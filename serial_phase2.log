@@ -1,0 +1,240 @@
+T-RustOs Kernel v0.1.0
+Limine protocol supported
+Framebuffer: 1280x800 @ 0xffff8000fd000000
+╔══════════════════════════════════════════════════════════════╗
+║                      T R U S T - O S                         ║
+║                 FAST • SECURE • RELIABLE                     ║
+╚══════════════════════════════════════════════════════════════╝
+
+Initializing memory management...
+HHDM offset: 0xffff800000000000
+Memory map entries: 14
+  0x0000001000 - 0x0000053000 (      335872 bytes) BOOTLOADER
+  0x0000053000 - 0x000009f000 (      311296 bytes) USABLE
+  0x000009fc00 - 0x00000a0000 (        1024 bytes) RESERVED
+  0x00000f0000 - 0x0000100000 (       65536 bytes) RESERVED
+  0x0000100000 - 0x000fcb6000 (   263938048 bytes) USABLE
+  0x000fcb6000 - 0x000fcb9000 (       12288 bytes) BOOTLOADER
+  0x000fcb9000 - 0x000fde3000 (     1220608 bytes) KERNEL
+  0x000fde3000 - 0x000ff4d000 (     1482752 bytes) BOOTLOADER
+  0x000ff4d000 - 0x000ff67000 (      106496 bytes) USABLE
+  0x000ff67000 - 0x000ffdf000 (      491520 bytes) BOOTLOADER
+  0x000ffdf000 - 0x0010000000 (      135168 bytes) RESERVED
+  0x00fd000000 - 0x00fd3e8000 (     4096000 bytes) FRAMEBUFFER
+  0x00fffc0000 - 0x0100000000 (      262144 bytes) RESERVED
+  0xfd00000000 - 0x10000000000 ( 12884901888 bytes) RESERVED
+[HEAP] Using mmap region at phys 0x100000
+[         0][CPU0][INFO ] Heap initialized: 16384 KB at virt 0xffff800000100000 (phys 0x100000)
+[OK] Memory management initialized
+Initializing GDT with Ring 0/3 support...
+[         0][CPU0][DEBUG] GDT initialized with Ring 0/3 support
+[OK] GDT initialized (Ring 0/3)
+Initializing early interrupts...
+[         0][CPU0][INFO ] SYSCALL handler initialized (kernel mode only)
+[         0][CPU0][DEBUG] IDT loaded, PIC initialized, SYSCALL ready, interrupts enabled
+[OK] Interrupts (early)
+Detecting CPU capabilities...
+[CPU] QEMU Virtual CPU version 2.5+
+[CPU] Vendor: Amd, Family: 15, Model: 107
+[CPU] TSC: true (invariant: false, freq: 3806 MHz)
+[CPU] SIMD: SSE=true SSE2=true SSE4.2=false AVX=false AVX2=false
+[CPU] Crypto: AES-NI=false PCLMULQDQ=false SHA=false RDRAND=false
+[CPU] Security: SMEP=false SMAP=false NX=true
+[CPU] Virt: VMX=false SVM=true
+[SIMD] SSE/SSE2 enabled
+[TSC] Initialized: 3806363480 Hz (3 GHz)
+[OK] CPU capabilities detected
+Parsing ACPI tables...
+[DEBUG] RSDP pointer from Limine: 0xf52d0
+[ACPI] RSDP phys=0xf52d0, mapping...
+[MMIO] Mapping 0xf52d0 -> 0xffff8000000f52d0 (2 pages)
+[ACPI] RSDP mapped at virt=0xffff8000000f52d0
+[ACPI] About to read RSDP...
+[ACPI] First byte: 0x52
+[ACPI] Sig OK: true
+[ACPI] Revision: 0, OEM: BOCHS
+[ACPI] Using RSDT at 0xffe2452
+[MMIO] Mapping 0xffe2452 -> 0xffff80000ffe2452 (2 pages)
+[ACPI] Found 4 tables
+[MMIO] Mapping 0xffe22ee -> 0xffff80000ffe22ee (2 pages)
+[ACPI] Table: FACP at 0xffe22ee, len=116
+[ACPI] FADT: PM1a=0x600, century=50
+[MMIO] Mapping 0xffe2362 -> 0xffff80000ffe2362 (2 pages)
+[ACPI] Table: APIC at 0xffe2362, len=144
+[ACPI] MADT: 4 CPUs, 1 I/O APICs
+[MMIO] Mapping 0xffe23f2 -> 0xffff80000ffe23f2 (2 pages)
+[ACPI] Table: HPET at 0xffe23f2, len=56
+[MMIO] Mapping 0xfed00000 -> 0xffff8000fed00000 (1 pages)
+[MMIO] Creating PT for PD[502]
+[ACPI] HPET: base=0xfed00000, min_tick=0
+[MMIO] Mapping 0xffe242a -> 0xffff80000ffe242a (2 pages)
+[ACPI] Table: WAET at 0xffe242a, len=40
+[OK] ACPI: 4 CPUs, 1 I/O APICs
+Initializing SMP...
+[SMP] BSP APIC ID: 0
+[SMP] Single-core mode (AP startup not yet implemented)
+[OK] SMP initialized
+Initializing paging subsystem...
+[         0][CPU0][DEBUG] Paging initialized, kernel CR3: 0xff80000
+[OK] Paging initialized (NX enabled)
+Initializing userland support...
+[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff8010fe92
+[         0][CPU0][INFO ] [USERLAND] SYSCALL/SYSRET configured (STAR, LSTAR, SFMASK)
+[OK] Userland support ready
+Initializing thread subsystem...
+[         0][CPU0][INFO ] [THREAD] Thread subsystem initialized
+[OK] Thread subsystem ready
+Initializing security subsystem...
+[OK] Security (basic)
+Keyboard driver ready
+[OK] Keyboard ready
+[--] RTC disabled
+[MOUSE] PS/2 mouse initialized (ID=250)
+[OK] Mouse initialized
+[PHASE] PCI init start
+[..] PCI bus scanning...
+[         0][CPU0][INFO ] [PCI] Found 7 devices:
+[         0][CPU0][INFO ] [PCI]   00:00.0 8086:1237 Bridge - Host Bridge (Intel)
+[         0][CPU0][INFO ] [PCI]   00:01.0 8086:7000 Bridge - ISA Bridge (Intel)
+[         0][CPU0][INFO ] [PCI]   00:01.1 8086:7010 Mass Storage - IDE Controller (Intel)
+[         0][CPU0][INFO ] [PCI]   00:01.3 8086:7113 Bridge (Intel)
+[         0][CPU0][INFO ] [PCI]   00:02.0 1234:1111 Display Controller - VGA Compatible (QEMU)
+[         0][CPU0][INFO ] [PCI]   00:03.0 8086:100E Network Controller - Ethernet (Intel)
+[         0][CPU0][INFO ] [PCI]   00:04.0 8086:2922 Mass Storage - SATA Controller (Intel)
+[OK] PCI bus scanned
+[PHASE] PCI init done
+[PHASE] Task scheduler init start
+[TASK] Cooperative scheduler initialized
+[         0][CPU0][INFO ] Scheduler ready
+[OK] Task scheduler ready
+[PHASE] Task scheduler init done
+[PHASE] Disk init start
+[..] Disk subsystem...
+[         0][CPU0][INFO ] [DISK] RAMDisk initialized: 0 MB (256 sectors)
+[         0][CPU0][INFO ] [DISK] Filesystem initialized (TRUSTFS v1)
+[OK] Disk driver ready
+[PHASE] Disk init done
+[PHASE] Driver framework init start
+[         0][CPU0][INFO ] [DRIVERS] Initializing driver framework...
+[         0][CPU0][DEBUG] [DRIVERS] Registered: virtio-net v1.0.0
+[         0][CPU0][DEBUG] [DRIVERS] Registered: e1000 v1.0.0
+[         0][CPU0][DEBUG] [DRIVERS] Registered: rtl8139 v0.1.0
+[INPUT] Keyboard: Some(PS2Keyboard), Mouse: Some(PS2Mouse)
+[         0][CPU0][INFO ] [DRIVERS] 3 drivers registered
+[DRIVERS] Probing storage controllers...
+[IDE] Probing IDE channels...
+[IDE] Secondary Master: QEMUDVD-ROM (0 sectors)
+[IDE] Found 1 drives
+[DRIVERS] IDE controller initialized
+[AHCI] Controller detected at 00:04.0 (BAR5=0xfebf1000)
+[AHCI] Mapping MMIO at phys=0xfebf1000 size=0x2000
+[MMIO] Mapping 0xfebf1000 -> 0xffff8000febf1000 (2 pages)
+[MMIO] Creating PT for PD[501]
+[AHCI] Initializing at ABAR phys=0xfebf1000 virt=0xffff8000febf1000
+[AHCI] Version 1.0
+[AHCI] 6 ports implemented, 32 command slots
+[AHCI] Port 0: Sata device detected
+[AHCI] Initialization complete
+[DRIVERS] AHCI controller initialized
+[AHCI] Port 0: 131072 sectors (64 MB), model: QEMU HARDDISK
+[DRIVERS] Storage: AHCI with 1 ports
+[OK] Driver framework initialized
+[OK] Persistent storage detected
+[PHASE] Driver framework init done
+[PHASE] Network init start
+[..] Network subsystem...
+[         0][CPU0][INFO ] [NET] Found: 8086:100E e1000 [Intel] BAR0=0xFEBC0000 IRQ=11
+[         0][CPU0][DEBUG] [PCI] Bus mastering enabled for 00:03.0
+[         0][CPU0][INFO ] [NET] Interface up: MAC=52:54:00:00:00:00
+[         0][CPU0][INFO ] [E1000] Probing 8086:100E
+[E1000] BAR0=0xfebc0000, calling map_mmio...
+[MMIO] Mapping 0xfebc0000 -> 0xffff8000febc0000 (32 pages)
+[E1000] map_mmio returned 0xffff8000febc0000
+[         0][CPU0][DEBUG] [E1000] MMIO: phys=0xfebc0000 virt=0xffff8000febc0000
+[         0][CPU0][DEBUG] [E1000] Resetting device...
+[         0][CPU0][DEBUG] [E1000] Reset complete
+[         0][CPU0][DEBUG] [E1000] Initializing RX ring (32 descriptors)
+[         0][CPU0][DEBUG] [E1000] Initializing TX ring (8 descriptors)
+[         0][CPU0][INFO ] [E1000] Link up at 1000 Mbps
+[         0][CPU0][INFO ] [E1000] MAC: 52:54:00:12:34:56
+[         0][CPU0][INFO ] [NET] MAC updated: 52:54:00:12:34:56
+[OK] Network driver: e1000
+[OK] Network ready
+[         0][CPU0][INFO ] [DHCP] Client started
+[DHCP] Sending DISCOVER
+[PHASE] Network init done
+[PHASE] VFS init start
+[         0][CPU0][INFO ] [VFS] Initializing Virtual File System...
+[         0][CPU0][DEBUG] [VFS] Mounted devfs at /dev
+[         0][CPU0][DEBUG] [VFS] Mounted procfs at /proc
+[         0][CPU0][DEBUG] [VFS] No block device, root will be ramfs
+[         0][CPU0][DEBUG] [VFS] Looking for FAT32 partitions...
+[         0][CPU0][DEBUG] [FAT32] Checking 1 AHCI devices
+[         0][CPU0][DEBUG] [FAT32] Port 0: 131072 sectors
+[         0][CPU0][INFO ] [FAT32] Mounted: 512 bytes/sector, 1 sectors/cluster, root cluster 2
+[         0][CPU0][INFO ] [FAT32] Mounted superfloppy FAT32 from port 0
+[         0][CPU0][INFO ] [VFS] Mounted FAT32 at /mnt/fat32
+[         0][CPU0][INFO ] [OK] VFS initialized
+[OK] Virtual filesystem ready
+[PHASE] VFS init done
+[PHASE] Linux Subsystem init start
+[TSL] No boot modules available
+[--] Linux Subsystem (no modules)
+[PHASE] Linux Subsystem init done
+[FILE_ASSOC] File associations initialized
+[OK] File associations ready
+[PHASE] Process manager init start
+[         0][CPU0][INFO ] [PROC] Initializing process manager...
+[         0][CPU0][DEBUG] [PROC] Kernel process created (PID 0)
+[         0][CPU0][INFO ] [OK] Process manager ready
+[OK] Process manager ready
+[PHASE] Process manager init done
+[PHASE] Auth system init
+[         0][CPU0][DEBUG] [AUTH] Authentication system initialized
+[OK] Authentication ready
+[PHASE] Init process start
+[         0][CPU0][INFO ] [INIT] Starting init process (PID 1)...
+[         0][CPU0][INFO ] [INIT] Init process ready
+[         0][CPU0][INFO ] [OK] System initialization complete
+
+========================================
+  TrustOS System Ready
+========================================
+
+Mounted filesystems:
+  /mnt/fat32 -> fat32
+  /proc -> proc
+  /dev -> devfs
+
+Processes: 1
+Heap used: 277 KB
+
+[OK] Init process started (PID 1)
+[PHASE] Init process done
+
+
+  System ready - TRust-OS v0.1.0
+  Type 'gui' to launch desktop, or use shell commands.
+
+[TEST] FAT32 Read Test:
+[TEST] FAT32 root has 2 entries:
+[TEST]   - test.txt (Regular)
+[TEST]   - docs (Directory)
+[TEST] Reading /mnt/fat32/test.txt:
+[TEST] Content: 'Hello TrustOS!'
+[TEST] Writing /mnt/fat32/hello.txt:
+[TEST] Wrote 19 bytes
+[TEST] Reading back /mnt/fat32/hello.txt:
+[TEST] Content: 'Hello from TrustOS!'
+[TEST] Phase 2 FAT32 tests complete
+Starting shell...
+
+ _____ ____            _    ___      
+|_   _|  _ \ _   _ ___| |_ / _ \ ___ 
+  | | | |_) | | | / __| __| | | / __|
+  | | |  _ <| |_| \__ \ |_| |_| \__ \
+  |_| |_| \_\\__,_|___/\__\\___/|___/
+
+  T-RustOs v0.1.0 - Type 'help' for commands
+
+trustos:/$ 

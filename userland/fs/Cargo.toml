@@ -1,0 +1,8 @@
+[package]
+name = "trustos_fs"
+version = "0.1.0"
+edition = "2021"
+authors = ["TRustOs Team"]
+
+[dependencies]
+# Will add block device interface

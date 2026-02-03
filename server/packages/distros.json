@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "distros": [
+    {
+      "id": "alpine",
+      "name": "Alpine Linux",
+      "version": "3.19",
+      "description": "Lightweight security-oriented Linux distribution",
+      "size_mb": 3,
+      "filename": "alpine-minirootfs.tar.gz",
+      "icon": "🏔️",
+      "category": "minimal"
+    },
+    {
+      "id": "busybox",
+      "name": "BusyBox",
+      "version": "1.36",
+      "description": "Minimal Unix utilities in a single binary",
+      "size_mb": 1,
+      "filename": "busybox.tar.gz",
+      "icon": "📦",
+      "category": "minimal"
+    },
+    {
+      "id": "debian-mini",
+      "name": "Debian Minimal",
+      "version": "12",
+      "description": "Debian base system (debootstrap)",
+      "size_mb": 150,
+      "filename": "debian-mini.tar.gz",
+      "icon": "🌀",
+      "category": "full"
+    },
+    {
+      "id": "ubuntu-core",
+      "name": "Ubuntu Core",
+      "version": "22.04",
+      "description": "Ubuntu minimal cloud image",
+      "size_mb": 200,
+      "filename": "ubuntu-core.tar.gz",
+      "icon": "🟠",
+      "category": "full"
+    },
+    {
+      "id": "arch-bootstrap",
+      "name": "Arch Linux Bootstrap",
+      "version": "2024.02",
+      "description": "Arch Linux bootstrap tarball",
+      "size_mb": 180,
+      "filename": "arch-bootstrap.tar.gz",
+      "icon": "🔵",
+      "category": "full"
+    },
+    {
+      "id": "void-musl",
+      "name": "Void Linux (musl)",
+      "version": "20240101",
+      "description": "Void Linux with musl libc",
+      "size_mb": 50,
+      "filename": "void-musl.tar.gz",
+      "icon": "⚫",
+      "category": "minimal"
+    }
+  ]
+}

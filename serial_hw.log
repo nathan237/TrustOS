@@ -1,0 +1,118 @@
+T-RustOs Kernel v0.1.0
+Limine protocol supported
+Framebuffer: 1280x800 @ 0xffff8000fd000000
+====================================
+  T-RUSTOS
+  Kernel v0.1.0
+====================================
+
+Initializing memory management...
+HHDM offset: 0xffff800000000000
+Memory map entries: 16
+  0x0000001000 - 0x0000053000 (      335872 bytes) BOOTLOADER
+  0x0000053000 - 0x000009f000 (      311296 bytes) USABLE
+  0x000009fc00 - 0x00000a0000 (        1024 bytes) RESERVED
+  0x00000f0000 - 0x0000100000 (       65536 bytes) RESERVED
+  0x0000100000 - 0x000fdd3000 (   265105408 bytes) USABLE
+  0x000fdd3000 - 0x000fdd6000 (       12288 bytes) BOOTLOADER
+  0x000fdd6000 - 0x000fe78000 (      663552 bytes) KERNEL
+  0x000fe78000 - 0x000ff40000 (      819200 bytes) BOOTLOADER
+  0x000ff40000 - 0x000ff41000 (        4096 bytes) USABLE
+  0x000ff41000 - 0x000ff43000 (        8192 bytes) BOOTLOADER
+  0x000ff43000 - 0x000ff5d000 (      106496 bytes) USABLE
+  0x000ff5d000 - 0x000ffde000 (      528384 bytes) BOOTLOADER
+  0x000ffde000 - 0x0010000000 (      139264 bytes) RESERVED
+  0x00fd000000 - 0x00fd3e8000 (     4096000 bytes) FRAMEBUFFER
+  0x00fffc0000 - 0x0100000000 (      262144 bytes) RESERVED
+  0xfd00000000 - 0x10000000000 ( 12884901888 bytes) RESERVED
+[HEAP] Using mmap region at phys 0x100000
+[         0][CPU0][INFO ] Heap initialized: 16384 KB at virt 0xffff800000100000 (phys 0x100000)
+[OK] Memory initialized
+Initializing GDT with Ring 0/3 support...
+[         0][CPU0][DEBUG] GDT initialized with Ring 0/3 support
+[OK] GDT initialized (Ring 0/3)
+Initializing paging subsystem...
+[         0][CPU0][DEBUG] Paging initialized, kernel CR3: 0xff76000
+[OK] Paging initialized (NX enabled)
+Initializing userland support...
+[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff800a1a91
+[         0][CPU0][INFO ] [USERLAND] SYSCALL/SYSRET configured (STAR, LSTAR, SFMASK)
+[OK] Userland support ready
+Initializing thread subsystem...
+[         0][CPU0][INFO ] [THREAD] Thread subsystem initialized
+[OK] Thread subsystem ready
+Initializing security subsystem...
+[OK] Security (basic)
+Initializing interrupts...
+[         0][CPU0][INFO ] SYSCALL handler initialized (kernel mode only)
+[         0][CPU0][DEBUG] IDT loaded, PIC initialized, SYSCALL ready, interrupts enabled
+[OK] Interrupts enabled
+Keyboard driver ready
+[OK] Keyboard ready
+[--] RTC disabled
+[MOUSE] PS/2 mouse initialized (ID=250)
+[OK] Mouse initialized
+[PHASE] PCI init start
+[..] PCI init start
+[         0][CPU0][INFO ] [PCI] Found 8 devices:
+[         0][CPU0][INFO ] [PCI]   00:00.0 8086:1237 Bridge - Host Bridge (Intel)
+[         0][CPU0][INFO ] [PCI]   00:01.0 8086:7000 Bridge - ISA Bridge (Intel)
+[         0][CPU0][INFO ] [PCI]   00:01.1 8086:7010 Mass Storage - IDE Controller (Intel)
+[         0][CPU0][INFO ] [PCI]   00:01.3 8086:7113 Bridge (Intel)
+[         0][CPU0][INFO ] [PCI]   00:02.0 1234:1111 Display Controller - VGA Compatible (QEMU)
+[         0][CPU0][INFO ] [PCI]   00:03.0 8086:2922 Mass Storage - SATA Controller (Intel)
+[         0][CPU0][INFO ] [PCI]   00:04.0 1B36:000D Serial Bus - USB 3.0 xHCI (Unknown)
+[         0][CPU0][INFO ] [PCI]   00:05.0 1AF4:1000 Network Controller - Ethernet (Red Hat (virtio))
+[OK] PCI bus scanned
+[PHASE] PCI init done
+[..] PCI init done
+[PHASE] Task scheduler init start
+[..] Task scheduler init start
+[TASK] Cooperative scheduler initialized
+[         0][CPU0][INFO ] Scheduler ready
+[OK] Task scheduler ready
+[PHASE] Task scheduler init done
+[..] Task scheduler init done
+[PHASE] Disk init start
+[..] Disk init start
+[         0][CPU0][INFO ] [DISK] RAMDisk initialized: 0 MB (256 sectors)
+[         0][CPU0][INFO ] [DISK] Filesystem initialized (TRUSTFS v1)
+[OK] Disk driver ready
+[PHASE] Disk init done
+[..] Disk init done
+[PHASE] Driver framework init start
+[..] Driver framework init start
+[         0][CPU0][INFO ] [DRIVERS] Initializing driver framework...
+[         0][CPU0][DEBUG] [DRIVERS] Registered: virtio-net v1.0.0
+[         0][CPU0][DEBUG] [DRIVERS] Registered: e1000 v0.1.0
+[         0][CPU0][DEBUG] [DRIVERS] Registered: rtl8139 v0.1.0
+[INPUT] Keyboard: Some(PS2Keyboard), Mouse: Some(PS2Mouse)
+[         0][CPU0][INFO ] [DRIVERS] 3 drivers registered
+[DRIVERS] Probing storage controllers...
+[IDE] Probing IDE channels...
+[IDE] Secondary Master: QEMUDVD-ROM (0 sectors)
+[IDE] Found 1 drives
+[DRIVERS] IDE controller initialized
+[AHCI] Initializing at ABAR phys=0xfebd5000 virt=0xffff8000febd5000
+[         0][CPU0][ERROR] EXCEPTION: PAGE FAULT
+Accessed Address: VirtAddr(0xffff8000febd5010)
+Error Code: PageFaultErrorCode(0x0)
+InterruptStackFrame {
+    instruction_pointer: VirtAddr(
+        0xffffffff8005c2c6,
+    ),
+    code_segment: 8,
+    cpu_flags: 0x10286,
+    stack_pointer: VirtAddr(
+        0xffff80000ff86dd0,
+    ),
+    stack_segment: 16,
+}
+
+!!! KERNEL PANIC !!!
+panicked at kernel\src\interrupts\handlers.rs:46:5:
+Page fault at VirtAddr(0xffff8000febd5010)
+
+!!! KERNEL PANIC !!!
+panicked at kernel\src\interrupts\handlers.rs:46:5:
+Page fault at VirtAddr(0xffff8000febd5010)

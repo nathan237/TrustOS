@@ -1,0 +1,8 @@
+[package]
+name = "trustos_init"
+version = "0.1.0"
+edition = "2021"
+authors = ["TRustOs Team"]
+
+[dependencies]
+# No std for now - will add syscall wrapper
