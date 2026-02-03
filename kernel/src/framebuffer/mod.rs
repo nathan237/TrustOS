@@ -225,16 +225,17 @@ const CHAR_WIDTH: usize = 8;
 const CHAR_HEIGHT: usize = 16;
 
 /// Initialize framebuffer with Limine info
+/// NOTE: This does NOT allocate memory. Call init_scrollback() after heap is ready.
 pub fn init(addr: *mut u8, width: u64, height: u64, pitch: u64, bpp: u16) {
     FB_ADDR.store(addr, Ordering::SeqCst);
     FB_WIDTH.store(width, Ordering::SeqCst);
     FB_HEIGHT.store(height, Ordering::SeqCst);
     FB_PITCH.store(pitch, Ordering::SeqCst);
     
-    // Initialize scrollback buffer
-    init_scrollback();
+    // NOTE: Do NOT call init_scrollback() here! It allocates memory.
+    // Call it after heap initialization in main.rs
     
-    // Clear screen
+    // Clear screen (no allocation - just writes to framebuffer directly)
     clear();
 }
 

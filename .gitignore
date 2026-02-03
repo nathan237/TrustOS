@@ -28,15 +28,69 @@ desktop.ini
 *.qcow2
 *.raw
 *.vdi
-*.fd
 NvVars
 qemu_*.txt
 serial_*.txt
 build_output.txt
 vbox_serial.txt
 
+# UEFI firmware (large binary files)
+*.fd
+OVMF*.fd
+OVMF_CODE.fd
+OVMF_VARS.fd
+
 # Linux initramfs (binary files)
 linux/initramfs/
+linux/bzImage
 
-# Limine submodule (will be handled separately)
+# Limine bootloader binaries
 limine/
+iso_root/boot/limine/*.bin
+iso_root/boot/limine/*.sys
+iso_root/EFI/
+
+# Boot binaries
+boot/trustos_kernel
+boot/bestdows_kernel
+iso_root/boot/trustos_kernel
+
+# Alpine QEMU image
+qemu-alpine/
+
+# SDK binaries
+sdk/bin/
+
+# Release binaries
+releases/*.bin
+releases/*.img
+
+# Userland binaries
+userland/hello
+userland/compositor/target/
+userland/fs/target/
+userland/init/target/
+userland/jarvis/target/
+userland/network/target/
+userland/shell/target/
+
+# EFI binaries
+EFI/
+
+# Backup files
+*.zip
+OSrust_backup*.zip
+
+# SDK build artifacts
+sdk/examples/*/target/
+
+# Server packages (can be re-downloaded)
+server/packages/*.tar.gz
+
+# Screenshots
+*.png
+qemu_screenshot*.png
+
+# Linux kernel binaries
+linux/bzImage
+linux/*.cpio.gz

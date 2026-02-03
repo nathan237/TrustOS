@@ -218,8 +218,8 @@ impl WaylandCompositor {
         // Simple dark background with subtle pattern
         for y in 0..height {
             for x in 0..width {
-                let pattern = if (x + y) % 32 < 16 { 0x00 } else { 0x02 };
-                let color = 0xFF000000 | (pattern << 16) | (pattern + 0x08) << 8 | pattern;
+                let pattern: u32 = if (x + y) % 32 < 16 { 0x00 } else { 0x02 };
+                let _color: u32 = 0xFF000000u32 | (pattern << 16) | ((pattern + 0x08) << 8) | pattern;
                 crate::framebuffer::put_pixel(x, y, self.background_color);
             }
         }

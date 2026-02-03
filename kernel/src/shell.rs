@@ -29,6 +29,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "vm", "linux", "gui", "distro", "distros", "alpine", "transpile", "disasm", "analyze",
     // GUI
     "glmode", "compositor", "theme", "imgview", "imageview", "view", "imgdemo", "imagedemo",
+    "wayland", "wl",
     // Tasks
     "tasks", "jobs", "threads",
     // Persistence
@@ -691,6 +692,9 @@ fn execute_command(cmd: &str) {
         "imgdemo" | "imagedemo" => cmd_imgdemo(args),
         "tasks" | "jobs" => cmd_tasks(),
         "threads" => cmd_threads(),
+        
+        // Wayland compositor
+        "wayland" | "wl" => cmd_wayland(args),
         
         // Alpine Linux all-in-one command
         "alpine" => cmd_alpine(args),
@@ -6595,6 +6599,150 @@ fn read_file_bytes(path: &str) -> Option<Vec<u8>> {
             Some(buf)
         }
         Err(_) => None,
+    }
+}
+
+/// Wayland compositor command
+fn cmd_wayland(args: &[&str]) {
+    let subcmd = args.get(0).copied().unwrap_or("help");
+    
+    match subcmd {
+        "init" | "start" => {
+            crate::println_color!(COLOR_CYAN, "╔══════════════════════════════════════════════════════════════╗");
+            crate::println_color!(COLOR_CYAN, "║            TrustOS Wayland Compositor                        ║");
+            crate::println_color!(COLOR_CYAN, "╚══════════════════════════════════════════════════════════════╝");
+            crate::println!();
+            
+            match crate::wayland::init() {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "[OK] Wayland compositor initialized");
+                    
+                    // Get screen info
+                    let (width, height) = crate::framebuffer::get_dimensions();
+                    crate::println!("     Display: {}x{}", width, height);
+                    crate::println!();
+                    crate::println!("Available globals:");
+                    for global in crate::wayland::protocol::get_globals() {
+                        crate::println!("  • {} v{}", global.interface, global.version);
+                    }
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "[ERROR] {}", e);
+                }
+            }
+        },
+        
+        "demo" => {
+            crate::println_color!(COLOR_CYAN, "Starting Wayland demo...");
+            
+            // Initialize if not already done
+            let _ = crate::wayland::init();
+            
+            // Create a test surface
+            crate::wayland::with_compositor(|compositor| {
+                // Create a surface
+                let surface_id = compositor.create_surface();
+                
+                // Create some test content
+                let width = 400u32;
+                let height = 300u32;
+                let mut buffer = alloc::vec![0xFF0A0F0C_u32; (width * height) as usize];
+                
+                // Draw a gradient
+                for y in 0..height {
+                    for x in 0..width {
+                        let r = (x * 255 / width) as u8;
+                        let g = ((y * 255 / height) as u8) / 2;
+                        let b = 0x20_u8;
+                        buffer[(y * width + x) as usize] = 0xFF000000 | (r as u32) << 16 | (g as u32) << 8 | b as u32;
+                    }
+                }
+                
+                // Draw border
+                for x in 0..width {
+                    buffer[x as usize] = 0xFF00FF66;
+                    buffer[((height - 1) * width + x) as usize] = 0xFF00FF66;
+                }
+                for y in 0..height {
+                    buffer[(y * width) as usize] = 0xFF00FF66;
+                    buffer[(y * width + width - 1) as usize] = 0xFF00FF66;
+                }
+                
+                // Attach and commit
+                if let Some(surface) = compositor.surfaces.get_mut(&surface_id) {
+                    surface.attach(buffer, width, height);
+                    surface.set_title("Wayland Demo");
+                    surface.set_position(200, 150);
+                    surface.make_toplevel();
+                    surface.commit();
+                }
+                
+                crate::println_color!(COLOR_GREEN, "[OK] Created surface {}", surface_id);
+            });
+            
+            // Compose and render
+            crate::wayland::compose_frame();
+            crate::println_color!(COLOR_GREEN, "[OK] Frame composed to framebuffer");
+            crate::println!();
+            crate::println!("Press any key to close demo...");
+            
+            // Wait for key
+            loop {
+                if let Some(_) = crate::keyboard::read_char() {
+                    break;
+                }
+            }
+            
+            // Clear screen
+            crate::framebuffer::clear();
+        },
+        
+        "status" => {
+            crate::println_color!(COLOR_CYAN, "Wayland Compositor Status");
+            crate::println_color!(COLOR_CYAN, "══════════════════════════");
+            
+            crate::wayland::with_compositor(|compositor| {
+                let (w, h) = (compositor.width, compositor.height);
+                crate::println!("Display: {}x{}", w, h);
+                crate::println!("Surfaces: {}", compositor.surfaces.len());
+                crate::println!("SHM Pools: {}", compositor.shm_pools.len());
+                crate::println!("Frame: {}", compositor.frame_number);
+                crate::println!("Pointer: ({}, {})", compositor.pointer_x, compositor.pointer_y);
+                
+                if !compositor.surfaces.is_empty() {
+                    crate::println!();
+                    crate::println!("Surfaces:");
+                    for (&id, surface) in &compositor.surfaces {
+                        let title = if surface.title.is_empty() { "<untitled>" } else { &surface.title };
+                        crate::println!("  #{}: {} @ ({},{}) {}x{}", 
+                            id, title, surface.x, surface.y, surface.width, surface.height);
+                    }
+                }
+            }).unwrap_or_else(|| {
+                crate::println_color!(COLOR_YELLOW, "Compositor not initialized");
+                crate::println!("Run 'wayland init' first");
+            });
+        },
+        
+        _ => {
+            crate::println_color!(COLOR_CYAN, "TrustOS Wayland Compositor");
+            crate::println_color!(COLOR_CYAN, "══════════════════════════");
+            crate::println!();
+            crate::println!("A native Wayland display server for TrustOS.");
+            crate::println!();
+            crate::println!("Usage: wayland <command>");
+            crate::println!();
+            crate::println!("Commands:");
+            crate::println!("  init    - Initialize the Wayland compositor");
+            crate::println!("  demo    - Run a visual demo");
+            crate::println!("  status  - Show compositor status");
+            crate::println!();
+            crate::println!("Protocol support:");
+            crate::println!("  • wl_compositor v5 - Surface creation");
+            crate::println!("  • wl_shm v1        - Shared memory buffers");
+            crate::println!("  • wl_seat v8       - Input devices");
+            crate::println!("  • xdg_wm_base v5   - Window management");
+        }
     }
 }
 

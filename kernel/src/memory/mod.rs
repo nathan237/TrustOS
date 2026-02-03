@@ -14,8 +14,8 @@ pub use paging::{AddressSpace, PageFlags, validate_user_ptr, is_user_address, is
 static HEAP_START: AtomicUsize = AtomicUsize::new(0);
 /// HHDM offset (higher half direct map)
 static HHDM_OFFSET: AtomicU64 = AtomicU64::new(0xFFFF_8000_0000_0000);
-/// Kernel heap size (512 MB - large heap for VMs, networking, and applications)
-pub const HEAP_SIZE: usize = 512 * 1024 * 1024;
+/// Kernel heap size (32 MB - enough for compositor, networking, and applications)
+pub const HEAP_SIZE: usize = 32 * 1024 * 1024;
 
 /// Initialize memory management with HHDM offset
 pub fn init_with_hhdm(hhdm_offset: u64, usable_base: u64) {

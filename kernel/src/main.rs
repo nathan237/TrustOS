@@ -69,6 +69,9 @@ mod compression;
 // Persistence (save downloads to disk)
 mod persistence;
 
+// Wayland Compositor (native display server)
+mod wayland;
+
 // Binary-to-Rust transpiler (analyze and convert Linux binaries)
 mod transpiler;
 
@@ -191,13 +194,10 @@ pub unsafe extern "C" fn kmain() -> ! {
             serial_println!("Framebuffer: {}x{} @ {:p}", fb.width(), fb.height(), fb.addr());
         }
     }
-
-    // Print boot banner with Matrix-style UI
-    framebuffer::show_simple_boot_header();
     
     use framebuffer::BootStatus;
 
-    // Phase 3: Memory management
+    // Phase 3: Memory management (MUST be before any println! that allocates)
     serial_println!("Initializing memory management...");
     
     let mut heap_initialized = false;
@@ -295,17 +295,28 @@ pub unsafe extern "C" fn kmain() -> ! {
         
         // Initialize heap with HHDM
         if let Some(heap_phys) = usable_for_heap {
-            println!("[HEAP] Using mmap region at phys {:#x}", heap_phys);
+            serial_println!("[HEAP] Using mmap region at phys {:#x}, size {} MB", heap_phys, memory::HEAP_SIZE / 1024 / 1024);
+            // NOTE: Do NOT use println! here - heap not yet initialized!
             memory::init_with_hhdm(hhdm_offset, heap_phys);
             heap_initialized = true;
+            serial_println!("[HEAP] Initialized: free={} KB", memory::heap::free() / 1024);
+        } else {
+            serial_println!("[HEAP] ERROR: No usable region found for {} MB heap!", memory::HEAP_SIZE / 1024 / 1024);
         }
     }
     
     if !heap_initialized {
         // Fallback
+        serial_println!("[HEAP] Using fallback init");
         memory::init();
     }
     
+    // Now that heap is initialized, initialize scrollback buffer (allocates ~3MB)
+    serial_println!("[FB] Initializing scrollback buffer...");
+    framebuffer::init_scrollback();
+    
+    // Now that heap is initialized, show boot banner
+    framebuffer::show_simple_boot_header();
     framebuffer::print_boot_status("Memory management initialized", BootStatus::Ok);
 
     // Phase 3.5: GDT with Ring 0/3 support
