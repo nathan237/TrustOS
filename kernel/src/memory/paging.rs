@@ -1,0 +1,611 @@
+//! Paging - 4-Level Page Tables for x86_64
+//!
+//! Implements memory isolation with separate address spaces per process.
+//! Uses 4KB pages with full permission control (R/W/X/User).
+
+use core::sync::atomic::{AtomicU64, Ordering};
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+
+/// Page size (4 KB)
+pub const PAGE_SIZE: usize = 4096;
+/// Number of entries per page table
+pub const ENTRIES_PER_TABLE: usize = 512;
+
+/// Page table entry flags
+#[derive(Clone, Copy, Debug)]
+#[repr(transparent)]
+pub struct PageFlags(u64);
+
+impl PageFlags {
+    pub const PRESENT: u64 = 1 << 0;
+    pub const WRITABLE: u64 = 1 << 1;
+    pub const USER: u64 = 1 << 2;
+    pub const WRITE_THROUGH: u64 = 1 << 3;
+    pub const NO_CACHE: u64 = 1 << 4;
+    pub const ACCESSED: u64 = 1 << 5;
+    pub const DIRTY: u64 = 1 << 6;
+    pub const HUGE_PAGE: u64 = 1 << 7;
+    pub const GLOBAL: u64 = 1 << 8;
+    pub const NO_EXECUTE: u64 = 1 << 63;
+    
+    /// Kernel code: Present + Readable (no write, no user)
+    pub const KERNEL_CODE: Self = Self(Self::PRESENT);
+    
+    /// Kernel data: Present + Writable (no user) + NX
+    pub const KERNEL_DATA: Self = Self(Self::PRESENT | Self::WRITABLE | Self::NO_EXECUTE);
+    
+    /// Kernel read-only: Present (no write, no user) + NX
+    pub const KERNEL_RODATA: Self = Self(Self::PRESENT | Self::NO_EXECUTE);
+    
+    /// User code: Present + User (no write)
+    pub const USER_CODE: Self = Self(Self::PRESENT | Self::USER);
+    
+    /// User data: Present + Writable + User + NX
+    pub const USER_DATA: Self = Self(Self::PRESENT | Self::WRITABLE | Self::USER | Self::NO_EXECUTE);
+    
+    /// User read-only: Present + User + NX
+    pub const USER_RODATA: Self = Self(Self::PRESENT | Self::USER | Self::NO_EXECUTE);
+    
+    pub const fn new(flags: u64) -> Self {
+        Self(flags)
+    }
+    
+    pub const fn bits(&self) -> u64 {
+        self.0
+    }
+    
+    pub fn is_present(&self) -> bool {
+        self.0 & Self::PRESENT != 0
+    }
+    
+    pub fn is_writable(&self) -> bool {
+        self.0 & Self::WRITABLE != 0
+    }
+    
+    pub fn is_user(&self) -> bool {
+        self.0 & Self::USER != 0
+    }
+    
+    pub fn is_executable(&self) -> bool {
+        self.0 & Self::NO_EXECUTE == 0
+    }
+}
+
+/// Page table entry
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct PageTableEntry(u64);
+
+impl PageTableEntry {
+    /// Physical address mask (bits 12-51)
+    const ADDR_MASK: u64 = 0x000F_FFFF_FFFF_F000;
+    
+    pub const fn new() -> Self {
+        Self(0)
+    }
+    
+    pub fn set(&mut self, phys_addr: u64, flags: PageFlags) {
+        self.0 = (phys_addr & Self::ADDR_MASK) | flags.bits();
+    }
+    
+    pub fn clear(&mut self) {
+        self.0 = 0;
+    }
+    
+    pub fn phys_addr(&self) -> u64 {
+        self.0 & Self::ADDR_MASK
+    }
+    
+    pub fn flags(&self) -> PageFlags {
+        PageFlags(self.0 & !Self::ADDR_MASK)
+    }
+    
+    pub fn is_present(&self) -> bool {
+        self.0 & PageFlags::PRESENT != 0
+    }
+    
+    pub fn is_unused(&self) -> bool {
+        self.0 == 0
+    }
+}
+
+/// Page table (512 entries, 4KB aligned)
+#[repr(align(4096))]
+#[repr(C)]
+pub struct PageTable {
+    entries: [PageTableEntry; ENTRIES_PER_TABLE],
+}
+
+impl PageTable {
+    pub const fn new() -> Self {
+        Self {
+            entries: [PageTableEntry::new(); ENTRIES_PER_TABLE],
+        }
+    }
+    
+    pub fn zero(&mut self) {
+        for entry in self.entries.iter_mut() {
+            entry.clear();
+        }
+    }
+}
+
+/// Address space for a process
+pub struct AddressSpace {
+    /// Physical address of PML4 (CR3 value)
+    pml4_phys: u64,
+    /// Allocated page tables (for cleanup)
+    page_tables: Vec<Box<PageTable>>,
+    /// HHDM offset for virtual/physical conversion
+    hhdm_offset: u64,
+}
+
+impl AddressSpace {
+    /// Create a new empty address space
+    pub fn new() -> Option<Self> {
+        let hhdm = crate::memory::hhdm_offset();
+        
+        // Allocate PML4 (top-level page table)
+        let mut pml4 = Box::new(PageTable::new());
+        pml4.zero();
+        
+        // Get physical address of PML4
+        let pml4_virt = &*pml4 as *const PageTable as u64;
+        let pml4_phys = pml4_virt.checked_sub(hhdm)?;
+        
+        let mut page_tables = Vec::new();
+        page_tables.push(pml4);
+        
+        Some(Self {
+            pml4_phys,
+            page_tables,
+            hhdm_offset: hhdm,
+        })
+    }
+    
+    /// Create address space that maps kernel memory
+    pub fn new_with_kernel() -> Option<Self> {
+        let mut space = Self::new()?;
+        
+        // Copy kernel mappings from current page table
+        // This ensures kernel code/data is accessible in all address spaces
+        space.map_kernel_space()?;
+        
+        Some(space)
+    }
+    
+    /// Get CR3 value (physical address of PML4)
+    pub fn cr3(&self) -> u64 {
+        self.pml4_phys
+    }
+    
+    /// Map kernel higher-half space into this address space
+    fn map_kernel_space(&mut self) -> Option<()> {
+        // Read current CR3
+        let current_cr3: u64;
+        unsafe {
+            core::arch::asm!("mov {}, cr3", out(reg) current_cr3);
+        }
+        
+        // Get current PML4
+        let current_pml4_virt = current_cr3 + self.hhdm_offset;
+        let current_pml4 = unsafe { 
+            &*(current_pml4_virt as *const PageTable) 
+        };
+        
+        // Get our PML4
+        let our_pml4_virt = self.pml4_phys + self.hhdm_offset;
+        let our_pml4 = unsafe { 
+            &mut *(our_pml4_virt as *mut PageTable) 
+        };
+        
+        // Copy the higher half entries (256-511) from kernel
+        // This includes HHDM and kernel code
+        for i in 256..512 {
+            if current_pml4.entries[i].is_present() {
+                our_pml4.entries[i] = current_pml4.entries[i];
+            }
+        }
+        
+        Some(())
+    }
+    
+    /// Map a single page
+    pub fn map_page(&mut self, virt: u64, phys: u64, flags: PageFlags) -> Option<()> {
+        // Extract indices for each level
+        let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
+        let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
+        let pd_idx = ((virt >> 21) & 0x1FF) as usize;
+        let pt_idx = ((virt >> 12) & 0x1FF) as usize;
+        
+        // Walk/create page table hierarchy using raw pointers to avoid borrow conflicts
+        let pml4_virt = self.pml4_phys + self.hhdm_offset;
+        let pml4 = pml4_virt as *mut PageTable;
+        
+        // Get or create PDPT
+        let pdpt_phys = unsafe { self.ensure_table_at(&mut (*pml4).entries[pml4_idx])? };
+        let pdpt = (pdpt_phys + self.hhdm_offset) as *mut PageTable;
+        
+        // Get or create PD
+        let pd_phys = unsafe { self.ensure_table_at(&mut (*pdpt).entries[pdpt_idx])? };
+        let pd = (pd_phys + self.hhdm_offset) as *mut PageTable;
+        
+        // Get or create PT
+        let pt_phys = unsafe { self.ensure_table_at(&mut (*pd).entries[pd_idx])? };
+        let pt = (pt_phys + self.hhdm_offset) as *mut PageTable;
+        
+        // Map the page
+        unsafe { (*pt).entries[pt_idx].set(phys, flags); }
+        
+        Some(())
+    }
+    
+    /// Ensure a table exists at the given entry, returns physical address
+    fn ensure_table_at(&mut self, entry: &mut PageTableEntry) -> Option<u64> {
+        if entry.is_present() {
+            Some(entry.phys_addr())
+        } else {
+            // Create new table
+            let mut new_table = Box::new(PageTable::new());
+            new_table.zero();
+            
+            let table_virt = &*new_table as *const PageTable as u64;
+            let table_phys = table_virt.checked_sub(self.hhdm_offset)?;
+            
+            // Set entry with present + writable + user
+            entry.set(table_phys, PageFlags::new(
+                PageFlags::PRESENT | PageFlags::WRITABLE | PageFlags::USER
+            ));
+            
+            // Keep ownership
+            self.page_tables.push(new_table);
+            
+            Some(table_phys)
+        }
+    }
+    
+    /// Get or create a page table at the given entry (for read operations)
+    #[allow(dead_code)]
+    fn get_or_create_table(&mut self, entry: &mut PageTableEntry) -> Option<*mut PageTable> {
+        if entry.is_present() {
+            // Table exists, return pointer
+            let table_phys = entry.phys_addr();
+            let table_virt = table_phys + self.hhdm_offset;
+            Some(table_virt as *mut PageTable)
+        } else {
+            // Create new table
+            let mut new_table = Box::new(PageTable::new());
+            new_table.zero();
+            
+            let table_virt = &*new_table as *const PageTable as u64;
+            let table_phys = table_virt.checked_sub(self.hhdm_offset)?;
+            
+            // Set entry with present + writable + user (so lower levels can set restrictions)
+            entry.set(table_phys, PageFlags::new(
+                PageFlags::PRESENT | PageFlags::WRITABLE | PageFlags::USER
+            ));
+            
+            // Keep ownership
+            self.page_tables.push(new_table);
+            
+            // Return pointer to the new table
+            Some(table_virt as *mut PageTable)
+        }
+    }
+    
+    /// Map a range of pages
+    pub fn map_range(&mut self, virt_start: u64, phys_start: u64, size: usize, flags: PageFlags) -> Option<()> {
+        let pages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+        
+        for i in 0..pages {
+            let offset = (i * PAGE_SIZE) as u64;
+            self.map_page(virt_start + offset, phys_start + offset, flags)?;
+        }
+        
+        Some(())
+    }
+    
+    /// Unmap a page
+    pub fn unmap_page(&mut self, virt: u64) -> Option<()> {
+        let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
+        let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
+        let pd_idx = ((virt >> 21) & 0x1FF) as usize;
+        let pt_idx = ((virt >> 12) & 0x1FF) as usize;
+        
+        let pml4_virt = self.pml4_phys + self.hhdm_offset;
+        let pml4 = unsafe { &mut *(pml4_virt as *mut PageTable) };
+        
+        if !pml4.entries[pml4_idx].is_present() {
+            return None;
+        }
+        
+        let pdpt_virt = pml4.entries[pml4_idx].phys_addr() + self.hhdm_offset;
+        let pdpt = unsafe { &mut *(pdpt_virt as *mut PageTable) };
+        
+        if !pdpt.entries[pdpt_idx].is_present() {
+            return None;
+        }
+        
+        let pd_virt = pdpt.entries[pdpt_idx].phys_addr() + self.hhdm_offset;
+        let pd = unsafe { &mut *(pd_virt as *mut PageTable) };
+        
+        if !pd.entries[pd_idx].is_present() {
+            return None;
+        }
+        
+        let pt_virt = pd.entries[pd_idx].phys_addr() + self.hhdm_offset;
+        let pt = unsafe { &mut *(pt_virt as *mut PageTable) };
+        
+        pt.entries[pt_idx].clear();
+        
+        // Invalidate TLB for this page
+        unsafe {
+            core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
+        }
+        
+        Some(())
+    }
+    
+    /// Switch to this address space
+    pub unsafe fn activate(&self) {
+        core::arch::asm!(
+            "mov cr3, {}",
+            in(reg) self.pml4_phys,
+            options(nostack, preserves_flags)
+        );
+    }
+    
+    /// Check if a virtual address is mapped and accessible with given flags
+    pub fn is_accessible(&self, virt: u64, required_flags: PageFlags) -> bool {
+        let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
+        let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
+        let pd_idx = ((virt >> 21) & 0x1FF) as usize;
+        let pt_idx = ((virt >> 12) & 0x1FF) as usize;
+        
+        let pml4_virt = self.pml4_phys + self.hhdm_offset;
+        let pml4 = unsafe { &*(pml4_virt as *const PageTable) };
+        
+        if !pml4.entries[pml4_idx].is_present() {
+            return false;
+        }
+        
+        let pdpt_virt = pml4.entries[pml4_idx].phys_addr() + self.hhdm_offset;
+        let pdpt = unsafe { &*(pdpt_virt as *const PageTable) };
+        
+        if !pdpt.entries[pdpt_idx].is_present() {
+            return false;
+        }
+        
+        let pd_virt = pdpt.entries[pdpt_idx].phys_addr() + self.hhdm_offset;
+        let pd = unsafe { &*(pd_virt as *const PageTable) };
+        
+        if !pd.entries[pd_idx].is_present() {
+            return false;
+        }
+        
+        let pt_virt = pd.entries[pd_idx].phys_addr() + self.hhdm_offset;
+        let pt = unsafe { &*(pt_virt as *const PageTable) };
+        
+        if !pt.entries[pt_idx].is_present() {
+            return false;
+        }
+        
+        let entry_flags = pt.entries[pt_idx].flags();
+        
+        // Check required flags
+        if required_flags.is_writable() && !entry_flags.is_writable() {
+            return false;
+        }
+        if required_flags.is_user() && !entry_flags.is_user() {
+            return false;
+        }
+        
+        true
+    }
+}
+
+impl Drop for AddressSpace {
+    fn drop(&mut self) {
+        // Page tables are automatically cleaned up via Vec<Box<PageTable>>
+        // No manual cleanup needed
+    }
+}
+
+/// Kernel address space (shared across all processes)
+static KERNEL_CR3: AtomicU64 = AtomicU64::new(0);
+
+/// Initialize paging subsystem
+pub fn init() {
+    // Save current CR3 for kernel space
+    let cr3: u64;
+    unsafe {
+        core::arch::asm!("mov {}, cr3", out(reg) cr3);
+    }
+    KERNEL_CR3.store(cr3, Ordering::SeqCst);
+    
+    // Enable NX bit (disabled for now - can cause issues on some QEMU configs)
+    // enable_nx();
+    
+    crate::log_debug!("Paging initialized, kernel CR3: {:#x}", cr3);
+}
+
+/// Enable NX (No-Execute) bit via EFER MSR
+fn enable_nx() {
+    const IA32_EFER: u32 = 0xC0000080;
+    const NXE_BIT: u64 = 1 << 11;
+    
+    unsafe {
+        // Read EFER - rdmsr puts result in EDX:EAX
+        let eax: u32;
+        let edx: u32;
+        core::arch::asm!(
+            "rdmsr",
+            in("ecx") IA32_EFER,
+            out("eax") eax,
+            out("edx") edx,
+        );
+        let efer = ((edx as u64) << 32) | (eax as u64);
+        
+        // Set NXE bit
+        let new_efer = efer | NXE_BIT;
+        let low = new_efer as u32;
+        let high = (new_efer >> 32) as u32;
+        
+        core::arch::asm!(
+            "wrmsr",
+            in("ecx") IA32_EFER,
+            in("eax") low,
+            in("edx") high,
+        );
+    }
+}
+
+/// Get kernel CR3 value
+pub fn kernel_cr3() -> u64 {
+    KERNEL_CR3.load(Ordering::Relaxed)
+}
+
+/// Check if an address is in user space (lower half)
+pub fn is_user_address(addr: u64) -> bool {
+    addr < 0x0000_8000_0000_0000
+}
+
+/// Check if an address is in kernel space (higher half)
+pub fn is_kernel_address(addr: u64) -> bool {
+    addr >= 0xFFFF_8000_0000_0000
+}
+
+/// Validate a user pointer (returns true if safe to access)
+pub fn validate_user_ptr(ptr: u64, len: usize, write: bool) -> bool {
+    // Check it's in user space
+    if !is_user_address(ptr) {
+        return false;
+    }
+    
+    // Check end doesn't overflow into kernel space
+    let end = ptr.saturating_add(len as u64);
+    if !is_user_address(end) {
+        return false;
+    }
+    
+    // TODO: Check page table mappings for current process
+    // For now, just validate address range
+    true
+}
+
+/// User memory region for allocating userspace memory
+pub struct UserMemoryRegion {
+    pub start: u64,
+    pub end: u64,
+    pub next_alloc: u64,
+}
+
+impl UserMemoryRegion {
+    /// Standard user space regions
+    pub const CODE_START: u64 = 0x0000_0000_0040_0000;    // 4 MB
+    pub const CODE_END: u64 = 0x0000_0000_1000_0000;      // 256 MB
+    pub const HEAP_START: u64 = 0x0000_0000_1000_0000;    // 256 MB
+    pub const HEAP_END: u64 = 0x0000_0000_8000_0000;      // 2 GB
+    pub const STACK_TOP: u64 = 0x0000_7FFF_FFFF_0000;     // Near top of user space
+    pub const STACK_SIZE: u64 = 0x0000_0000_0010_0000;    // 1 MB stack
+}
+
+/// Map a single MMIO page into the kernel's current page tables
+/// Uses flags appropriate for MMIO: present, writable, no-cache, no-execute
+pub fn map_kernel_mmio_page(virt: u64, phys: u64) -> Result<(), &'static str> {
+    use alloc::boxed::Box;
+    
+    let hhdm = crate::memory::hhdm_offset();
+    
+    // Extract indices for each level
+    let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
+    let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
+    let pd_idx = ((virt >> 21) & 0x1FF) as usize;
+    let pt_idx = ((virt >> 12) & 0x1FF) as usize;
+    
+    // Read current CR3 to get kernel's PML4
+    let cr3: u64;
+    unsafe {
+        core::arch::asm!("mov {}, cr3", out(reg) cr3);
+    }
+    
+    // Access PML4 via HHDM
+    let pml4 = unsafe { &mut *((cr3 + hhdm) as *mut PageTable) };
+    
+    // Get or create PDPT
+    let pdpt = if pml4.entries[pml4_idx].is_present() {
+        let pdpt_phys = pml4.entries[pml4_idx].phys_addr();
+        unsafe { &mut *((pdpt_phys + hhdm) as *mut PageTable) }
+    } else {
+        // Need to create PDPT - this shouldn't happen for HHDM region
+        return Err("PML4 entry not present - HHDM not covering this region");
+    };
+    
+    // Get or create PD
+    let pd = if pdpt.entries[pdpt_idx].is_present() {
+        let pd_phys = pdpt.entries[pdpt_idx].phys_addr();
+        unsafe { &mut *((pd_phys + hhdm) as *mut PageTable) }
+    } else {
+        // Need to create PD - allocate a new page table
+        crate::serial_println!("[MMIO] Creating PD for PDPT[{}]", pdpt_idx);
+        let new_pd = Box::new(PageTable::new());
+        let pd_virt = Box::into_raw(new_pd) as u64;
+        let pd_phys = pd_virt.checked_sub(hhdm).ok_or("Cannot convert PD virt to phys")?;
+        
+        // Set PDPT entry
+        let flags = PageFlags::new(PageFlags::PRESENT | PageFlags::WRITABLE);
+        pdpt.entries[pdpt_idx].set(pd_phys, flags);
+        
+        unsafe { &mut *(pd_virt as *mut PageTable) }
+    };
+    
+    // Get or create PT
+    let pt = if pd.entries[pd_idx].is_present() {
+        // Check if it's a huge page (2MB)
+        if pd.entries[pd_idx].flags().0 & PageFlags::HUGE_PAGE != 0 {
+            // Already mapped as 2MB page, MMIO access should work
+            return Ok(());
+        }
+        let pt_phys = pd.entries[pd_idx].phys_addr();
+        unsafe { &mut *((pt_phys + hhdm) as *mut PageTable) }
+    } else {
+        // Need to create PT - allocate a new page table
+        crate::serial_println!("[MMIO] Creating PT for PD[{}]", pd_idx);
+        let new_pt = Box::new(PageTable::new());
+        let pt_virt = Box::into_raw(new_pt) as u64;
+        let pt_phys = pt_virt.checked_sub(hhdm).ok_or("Cannot convert PT virt to phys")?;
+        
+        // Set PD entry
+        let flags = PageFlags::new(PageFlags::PRESENT | PageFlags::WRITABLE);
+        pd.entries[pd_idx].set(pt_phys, flags);
+        
+        unsafe { &mut *(pt_virt as *mut PageTable) }
+    };
+    
+    // Check if already mapped
+    if pt.entries[pt_idx].is_present() {
+        // Page already mapped - check if it's the same physical address
+        let existing_phys = pt.entries[pt_idx].phys_addr();
+        if existing_phys == (phys & !0xFFF) {
+            // Same page, already mapped
+            return Ok(());
+        }
+        // Different mapping exists - update it for MMIO
+        crate::serial_println!("[MMIO] Updating existing mapping at PT[{}]", pt_idx);
+    }
+    
+    // Set MMIO page entry: Present + Writable + No-Cache + No-Execute
+    let mmio_flags = PageFlags::new(
+        PageFlags::PRESENT | 
+        PageFlags::WRITABLE | 
+        PageFlags::NO_CACHE | 
+        PageFlags::WRITE_THROUGH |
+        PageFlags::NO_EXECUTE
+    );
+    
+    pt.entries[pt_idx].set(phys & !0xFFF, mmio_flags);
+    
+    Ok(())
+}
+

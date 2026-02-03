@@ -1,0 +1,14 @@
+[package]
+name = "trustos-rt"
+version = "0.1.0"
+edition = "2021"
+description = "TrustOS Runtime Library - Entry point and syscalls"
+license = "MIT"
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+
+[features]
+default = []

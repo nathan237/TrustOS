@@ -1,0 +1,34 @@
+[workspace]
+resolver = "2"
+members = [
+    "kernel",
+    "userland/init",
+    "userland/shell",
+    "userland/fs",
+    "userland/network",
+    "userland/jarvis",
+    "userland/compositor",
+]
+exclude = [
+    "sdk",
+    "sdk/trustos-rt",
+    "sdk/examples/hello",
+    "sdk/examples/syscall-test",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["TRustOs Team"]
+license = "MIT"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+lto = false
+opt-level = 2
+
+[patch.crates-io]
+mbedtls-platform-support = { path = "crates/mbedtls-platform-support" }

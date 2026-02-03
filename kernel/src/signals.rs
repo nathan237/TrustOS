@@ -1,0 +1,399 @@
+//! POSIX Signals
+//!
+//! Signal handling for process control and inter-process communication.
+//! Implements Linux-compatible signal semantics.
+
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU64, Ordering};
+use spin::Mutex;
+
+/// Signal numbers (Linux compatible)
+pub mod sig {
+    pub const SIGHUP: u32 = 1;
+    pub const SIGINT: u32 = 2;
+    pub const SIGQUIT: u32 = 3;
+    pub const SIGILL: u32 = 4;
+    pub const SIGTRAP: u32 = 5;
+    pub const SIGABRT: u32 = 6;
+    pub const SIGBUS: u32 = 7;
+    pub const SIGFPE: u32 = 8;
+    pub const SIGKILL: u32 = 9;  // Cannot be caught or ignored
+    pub const SIGUSR1: u32 = 10;
+    pub const SIGSEGV: u32 = 11;
+    pub const SIGUSR2: u32 = 12;
+    pub const SIGPIPE: u32 = 13;
+    pub const SIGALRM: u32 = 14;
+    pub const SIGTERM: u32 = 15;
+    pub const SIGSTKFLT: u32 = 16;
+    pub const SIGCHLD: u32 = 17;
+    pub const SIGCONT: u32 = 18;
+    pub const SIGSTOP: u32 = 19; // Cannot be caught or ignored
+    pub const SIGTSTP: u32 = 20;
+    pub const SIGTTIN: u32 = 21;
+    pub const SIGTTOU: u32 = 22;
+    pub const SIGURG: u32 = 23;
+    pub const SIGXCPU: u32 = 24;
+    pub const SIGXFSZ: u32 = 25;
+    pub const SIGVTALRM: u32 = 26;
+    pub const SIGPROF: u32 = 27;
+    pub const SIGWINCH: u32 = 28;
+    pub const SIGIO: u32 = 29;
+    pub const SIGPWR: u32 = 30;
+    pub const SIGSYS: u32 = 31;
+    
+    // Real-time signals (32-64)
+    pub const SIGRTMIN: u32 = 32;
+    pub const SIGRTMAX: u32 = 64;
+    
+    pub const MAX_SIGNALS: usize = 65;
+}
+
+/// Signal action flags
+pub mod sa_flags {
+    pub const SA_NOCLDSTOP: u64 = 0x00000001;
+    pub const SA_NOCLDWAIT: u64 = 0x00000002;
+    pub const SA_SIGINFO: u64 = 0x00000004;
+    pub const SA_ONSTACK: u64 = 0x08000000;
+    pub const SA_RESTART: u64 = 0x10000000;
+    pub const SA_NODEFER: u64 = 0x40000000;
+    pub const SA_RESETHAND: u64 = 0x80000000;
+    pub const SA_RESTORER: u64 = 0x04000000;
+}
+
+/// Special signal handlers
+pub const SIG_DFL: u64 = 0;  // Default action
+pub const SIG_IGN: u64 = 1;  // Ignore signal
+pub const SIG_ERR: u64 = u64::MAX;
+
+/// Signal action structure (Linux compatible)
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct SigAction {
+    /// Handler function pointer or SIG_DFL/SIG_IGN
+    pub sa_handler: u64,
+    /// Flags
+    pub sa_flags: u64,
+    /// Signal restorer (for returning from handler)
+    pub sa_restorer: u64,
+    /// Signal mask during handler
+    pub sa_mask: u64,
+}
+
+impl Default for SigAction {
+    fn default() -> Self {
+        Self {
+            sa_handler: SIG_DFL,
+            sa_flags: 0,
+            sa_restorer: 0,
+            sa_mask: 0,
+        }
+    }
+}
+
+/// Pending signal info
+#[derive(Clone, Debug)]
+pub struct PendingSignal {
+    pub signo: u32,
+    pub sender_pid: u32,
+    pub timestamp: u64,
+}
+
+/// Per-process signal state
+pub struct SignalState {
+    /// Signal actions for each signal
+    pub actions: [SigAction; sig::MAX_SIGNALS],
+    /// Pending signals bitmask
+    pub pending: AtomicU64,
+    /// Blocked signals bitmask
+    pub blocked: AtomicU64,
+    /// Pending signal queue (for siginfo)
+    pub pending_queue: Vec<PendingSignal>,
+}
+
+impl SignalState {
+    pub fn new() -> Self {
+        Self {
+            actions: [SigAction::default(); sig::MAX_SIGNALS],
+            pending: AtomicU64::new(0),
+            blocked: AtomicU64::new(0),
+            pending_queue: Vec::new(),
+        }
+    }
+    
+    /// Set signal action
+    pub fn set_action(&mut self, signo: u32, action: SigAction) -> Result<SigAction, i32> {
+        if signo == 0 || signo as usize >= sig::MAX_SIGNALS {
+            return Err(-22); // EINVAL
+        }
+        
+        // Cannot change SIGKILL or SIGSTOP
+        if signo == sig::SIGKILL || signo == sig::SIGSTOP {
+            return Err(-22); // EINVAL
+        }
+        
+        let old = self.actions[signo as usize];
+        self.actions[signo as usize] = action;
+        Ok(old)
+    }
+    
+    /// Get signal action
+    pub fn get_action(&self, signo: u32) -> Option<&SigAction> {
+        if signo as usize >= sig::MAX_SIGNALS {
+            return None;
+        }
+        Some(&self.actions[signo as usize])
+    }
+    
+    /// Post a signal to this process
+    pub fn post_signal(&mut self, signo: u32, sender_pid: u32) {
+        if signo == 0 || signo as usize >= sig::MAX_SIGNALS {
+            return;
+        }
+        
+        // Set pending bit
+        self.pending.fetch_or(1 << signo, Ordering::SeqCst);
+        
+        // Add to queue
+        self.pending_queue.push(PendingSignal {
+            signo,
+            sender_pid,
+            timestamp: crate::time::now_ns(),
+        });
+    }
+    
+    /// Check if signal is pending
+    pub fn is_pending(&self, signo: u32) -> bool {
+        if signo as usize >= sig::MAX_SIGNALS {
+            return false;
+        }
+        (self.pending.load(Ordering::Relaxed) & (1 << signo)) != 0
+    }
+    
+    /// Check if signal is blocked
+    pub fn is_blocked(&self, signo: u32) -> bool {
+        if signo as usize >= sig::MAX_SIGNALS {
+            return false;
+        }
+        // SIGKILL and SIGSTOP cannot be blocked
+        if signo == sig::SIGKILL || signo == sig::SIGSTOP {
+            return false;
+        }
+        (self.blocked.load(Ordering::Relaxed) & (1 << signo)) != 0
+    }
+    
+    /// Get next deliverable signal
+    pub fn get_deliverable(&self) -> Option<u32> {
+        let pending = self.pending.load(Ordering::Relaxed);
+        let blocked = self.blocked.load(Ordering::Relaxed);
+        let deliverable = pending & !blocked;
+        
+        if deliverable == 0 {
+            return None;
+        }
+        
+        // Find first set bit
+        Some(deliverable.trailing_zeros())
+    }
+    
+    /// Clear pending signal
+    pub fn clear_pending(&mut self, signo: u32) {
+        if signo as usize >= sig::MAX_SIGNALS {
+            return;
+        }
+        self.pending.fetch_and(!(1 << signo), Ordering::SeqCst);
+        self.pending_queue.retain(|s| s.signo != signo);
+    }
+    
+    /// Block signals
+    pub fn block(&self, mask: u64) {
+        self.blocked.fetch_or(mask, Ordering::SeqCst);
+    }
+    
+    /// Unblock signals
+    pub fn unblock(&self, mask: u64) {
+        self.blocked.fetch_and(!mask, Ordering::SeqCst);
+    }
+    
+    /// Set blocked mask
+    pub fn set_blocked(&self, mask: u64) {
+        // Cannot block SIGKILL or SIGSTOP
+        let mask = mask & !((1 << sig::SIGKILL) | (1 << sig::SIGSTOP));
+        self.blocked.store(mask, Ordering::SeqCst);
+    }
+}
+
+/// Global signal state per process
+static SIGNAL_STATES: Mutex<BTreeMap<u32, SignalState>> = Mutex::new(BTreeMap::new());
+
+/// Initialize signal handling for a process
+pub fn init_process(pid: u32) {
+    SIGNAL_STATES.lock().insert(pid, SignalState::new());
+}
+
+/// Clean up signal state for exited process
+pub fn cleanup_process(pid: u32) {
+    SIGNAL_STATES.lock().remove(&pid);
+}
+
+/// Send signal to process
+pub fn kill(target_pid: u32, signo: u32, sender_pid: u32) -> Result<(), i32> {
+    if signo == 0 {
+        // Signal 0 just checks if process exists
+        let exists = SIGNAL_STATES.lock().contains_key(&target_pid);
+        return if exists { Ok(()) } else { Err(-3) }; // ESRCH
+    }
+    
+    let mut states = SIGNAL_STATES.lock();
+    let state = states.get_mut(&target_pid).ok_or(-3)?; // ESRCH
+    
+    state.post_signal(signo, sender_pid);
+    
+    // Check if signal should terminate/stop process immediately
+    if signo == sig::SIGKILL || signo == sig::SIGSTOP {
+        handle_fatal_signal(target_pid, signo);
+    }
+    
+    Ok(())
+}
+
+/// Handle fatal signal (SIGKILL, SIGSTOP)
+fn handle_fatal_signal(pid: u32, signo: u32) {
+    match signo {
+        sig::SIGKILL => {
+            // Terminate process immediately
+            crate::process::terminate(pid);
+        }
+        sig::SIGSTOP => {
+            // Stop process
+            crate::process::stop(pid);
+        }
+        _ => {}
+    }
+}
+
+/// Set signal action (sigaction syscall)
+pub fn set_action(pid: u32, signo: u32, action: SigAction) -> Result<SigAction, i32> {
+    let mut states = SIGNAL_STATES.lock();
+    let state = states.get_mut(&pid).ok_or(-3)?;
+    state.set_action(signo, action)
+}
+
+/// Get signal action
+pub fn get_action(pid: u32, signo: u32) -> Result<SigAction, i32> {
+    let states = SIGNAL_STATES.lock();
+    let state = states.get(&pid).ok_or(-3)?;
+    state.get_action(signo).copied().ok_or(-22)
+}
+
+/// Set signal mask (sigprocmask syscall)
+pub fn set_mask(pid: u32, how: u32, set: u64, old_set: &mut u64) -> Result<(), i32> {
+    let states = SIGNAL_STATES.lock();
+    let state = states.get(&pid).ok_or(-3)?;
+    
+    *old_set = state.blocked.load(Ordering::Relaxed);
+    
+    match how {
+        0 => state.block(set),        // SIG_BLOCK
+        1 => state.unblock(set),      // SIG_UNBLOCK
+        2 => state.set_blocked(set),  // SIG_SETMASK
+        _ => return Err(-22),
+    }
+    
+    Ok(())
+}
+
+/// Check for pending signals and deliver if needed
+pub fn check_signals(pid: u32) -> Option<u32> {
+    let mut states = SIGNAL_STATES.lock();
+    let state = states.get_mut(&pid)?;
+    
+    if let Some(signo) = state.get_deliverable() {
+        let action = &state.actions[signo as usize];
+        
+        match action.sa_handler {
+            SIG_IGN => {
+                // Ignore - just clear
+                state.clear_pending(signo);
+                None
+            }
+            SIG_DFL => {
+                // Default action
+                state.clear_pending(signo);
+                handle_default_action(pid, signo);
+                Some(signo)
+            }
+            _ => {
+                // User handler
+                state.clear_pending(signo);
+                Some(signo)
+            }
+        }
+    } else {
+        None
+    }
+}
+
+/// Handle default signal action
+fn handle_default_action(pid: u32, signo: u32) {
+    match signo {
+        // Signals that terminate
+        sig::SIGHUP | sig::SIGINT | sig::SIGKILL | sig::SIGPIPE |
+        sig::SIGALRM | sig::SIGTERM | sig::SIGUSR1 | sig::SIGUSR2 => {
+            crate::process::terminate(pid);
+        }
+        
+        // Signals that terminate with core dump
+        sig::SIGQUIT | sig::SIGILL | sig::SIGABRT | sig::SIGFPE |
+        sig::SIGSEGV | sig::SIGBUS | sig::SIGSYS => {
+            // TODO: Generate core dump
+            crate::process::terminate(pid);
+        }
+        
+        // Signals that stop
+        sig::SIGSTOP | sig::SIGTSTP | sig::SIGTTIN | sig::SIGTTOU => {
+            crate::process::stop(pid);
+        }
+        
+        // Signals that continue
+        sig::SIGCONT => {
+            crate::process::resume(pid);
+        }
+        
+        // Signals ignored by default
+        sig::SIGCHLD | sig::SIGURG | sig::SIGWINCH => {
+            // Do nothing
+        }
+        
+        _ => {
+            // Unknown signal - terminate
+            crate::process::terminate(pid);
+        }
+    }
+}
+
+/// Get signal name
+pub fn signal_name(signo: u32) -> &'static str {
+    match signo {
+        sig::SIGHUP => "SIGHUP",
+        sig::SIGINT => "SIGINT",
+        sig::SIGQUIT => "SIGQUIT",
+        sig::SIGILL => "SIGILL",
+        sig::SIGTRAP => "SIGTRAP",
+        sig::SIGABRT => "SIGABRT",
+        sig::SIGBUS => "SIGBUS",
+        sig::SIGFPE => "SIGFPE",
+        sig::SIGKILL => "SIGKILL",
+        sig::SIGUSR1 => "SIGUSR1",
+        sig::SIGSEGV => "SIGSEGV",
+        sig::SIGUSR2 => "SIGUSR2",
+        sig::SIGPIPE => "SIGPIPE",
+        sig::SIGALRM => "SIGALRM",
+        sig::SIGTERM => "SIGTERM",
+        sig::SIGCHLD => "SIGCHLD",
+        sig::SIGCONT => "SIGCONT",
+        sig::SIGSTOP => "SIGSTOP",
+        sig::SIGTSTP => "SIGTSTP",
+        _ => "UNKNOWN",
+    }
+}

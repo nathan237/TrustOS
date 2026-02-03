@@ -1,0 +1,14 @@
+[package]
+name = "boot"
+version = "0.1.0"
+edition = "2021"
+
+# Exclude from workspace
+[workspace]
+
+[dependencies]
+bootloader = "0.11"
+
+[[bin]]
+name = "boot"
+path = "src/main.rs"

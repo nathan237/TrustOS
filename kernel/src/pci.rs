@@ -1,0 +1,509 @@
+//! PCI Bus Enumeration
+//!
+//! Real PCI hardware detection and device enumeration.
+//! This is the foundation for all hardware drivers.
+
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::format;
+use x86_64::instructions::port::Port;
+use spin::Mutex;
+
+/// PCI configuration ports
+const PCI_CONFIG_ADDRESS: u16 = 0xCF8;
+const PCI_CONFIG_DATA: u16 = 0xCFC;
+
+/// PCI device classes
+pub mod class {
+    pub const UNCLASSIFIED: u8 = 0x00;
+    pub const MASS_STORAGE: u8 = 0x01;
+    pub const NETWORK: u8 = 0x02;
+    pub const DISPLAY: u8 = 0x03;
+    pub const MULTIMEDIA: u8 = 0x04;
+    pub const MEMORY: u8 = 0x05;
+    pub const BRIDGE: u8 = 0x06;
+    pub const SIMPLE_COMM: u8 = 0x07;
+    pub const BASE_PERIPHERAL: u8 = 0x08;
+    pub const INPUT: u8 = 0x09;
+    pub const DOCKING: u8 = 0x0A;
+    pub const PROCESSOR: u8 = 0x0B;
+    pub const SERIAL_BUS: u8 = 0x0C;
+    pub const WIRELESS: u8 = 0x0D;
+    pub const INTELLIGENT: u8 = 0x0E;
+    pub const SATELLITE: u8 = 0x0F;
+    pub const ENCRYPTION: u8 = 0x10;
+    pub const SIGNAL_PROC: u8 = 0x11;
+}
+
+/// Storage subclasses
+pub mod storage {
+    pub const SCSI: u8 = 0x00;
+    pub const IDE: u8 = 0x01;
+    pub const FLOPPY: u8 = 0x02;
+    pub const IPI: u8 = 0x03;
+    pub const RAID: u8 = 0x04;
+    pub const ATA: u8 = 0x05;
+    pub const SATA: u8 = 0x06;
+    pub const SAS: u8 = 0x07;
+    pub const NVM: u8 = 0x08;  // NVMe
+}
+
+/// Network subclasses
+pub mod network {
+    pub const ETHERNET: u8 = 0x00;
+    pub const TOKEN_RING: u8 = 0x01;
+    pub const FDDI: u8 = 0x02;
+    pub const ATM: u8 = 0x03;
+    pub const ISDN: u8 = 0x04;
+    pub const PICMG: u8 = 0x06;
+    pub const INFINIBAND: u8 = 0x07;
+}
+
+/// Bridge subclasses
+pub mod bridge {
+    pub const HOST: u8 = 0x00;
+    pub const ISA: u8 = 0x01;
+    pub const EISA: u8 = 0x02;
+    pub const MCA: u8 = 0x03;
+    pub const PCI_TO_PCI: u8 = 0x04;
+    pub const PCMCIA: u8 = 0x05;
+    pub const NUBUS: u8 = 0x06;
+    pub const CARDBUS: u8 = 0x07;
+    pub const RACEWAY: u8 = 0x08;
+    pub const PCI_SEMI: u8 = 0x09;
+    pub const INFINIBAND_PCI: u8 = 0x0A;
+}
+
+/// Serial bus subclasses
+pub mod serial {
+    pub const FIREWIRE: u8 = 0x00;
+    pub const ACCESS: u8 = 0x01;
+    pub const SSA: u8 = 0x02;
+    pub const USB: u8 = 0x03;
+    pub const FIBRE: u8 = 0x04;
+    pub const SMBUS: u8 = 0x05;
+    pub const INFINIBAND: u8 = 0x06;
+    pub const IPMI: u8 = 0x07;
+}
+
+/// USB programming interfaces
+pub mod usb {
+    pub const UHCI: u8 = 0x00;
+    pub const OHCI: u8 = 0x10;
+    pub const EHCI: u8 = 0x20;
+    pub const XHCI: u8 = 0x30;
+}
+
+/// PCI device information
+#[derive(Debug, Clone)]
+pub struct PciDevice {
+    pub bus: u8,
+    pub device: u8,
+    pub function: u8,
+    pub vendor_id: u16,
+    pub device_id: u16,
+    pub class_code: u8,
+    pub subclass: u8,
+    pub prog_if: u8,
+    pub revision: u8,
+    pub header_type: u8,
+    pub interrupt_line: u8,
+    pub interrupt_pin: u8,
+    pub bar: [u32; 6],
+}
+
+impl PciDevice {
+    /// Get class name
+    pub fn class_name(&self) -> &'static str {
+        match self.class_code {
+            class::UNCLASSIFIED => "Unclassified",
+            class::MASS_STORAGE => "Mass Storage",
+            class::NETWORK => "Network Controller",
+            class::DISPLAY => "Display Controller",
+            class::MULTIMEDIA => "Multimedia",
+            class::MEMORY => "Memory Controller",
+            class::BRIDGE => "Bridge",
+            class::SIMPLE_COMM => "Communication",
+            class::BASE_PERIPHERAL => "Peripheral",
+            class::INPUT => "Input Device",
+            class::DOCKING => "Docking Station",
+            class::PROCESSOR => "Processor",
+            class::SERIAL_BUS => "Serial Bus",
+            class::WIRELESS => "Wireless",
+            class::INTELLIGENT => "Intelligent I/O",
+            class::SATELLITE => "Satellite",
+            class::ENCRYPTION => "Encryption",
+            class::SIGNAL_PROC => "Signal Processing",
+            _ => "Unknown",
+        }
+    }
+    
+    /// Get subclass name
+    pub fn subclass_name(&self) -> &'static str {
+        match (self.class_code, self.subclass) {
+            // Storage
+            (class::MASS_STORAGE, storage::IDE) => "IDE Controller",
+            (class::MASS_STORAGE, storage::SATA) => "SATA Controller",
+            (class::MASS_STORAGE, storage::NVM) => "NVMe Controller",
+            (class::MASS_STORAGE, storage::RAID) => "RAID Controller",
+            (class::MASS_STORAGE, storage::SCSI) => "SCSI Controller",
+            (class::MASS_STORAGE, storage::ATA) => "ATA Controller",
+            
+            // Network
+            (class::NETWORK, network::ETHERNET) => "Ethernet",
+            (class::NETWORK, network::INFINIBAND) => "InfiniBand",
+            
+            // Display
+            (class::DISPLAY, 0x00) => "VGA Compatible",
+            (class::DISPLAY, 0x01) => "XGA Controller",
+            (class::DISPLAY, 0x02) => "3D Controller",
+            
+            // Bridge
+            (class::BRIDGE, bridge::HOST) => "Host Bridge",
+            (class::BRIDGE, bridge::ISA) => "ISA Bridge",
+            (class::BRIDGE, bridge::PCI_TO_PCI) => "PCI-to-PCI Bridge",
+            
+            // Serial Bus
+            (class::SERIAL_BUS, serial::USB) => match self.prog_if {
+                usb::UHCI => "USB UHCI",
+                usb::OHCI => "USB OHCI",
+                usb::EHCI => "USB 2.0 EHCI",
+                usb::XHCI => "USB 3.0 xHCI",
+                0xFE => "USB Device",
+                _ => "USB Controller",
+            },
+            (class::SERIAL_BUS, serial::SMBUS) => "SMBus",
+            
+            _ => "",
+        }
+    }
+    
+    /// Get vendor name (common vendors)
+    pub fn vendor_name(&self) -> &'static str {
+        match self.vendor_id {
+            0x8086 => "Intel",
+            0x1022 => "AMD",
+            0x10DE => "NVIDIA",
+            0x1002 => "AMD/ATI",
+            0x14E4 => "Broadcom",
+            0x10EC => "Realtek",
+            0x8087 => "Intel (Wireless)",
+            0x1B4B => "Marvell",
+            0x1969 => "Qualcomm Atheros",
+            0x168C => "Qualcomm Atheros",
+            0x1AF4 => "Red Hat (virtio)",
+            0x1234 => "QEMU",
+            0x15AD => "VMware",
+            0x80EE => "VirtualBox",
+            0x1AB8 => "Parallels",
+            _ => "Unknown",
+        }
+    }
+    
+    /// Check if this is a multifunction device
+    pub fn is_multifunction(&self) -> bool {
+        self.header_type & 0x80 != 0
+    }
+    
+    /// Get BAR address (masked)
+    pub fn bar_address(&self, index: usize) -> Option<u64> {
+        if index >= 6 {
+            return None;
+        }
+        
+        let bar = self.bar[index];
+        if bar == 0 {
+            return None;
+        }
+        
+        // Check if memory or I/O
+        if bar & 1 == 0 {
+            // Memory BAR
+            let bar_type = (bar >> 1) & 0x3;
+            match bar_type {
+                0 => Some((bar & 0xFFFFFFF0) as u64), // 32-bit
+                2 if index < 5 => {
+                    // 64-bit BAR
+                    let high = self.bar[index + 1] as u64;
+                    Some(((high << 32) | (bar & 0xFFFFFFF0) as u64))
+                }
+                _ => None,
+            }
+        } else {
+            // I/O BAR
+            Some((bar & 0xFFFFFFFC) as u64)
+        }
+    }
+    
+    /// Check if BAR is memory-mapped
+    pub fn bar_is_memory(&self, index: usize) -> bool {
+        if index >= 6 {
+            return false;
+        }
+        self.bar[index] & 1 == 0
+    }
+    
+    /// Check if BAR is I/O port
+    pub fn bar_is_io(&self, index: usize) -> bool {
+        if index >= 6 {
+            return false;
+        }
+        self.bar[index] & 1 != 0
+    }
+}
+
+/// Global device list
+static DEVICES: Mutex<Vec<PciDevice>> = Mutex::new(Vec::new());
+
+/// Read PCI configuration register
+pub fn config_read(bus: u8, device: u8, function: u8, offset: u8) -> u32 {
+    let address: u32 = 
+        (1 << 31) |                       // Enable bit
+        ((bus as u32) << 16) |            // Bus number
+        ((device as u32) << 11) |         // Device number
+        ((function as u32) << 8) |        // Function number
+        ((offset as u32) & 0xFC);         // Register offset (aligned)
+    
+    let mut addr_port: Port<u32> = Port::new(PCI_CONFIG_ADDRESS);
+    let mut data_port: Port<u32> = Port::new(PCI_CONFIG_DATA);
+    
+    unsafe {
+        addr_port.write(address);
+        data_port.read()
+    }
+}
+
+/// Write PCI configuration register
+pub fn config_write(bus: u8, device: u8, function: u8, offset: u8, value: u32) {
+    let address: u32 = 
+        (1 << 31) |
+        ((bus as u32) << 16) |
+        ((device as u32) << 11) |
+        ((function as u32) << 8) |
+        ((offset as u32) & 0xFC);
+    
+    let mut addr_port: Port<u32> = Port::new(PCI_CONFIG_ADDRESS);
+    let mut data_port: Port<u32> = Port::new(PCI_CONFIG_DATA);
+    
+    unsafe {
+        addr_port.write(address);
+        data_port.write(value);
+    }
+}
+
+/// Read 16-bit value from PCI config
+pub fn config_read16(bus: u8, device: u8, function: u8, offset: u8) -> u16 {
+    let value = config_read(bus, device, function, offset & 0xFC);
+    ((value >> ((offset & 2) * 8)) & 0xFFFF) as u16
+}
+
+/// Read 8-bit value from PCI config
+pub fn config_read8(bus: u8, device: u8, function: u8, offset: u8) -> u8 {
+    let value = config_read(bus, device, function, offset & 0xFC);
+    ((value >> ((offset & 3) * 8)) & 0xFF) as u8
+}
+
+/// Scan a single function
+fn scan_function(bus: u8, device: u8, function: u8) -> Option<PciDevice> {
+    let vendor_device = config_read(bus, device, function, 0x00);
+    let vendor_id = (vendor_device & 0xFFFF) as u16;
+    
+    if vendor_id == 0xFFFF || vendor_id == 0x0000 {
+        return None;
+    }
+    
+    let device_id = ((vendor_device >> 16) & 0xFFFF) as u16;
+    
+    let class_reg = config_read(bus, device, function, 0x08);
+    let revision = (class_reg & 0xFF) as u8;
+    let prog_if = ((class_reg >> 8) & 0xFF) as u8;
+    let subclass = ((class_reg >> 16) & 0xFF) as u8;
+    let class_code = ((class_reg >> 24) & 0xFF) as u8;
+    
+    let header_reg = config_read(bus, device, function, 0x0C);
+    let header_type = ((header_reg >> 16) & 0xFF) as u8;
+    
+    let int_reg = config_read(bus, device, function, 0x3C);
+    let interrupt_line = (int_reg & 0xFF) as u8;
+    let interrupt_pin = ((int_reg >> 8) & 0xFF) as u8;
+    
+    // Read BARs
+    let mut bar = [0u32; 6];
+    for i in 0..6 {
+        bar[i] = config_read(bus, device, function, 0x10 + (i as u8 * 4));
+    }
+    
+    Some(PciDevice {
+        bus,
+        device,
+        function,
+        vendor_id,
+        device_id,
+        class_code,
+        subclass,
+        prog_if,
+        revision,
+        header_type,
+        interrupt_line,
+        interrupt_pin,
+        bar,
+    })
+}
+
+/// Scan a device (all functions)
+fn scan_device(bus: u8, device: u8, devices: &mut Vec<PciDevice>) {
+    if let Some(dev) = scan_function(bus, device, 0) {
+        let multifunction = dev.is_multifunction();
+        devices.push(dev);
+        
+        if multifunction {
+            for function in 1..8 {
+                if let Some(dev) = scan_function(bus, device, function) {
+                    devices.push(dev);
+                }
+            }
+        }
+    }
+}
+
+/// Scan entire PCI bus
+pub fn scan() -> Vec<PciDevice> {
+    let mut devices = Vec::new();
+    
+    // Try to detect PCI - check multiple locations since slot 0:0.0 may be empty
+    let mut pci_found = false;
+    for device in 0..32 {
+        let test = config_read(0, device, 0, 0);
+        if test != 0xFFFFFFFF && test != 0x00000000 {
+            pci_found = true;
+            break;
+        }
+    }
+    
+    if !pci_found {
+        crate::log_warn!("[PCI] No PCI bus detected - scanning anyway...");
+    }
+    
+    // Scan buses 0-255 (scan even if detection failed - some VMs need this)
+    for bus in 0..=255u8 {
+        for device in 0..32 {
+            scan_device(bus, device, &mut devices);
+        }
+        
+        // Optimization: if bus 0 has no bridges, skip other buses
+        if bus == 0 && !devices.iter().any(|d| d.class_code == class::BRIDGE) {
+            break;
+        }
+        
+        // QEMU typically only uses first few buses
+        if bus > 10 && devices.iter().filter(|d| d.bus > 0).count() == 0 {
+            break;
+        }
+    }
+    
+    devices
+}
+
+/// Initialize PCI subsystem
+pub fn init() {
+    let devices = scan();
+    let count = devices.len();
+    
+    crate::log!("[PCI] Found {} devices:", count);
+    
+    for dev in &devices {
+        let subclass_name = dev.subclass_name();
+        if subclass_name.is_empty() {
+            crate::log!("[PCI]   {:02X}:{:02X}.{} {:04X}:{:04X} {} ({})",
+                dev.bus, dev.device, dev.function,
+                dev.vendor_id, dev.device_id,
+                dev.class_name(),
+                dev.vendor_name());
+        } else {
+            crate::log!("[PCI]   {:02X}:{:02X}.{} {:04X}:{:04X} {} - {} ({})",
+                dev.bus, dev.device, dev.function,
+                dev.vendor_id, dev.device_id,
+                dev.class_name(),
+                subclass_name,
+                dev.vendor_name());
+        }
+    }
+    
+    *DEVICES.lock() = devices;
+}
+
+/// Get all PCI devices
+pub fn get_devices() -> Vec<PciDevice> {
+    DEVICES.lock().clone()
+}
+
+/// Find devices by class
+pub fn find_by_class(class_code: u8) -> Vec<PciDevice> {
+    DEVICES.lock().iter()
+        .filter(|d| d.class_code == class_code)
+        .cloned()
+        .collect()
+}
+
+/// Find devices by class and subclass
+pub fn find_by_class_subclass(class_code: u8, subclass: u8) -> Vec<PciDevice> {
+    DEVICES.lock().iter()
+        .filter(|d| d.class_code == class_code && d.subclass == subclass)
+        .cloned()
+        .collect()
+}
+
+/// Find device by vendor and device ID
+pub fn find_by_id(vendor_id: u16, device_id: u16) -> Option<PciDevice> {
+    DEVICES.lock().iter()
+        .find(|d| d.vendor_id == vendor_id && d.device_id == device_id)
+        .cloned()
+}
+
+/// Find first device of a class
+pub fn find_first(class_code: u8) -> Option<PciDevice> {
+    DEVICES.lock().iter()
+        .find(|d| d.class_code == class_code)
+        .cloned()
+}
+
+/// Enable bus mastering for a device
+pub fn enable_bus_master(dev: &PciDevice) {
+    let command = config_read16(dev.bus, dev.device, dev.function, 0x04);
+    let new_command = command | 0x04; // Bus Master Enable
+    config_write(dev.bus, dev.device, dev.function, 0x04, new_command as u32);
+    crate::log_debug!("[PCI] Bus mastering enabled for {:02X}:{:02X}.{}", 
+        dev.bus, dev.device, dev.function);
+}
+
+/// Enable memory space access for a device
+pub fn enable_memory_space(dev: &PciDevice) {
+    let command = config_read16(dev.bus, dev.device, dev.function, 0x04);
+    let new_command = command | 0x02; // Memory Space Enable
+    config_write(dev.bus, dev.device, dev.function, 0x04, new_command as u32);
+}
+
+/// Enable I/O space access for a device
+pub fn enable_io_space(dev: &PciDevice) {
+    let command = config_read16(dev.bus, dev.device, dev.function, 0x04);
+    let new_command = command | 0x01; // I/O Space Enable
+    config_write(dev.bus, dev.device, dev.function, 0x04, new_command as u32);
+}
+
+/// Get summary of detected hardware
+pub fn hardware_summary() -> String {
+    let devices = DEVICES.lock();
+    
+    let storage = devices.iter().filter(|d| d.class_code == class::MASS_STORAGE).count();
+    let network = devices.iter().filter(|d| d.class_code == class::NETWORK).count();
+    let display = devices.iter().filter(|d| d.class_code == class::DISPLAY).count();
+    let usb = devices.iter().filter(|d| 
+        d.class_code == class::SERIAL_BUS && d.subclass == serial::USB
+    ).count();
+    let bridges = devices.iter().filter(|d| d.class_code == class::BRIDGE).count();
+    
+    format!(
+        "PCI: {} devices (Storage:{}, Network:{}, Display:{}, USB:{}, Bridges:{})",
+        devices.len(), storage, network, display, usb, bridges
+    )
+}

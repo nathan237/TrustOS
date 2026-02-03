@@ -1,0 +1,27 @@
+[package]
+name = "mbedtls-platform-support"
+version = "0.1.1"
+edition = "2018"
+build = "build.rs"
+links = "mbedtls-platform-support"
+license = "Apache-2.0 OR GPL-2.0-or-later"
+description = "Platform support stubs for mbedtls in freestanding environments."
+
+[dependencies]
+cfg-if = "1.0.0"
+chrono = { version = "0.4", optional = true }
+mbedtls-sys-auto = { version = "2.25.0", default-features = false, features = ["threading", "custom_printf"] }
+spin = { version = "0.4.0", optional = true, default-features = false }
+
+[build-dependencies]
+cc = "1.0"
+
+[features]
+aesni = ["mbedtls-sys-auto/aesni"]
+custom_gmtime_r = ["mbedtls-sys-auto/custom_gmtime_r", "chrono"]
+custom_time = ["mbedtls-sys-auto/custom_time", "chrono"]
+force_aesni_support = ["mbedtls-sys-auto/custom_has_support", "mbedtls-sys-auto/aes_alt", "aesni"]
+rust_threading = ["mbedtls-sys-auto/custom_threading", "std"]
+spin_threading = ["spin", "mbedtls-sys-auto/custom_threading"]
+std = ["mbedtls-sys-auto/std"]
+time = ["mbedtls-sys-auto/time"]
