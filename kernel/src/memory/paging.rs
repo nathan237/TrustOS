@@ -29,6 +29,15 @@ impl PageFlags {
     pub const GLOBAL: u64 = 1 << 8;
     pub const NO_EXECUTE: u64 = 1 << 63;
     
+    /// PAT bit for 4KB pages (bit 7) — selects PAT entry for memory type
+    /// Combined with PCD (bit 4) and PWT (bit 3):
+    ///   PAT=0, PCD=0, PWT=0 → PAT entry 0 (WB by default)
+    ///   PAT=0, PCD=0, PWT=1 → PAT entry 1 (reprogrammed to WC)
+    ///   PAT=0, PCD=1, PWT=0 → PAT entry 2 (UC-)
+    ///   PAT=0, PCD=1, PWT=1 → PAT entry 3 (UC)
+    ///   PAT=1, ... → PAT entries 4-7
+    pub const PAGE_PAT: u64 = 1 << 7;
+    
     /// Kernel code: Present + Readable (no write, no user)
     pub const KERNEL_CODE: Self = Self(Self::PRESENT);
     
@@ -538,8 +547,17 @@ pub fn map_kernel_mmio_page(virt: u64, phys: u64) -> Result<(), &'static str> {
         let pdpt_phys = pml4.entries[pml4_idx].phys_addr();
         unsafe { &mut *((pdpt_phys + hhdm) as *mut PageTable) }
     } else {
-        // Need to create PDPT - this shouldn't happen for HHDM region
-        return Err("PML4 entry not present - HHDM not covering this region");
+        // PML4 entry missing — PCI MMIO regions aren't covered by Limine HHDM.
+        // Allocate a new PDPT to extend the mapping.
+        crate::serial_println!("[MMIO] Creating PDPT for PML4[{}] (phys={:#x})", pml4_idx, phys);
+        let new_pdpt = Box::new(PageTable::new());
+        let pdpt_virt = Box::into_raw(new_pdpt) as u64;
+        let pdpt_phys = pdpt_virt.checked_sub(hhdm).ok_or("Cannot convert PDPT virt to phys")?;
+        
+        let flags = PageFlags::new(PageFlags::PRESENT | PageFlags::WRITABLE);
+        pml4.entries[pml4_idx].set(pdpt_phys, flags);
+        
+        unsafe { &mut *(pdpt_virt as *mut PageTable) }
     };
     
     // Get or create PD
@@ -607,5 +625,144 @@ pub fn map_kernel_mmio_page(virt: u64, phys: u64) -> Result<(), &'static str> {
     pt.entries[pt_idx].set(phys & !0xFFF, mmio_flags);
     
     Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PAT (Page Attribute Table) — Write-Combining support
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Every GPU driver (Mesa, NVIDIA, AMD) uses PAT to set framebuffer memory type
+// to Write-Combining (WC). WC batches individual writes into 64-byte burst
+// transfers, giving 10-20x throughput vs UC (Uncacheable).
+//
+// Default x86 PAT entries:
+//   0: WB (Write-Back)      1: WT (Write-Through)
+//   2: UC- (Uncacheable-)    3: UC (Uncacheable)
+//   4: WB                    5: WT        
+//   6: UC-                   7: UC
+//
+// We reprogram entry 1 (PWT=1, PCD=0, PAT=0) from WT → WC (0x01)
+// Then any page with PWT=1, PCD=0 gets Write-Combining behavior.
+
+const IA32_PAT_MSR: u32 = 0x277;
+
+/// Memory type values for PAT entries
+const PAT_WB: u8 = 0x06;  // Write-Back (default)
+const PAT_WT: u8 = 0x04;  // Write-Through  
+const PAT_UC: u8 = 0x00;  // Uncacheable
+const PAT_WC: u8 = 0x01;  // Write-Combining ← what we want for framebuffer
+
+/// Setup PAT with Write-Combining in entry 1
+/// Call once during early boot, before any WC mappings
+pub fn setup_pat_write_combining() {
+    unsafe {
+        // Read current PAT MSR
+        let pat_lo: u32;
+        let pat_hi: u32;
+        core::arch::asm!(
+            "rdmsr",
+            in("ecx") IA32_PAT_MSR,
+            out("eax") pat_lo,
+            out("edx") pat_hi,
+        );
+        
+        let old_pat = ((pat_hi as u64) << 32) | (pat_lo as u64);
+        
+        // Build new PAT: replace entry 1 (bits 15:8) with WC (0x01)
+        // Entry layout: each entry is 8 bits, entries 0-3 in low dword, 4-7 in high
+        let new_pat = (old_pat & !0x0000_0000_0000_FF00) | ((PAT_WC as u64) << 8);
+        
+        let new_lo = new_pat as u32;
+        let new_hi = (new_pat >> 32) as u32;
+        
+        // Write new PAT MSR
+        core::arch::asm!(
+            "wrmsr",
+            in("ecx") IA32_PAT_MSR,
+            in("eax") new_lo,
+            in("edx") new_hi,
+        );
+        
+        // Flush TLB to apply new PAT
+        core::arch::asm!(
+            "mov {tmp}, cr3",
+            "mov cr3, {tmp}",
+            tmp = out(reg) _,
+        );
+        
+        crate::serial_println!(
+            "[PAT] Write-Combining enabled: PAT[1]=WC (was {:#04x}, now {:#04x})",
+            (old_pat >> 8) & 0xFF,
+            PAT_WC
+        );
+    }
+}
+
+/// Remap a region as Write-Combining (WC) for optimal framebuffer/VRAM writes
+/// The region must already be mapped. This function updates the page flags
+/// to select PAT entry 1 (WC) by setting PWT=1, PCD=0, PAT_bit=0.
+///
+/// This is how Mesa, NVIDIA, and AMD drivers map GPU BARs and framebuffers.
+pub fn remap_region_write_combining(virt_start: u64, size_bytes: usize) -> Result<usize, &'static str> {
+    let hhdm = crate::memory::hhdm_offset();
+    let num_pages = (size_bytes + PAGE_SIZE - 1) / PAGE_SIZE;
+    let mut remapped = 0usize;
+    
+    let cr3: u64;
+    unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3); }
+    
+    for page_idx in 0..num_pages {
+        let virt = virt_start + (page_idx * PAGE_SIZE) as u64;
+        
+        let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
+        let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
+        let pd_idx = ((virt >> 21) & 0x1FF) as usize;
+        let pt_idx = ((virt >> 12) & 0x1FF) as usize;
+        
+        let pml4 = unsafe { &mut *((cr3 + hhdm) as *mut PageTable) };
+        if !pml4.entries[pml4_idx].is_present() { continue; }
+        
+        let pdpt_phys = pml4.entries[pml4_idx].phys_addr();
+        let pdpt = unsafe { &mut *((pdpt_phys + hhdm) as *mut PageTable) };
+        if !pdpt.entries[pdpt_idx].is_present() { continue; }
+        
+        // Check for 1GB huge page
+        if pdpt.entries[pdpt_idx].flags().0 & PageFlags::HUGE_PAGE != 0 { continue; }
+        
+        let pd_phys = pdpt.entries[pdpt_idx].phys_addr();
+        let pd = unsafe { &mut *((pd_phys + hhdm) as *mut PageTable) };
+        if !pd.entries[pd_idx].is_present() { continue; }
+        
+        // Check for 2MB huge page
+        if pd.entries[pd_idx].flags().0 & PageFlags::HUGE_PAGE != 0 { continue; }
+        
+        let pt_phys = pd.entries[pd_idx].phys_addr();
+        let pt = unsafe { &mut *((pt_phys + hhdm) as *mut PageTable) };
+        if !pt.entries[pt_idx].is_present() { continue; }
+        
+        // Get current entry
+        let phys_addr = pt.entries[pt_idx].phys_addr();
+        let old_flags = pt.entries[pt_idx].flags().0;
+        
+        // Set WC: PWT=1, clear PCD and PAT bit (selects PAT entry 1 = WC)
+        let new_flags = (old_flags & !(PageFlags::NO_CACHE | PageFlags::PAGE_PAT))
+            | PageFlags::WRITE_THROUGH;  // PWT=1, PCD=0, PAT=0 → entry 1 (WC)
+        
+        pt.entries[pt_idx].set(phys_addr, PageFlags::new(new_flags));
+        
+        // Invalidate this TLB entry
+        unsafe {
+            core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
+        }
+        
+        remapped += 1;
+    }
+    
+    crate::serial_println!(
+        "[PAT] Remapped {} pages as Write-Combining @ {:#x} ({} KB)",
+        remapped, virt_start, (remapped * PAGE_SIZE) / 1024
+    );
+    
+    Ok(remapped)
 }
 

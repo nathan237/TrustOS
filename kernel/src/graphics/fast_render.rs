@@ -54,15 +54,25 @@ impl FastSurface {
         }
     }
 
-    /// Clear entire surface (optimized)
+    /// Clear entire surface (SSE2 optimized)
     #[inline]
     pub fn clear(&mut self, color: u32) {
-        // Using fill() leverages LLVM's memset optimization
-        self.data.fill(color);
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            crate::graphics::simd::fill_row_sse2(
+                self.data.as_mut_ptr(),
+                self.data.len(),
+                color
+            );
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            self.data.fill(color);
+        }
         self.dirty.mark_full();
     }
 
-    /// Fill rectangle - optimized row-based fill
+    /// Fill rectangle - SSE2 optimized row-based fill
     #[inline]
     pub fn fill_rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: u32) {
         let x1 = x.max(0) as u32;
@@ -77,8 +87,18 @@ impl FastSurface {
         
         for py in y1..y2 {
             let row_start = py as usize * stride + x1 as usize;
-            // fill() is optimized to use rep stosd on x86
-            self.data[row_start..row_start + row_width].fill(color);
+            #[cfg(target_arch = "x86_64")]
+            unsafe {
+                crate::graphics::simd::fill_row_sse2(
+                    self.data.as_mut_ptr().add(row_start),
+                    row_width,
+                    color
+                );
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
+                self.data[row_start..row_start + row_width].fill(color);
+            }
         }
         
         self.dirty.add_rect(x1, y1, x2 - x1, y2 - y1);
@@ -200,7 +220,7 @@ impl FastSurface {
         let actual_sx = (sx1 as i32 + src_offset_x) as usize;
         let actual_sy = (sy1 as i32 + src_offset_y) as usize;
         
-        // Copy row by row using copy_from_slice (uses memcpy)
+        // Copy row by row using SSE2
         let src_stride = src.width as usize;
         let dst_stride = self.width as usize;
         
@@ -208,14 +228,25 @@ impl FastSurface {
             let src_row_start = (actual_sy + row) * src_stride + actual_sx;
             let dst_row_start = (dy + row) * dst_stride + dx;
             
-            self.data[dst_row_start..dst_row_start + copy_w]
-                .copy_from_slice(&src.data[src_row_start..src_row_start + copy_w]);
+            #[cfg(target_arch = "x86_64")]
+            unsafe {
+                crate::graphics::simd::copy_row_sse2(
+                    self.data.as_mut_ptr().add(dst_row_start),
+                    src.data.as_ptr().add(src_row_start),
+                    copy_w
+                );
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
+                self.data[dst_row_start..dst_row_start + copy_w]
+                    .copy_from_slice(&src.data[src_row_start..src_row_start + copy_w]);
+            }
         }
         
         self.dirty.add_rect(dx as u32, dy as u32, copy_w as u32, copy_h as u32);
     }
 
-    /// Blit with alpha blending (optimized)
+    /// Blit with alpha blending (SSE2 optimized)
     pub fn blit_alpha(&mut self, src: &FastSurface, dst_x: i32, dst_y: i32) {
         let dx_start = dst_x.max(0) as u32;
         let dy_start = dst_y.max(0) as u32;
@@ -234,37 +265,47 @@ impl FastSurface {
             let src_row = (src_y_start + row) as usize * src_stride;
             let dst_row = (dy_start + row) as usize * dst_stride;
             
-            // Process 8 pixels at a time when possible
-            let mut x = 0u32;
-            while x + 8 <= copy_w {
-                for i in 0..8 {
-                    let src_idx = src_row + (src_x_start + x + i) as usize;
-                    let dst_idx = dst_row + (dx_start + x + i) as usize;
+            // Use SSE2 blend when available
+            #[cfg(target_arch = "x86_64")]
+            unsafe {
+                let src_ptr = src.data.as_ptr().add(src_row + src_x_start as usize);
+                let dst_ptr = self.data.as_mut_ptr().add(dst_row + dx_start as usize);
+                crate::graphics::simd::blend_row_sse2(dst_ptr, src_ptr, copy_w as usize);
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
+                // Process 8 pixels at a time when possible
+                let mut x = 0u32;
+                while x + 8 <= copy_w {
+                    for i in 0..8 {
+                        let src_idx = src_row + (src_x_start + x + i) as usize;
+                        let dst_idx = dst_row + (dx_start + x + i) as usize;
+                        let src_pixel = src.data[src_idx];
+                        let alpha = src_pixel >> 24;
+                        
+                        if alpha == 255 {
+                            self.data[dst_idx] = src_pixel;
+                        } else if alpha > 0 {
+                            self.data[dst_idx] = blend_fast(src_pixel, self.data[dst_idx]);
+                        }
+                    }
+                    x += 8;
+                }
+                
+                // Handle remaining pixels
+                while x < copy_w {
+                    let src_idx = src_row + (src_x_start + x) as usize;
+                    let dst_idx = dst_row + (dx_start + x) as usize;
                     let src_pixel = src.data[src_idx];
                     let alpha = src_pixel >> 24;
-                    
+                
                     if alpha == 255 {
                         self.data[dst_idx] = src_pixel;
                     } else if alpha > 0 {
                         self.data[dst_idx] = blend_fast(src_pixel, self.data[dst_idx]);
                     }
+                    x += 1;
                 }
-                x += 8;
-            }
-            
-            // Handle remaining pixels
-            while x < copy_w {
-                let src_idx = src_row + (src_x_start + x) as usize;
-                let dst_idx = dst_row + (dx_start + x) as usize;
-                let src_pixel = src.data[src_idx];
-                let alpha = src_pixel >> 24;
-                
-                if alpha == 255 {
-                    self.data[dst_idx] = src_pixel;
-                } else if alpha > 0 {
-                    self.data[dst_idx] = blend_fast(src_pixel, self.data[dst_idx]);
-                }
-                x += 1;
             }
         }
         

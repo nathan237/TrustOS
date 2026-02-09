@@ -36,6 +36,12 @@ mod apps;
 mod graphics;
 mod icons;
 mod browser;
+mod cosmic; // COSMIC-style UI framework (libcosmic-inspired)
+mod compositor; // Multi-layer compositor for flicker-free rendering
+mod holovolume; // Volumetric ASCII raymarcher - 3D holographic desktop
+mod matrix_fast; // Ultra-optimized Matrix rain with Braille sub-pixels
+mod formula3d;   // Tsoding-inspired wireframe 3D renderer (perspective projection)
+mod gpu_emu;      // Virtual GPU - CPU cores emulating GPU parallelism
 // TLS 1.3 pure Rust implementation (no C dependencies)
 mod tls13;
 // CPU hardware exploitation (TSC, AES-NI, SIMD, SMP)
@@ -75,6 +81,9 @@ mod wayland;
 // Binary-to-Rust transpiler (analyze and convert Linux binaries)
 mod transpiler;
 
+// TrustLang — integrated programming language (Rust-like, bytecode VM)
+mod trustlang;
+
 // Subsystems
 mod memory;
 mod interrupts;
@@ -88,6 +97,7 @@ mod theme;
 mod image;
 mod perf;
 mod hypervisor;
+mod rasterizer;
 
 // Synchronization primitives (Redox-inspired)
 mod sync;
@@ -103,7 +113,7 @@ use core::alloc::Layout;
 use limine::request::{
     FramebufferRequest, MemoryMapRequest, HhdmRequest,
     RequestsStartMarker, RequestsEndMarker, ModuleRequest,
-    RsdpRequest
+    RsdpRequest, SmpRequest
 };
 use limine::BaseRevision;
 
@@ -145,6 +155,11 @@ static MODULE_REQUEST: ModuleRequest = ModuleRequest::new();
 #[used]
 #[unsafe(link_section = ".requests")]
 static RSDP_REQUEST: RsdpRequest = RsdpRequest::new();
+
+/// Request SMP (multi-core) support from Limine
+#[used]
+#[unsafe(link_section = ".requests")]
+static SMP_REQUEST: SmpRequest = SmpRequest::new();
 
 /// Limine requests end marker
 #[used]
@@ -355,15 +370,52 @@ pub unsafe extern "C" fn kmain() -> ! {
         framebuffer::print_boot_status("No RSDP from bootloader", BootStatus::Skip);
     }
     
-    // Phase 3.56: SMP initialization
+    // Phase 3.56: SMP initialization - Start all CPU cores!
     serial_println!("Initializing SMP...");
     cpu::smp::init();
-    framebuffer::print_boot_status("SMP initialized", BootStatus::Ok);
+    
+    // Boot Application Processors (APs)
+    if let Some(smp_response) = SMP_REQUEST.get_response() {
+        let cpu_count = smp_response.cpus().len();
+        serial_println!("[SMP] Found {} CPUs via Limine", cpu_count);
+        
+        // Start each AP
+        for cpu in smp_response.cpus().iter() {
+            if cpu.id != 0 {  // Skip BSP (Bootstrap Processor)
+                serial_println!("[SMP] Starting AP {} (LAPIC ID: {})", cpu.id, cpu.lapic_id);
+                // Set the entry point for this AP
+                cpu.goto_address.write(cpu::smp::ap_entry);
+            }
+        }
+        
+        // Wait for APs to initialize (with timeout)
+        let mut ready_count = 1u32; // BSP is ready
+        for _ in 0..1000 {
+            ready_count = cpu::smp::ready_cpu_count();
+            if ready_count >= cpu_count as u32 {
+                break;
+            }
+            // Small delay
+            for _ in 0..10000 { core::hint::spin_loop(); }
+        }
+        
+        serial_println!("[SMP] {} of {} CPUs online", ready_count, cpu_count);
+        cpu::smp::set_cpu_count(cpu_count as u32);
+        framebuffer::print_boot_status(&alloc::format!("SMP: {} cores active", ready_count), BootStatus::Ok);
+    } else {
+        serial_println!("[SMP] No SMP response from bootloader");
+        framebuffer::print_boot_status("SMP: single core", BootStatus::Ok);
+    }
     
     // Phase 3.6: Paging subsystem
     serial_println!("Initializing paging subsystem...");
     memory::paging::init();  // Saves kernel CR3, enables NX
     framebuffer::print_boot_status("Paging initialized (NX enabled)", BootStatus::Ok);
+    
+    // PAT: Enable Write-Combining (WC) — standard GPU driver optimization
+    // All GPU drivers (Mesa, NVIDIA, AMD) use WC for VRAM writes:
+    // batches individual stores into 64-byte burst transfers (10-20x faster)
+    memory::paging::setup_pat_write_combining();
     
     // Phase 3.7: Userland support (SYSCALL/SYSRET)
     serial_println!("Initializing userland support...");
@@ -485,6 +537,28 @@ pub unsafe extern "C" fn kmain() -> ! {
         framebuffer::print_boot_status("Driver framework disabled", BootStatus::Skip);
     }
     serial_println!("[PHASE] Driver framework init done");
+    
+    // Phase 11b: VirtIO GPU
+    serial_println!("[PHASE] VirtIO GPU init start");
+    framebuffer::print_boot_status("VirtIO GPU...", BootStatus::Info);
+    drivers::virtio_gpu::init_from_pci().ok();
+    if drivers::virtio_gpu::is_available() {
+        framebuffer::print_boot_status(&alloc::format!("VirtIO GPU: {}", drivers::virtio_gpu::info_string()), BootStatus::Ok);
+    } else {
+        framebuffer::print_boot_status("VirtIO GPU: not found (fallback framebuffer)", BootStatus::Skip);
+    }
+    serial_println!("[PHASE] VirtIO GPU init done");
+    
+    // Remap framebuffer as Write-Combining for faster MMIO writes
+    {
+        let fb_addr = framebuffer::FB_ADDR.load(core::sync::atomic::Ordering::SeqCst);
+        let fb_w = framebuffer::FB_WIDTH.load(core::sync::atomic::Ordering::SeqCst) as usize;
+        let fb_h = framebuffer::FB_HEIGHT.load(core::sync::atomic::Ordering::SeqCst) as usize;
+        if !fb_addr.is_null() && fb_w > 0 && fb_h > 0 {
+            let fb_size = fb_w * fb_h * 4;
+            let _ = memory::paging::remap_region_write_combining(fb_addr as u64, fb_size);
+        }
+    }
     
     // Phase 12: Network (with universal driver system)
     serial_println!("[PHASE] Network init start");
@@ -649,7 +723,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     framebuffer::draw_separator(framebuffer::get_cursor().1 as u32 * 16, framebuffer::COLOR_GREEN);
     println!();
     println_color!(framebuffer::COLOR_BRIGHT_GREEN, "  System ready - TRust-OS v0.1.0");
-    println_color!(framebuffer::COLOR_GREEN, "  Type 'gui' to launch desktop, or use shell commands.");
+    println_color!(framebuffer::COLOR_GREEN, "  Type 'desktop' to launch the desktop, or use shell commands.");
     println!();
 
     // Check for saved data and ask user
@@ -659,6 +733,11 @@ pub unsafe extern "C" fn kmain() -> ! {
 
     // Auto-login as root for now (development mode)
     auth::auto_login_root();
+
+    // Run crypto self-tests at startup
+    serial_println!("[BOOT] Running crypto self-tests...");
+    tls13::crypto::run_self_tests();
+    serial_println!("[BOOT] Crypto self-tests complete");
 
     // Start shell (runs forever)
     serial_println!("Starting shell...");

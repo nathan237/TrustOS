@@ -171,6 +171,11 @@ pub fn handle_interrupt() {
         let x_overflow = buttons & 0x40 != 0;
         let y_overflow = buttons & 0x80 != 0;
         
+        // ALWAYS update buttons, even on overflow!
+        LEFT_BUTTON.store(buttons & 0x01 != 0, Ordering::Relaxed);
+        RIGHT_BUTTON.store(buttons & 0x02 != 0, Ordering::Relaxed);
+        MIDDLE_BUTTON.store(buttons & 0x04 != 0, Ordering::Relaxed);
+        
         if !x_overflow && !y_overflow {
             let width = SCREEN_WIDTH.load(Ordering::Relaxed);
             let height = SCREEN_HEIGHT.load(Ordering::Relaxed);
@@ -187,11 +192,6 @@ pub fn handle_interrupt() {
             
             MOUSE_X.store(new_x, Ordering::Relaxed);
             MOUSE_Y.store(new_y, Ordering::Relaxed);
-            
-            // Update buttons atomically
-            LEFT_BUTTON.store(buttons & 0x01 != 0, Ordering::Relaxed);
-            RIGHT_BUTTON.store(buttons & 0x02 != 0, Ordering::Relaxed);
-            MIDDLE_BUTTON.store(buttons & 0x04 != 0, Ordering::Relaxed);
             
             // Update scroll wheel delta
             if z_rel != 0 {
@@ -265,4 +265,29 @@ pub fn is_initialized() -> bool {
     // Mouse is considered initialized if we have scroll wheel support
     // or if basic initialization completed
     *HAS_SCROLL_WHEEL.lock() || true  // Always true after init() is called
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DELTA TRACKING for smooth mouse movement in GUI
+// ═══════════════════════════════════════════════════════════════════════════════
+
+static LAST_X: AtomicI32 = AtomicI32::new(640);
+static LAST_Y: AtomicI32 = AtomicI32::new(400);
+
+/// Get mouse delta since last call (for smooth GUI updates)
+/// Returns None if mouse hasn't moved
+pub fn get_delta() -> Option<(i32, i32)> {
+    let cur_x = MOUSE_X.load(Ordering::Relaxed);
+    let cur_y = MOUSE_Y.load(Ordering::Relaxed);
+    let last_x = LAST_X.swap(cur_x, Ordering::Relaxed);
+    let last_y = LAST_Y.swap(cur_y, Ordering::Relaxed);
+    
+    let dx = cur_x - last_x;
+    let dy = cur_y - last_y;
+    
+    if dx != 0 || dy != 0 {
+        Some((dx, dy))
+    } else {
+        None
+    }
 }

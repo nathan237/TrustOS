@@ -149,14 +149,16 @@ fn process_encrypted_handshake(session: &mut TlsSession, data: &[u8]) -> Result<
                 // Finished
                 handshake::parse_finished(session, msg)?;
                 
-                // Derive application secrets
+                // Get transcript hash for application secrets (BEFORE adding client Finished)
                 let mut transcript = session.transcript_hash.clone();
                 let transcript_hash = transcript.finalize();
-                handshake::derive_application_secrets(session, &transcript_hash)?;
                 
-                // Send client Finished
+                // Send client Finished (MUST be encrypted with handshake keys)
                 let client_finished = handshake::build_client_finished(session);
                 let encrypted = encrypt_record(session, ContentType::Handshake, &client_finished)?;
+                
+                // NOW derive application secrets (keys change after this)
+                handshake::derive_application_secrets(session, &transcript_hash)?;
                 
                 session.state = TlsState::ApplicationData;
                 
@@ -220,6 +222,8 @@ pub fn decrypt_record(session: &mut TlsSession, ciphertext: &[u8]) -> Result<Vec
         return Err(TlsError::DecryptionFailed);
     }
     
+    crate::serial_println!("[TLS] Decrypting {} bytes, seq={}", ciphertext.len(), session.server_seq);
+    
     // Build nonce
     let mut nonce = [0u8; 12];
     nonce.copy_from_slice(&session.server_write_iv);
@@ -228,6 +232,8 @@ pub fn decrypt_record(session: &mut TlsSession, ciphertext: &[u8]) -> Result<Vec
         nonce[4 + i] ^= seq_bytes[i];
     }
     session.server_seq += 1;
+    
+    crate::serial_println!("[TLS] Key={:02x?} Nonce={:02x?}", &session.server_write_key[..8], &nonce[..8]);
     
     // AAD
     let aad = [

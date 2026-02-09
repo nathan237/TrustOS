@@ -46,8 +46,8 @@ $wslIsoRoot = "/mnt/c/Users/nathan/Documents/Scripts/OSrust/iso_root"
 $wslIsoPath = "/mnt/c/Users/nathan/Documents/Scripts/OSrust/trustos.iso"
 wsl -e xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin `
     -no-emul-boot -boot-load-size 4 -boot-info-table `
-    --efi-boot EFI/BOOT/BOOTX64.EFI -efi-boot-part `
-    --efi-boot-image --protective-msdos-label `
+    --efi-boot boot/limine/limine-uefi-cd.bin `
+    -efi-boot-part --efi-boot-image --protective-msdos-label `
     -o $wslIsoPath $wslIsoRoot 2>&1 | Out-Null
 Write-Host "ISO created: $ISOPath" -ForegroundColor Green
 

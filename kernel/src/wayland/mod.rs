@@ -33,6 +33,7 @@ pub mod surface;
 pub mod shm;
 pub mod seat;
 pub mod display;
+pub mod terminal;
 
 use alloc::vec::Vec;
 use alloc::string::String;

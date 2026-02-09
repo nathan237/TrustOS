@@ -3,6 +3,7 @@
 //! 16x16 and 32x32 pixel icons for a professional look
 
 use crate::framebuffer;
+use libm::{cosf, sinf};
 
 /// Icon size
 pub const ICON_SIZE: u32 = 32;
@@ -285,6 +286,7 @@ pub enum IconType {
     Game,
     Editor,
     OpenGL,
+    Browser,
 }
 
 /// Draw an icon by type
@@ -300,6 +302,7 @@ pub fn draw_icon(icon_type: IconType, x: u32, y: u32, color: u32, bg: u32) {
         IconType::Game => draw_game_icon(x, y, color, bg),
         IconType::Editor => draw_editor_icon(x, y, color, bg),
         IconType::OpenGL => draw_opengl_icon(x, y, color, bg),
+        IconType::Browser => draw_browser_icon(x, y, color, bg),
     }
 }
 
@@ -366,4 +369,62 @@ pub fn draw_opengl_icon(x: u32, y: u32, color: u32, _bg: u32) {
     put(tx + 15, ty + 29, light);
     put(tx + 16, ty + 29, light);
     put(tx + 17, ty + 29, light);
+}
+
+/// Draw a 32x32 browser icon (globe with navigation)
+pub fn draw_browser_icon(x: u32, y: u32, color: u32, _bg: u32) {
+    let dark = darken(color, 0.6);
+    let light = lighten(color, 1.3);
+    
+    let cx = x as i32 + 16;
+    let cy = y as i32 + 16;
+    
+    // Draw globe (outer circle)
+    for angle in 0..360 {
+        let rad = (angle as f32) * 3.14159 / 180.0;
+        let px = cx + (cosf(rad) * 12.0) as i32;
+        let py = cy + (sinf(rad) * 12.0) as i32;
+        if px >= 0 && py >= 0 {
+            framebuffer::put_pixel(px as u32, py as u32, color);
+        }
+    }
+    
+    // Inner globe (smaller circle)
+    for angle in 0..360 {
+        let rad = (angle as f32) * 3.14159 / 180.0;
+        let px = cx + (cosf(rad) * 8.0) as i32;
+        let py = cy + (sinf(rad) * 8.0) as i32;
+        if px >= 0 && py >= 0 {
+            framebuffer::put_pixel(px as u32, py as u32, dark);
+        }
+    }
+    
+    // Vertical meridian
+    for dy in -12i32..=12 {
+        let py = cy + dy;
+        if py >= 0 {
+            framebuffer::put_pixel(cx as u32, py as u32, light);
+        }
+    }
+    
+    // Horizontal equator
+    for dx in -12i32..=12 {
+        let px = cx + dx;
+        if px >= 0 {
+            framebuffer::put_pixel(px as u32, cy as u32, light);
+        }
+    }
+    
+    // Curved latitude lines (simplified as horizontal lines at offsets)
+    for dx in -10i32..=10 {
+        let px = cx + dx;
+        if px >= 0 {
+            framebuffer::put_pixel(px as u32, (cy - 6) as u32, dark);
+            framebuffer::put_pixel(px as u32, (cy + 6) as u32, dark);
+        }
+    }
+    
+    // Navigation bar at bottom (address bar)
+    framebuffer::fill_rect(x + 2, y + 26, 28, 4, dark);
+    framebuffer::fill_rect(x + 4, y + 27, 24, 2, 0xFF202020);
 }

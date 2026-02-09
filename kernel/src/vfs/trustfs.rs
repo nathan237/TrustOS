@@ -38,6 +38,7 @@ const INODES_PER_SECTOR: usize = SECTOR_SIZE / core::mem::size_of::<DiskInode>()
 
 const MAX_NAME_LEN: usize = 28;
 const DIRECT_BLOCKS: usize = 12;
+const INDIRECT_PTRS: usize = SECTOR_SIZE / 4; // 128 block pointers per indirect block
 
 /// On-disk superblock
 #[repr(C)]
@@ -84,7 +85,8 @@ struct DiskInode {
     blocks: u32,        // Number of blocks used
     atime: u32,         // Access time
     mtime: u32,         // Modification time
-    direct: [u32; DIRECT_BLOCKS], // Direct block pointers
+    direct: [u32; DIRECT_BLOCKS], // Direct block pointers (12 × 512B = 6KB)
+    indirect: u32,      // Single indirect block pointer (+128 × 512B = 64KB)
 }
 
 impl Default for DiskInode {
@@ -97,6 +99,7 @@ impl Default for DiskInode {
             atime: 0,
             mtime: 0,
             direct: [0; DIRECT_BLOCKS],
+            indirect: 0,
         }
     }
 }
@@ -220,14 +223,20 @@ struct TrustFsInner {
 }
 
 impl TrustFsInner {
-    /// Read a sector from disk
+    /// Read a sector (via block cache if available)
     fn read_sector(&self, sector: u64, buf: &mut [u8; SECTOR_SIZE]) -> VfsResult<()> {
+        if super::block_cache::cached_read(sector, buf).is_ok() {
+            return Ok(());
+        }
         crate::virtio_blk::read_sector(sector, buf)
             .map_err(|_| VfsError::IoError)
     }
     
-    /// Write a sector to disk
+    /// Write a sector (via block cache if available)
     fn write_sector(&self, sector: u64, buf: &[u8; SECTOR_SIZE]) -> VfsResult<()> {
+        if super::block_cache::cached_write(sector, buf).is_ok() {
+            return Ok(());
+        }
         crate::virtio_blk::write_sector(sector, buf)
             .map_err(|_| VfsError::IoError)
     }
@@ -339,7 +348,37 @@ impl TrustFsInner {
         Err(VfsError::NoSpace)
     }
     
-    /// Read file data
+    /// Resolve logical block index to physical block number
+    fn resolve_block(&self, inode: &DiskInode, block_idx: usize) -> VfsResult<u32> {
+        if block_idx < DIRECT_BLOCKS {
+            Ok(inode.direct[block_idx])
+        } else if block_idx < DIRECT_BLOCKS + INDIRECT_PTRS {
+            if inode.indirect == 0 { return Ok(0); }
+            let mut ind_buf = [0u8; SECTOR_SIZE];
+            self.read_sector(DATA_START_SECTOR + inode.indirect as u64, &mut ind_buf)?;
+            let ptrs = unsafe { &*(ind_buf.as_ptr() as *const [u32; INDIRECT_PTRS]) };
+            Ok(ptrs[block_idx - DIRECT_BLOCKS])
+        } else {
+            Err(VfsError::NoSpace) // File too large
+        }
+    }
+
+    /// Write a block pointer into the indirect block table
+    fn write_indirect_ptr(&self, inode: &mut DiskInode, idx: usize, block_num: u32) -> VfsResult<()> {
+        if inode.indirect == 0 {
+            inode.indirect = self.alloc_block()?;
+            // Zero out the new indirect block
+            let zero = [0u8; SECTOR_SIZE];
+            self.write_sector(DATA_START_SECTOR + inode.indirect as u64, &zero)?;
+        }
+        let mut ind_buf = [0u8; SECTOR_SIZE];
+        self.read_sector(DATA_START_SECTOR + inode.indirect as u64, &mut ind_buf)?;
+        let ptrs = unsafe { &mut *(ind_buf.as_mut_ptr() as *mut [u32; INDIRECT_PTRS]) };
+        ptrs[idx] = block_num;
+        self.write_sector(DATA_START_SECTOR + inode.indirect as u64, &ind_buf)
+    }
+
+    /// Read file data (supports direct + indirect blocks, up to ~70KB)
     fn read_file(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
         let inode = self.read_inode(ino)?;
         
@@ -355,13 +394,11 @@ impl TrustFsInner {
             let block_idx = file_offset / SECTOR_SIZE;
             let block_offset = file_offset % SECTOR_SIZE;
             
-            if block_idx >= DIRECT_BLOCKS || inode.direct[block_idx] == 0 {
-                break;
-            }
+            let phys_block = self.resolve_block(&inode, block_idx)?;
+            if phys_block == 0 { break; }
             
             let mut sector_buf = [0u8; SECTOR_SIZE];
-            let sector = DATA_START_SECTOR + inode.direct[block_idx] as u64;
-            self.read_sector(sector, &mut sector_buf)?;
+            self.read_sector(DATA_START_SECTOR + phys_block as u64, &mut sector_buf)?;
             
             let chunk_size = core::cmp::min(SECTOR_SIZE - block_offset, to_read - bytes_read);
             buf[bytes_read..bytes_read + chunk_size]
@@ -374,28 +411,36 @@ impl TrustFsInner {
         Ok(bytes_read)
     }
     
-    /// Write file data
+    /// Write file data (supports direct + indirect blocks, up to ~70KB)
     fn write_file(&self, ino: Ino, offset: u64, buf: &[u8]) -> VfsResult<usize> {
         let mut inode = self.read_inode(ino)?;
         
         let mut bytes_written = 0;
         let mut file_offset = offset as usize;
+        let max_blocks = DIRECT_BLOCKS + INDIRECT_PTRS;
         
         while bytes_written < buf.len() {
             let block_idx = file_offset / SECTOR_SIZE;
             let block_offset = file_offset % SECTOR_SIZE;
             
-            if block_idx >= DIRECT_BLOCKS {
-                break; // No indirect blocks support yet
-            }
+            if block_idx >= max_blocks { break; }
             
-            // Allocate block if needed
-            if inode.direct[block_idx] == 0 {
-                inode.direct[block_idx] = self.alloc_block()?;
+            // Resolve or allocate block
+            let phys_block = self.resolve_block(&inode, block_idx)?;
+            let phys_block = if phys_block == 0 {
+                let new_block = self.alloc_block()?;
                 inode.blocks += 1;
-            }
+                if block_idx < DIRECT_BLOCKS {
+                    inode.direct[block_idx] = new_block;
+                } else {
+                    self.write_indirect_ptr(&mut inode, block_idx - DIRECT_BLOCKS, new_block)?;
+                }
+                new_block
+            } else {
+                phys_block
+            };
             
-            let sector = DATA_START_SECTOR + inode.direct[block_idx] as u64;
+            let sector = DATA_START_SECTOR + phys_block as u64;
             let chunk_size = core::cmp::min(SECTOR_SIZE - block_offset, buf.len() - bytes_written);
             
             // Read-modify-write for partial blocks
@@ -593,8 +638,10 @@ impl TrustFsInner {
         })
     }
     
-    /// Sync filesystem to disk
+    /// Sync filesystem to disk (flush cache + superblock)
     fn sync(&self) -> VfsResult<()> {
+        // Flush block cache first
+        let _ = super::block_cache::sync();
         // Write superblock
         let sb = self.superblock.read();
         let mut buf = [0u8; SECTOR_SIZE];

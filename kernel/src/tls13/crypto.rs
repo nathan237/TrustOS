@@ -565,6 +565,8 @@ pub fn aes_gcm_decrypt(
         diff |= computed_tag[i] ^ tag[i];
     }
     if diff != 0 {
+        crate::serial_println!("[AES-GCM] Tag mismatch! computed={:02x?} received={:02x?}", 
+            &computed_tag[..8], &tag[..8]);
         return Err(());
     }
     
@@ -602,53 +604,105 @@ pub fn x25519_base(private_key: &[u8; 32]) -> [u8; 32] {
 }
 
 /// X25519 scalar multiplication
+/// Uses the Montgomery ladder algorithm exactly as in curve25519-dalek
 pub fn x25519(k: &[u8; 32], u: &[u8; 32]) -> [u8; 32] {
-    // Clamp the scalar
+    // Clamp the scalar per RFC 7748
     let mut scalar = *k;
     scalar[0] &= 248;
     scalar[31] &= 127;
     scalar[31] |= 64;
     
-    // Montgomery ladder on Curve25519
-    // Using field element representation as [u64; 5] for GF(2^255 - 19)
-    let u_fe = fe_from_bytes(u);
+    // Clear the top bit of the u-coordinate per RFC 7748
+    let mut u_clamped = *u;
+    u_clamped[31] &= 127;
     
-    let mut x_1 = u_fe;
-    let mut x_2 = FE_ONE;
-    let mut z_2 = FE_ZERO;
-    let mut x_3 = u_fe;
-    let mut z_3 = FE_ONE;
+    // Montgomery ladder using Algorithm 8 from Costello-Smith 2017
+    let affine_u = fe_from_bytes(&u_clamped);
     
-    let mut swap: u64 = 0;
+    // x0 = ProjectivePoint::identity() = (U:W) = (1:0)
+    let mut x0_u = FE_ONE;
+    let mut x0_w = FE_ZERO;
+    
+    // x1 = (affine_u, 1)
+    let mut x1_u = affine_u;
+    let mut x1_w = FE_ONE;
+    
+    // Go through bits from most to least significant, using sliding window of 2
+    // Per dalek: scalar invariant #1 says MSB (bit 255) is 0, so skip it
+    // We iterate bits 254 down to 0
+    let mut prev_bit = false;
     
     for i in (0..255).rev() {
-        let bit = ((scalar[i >> 3] >> (i & 7)) & 1) as u64;
-        swap ^= bit;
-        fe_cswap(&mut x_2, &mut x_3, swap);
-        fe_cswap(&mut z_2, &mut z_3, swap);
-        swap = bit;
+        let cur_bit = ((scalar[i >> 3] >> (i & 7)) & 1) == 1;
+        let choice = (prev_bit ^ cur_bit) as u64;
         
-        let a = fe_add(&x_2, &z_2);
-        let aa = fe_sq(&a);
-        let b = fe_sub(&x_2, &z_2);
-        let bb = fe_sq(&b);
-        let e = fe_sub(&aa, &bb);
-        let c = fe_add(&x_3, &z_3);
-        let d = fe_sub(&x_3, &z_3);
-        let da = fe_mul(&d, &a);
-        let cb = fe_mul(&c, &b);
+        // Conditional swap based on XOR of consecutive bits
+        fe_cswap(&mut x0_u, &mut x1_u, choice);
+        fe_cswap(&mut x0_w, &mut x1_w, choice);
         
-        x_3 = fe_sq(&fe_add(&da, &cb));
-        z_3 = fe_mul(&x_1, &fe_sq(&fe_sub(&da, &cb)));
-        x_2 = fe_mul(&aa, &bb);
-        z_2 = fe_mul(&e, &fe_add(&aa, &fe_mul121666(&e)));
+        // differential_add_and_double: P = x0, Q = x1
+        differential_add_and_double(&mut x0_u, &mut x0_w, &mut x1_u, &mut x1_w, &affine_u);
+        
+        prev_bit = cur_bit;
     }
     
-    fe_cswap(&mut x_2, &mut x_3, swap);
-    fe_cswap(&mut z_2, &mut z_3, swap);
+    // Final swap based on the LSB (bit 0)
+    let final_swap = prev_bit as u64;
+    fe_cswap(&mut x0_u, &mut x0_w, final_swap);
+    fe_cswap(&mut x1_u, &mut x1_w, final_swap);
     
-    let result = fe_mul(&x_2, &fe_invert(&z_2));
+    // Convert x0 to affine: u = U / W
+    let result = fe_mul(&x0_u, &fe_invert(&x0_w));
     fe_to_bytes(&result)
+}
+
+/// Perform the double-and-add step of the Montgomery ladder.
+/// This is Algorithm 8 from Costello-Smith 2017.
+/// 
+/// Given projective points (U_P : W_P) = u(P), (U_Q : W_Q) = u(Q),
+/// and the affine difference u_{P-Q} = u(P-Q), set:
+///     (U_P : W_P) <- u([2]P)
+///     (U_Q : W_Q) <- u(P + Q)
+fn differential_add_and_double(
+    p_u: &mut Fe, p_w: &mut Fe,
+    q_u: &mut Fe, q_w: &mut Fe,
+    affine_pmq: &Fe,
+) {
+    let t0 = fe_add(p_u, p_w);
+    let t1 = fe_sub(p_u, p_w);
+    let t2 = fe_add(q_u, q_w);
+    let t3 = fe_sub(q_u, q_w);
+    
+    let t4 = fe_sq(&t0);    // (U_P + W_P)^2
+    let t5 = fe_sq(&t1);    // (U_P - W_P)^2
+    
+    let t6 = fe_sub(&t4, &t5);  // 4 U_P W_P
+    
+    let t7 = fe_mul(&t0, &t3);  // (U_P + W_P)(U_Q - W_Q)
+    let t8 = fe_mul(&t1, &t2);  // (U_P - W_P)(U_Q + W_Q)
+    
+    let t9 = fe_add(&t7, &t8);  // 2(U_P U_Q - W_P W_Q)
+    let t10 = fe_sub(&t7, &t8); // 2(W_P U_Q - U_P W_Q)
+    
+    let t11 = fe_sq(&t9);       // 4(U_P U_Q - W_P W_Q)^2
+    let t12 = fe_sq(&t10);      // 4(W_P U_Q - U_P W_Q)^2
+    
+    let t13 = fe_mul121666(&t6); // ((A+2)/4) * 4 U_P W_P = (A+2) U_P W_P / 4 * 4 = (A+2) U_P W_P
+    
+    let t14 = fe_mul(&t4, &t5); // (U_P^2 - W_P^2)^2
+    let t15 = fe_add(&t13, &t5); // (U_P - W_P)^2 + (A+2) U_P W_P
+    let t16 = fe_mul(&t6, &t15); // 4 U_P W_P * ((U_P - W_P)^2 + (A+2)/4 * 4 U_P W_P)
+    
+    let t17 = fe_mul(affine_pmq, &t12); // U_D * 4(W_P U_Q - U_P W_Q)^2
+    let t18 = t11;                       // W_D * 4(U_P U_Q - W_P W_Q)^2 (W_D = 1)
+    
+    // Update P = [2]P
+    *p_u = t14;  // U_{P'} = (U_P + W_P)^2 (U_P - W_P)^2
+    *p_w = t16;  // W_{P'} = 4 U_P W_P * ((U_P - W_P)^2 + ((A+2)/4) * 4 U_P W_P)
+    
+    // Update Q = P + Q
+    *q_u = t18;  // U_{Q'} = W_D * 4(U_P U_Q - W_P W_Q)^2
+    *q_w = t17;  // W_{Q'} = U_D * 4(W_P U_Q - U_P W_Q)^2
 }
 
 // Field element operations for GF(2^255 - 19)
@@ -678,42 +732,70 @@ fn fe_from_bytes(b: &[u8; 32]) -> Fe {
 }
 
 fn fe_to_bytes(h: &Fe) -> [u8; 32] {
-    let mut t = *h;
-    fe_reduce(&mut t);
+    // First do weak reduction to ensure limbs are bounded
+    let mut limbs = *h;
+    fe_reduce(&mut limbs);
     
+    // Canonical reduction: compute q = (h + 19) / 2^255
+    // h >= p <==> h + 19 >= p + 19 <==> h + 19 >= 2^255
+    // Therefore q = 1 if h >= p, else q = 0
+    // Then r = h - q*p = h + 19*q - 2^255*q
+    let mut q = (limbs[0] + 19) >> 51;
+    q = (limbs[1] + q) >> 51;
+    q = (limbs[2] + q) >> 51;
+    q = (limbs[3] + q) >> 51;
+    q = (limbs[4] + q) >> 51;
+    
+    // Now compute r = h + 19*q (and ignore the 2^255*q part by masking)
+    limbs[0] += 19 * q;
+    
+    // Carry propagation
+    const LOW_51_BIT_MASK: u64 = (1u64 << 51) - 1;
+    limbs[1] += limbs[0] >> 51;
+    limbs[0] &= LOW_51_BIT_MASK;
+    limbs[2] += limbs[1] >> 51;
+    limbs[1] &= LOW_51_BIT_MASK;
+    limbs[3] += limbs[2] >> 51;
+    limbs[2] &= LOW_51_BIT_MASK;
+    limbs[4] += limbs[3] >> 51;
+    limbs[3] &= LOW_51_BIT_MASK;
+    // Discard the carry from limbs[4] - this subtracts 2^255*q
+    limbs[4] &= LOW_51_BIT_MASK;
+    
+    // Now arrange the bits of the limbs into bytes
     let mut s = [0u8; 32];
-    s[0] = t[0] as u8;
-    s[1] = (t[0] >> 8) as u8;
-    s[2] = (t[0] >> 16) as u8;
-    s[3] = (t[0] >> 24) as u8;
-    s[4] = (t[0] >> 32) as u8;
-    s[5] = (t[0] >> 40) as u8;
-    s[6] = ((t[0] >> 48) | (t[1] << 3)) as u8;
-    s[7] = (t[1] >> 5) as u8;
-    s[8] = (t[1] >> 13) as u8;
-    s[9] = (t[1] >> 21) as u8;
-    s[10] = (t[1] >> 29) as u8;
-    s[11] = (t[1] >> 37) as u8;
-    s[12] = ((t[1] >> 45) | (t[2] << 6)) as u8;
-    s[13] = (t[2] >> 2) as u8;
-    s[14] = (t[2] >> 10) as u8;
-    s[15] = (t[2] >> 18) as u8;
-    s[16] = (t[2] >> 26) as u8;
-    s[17] = (t[2] >> 34) as u8;
-    s[18] = (t[2] >> 42) as u8;
-    s[19] = ((t[2] >> 50) | (t[3] << 1)) as u8;
-    s[20] = (t[3] >> 7) as u8;
-    s[21] = (t[3] >> 15) as u8;
-    s[22] = (t[3] >> 23) as u8;
-    s[23] = (t[3] >> 31) as u8;
-    s[24] = (t[3] >> 39) as u8;
-    s[25] = ((t[3] >> 47) | (t[4] << 4)) as u8;
-    s[26] = (t[4] >> 4) as u8;
-    s[27] = (t[4] >> 12) as u8;
-    s[28] = (t[4] >> 20) as u8;
-    s[29] = (t[4] >> 28) as u8;
-    s[30] = (t[4] >> 36) as u8;
-    s[31] = (t[4] >> 44) as u8;
+    s[0] = limbs[0] as u8;
+    s[1] = (limbs[0] >> 8) as u8;
+    s[2] = (limbs[0] >> 16) as u8;
+    s[3] = (limbs[0] >> 24) as u8;
+    s[4] = (limbs[0] >> 32) as u8;
+    s[5] = (limbs[0] >> 40) as u8;
+    s[6] = ((limbs[0] >> 48) | (limbs[1] << 3)) as u8;
+    s[7] = (limbs[1] >> 5) as u8;
+    s[8] = (limbs[1] >> 13) as u8;
+    s[9] = (limbs[1] >> 21) as u8;
+    s[10] = (limbs[1] >> 29) as u8;
+    s[11] = (limbs[1] >> 37) as u8;
+    s[12] = ((limbs[1] >> 45) | (limbs[2] << 6)) as u8;
+    s[13] = (limbs[2] >> 2) as u8;
+    s[14] = (limbs[2] >> 10) as u8;
+    s[15] = (limbs[2] >> 18) as u8;
+    s[16] = (limbs[2] >> 26) as u8;
+    s[17] = (limbs[2] >> 34) as u8;
+    s[18] = (limbs[2] >> 42) as u8;
+    s[19] = ((limbs[2] >> 50) | (limbs[3] << 1)) as u8;
+    s[20] = (limbs[3] >> 7) as u8;
+    s[21] = (limbs[3] >> 15) as u8;
+    s[22] = (limbs[3] >> 23) as u8;
+    s[23] = (limbs[3] >> 31) as u8;
+    s[24] = (limbs[3] >> 39) as u8;
+    s[25] = ((limbs[3] >> 47) | (limbs[4] << 4)) as u8;
+    s[26] = (limbs[4] >> 4) as u8;
+    s[27] = (limbs[4] >> 12) as u8;
+    s[28] = (limbs[4] >> 20) as u8;
+    s[29] = (limbs[4] >> 28) as u8;
+    s[30] = (limbs[4] >> 36) as u8;
+    s[31] = (limbs[4] >> 44) as u8;
     
     s
 }
@@ -749,39 +831,106 @@ fn fe_add(a: &Fe, b: &Fe) -> Fe {
 }
 
 fn fe_sub(a: &Fe, b: &Fe) -> Fe {
-    // Add 2*p to avoid underflow
-    let p = 0x7ffffffffffedu64;
-    [
-        a[0] + 2 * p - b[0],
-        a[1] + 2 * 0x7ffffffffffff - b[1],
-        a[2] + 2 * 0x7ffffffffffff - b[2],
-        a[3] + 2 * 0x7ffffffffffff - b[3],
-        a[4] + 2 * 0x7ffffffffffff - b[4],
-    ]
+    // Subtract in GF(2^255-19) by computing a - b + 16*p
+    // 16p = 16 * (2^255 - 19) = 2^259 - 304
+    // In radix-51: we add enough headroom to avoid underflow
+    // Using the same values as curve25519-dalek
+    FieldElement51::reduce([
+        (a[0] + 36028797018963664u64) - b[0],  // 2^55 - 16*19
+        (a[1] + 36028797018963952u64) - b[1],  // 2^55 - 16
+        (a[2] + 36028797018963952u64) - b[2],
+        (a[3] + 36028797018963952u64) - b[3],
+        (a[4] + 36028797018963952u64) - b[4],
+    ])
+}
+
+/// Reduce 64-bit limbs to fit in 51 bits (weak reduction)
+struct FieldElement51;
+impl FieldElement51 {
+    fn reduce(mut limbs: [u64; 5]) -> Fe {
+        const LOW_51_BIT_MASK: u64 = (1u64 << 51) - 1;
+        
+        let c0 = limbs[0] >> 51;
+        let c1 = limbs[1] >> 51;
+        let c2 = limbs[2] >> 51;
+        let c3 = limbs[3] >> 51;
+        let c4 = limbs[4] >> 51;
+        
+        limbs[0] &= LOW_51_BIT_MASK;
+        limbs[1] &= LOW_51_BIT_MASK;
+        limbs[2] &= LOW_51_BIT_MASK;
+        limbs[3] &= LOW_51_BIT_MASK;
+        limbs[4] &= LOW_51_BIT_MASK;
+        
+        limbs[0] += c4 * 19;
+        limbs[1] += c0;
+        limbs[2] += c1;
+        limbs[3] += c2;
+        limbs[4] += c3;
+        
+        limbs
+    }
 }
 
 fn fe_mul(a: &Fe, b: &Fe) -> Fe {
-    let mut r = [0u128; 5];
+    // Schoolbook multiplication with reduction mod 2^255-19
+    // The result coefficients r[0..9] need to be computed then folded
     
-    for i in 0..5 {
-        for j in 0..5 {
-            let idx = (i + j) % 5;
-            let factor = if i + j >= 5 { 19u128 } else { 1u128 };
-            r[idx] += (a[i] as u128) * (b[j] as u128) * factor;
-        }
-    }
+    let a0 = a[0] as u128;
+    let a1 = a[1] as u128;
+    let a2 = a[2] as u128;
+    let a3 = a[3] as u128;
+    let a4 = a[4] as u128;
     
+    let b0 = b[0] as u128;
+    let b1 = b[1] as u128;
+    let b2 = b[2] as u128;
+    let b3 = b[3] as u128;
+    let b4 = b[4] as u128;
+    
+    // Products that contribute to each coefficient (before reduction)
+    // t0 = a0*b0 + 19*(a1*b4 + a2*b3 + a3*b2 + a4*b1)
+    // t1 = a0*b1 + a1*b0 + 19*(a2*b4 + a3*b3 + a4*b2)
+    // t2 = a0*b2 + a1*b1 + a2*b0 + 19*(a3*b4 + a4*b3)
+    // t3 = a0*b3 + a1*b2 + a2*b1 + a3*b0 + 19*(a4*b4)
+    // t4 = a0*b4 + a1*b3 + a2*b2 + a3*b1 + a4*b0
+    
+    let t0 = a0*b0 + 19*(a1*b4 + a2*b3 + a3*b2 + a4*b1);
+    let t1 = a0*b1 + a1*b0 + 19*(a2*b4 + a3*b3 + a4*b2);
+    let t2 = a0*b2 + a1*b1 + a2*b0 + 19*(a3*b4 + a4*b3);
+    let t3 = a0*b3 + a1*b2 + a2*b1 + a3*b0 + 19*(a4*b4);
+    let t4 = a0*b4 + a1*b3 + a2*b2 + a3*b1 + a4*b0;
+    
+    // Carry propagation
     let mut h = [0u64; 5];
-    for i in 0..5 {
-        h[i] = (r[i] & 0x7ffffffffffff) as u64;
-        if i < 4 {
-            r[i + 1] += r[i] >> 51;
-        } else {
-            h[0] += ((r[4] >> 51) * 19) as u64;
-        }
-    }
     
-    fe_reduce(&mut h);
+    let c = t0 >> 51;
+    h[0] = (t0 & 0x7ffffffffffff) as u64;
+    let t1 = t1 + c;
+    
+    let c = t1 >> 51;
+    h[1] = (t1 & 0x7ffffffffffff) as u64;
+    let t2 = t2 + c;
+    
+    let c = t2 >> 51;
+    h[2] = (t2 & 0x7ffffffffffff) as u64;
+    let t3 = t3 + c;
+    
+    let c = t3 >> 51;
+    h[3] = (t3 & 0x7ffffffffffff) as u64;
+    let t4 = t4 + c;
+    
+    let c = t4 >> 51;
+    h[4] = (t4 & 0x7ffffffffffff) as u64;
+    
+    // Reduce: 2^255 = 19 mod p
+    h[0] += (c as u64) * 19;
+    
+    // One more carry if needed
+    let c = h[0] >> 51;
+    h[0] &= 0x7ffffffffffff;
+    h[1] += c;
+    
     h
 }
 
@@ -809,48 +958,73 @@ fn fe_mul121666(a: &Fe) -> Fe {
     h
 }
 
+/// Compute z^(2^250-1), returning (z^(2^250-1), z^11)
+/// This follows the exact addition chain from curve25519-dalek
+fn pow22501(z: &Fe) -> (Fe, Fe) {
+    // t0 = z^2
+    let t0 = fe_sq(z);
+    // t1 = z^8 = (z^2)^2^2
+    let t1 = fe_sq(&fe_sq(&t0));
+    // t2 = z^9 = z^8 * z
+    let t2 = fe_mul(z, &t1);
+    // t3 = z^11 = z^9 * z^2
+    let t3 = fe_mul(&t0, &t2);
+    // t4 = z^22 = (z^11)^2
+    let t4 = fe_sq(&t3);
+    // t5 = z^31 = z^(2^5-1) = z^22 * z^9
+    let t5 = fe_mul(&t2, &t4);
+    
+    // t6 = z^(2^10-1)
+    let mut t6 = fe_sq(&t5);
+    for _ in 1..5 { t6 = fe_sq(&t6); }
+    let t7 = fe_mul(&t6, &t5);
+    
+    // t8 = z^(2^20-1)
+    let mut t8 = fe_sq(&t7);
+    for _ in 1..10 { t8 = fe_sq(&t8); }
+    let t9 = fe_mul(&t8, &t7);
+    
+    // t10 = z^(2^40-1)
+    let mut t10 = fe_sq(&t9);
+    for _ in 1..20 { t10 = fe_sq(&t10); }
+    let t11 = fe_mul(&t10, &t9);
+    
+    // t12 = z^(2^50-1)
+    let mut t12 = fe_sq(&t11);
+    for _ in 1..10 { t12 = fe_sq(&t12); }
+    let t13 = fe_mul(&t12, &t7);
+    
+    // t14 = z^(2^100-1)
+    let mut t14 = fe_sq(&t13);
+    for _ in 1..50 { t14 = fe_sq(&t14); }
+    let t15 = fe_mul(&t14, &t13);
+    
+    // t16 = z^(2^200-1)
+    let mut t16 = fe_sq(&t15);
+    for _ in 1..100 { t16 = fe_sq(&t16); }
+    let t17 = fe_mul(&t16, &t15);
+    
+    // t18 = z^(2^250-1)
+    let mut t18 = fe_sq(&t17);
+    for _ in 1..50 { t18 = fe_sq(&t18); }
+    let t19 = fe_mul(&t18, &t13);
+    
+    (t19, t3)
+}
+
 fn fe_invert(z: &Fe) -> Fe {
     // z^(p-2) = z^(2^255-21)
-    let z2 = fe_sq(z);
-    let z4 = fe_sq(&z2);
-    let z8 = fe_sq(&z4);
-    let z9 = fe_mul(&z8, z);
-    let z11 = fe_mul(&z9, &z2);
-    let z22 = fe_sq(&z11);
-    let z_5_0 = fe_mul(&z22, &z9);
+    // The bits of p-2 = 2^255 - 21 = 2^255 - 32 + 11
+    // In binary: 11010111111...11 (253 ones with gaps at positions 2 and 4)
     
-    let mut t0 = fe_sq(&z_5_0);
-    for _ in 1..5 { t0 = fe_sq(&t0); }
-    let z_10_5 = fe_mul(&t0, &z_5_0);
+    let (t19, t3) = pow22501(z);   // t19: z^(2^250-1), t3: z^11
     
-    t0 = fe_sq(&z_10_5);
-    for _ in 1..10 { t0 = fe_sq(&t0); }
-    let z_20_10 = fe_mul(&t0, &z_10_5);
+    // t20 = z^(2^255-32) = (z^(2^250-1))^32
+    let mut t20 = fe_sq(&t19);
+    for _ in 1..5 { t20 = fe_sq(&t20); }
     
-    t0 = fe_sq(&z_20_10);
-    for _ in 1..20 { t0 = fe_sq(&t0); }
-    let z_40_20 = fe_mul(&t0, &z_20_10);
-    
-    t0 = fe_sq(&z_40_20);
-    for _ in 1..10 { t0 = fe_sq(&t0); }
-    let z_50_10 = fe_mul(&t0, &z_10_5);
-    
-    t0 = fe_sq(&z_50_10);
-    for _ in 1..50 { t0 = fe_sq(&t0); }
-    let z_100_50 = fe_mul(&t0, &z_50_10);
-    
-    t0 = fe_sq(&z_100_50);
-    for _ in 1..100 { t0 = fe_sq(&t0); }
-    let z_200_100 = fe_mul(&t0, &z_100_50);
-    
-    t0 = fe_sq(&z_200_100);
-    for _ in 1..50 { t0 = fe_sq(&t0); }
-    let z_250_50 = fe_mul(&t0, &z_50_10);
-    
-    t0 = fe_sq(&z_250_50);
-    for _ in 1..5 { t0 = fe_sq(&t0); }
-    
-    fe_mul(&t0, &z11)
+    // t21 = z^(2^255-21) = z^(2^255-32) * z^11
+    fe_mul(&t20, &t3)
 }
 
 fn fe_cswap(a: &mut Fe, b: &mut Fe, swap: u64) {
@@ -860,4 +1034,218 @@ fn fe_cswap(a: &mut Fe, b: &mut Fe, swap: u64) {
         a[i] ^= t;
         b[i] ^= t;
     }
+}
+
+/// Run crypto self-tests with known test vectors
+pub fn run_self_tests() {
+    crate::serial_println!("[CRYPTO] Running self-tests...");
+    
+    // Test AES-128 with NIST test vector
+    let aes_key: [u8; 16] = [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6,
+                            0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c];
+    let mut block: [u8; 16] = [0x32, 0x43, 0xf6, 0xa8, 0x88, 0x5a, 0x30, 0x8d,
+                               0x31, 0x31, 0x98, 0xa2, 0xe0, 0x37, 0x07, 0x34];
+    let expected: [u8; 16] = [0x39, 0x25, 0x84, 0x1d, 0x02, 0xdc, 0x09, 0xfb,
+                              0xdc, 0x11, 0x85, 0x97, 0x19, 0x6a, 0x0b, 0x32];
+    
+    let aes = Aes128::new(&aes_key);
+    aes.encrypt_block(&mut block);
+    
+    if block == expected {
+        crate::serial_println!("[CRYPTO] AES-128: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] AES-128: FAIL");
+        crate::serial_println!("[CRYPTO] Expected: {:02x?}", &expected);
+        crate::serial_println!("[CRYPTO] Got:      {:02x?}", &block);
+    }
+    
+    // Test SHA-256 with empty input
+    let sha_empty = sha256(&[]);
+    let sha_expected: [u8; 32] = [
+        0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+        0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+        0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+        0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+    ];
+    
+    if sha_empty == sha_expected {
+        crate::serial_println!("[CRYPTO] SHA-256: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] SHA-256: FAIL");
+        crate::serial_println!("[CRYPTO] Expected: {:02x?}", &sha_expected[..16]);
+        crate::serial_println!("[CRYPTO] Got:      {:02x?}", &sha_empty[..16]);
+    }
+    
+    // Test X25519 with RFC 7748 test vector
+    let scalar: [u8; 32] = [
+        0xa5, 0x46, 0xe3, 0x6b, 0xf0, 0x52, 0x7c, 0x9d,
+        0x3b, 0x16, 0x15, 0x4b, 0x82, 0x46, 0x5e, 0xdd,
+        0x62, 0x14, 0x4c, 0x0a, 0xc1, 0xfc, 0x5a, 0x18,
+        0x50, 0x6a, 0x22, 0x44, 0xba, 0x44, 0x9a, 0xc4,
+    ];
+    let u_coord: [u8; 32] = [
+        0xe6, 0xdb, 0x68, 0x67, 0x58, 0x30, 0x30, 0xdb,
+        0x35, 0x94, 0xc1, 0xa4, 0x24, 0xb1, 0x5f, 0x7c,
+        0x72, 0x66, 0x24, 0xec, 0x26, 0xb3, 0x35, 0x3b,
+        0x10, 0xa9, 0x03, 0xa6, 0xd0, 0xab, 0x1c, 0x4c,
+    ];
+    
+    // Test round-trip: fe_from_bytes -> fe_to_bytes
+    let mut u_test = u_coord;
+    u_test[31] &= 0x7f;  // Clear top bit
+    let fe = fe_from_bytes(&u_test);
+    let rt = fe_to_bytes(&fe);
+    if rt == u_test {
+        crate::serial_println!("[CRYPTO] FE round-trip: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] FE round-trip: FAIL");
+        crate::serial_println!("[CRYPTO] Input:  {:02x?}", &u_test[..16]);
+        crate::serial_println!("[CRYPTO] Output: {:02x?}", &rt[..16]);
+    }
+    
+    // Test fe_mul: 1 * u = u
+    let one = FE_ONE;
+    let mul_result = fe_mul(&one, &fe);
+    let mul_bytes = fe_to_bytes(&mul_result);
+    if mul_bytes == u_test {
+        crate::serial_println!("[CRYPTO] FE mul identity: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] FE mul identity: FAIL");
+        crate::serial_println!("[CRYPTO] Expected: {:02x?}", &u_test[..16]);
+        crate::serial_println!("[CRYPTO] Got:      {:02x?}", &mul_bytes[..16]);
+    }
+    
+    // Test fe_sq: u^2 round-trip
+    let sq_result = fe_sq(&fe);
+    // No simple check, just ensure it doesn't crash
+    crate::serial_println!("[CRYPTO] FE sq: OK (no crash)");
+    
+    // Test fe_add and fe_sub: u + 0 = u, u - 0 = u
+    let add_result = fe_add(&fe, &FE_ZERO);
+    let add_bytes = fe_to_bytes(&add_result);
+    if add_bytes == u_test {
+        crate::serial_println!("[CRYPTO] FE add identity: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] FE add identity: FAIL");
+    }
+    
+    let sub_result = fe_sub(&fe, &FE_ZERO);
+    let sub_bytes = fe_to_bytes(&sub_result);
+    if sub_bytes == u_test {
+        crate::serial_println!("[CRYPTO] FE sub identity: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] FE sub identity: FAIL");
+        crate::serial_println!("[CRYPTO] Expected: {:02x?}", &u_test[..16]);
+        crate::serial_println!("[CRYPTO] Got:      {:02x?}", &sub_bytes[..16]);
+    }
+    
+    // Test consistency: z^2 * z^2 = z^4 = (z^2)^2
+    let z2 = fe_sq(&fe);
+    let z4_mul = fe_mul(&z2, &z2);      // z^2 * z^2
+    let z4_sq = fe_sq(&z2);              // (z^2)^2
+    let z4_mul_bytes = fe_to_bytes(&z4_mul);
+    let z4_sq_bytes = fe_to_bytes(&z4_sq);
+    if z4_mul_bytes == z4_sq_bytes {
+        crate::serial_println!("[CRYPTO] FE mul vs sq: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] FE mul vs sq: FAIL (z^2*z^2 != sq(z^2))");
+        crate::serial_println!("[CRYPTO] mul: {:02x?}", &z4_mul_bytes[..16]);
+        crate::serial_println!("[CRYPTO] sq:  {:02x?}", &z4_sq_bytes[..16]);
+    }
+    
+    let one_bytes = fe_to_bytes(&FE_ONE);
+    
+    // Test simple mul: 2 * 2 = 4
+    let two: Fe = [2, 0, 0, 0, 0];
+    let four: Fe = [4, 0, 0, 0, 0];
+    let two_times_two = fe_mul(&two, &two);
+    let four_bytes = fe_to_bytes(&four);
+    let tt_bytes = fe_to_bytes(&two_times_two);
+    if tt_bytes == four_bytes {
+        crate::serial_println!("[CRYPTO] FE 2*2=4: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] FE 2*2=4: FAIL");
+        crate::serial_println!("[CRYPTO] Expected: {:02x?}", &four_bytes[..16]);
+        crate::serial_println!("[CRYPTO] Got:      {:02x?}", &tt_bytes[..16]);
+    }
+    
+    // Test: sq(2) = 4
+    let sq_two = fe_sq(&two);
+    let sq_two_bytes = fe_to_bytes(&sq_two);
+    if sq_two_bytes == four_bytes {
+        crate::serial_println!("[CRYPTO] FE sq(2)=4: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] FE sq(2)=4: FAIL");
+        crate::serial_println!("[CRYPTO] Expected: {:02x?}", &four_bytes[..16]);
+        crate::serial_println!("[CRYPTO] Got:      {:02x?}", &sq_two_bytes[..16]);
+    }
+    
+    // Test: 2 * 2^(-1) = 1
+    let two_inv = fe_invert(&two);
+    let two_mul_inv = fe_mul(&two, &two_inv);
+    let two_inv_bytes = fe_to_bytes(&two_mul_inv);
+    if two_inv_bytes == one_bytes {
+        crate::serial_println!("[CRYPTO] FE 2*2^-1: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] FE 2*2^-1: FAIL");
+        crate::serial_println!("[CRYPTO] Expected: {:02x?}", &one_bytes[..16]);
+        crate::serial_println!("[CRYPTO] Got:      {:02x?}", &two_inv_bytes[..16]);
+    }
+    
+    // Test z * z^(-1) = 1
+    let z_inv = fe_invert(&fe);
+    let mul_inv = fe_mul(&fe, &z_inv);
+    let inv_bytes = fe_to_bytes(&mul_inv);
+    if inv_bytes == one_bytes {
+        crate::serial_println!("[CRYPTO] FE invert: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] FE invert: FAIL");
+        crate::serial_println!("[CRYPTO] Expected: {:02x?}", &one_bytes[..16]);
+        crate::serial_println!("[CRYPTO] Got:      {:02x?}", &inv_bytes[..16]);
+    }
+    
+    let x25519_expected: [u8; 32] = [
+        0xc3, 0xda, 0x55, 0x37, 0x9d, 0xe9, 0xc6, 0x90,
+        0x8e, 0x94, 0xea, 0x4d, 0xf2, 0x8d, 0x08, 0x4f,
+        0x32, 0xec, 0xcf, 0x03, 0x49, 0x1c, 0x71, 0xf7,
+        0x54, 0xb4, 0x07, 0x55, 0x77, 0xa2, 0x85, 0x52,
+    ];
+    
+    let x25519_result = x25519(&scalar, &u_coord);
+    
+    if x25519_result == x25519_expected {
+        crate::serial_println!("[CRYPTO] X25519: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] X25519: FAIL");
+        crate::serial_println!("[CRYPTO] Expected: {:02x?}", &x25519_expected[..16]);
+        crate::serial_println!("[CRYPTO] Got:      {:02x?}", &x25519_result[..16]);
+    }
+    
+    // Test AES-GCM with NIST test vector
+    // From NIST GCM test vectors - Test Case 2
+    let gcm_key: [u8; 16] = [0x00; 16];
+    let gcm_nonce: [u8; 12] = [0x00; 12];
+    let gcm_plaintext: [u8; 16] = [0x00; 16];
+    let gcm_expected_ct: [u8; 16] = [
+        0x03, 0x88, 0xda, 0xce, 0x60, 0xb6, 0xa3, 0x92,
+        0xf3, 0x28, 0xc2, 0xb9, 0x71, 0xb2, 0xfe, 0x78,
+    ];
+    let gcm_expected_tag: [u8; 16] = [
+        0xab, 0x6e, 0x47, 0xd4, 0x2c, 0xec, 0x13, 0xbd,
+        0xf5, 0x3a, 0x67, 0xb2, 0x12, 0x57, 0xbd, 0xdf,
+    ];
+    
+    let gcm_result = aes_gcm_encrypt(&gcm_key, &gcm_nonce, &[], &gcm_plaintext);
+    
+    if &gcm_result[..16] == &gcm_expected_ct && &gcm_result[16..] == &gcm_expected_tag {
+        crate::serial_println!("[CRYPTO] AES-GCM: PASS");
+    } else {
+        crate::serial_println!("[CRYPTO] AES-GCM: FAIL");
+        crate::serial_println!("[CRYPTO] Expected CT:  {:02x?}", &gcm_expected_ct);
+        crate::serial_println!("[CRYPTO] Got CT:       {:02x?}", &gcm_result[..16]);
+        crate::serial_println!("[CRYPTO] Expected TAG: {:02x?}", &gcm_expected_tag);
+        crate::serial_println!("[CRYPTO] Got TAG:      {:02x?}", &gcm_result[16..]);
+    }
+    
+    crate::serial_println!("[CRYPTO] Self-tests complete");
 }

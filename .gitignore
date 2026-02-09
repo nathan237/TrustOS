@@ -67,6 +67,7 @@ releases/*.img
 
 # Userland binaries
 userland/hello
+userland/*/target/
 userland/compositor/target/
 userland/fs/target/
 userland/init/target/
@@ -89,8 +90,24 @@ server/packages/*.tar.gz
 
 # Screenshots
 *.png
+*.ppm
 qemu_screenshot*.png
 
 # Linux kernel binaries
 linux/bzImage
 linux/*.cpio.gz
+
+# ML model outputs (large)
+output_v21/
+output_v22/
+cache_v21/
+cache_v22/
+*.pt
+tinygl_decompiled.json
+
+# Build logs
+build_out.txt
+serial_*.log
+
+# Misc
+launch-trustos.bat

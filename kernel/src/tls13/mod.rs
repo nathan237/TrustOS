@@ -256,27 +256,82 @@ where
     send(&client_hello)?;
     session.state = TlsState::ClientHelloSent;
     
-    // Receive and process server messages
-    let mut buf = [0u8; 16384];
+    // Buffer to accumulate fragmented TLS records
+    let mut accumulator: Vec<u8> = Vec::with_capacity(32768);
+    let mut recv_buf = [0u8; 4096];
+    
     loop {
-        let n = recv(&mut buf)?;
-        if n == 0 {
-            return Err(TlsError::ConnectionClosed);
-        }
-        
-        // Process received data
-        if let Some(response) = session.process_record(&buf[..n])? {
-            if !response.is_empty() {
-                send(&response)?;
+        // Try to process any complete records in the accumulator
+        while accumulator.len() >= 5 {
+            // Read TLS record header
+            let content_type = accumulator[0];
+            let version = u16::from_be_bytes([accumulator[1], accumulator[2]]);
+            let record_length = u16::from_be_bytes([accumulator[3], accumulator[4]]) as usize;
+            let total_record_size = 5 + record_length;
+            
+            crate::serial_println!("[TLS] Header: type={} ver=0x{:04x} len={}", content_type, version, record_length);
+            
+            // Sanity check: TLS record type should be 20-23, version 0x0301-0x0303
+            if content_type < 20 || content_type > 23 {
+                crate::serial_println!("[TLS] Invalid content type {}, first 10 bytes: {:02x?}", 
+                    content_type, &accumulator[..accumulator.len().min(10)]);
+                return Err(TlsError::ProtocolError);
+            }
+            
+            if accumulator.len() < total_record_size {
+                // Need more data for this record
+                crate::serial_println!("[TLS] Need {} bytes, have {}", total_record_size, accumulator.len());
+                break;
+            }
+            
+            // We have a complete record, process it
+            let record_data: Vec<u8> = accumulator.drain(..total_record_size).collect();
+            crate::serial_println!("[TLS] Processing record: type={} len={}", record_data[0], record_length);
+            
+            match session.process_record(&record_data) {
+                Ok(Some(response)) => {
+                    if !response.is_empty() {
+                        send(&response)?;
+                    }
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    crate::serial_println!("[TLS] Record error: {:?}", e);
+                    return Err(e);
+                }
+            }
+            
+            if session.state == TlsState::ApplicationData {
+                return Ok(());
+            }
+            
+            if session.state == TlsState::Error {
+                return Err(TlsError::HandshakeFailed);
             }
         }
         
-        if session.state == TlsState::ApplicationData {
-            return Ok(());
-        }
-        
-        if session.state == TlsState::Error {
-            return Err(TlsError::HandshakeFailed);
+        // Receive more data
+        match recv(&mut recv_buf) {
+            Ok(0) => {
+                if accumulator.is_empty() {
+                    return Err(TlsError::ConnectionClosed);
+                }
+                // No more data but we still have unprocessed bytes
+                continue;
+            }
+            Ok(n) => {
+                crate::serial_println!("[TLS] Received {} bytes, accumulator has {}", n, accumulator.len());
+                accumulator.extend_from_slice(&recv_buf[..n]);
+            }
+            Err(TlsError::WouldBlock) => {
+                // No data yet, keep waiting if we're still in handshake
+                crate::serial_println!("[TLS] WouldBlock, accumulator has {} bytes", accumulator.len());
+                continue;
+            }
+            Err(e) => {
+                crate::serial_println!("[TLS] Recv error: {:?}", e);
+                return Err(e);
+            }
         }
     }
 }

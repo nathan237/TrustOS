@@ -20,6 +20,11 @@ miniz_oxide = { version = "0.7", default-features = false, features = ["with-all
 embedded-graphics = "0.8"
 embedded-graphics-core = "0.4"
 micromath = "2.1"
+libm = "0.2"
+
+# COSMIC-style UI rendering (no_std compatible)
+tiny-skia = { version = "0.12", default-features = false, features = ["no-std-float", "simd"] }
+tiny-skia-path = { version = "0.12", default-features = false, features = ["no-std-float"] }
 
 [[bin]]
 name = "trustos_kernel"

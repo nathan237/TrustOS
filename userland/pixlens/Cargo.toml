@@ -1,0 +1,15 @@
+[package]
+name = "pixlens"
+version = "0.1.0"
+edition = "2021"
+authors = ["Nathan (nated0ge)"]
+description = "Visual cryptanalysis tool - reveal hidden patterns through custom bitmap mappings"
+
+[workspace]
+
+[dependencies]
+# No dependencies - outputs raw PPM format (viewable in most image viewers)
+
+[[bin]]
+name = "pixlens"
+path = "src/main.rs"

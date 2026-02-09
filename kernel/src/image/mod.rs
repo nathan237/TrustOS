@@ -2,7 +2,7 @@
 // TrustOS Image System
 // ═══════════════════════════════════════════════════════════════════════════════
 //
-// Load and display images (BMP, PPM, raw formats)
+// Load and display images (PNG, BMP, PPM, raw formats)
 // Draw images to framebuffer with scaling, transparency, etc.
 //
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -12,9 +12,11 @@ use alloc::vec::Vec;
 
 pub mod bmp;
 pub mod ppm;
+pub mod png;
 
 pub use bmp::*;
 pub use ppm::*;
+pub use png::*;
 
 /// Image data structure
 #[derive(Clone)]

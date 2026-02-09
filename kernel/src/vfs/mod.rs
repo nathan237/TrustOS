@@ -15,6 +15,8 @@ pub mod devfs;
 pub mod procfs;
 pub mod trustfs;
 pub mod fat32;
+pub mod block_cache;
+pub mod wal;
 
 /// File descriptor type
 pub type Fd = i32;

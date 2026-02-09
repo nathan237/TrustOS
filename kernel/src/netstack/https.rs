@@ -8,6 +8,33 @@ use core::fmt;
 use crate::tls13::{TlsSession, TlsError, do_handshake};
 use crate::netstack::tcp;
 
+/// Ensure network is ready (DHCP completed) before making requests
+fn ensure_network_ready() {
+    // Start DHCP if not already
+    if !crate::netstack::dhcp::is_bound() {
+        crate::serial_println!("[HTTPS] Waiting for network (DHCP)...");
+        crate::netstack::dhcp::start();
+        
+        // Wait up to 5 seconds for DHCP
+        let start = crate::logger::get_ticks();
+        while !crate::netstack::dhcp::is_bound() {
+            crate::netstack::poll();
+            
+            if crate::logger::get_ticks().saturating_sub(start) > 5000 {
+                crate::serial_println!("[HTTPS] DHCP timeout, continuing anyway");
+                break;
+            }
+            
+            // Small delay
+            for _ in 0..10000 { core::hint::spin_loop(); }
+        }
+        
+        if crate::netstack::dhcp::is_bound() {
+            crate::serial_println!("[HTTPS] Network ready");
+        }
+    }
+}
+
 /// HTTPS response
 pub struct HttpsResponse {
     pub status_code: u16,
@@ -56,6 +83,9 @@ pub fn get(url: &str) -> Result<HttpsResponse, HttpsError> {
     
     crate::serial_println!("[HTTPS] GET https://{}:{}{}", host, port, path);
     
+    // Make sure network is ready (DHCP completed)
+    ensure_network_ready();
+    
     // Resolve DNS
     let ip = crate::netstack::dns::resolve(&host)
         .ok_or(HttpsError::DnsError)?;
@@ -83,6 +113,7 @@ pub fn get(url: &str) -> Result<HttpsResponse, HttpsError> {
                 .map_err(|_| TlsError::ConnectionFailed)
         };
         
+        let mut recv_attempts = 0u32;
         let mut recv = |buf: &mut [u8]| -> Result<usize, TlsError> {
             // Poll and receive TCP data
             for _ in 0..100 {
@@ -91,11 +122,19 @@ pub fn get(url: &str) -> Result<HttpsResponse, HttpsError> {
                 if let Some(data) = tcp::recv_data(ip, port, src_port) {
                     let len = data.len().min(buf.len());
                     buf[..len].copy_from_slice(&data[..len]);
+                    recv_attempts = 0;
                     return Ok(len);
                 }
                 
                 // Small delay
-                for _ in 0..50000 { core::hint::spin_loop(); }
+                for _ in 0..10000 { core::hint::spin_loop(); }
+            }
+            
+            recv_attempts += 1;
+            if recv_attempts > 50 {
+                // After 50 WouldBlock returns (5000 polls), give up
+                crate::serial_println!("[TLS] Too many recv attempts, giving up");
+                return Err(TlsError::ConnectionClosed);
             }
             
             Err(TlsError::WouldBlock)

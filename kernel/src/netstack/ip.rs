@@ -52,12 +52,21 @@ pub fn handle_packet(data: &[u8]) {
         return;
     }
     
+    // Get total length from IP header (bytes 2-3)
+    let total_length = u16::from_be_bytes([data[2], data[3]]) as usize;
+    
+    // Validate total length
+    if total_length < header_len || total_length > data.len() {
+        return;
+    }
+    
     let ttl = data[8];
     let protocol = data[9];
     let source = [data[12], data[13], data[14], data[15]];
     let dest = [data[16], data[17], data[18], data[19]];
     
-    let payload = &data[header_len..];
+    // Use total_length to get actual payload, ignoring Ethernet padding
+    let payload = &data[header_len..total_length];
     
     if protocol != 6 {
         crate::serial_println!("[IP] {}.{}.{}.{} -> {}.{}.{}.{} proto={} ttl={}", 

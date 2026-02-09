@@ -1,6 +1,29 @@
-//! Simple 8x16 bitmap font
+//! Simple 8x16 bitmap font with optional anti-aliasing
 //!
 //! Basic ASCII font for framebuffer text rendering.
+//! Supports smooth edge rendering via sub-pixel anti-aliasing.
+
+/// Font rendering mode
+#[derive(Clone, Copy, PartialEq)]
+pub enum FontMode {
+    /// Sharp pixels, no smoothing
+    Sharp,
+    /// Anti-aliased edges
+    Smooth,
+}
+
+/// Current font rendering mode (global setting)
+static mut FONT_MODE: FontMode = FontMode::Smooth;
+
+/// Set font rendering mode
+pub fn set_mode(mode: FontMode) {
+    unsafe { FONT_MODE = mode; }
+}
+
+/// Get current font rendering mode
+pub fn get_mode() -> FontMode {
+    unsafe { FONT_MODE }
+}
 
 /// Get glyph bitmap for a character (8x16 pixels)
 /// Returns array of 16 bytes, each byte is a row of 8 pixels
@@ -10,6 +33,133 @@ pub fn get_glyph(c: char) -> [u8; 16] {
         return FONT_DATA[0]; // Return space for unprintable
     }
     FONT_DATA[idx - 32]
+}
+
+/// Draw a character with anti-aliasing to a buffer
+/// Returns the character width (8 pixels)
+/// 
+/// Anti-aliasing works by:
+/// 1. Checking neighboring pixels
+/// 2. Adding semi-transparent pixels at edges
+/// 3. Blending with background color
+#[inline]
+pub fn draw_char_smooth(
+    buffer: &mut [u32],
+    width: u32,
+    x: u32,
+    y: u32,
+    c: char,
+    fg_color: u32,
+    bg_color: u32,
+) -> u32 {
+    let glyph = get_glyph(c);
+    let height = buffer.len() as u32 / width;
+    
+    // Extract color components
+    let fg_r = ((fg_color >> 16) & 0xFF) as u32;
+    let fg_g = ((fg_color >> 8) & 0xFF) as u32;
+    let fg_b = (fg_color & 0xFF) as u32;
+    
+    let bg_r = ((bg_color >> 16) & 0xFF) as u32;
+    let bg_g = ((bg_color >> 8) & 0xFF) as u32;
+    let bg_b = (bg_color & 0xFF) as u32;
+    
+    // Pre-calculate blended colors for anti-aliasing (25%, 50%, 75%)
+    let blend_25 = blend_color(fg_r, fg_g, fg_b, bg_r, bg_g, bg_b, 64);
+    let blend_50 = blend_color(fg_r, fg_g, fg_b, bg_r, bg_g, bg_b, 128);
+    let blend_75 = blend_color(fg_r, fg_g, fg_b, bg_r, bg_g, bg_b, 192);
+    
+    for (row_idx, &bits) in glyph.iter().enumerate() {
+        let py = y + row_idx as u32;
+        if py >= height { break; }
+        
+        let row_offset = (py * width) as usize;
+        let prev_bits = if row_idx > 0 { glyph[row_idx - 1] } else { 0 };
+        let next_bits = if row_idx < 15 { glyph[row_idx + 1] } else { 0 };
+        
+        for bit in 0..8u32 {
+            let px = x + bit;
+            if px >= width { continue; }
+            
+            let mask = 0x80 >> bit;
+            let is_set = bits & mask != 0;
+            
+            if is_set {
+                // Foreground pixel
+                buffer[row_offset + px as usize] = fg_color;
+            } else {
+                // Check if this is an edge pixel that needs anti-aliasing
+                let left_set = bit > 0 && (bits & (mask << 1)) != 0;
+                let right_set = bit < 7 && (bits & (mask >> 1)) != 0;
+                let top_set = prev_bits & mask != 0;
+                let bottom_set = next_bits & mask != 0;
+                
+                // Count adjacent foreground pixels
+                let adjacent = (left_set as u8) + (right_set as u8) + (top_set as u8) + (bottom_set as u8);
+                
+                // Also check diagonals for smoother edges
+                let tl = bit > 0 && (prev_bits & (mask << 1)) != 0;
+                let tr = bit < 7 && (prev_bits & (mask >> 1)) != 0;
+                let bl = bit > 0 && (next_bits & (mask << 1)) != 0;
+                let br = bit < 7 && (next_bits & (mask >> 1)) != 0;
+                let diag = (tl as u8) + (tr as u8) + (bl as u8) + (br as u8);
+                
+                let color = if adjacent >= 2 {
+                    blend_75
+                } else if adjacent == 1 && diag >= 1 {
+                    blend_50
+                } else if diag >= 2 {
+                    blend_25
+                } else {
+                    bg_color
+                };
+                
+                buffer[row_offset + px as usize] = color;
+            }
+        }
+    }
+    
+    8 // Character width
+}
+
+/// Draw a character without anti-aliasing (sharp mode)
+#[inline]
+pub fn draw_char_sharp(
+    buffer: &mut [u32],
+    width: u32,
+    x: u32,
+    y: u32,
+    c: char,
+    fg_color: u32,
+) {
+    let glyph = get_glyph(c);
+    let height = buffer.len() as u32 / width;
+    
+    for (row_idx, &bits) in glyph.iter().enumerate() {
+        let py = y + row_idx as u32;
+        if py >= height { break; }
+        
+        let row_offset = (py * width) as usize;
+        
+        for bit in 0..8u32 {
+            if bits & (0x80 >> bit) != 0 {
+                let px = x + bit;
+                if px < width {
+                    buffer[row_offset + px as usize] = fg_color;
+                }
+            }
+        }
+    }
+}
+
+/// Blend two colors based on alpha (0-255)
+#[inline]
+fn blend_color(fg_r: u32, fg_g: u32, fg_b: u32, bg_r: u32, bg_g: u32, bg_b: u32, alpha: u32) -> u32 {
+    let inv_alpha = 255 - alpha;
+    let r = (fg_r * alpha + bg_r * inv_alpha) / 255;
+    let g = (fg_g * alpha + bg_g * inv_alpha) / 255;
+    let b = (fg_b * alpha + bg_b * inv_alpha) / 255;
+    0xFF000000 | (r << 16) | (g << 8) | b
 }
 
 /// Basic 8x16 font data (ASCII 32-126)

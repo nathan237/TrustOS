@@ -1,6 +1,6 @@
 param(
     [string]$IsoPath = "$PSScriptRoot\trustos.iso",
-    [string]$Command = "httpget 10.0.2.2 8081 / localhost",
+    [string]$Command = "",
     [int]$SerialPort = 4444
 )
 

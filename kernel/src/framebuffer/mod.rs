@@ -14,6 +14,17 @@ use alloc::boxed::Box;
 use alloc::format;
 use core::sync::atomic::{AtomicPtr, AtomicU64, AtomicBool, Ordering};
 
+/// Fast approximate square root (Newton-Raphson, 5 iterations)
+#[inline]
+fn fast_sqrt(x: f32) -> f32 {
+    if x <= 0.0 { return 0.0; }
+    let mut guess = x * 0.5;
+    for _ in 0..5 {
+        guess = (guess + x / guess) * 0.5;
+    }
+    guess
+}
+
 /// Framebuffer info stored after initialization
 struct FramebufferInfo {
     addr: *mut u8,
@@ -31,11 +42,11 @@ struct Console {
     bg_color: u32,
 }
 
-// Static storage
-static FB_ADDR: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
-static FB_WIDTH: AtomicU64 = AtomicU64::new(0);
-static FB_HEIGHT: AtomicU64 = AtomicU64::new(0);
-static FB_PITCH: AtomicU64 = AtomicU64::new(0);
+// Static storage - pub for compositor access
+pub static FB_ADDR: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
+pub static FB_WIDTH: AtomicU64 = AtomicU64::new(0);
+pub static FB_HEIGHT: AtomicU64 = AtomicU64::new(0);
+pub static FB_PITCH: AtomicU64 = AtomicU64::new(0);
 
 // Double buffering
 static BACKBUFFER: Mutex<Option<Box<[u32]>>> = Mutex::new(None);
@@ -251,6 +262,21 @@ pub fn is_initialized() -> bool {
     !FB_ADDR.load(Ordering::SeqCst).is_null()
 }
 
+/// Get framebuffer width
+pub fn width() -> u32 {
+    FB_WIDTH.load(Ordering::SeqCst) as u32
+}
+
+/// Get framebuffer height
+pub fn height() -> u32 {
+    FB_HEIGHT.load(Ordering::SeqCst) as u32
+}
+
+/// Get raw framebuffer pointer as u32 pixels
+pub fn get_framebuffer() -> *mut u32 {
+    FB_ADDR.load(Ordering::SeqCst) as *mut u32
+}
+
 /// Clear the screen
 pub fn clear() {
     let addr = FB_ADDR.load(Ordering::SeqCst);
@@ -349,6 +375,108 @@ pub fn get_pixel(x: u32, y: u32) -> u32 {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FAST PIXEL CONTEXT - Cache framebuffer params to avoid atomic loads per pixel
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Cached framebuffer context for fast pixel operations
+/// Use when drawing many pixels to avoid 4 atomic loads per put_pixel call
+pub struct FastPixelContext {
+    pub addr: *mut u8,
+    pub width: usize,
+    pub height: usize,
+    pub pitch: usize,
+    pub backbuffer: bool,
+}
+
+impl FastPixelContext {
+    /// Create a new fast pixel context by caching current FB state
+    #[inline]
+    pub fn new() -> Self {
+        FastPixelContext {
+            addr: FB_ADDR.load(Ordering::SeqCst),
+            width: FB_WIDTH.load(Ordering::SeqCst) as usize,
+            height: FB_HEIGHT.load(Ordering::SeqCst) as usize,
+            pitch: FB_PITCH.load(Ordering::SeqCst) as usize,
+            backbuffer: USE_BACKBUFFER.load(Ordering::SeqCst),
+        }
+    }
+    
+    /// Put pixel (no bounds check for maximum speed)
+    /// Safety: Caller must ensure x < width and y < height
+    #[inline(always)]
+    pub unsafe fn put_pixel_unchecked(&self, x: usize, y: usize, color: u32) {
+        if self.backbuffer {
+            // Fast path for backbuffer
+            if let Some(ref mut buf) = *BACKBUFFER.lock() {
+                let idx = y * self.width + x;
+                *buf.get_unchecked_mut(idx) = color;
+            }
+        } else {
+            let offset = y * self.pitch + x * 4;
+            (self.addr.add(offset) as *mut u32).write_volatile(color);
+        }
+    }
+    
+    /// Put pixel with bounds check
+    #[inline(always)]
+    pub fn put_pixel(&self, x: usize, y: usize, color: u32) {
+        if x >= self.width || y >= self.height { return; }
+        unsafe { self.put_pixel_unchecked(x, y, color); }
+    }
+    
+    /// Fill a horizontal span of pixels
+    #[inline]
+    pub fn fill_hspan(&self, x: usize, y: usize, len: usize, color: u32) {
+        if y >= self.height || x >= self.width { return; }
+        let actual_len = len.min(self.width - x);
+        
+        if self.backbuffer {
+            if let Some(ref mut buf) = *BACKBUFFER.lock() {
+                let start = y * self.width + x;
+                #[cfg(target_arch = "x86_64")]
+                unsafe {
+                    crate::graphics::simd::fill_row_sse2(
+                        buf.as_mut_ptr().add(start),
+                        actual_len,
+                        color
+                    );
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                {
+                    buf[start..start + actual_len].fill(color);
+                }
+            }
+        } else {
+            unsafe {
+                let ptr = (self.addr.add(y * self.pitch + x * 4)) as *mut u32;
+                #[cfg(target_arch = "x86_64")]
+                {
+                    crate::graphics::simd::fill_row_sse2(ptr, actual_len, color);
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                {
+                    for i in 0..actual_len {
+                        ptr.add(i).write_volatile(color);
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Get a mutable slice to the backbuffer (if enabled)
+    /// Returns None if backbuffer is not available
+    pub fn get_backbuffer_slice(&self) -> Option<alloc::boxed::Box<[u32]>> {
+        if self.backbuffer {
+            if let Some(ref buf) = *BACKBUFFER.lock() {
+                // We need to clone, can't return reference
+                return Some(buf.clone());
+            }
+        }
+        None
+    }
+}
+
 /// Get framebuffer dimensions
 pub fn get_dimensions() -> (u32, u32) {
     (FB_WIDTH.load(Ordering::SeqCst) as u32, FB_HEIGHT.load(Ordering::SeqCst) as u32)
@@ -412,7 +540,7 @@ pub fn get_backbuffer_info() -> Option<(*mut u8, u32, u32, u32)> {
     }
 }
 
-/// Swap buffers - copy backbuffer to framebuffer (fast memcpy)
+/// Swap buffers - copy backbuffer to framebuffer (SSE2 optimized)
 pub fn swap_buffers() {
     let addr = FB_ADDR.load(Ordering::SeqCst);
     if addr.is_null() {
@@ -424,7 +552,7 @@ pub fn swap_buffers() {
     let pitch = FB_PITCH.load(Ordering::SeqCst) as usize;
     
     if let Some(ref buf) = *BACKBUFFER.lock() {
-        // Fast copy row by row (handles pitch != width*4)
+        // Fast copy row by row using SSE2 when available
         for y in 0..height {
             let src_offset = y * width;
             let dst_offset = y * pitch;
@@ -432,22 +560,35 @@ pub fn swap_buffers() {
             unsafe {
                 let src = buf.as_ptr().add(src_offset);
                 let dst = addr.add(dst_offset) as *mut u32;
-                core::ptr::copy_nonoverlapping(src, dst, width);
+                
+                #[cfg(target_arch = "x86_64")]
+                {
+                    crate::graphics::simd::copy_row_sse2(dst, src, width);
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                {
+                    core::ptr::copy_nonoverlapping(src, dst, width);
+                }
             }
         }
     }
 }
 
-/// Clear backbuffer with color (optimized with slice fill)
+/// Clear backbuffer with color (SSE2 optimized)
 pub fn clear_backbuffer(color: u32) {
     if let Some(ref mut buf) = *BACKBUFFER.lock() {
-        // Using fill() is faster than iterating
-        buf.fill(color);
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            crate::graphics::simd::fill_row_sse2(buf.as_mut_ptr(), buf.len(), color);
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            buf.fill(color);
+        }
     }
 }
 
-/// Draw filled rectangle to backbuffer (fast)
-/// Draw filled rectangle to backbuffer (optimized with slice fill)
+/// Draw filled rectangle to backbuffer (SSE2 optimized)
 pub fn fill_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
     let width = FB_WIDTH.load(Ordering::SeqCst) as u32;
     let height = FB_HEIGHT.load(Ordering::SeqCst) as u32;
@@ -465,8 +606,19 @@ pub fn fill_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
             for py in y1..y2 {
                 let row_start = py as usize * width as usize + x1 as usize;
                 if row_start + rect_width <= buf.len() {
-                    // Use slice fill for each row (much faster than loop)
-                    buf[row_start..row_start + rect_width].fill(color);
+                    // Use SSE2 for each row (much faster)
+                    #[cfg(target_arch = "x86_64")]
+                    unsafe {
+                        crate::graphics::simd::fill_row_sse2(
+                            buf.as_mut_ptr().add(row_start),
+                            rect_width,
+                            color
+                        );
+                    }
+                    #[cfg(not(target_arch = "x86_64"))]
+                    {
+                        buf[row_start..row_start + rect_width].fill(color);
+                    }
                 }
             }
         }
@@ -479,16 +631,25 @@ pub fn fill_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
     }
 }
 
-/// Draw a single pixel (bounds checked)
+/// Draw a single pixel (bounds checked) - uses backbuffer if enabled
 pub fn draw_pixel(x: u32, y: u32, color: u32) {
-    let addr = FB_ADDR.load(Ordering::SeqCst);
-    if addr.is_null() { return; }
-    
     let width = FB_WIDTH.load(Ordering::SeqCst) as u32;
     let height = FB_HEIGHT.load(Ordering::SeqCst) as u32;
-    let pitch = FB_PITCH.load(Ordering::SeqCst) as usize;
     
-    if x < width && y < height {
+    if x >= width || y >= height { return; }
+    
+    // Use backbuffer if double buffering is enabled
+    if USE_BACKBUFFER.load(Ordering::SeqCst) {
+        if let Some(ref mut buf) = *BACKBUFFER.lock() {
+            let offset = y as usize * width as usize + x as usize;
+            if offset < buf.len() {
+                buf[offset] = color;
+            }
+        }
+    } else {
+        let addr = FB_ADDR.load(Ordering::SeqCst);
+        if addr.is_null() { return; }
+        let pitch = FB_PITCH.load(Ordering::SeqCst) as usize;
         let offset = y as usize * pitch + x as usize * 4;
         unsafe {
             let ptr = addr.add(offset) as *mut u32;
@@ -515,6 +676,115 @@ pub fn draw_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
     draw_vline(x + w - 1, y, h, color);
 }
 
+/// Draw filled circle (fast Midpoint circle algorithm)
+pub fn fill_circle(cx: u32, cy: u32, radius: u32, color: u32) {
+    if radius == 0 { return; }
+    
+    // Fast horizontal line fill using squared distance
+    let r2 = (radius * radius) as i32;
+    for dy in 0..=radius {
+        let dx = fast_sqrt((r2 - (dy * dy) as i32) as f32) as u32;
+        if dx > 0 {
+            // Upper half
+            if cy >= dy {
+                fill_rect(cx.saturating_sub(dx), cy - dy, dx * 2 + 1, 1, color);
+            }
+            // Lower half
+            fill_rect(cx.saturating_sub(dx), cy + dy, dx * 2 + 1, 1, color);
+        }
+    }
+}
+
+/// Draw filled rounded rectangle (corners with radius)
+pub fn fill_rounded_rect(x: u32, y: u32, w: u32, h: u32, radius: u32, color: u32) {
+    if w == 0 || h == 0 { return; }
+    
+    let r = radius.min(w / 2).min(h / 2);
+    
+    if r == 0 {
+        fill_rect(x, y, w, h, color);
+        return;
+    }
+    
+    // Center rectangle (full width, reduced height)
+    fill_rect(x, y + r, w, h - r * 2, color);
+    // Top rectangle (reduced width)
+    fill_rect(x + r, y, w - r * 2, r, color);
+    // Bottom rectangle (reduced width)
+    fill_rect(x + r, y + h - r, w - r * 2, r, color);
+    
+    // Four corners using filled quarter circles
+    let r2 = (r * r) as i32;
+    for dy in 0..r {
+        let dx = fast_sqrt((r2 - (dy * dy) as i32) as f32) as u32;
+        if dx > 0 {
+            // Top-left corner
+            fill_rect(x + r - dx, y + r - dy - 1, dx, 1, color);
+            // Top-right corner
+            fill_rect(x + w - r, y + r - dy - 1, dx, 1, color);
+            // Bottom-left corner
+            fill_rect(x + r - dx, y + h - r + dy, dx, 1, color);
+            // Bottom-right corner
+            fill_rect(x + w - r, y + h - r + dy, dx, 1, color);
+        }
+    }
+}
+
+/// Draw rounded rectangle stroke (outline only)
+pub fn stroke_rounded_rect(x: u32, y: u32, w: u32, h: u32, radius: u32, color: u32) {
+    if w == 0 || h == 0 { return; }
+    
+    let r = radius.min(w / 2).min(h / 2);
+    
+    if r == 0 {
+        draw_rect(x, y, w, h, color);
+        return;
+    }
+    
+    // Horizontal edges
+    draw_hline(x + r, y, w - r * 2, color);           // Top
+    draw_hline(x + r, y + h - 1, w - r * 2, color);   // Bottom
+    // Vertical edges
+    draw_vline(x, y + r, h - r * 2, color);           // Left
+    draw_vline(x + w - 1, y + r, h - r * 2, color);   // Right
+    
+    // Draw corner arcs using Midpoint circle algorithm
+    let mut px = r as i32;
+    let mut py = 0i32;
+    let mut err = 0i32;
+    
+    while px >= py {
+        // Top-left corner
+        draw_pixel(x + r - px as u32, y + r - py as u32, color);
+        draw_pixel(x + r - py as u32, y + r - px as u32, color);
+        // Top-right corner  
+        draw_pixel(x + w - 1 - r + px as u32, y + r - py as u32, color);
+        draw_pixel(x + w - 1 - r + py as u32, y + r - px as u32, color);
+        // Bottom-left corner
+        draw_pixel(x + r - px as u32, y + h - 1 - r + py as u32, color);
+        draw_pixel(x + r - py as u32, y + h - 1 - r + px as u32, color);
+        // Bottom-right corner
+        draw_pixel(x + w - 1 - r + px as u32, y + h - 1 - r + py as u32, color);
+        draw_pixel(x + w - 1 - r + py as u32, y + h - 1 - r + px as u32, color);
+        
+        py += 1;
+        err += 1 + 2 * py;
+        if 2 * (err - px) + 1 > 0 {
+            px -= 1;
+            err += 1 - 2 * px;
+        }
+    }
+}
+
+/// Draw text using bitmap font with transparent background
+pub fn draw_text(text: &str, x: u32, y: u32, color: u32) {
+    let mut cx = x;
+    for c in text.chars() {
+        draw_char_at(cx, y, c, color);
+        cx += CHAR_WIDTH as u32;
+    }
+}
+
 /// Draw a character at pixel position (private)
 fn draw_char(c: char, x: usize, y: usize, fg: u32, bg: u32) {
     let glyph = font::get_glyph(c);
@@ -529,14 +799,56 @@ fn draw_char(c: char, x: usize, y: usize, fg: u32, bg: u32) {
 }
 
 /// Draw a character at pixel position with transparent background
+/// Optimized: takes lock once instead of per-pixel
 pub fn draw_char_at(x: u32, y: u32, c: char, color: u32) {
     let glyph = font::get_glyph(c);
+    let width = FB_WIDTH.load(Ordering::SeqCst) as u32;
+    let height = FB_HEIGHT.load(Ordering::SeqCst) as u32;
     
-    for row in 0..CHAR_HEIGHT {
-        let bits = glyph[row];
-        for col in 0..CHAR_WIDTH {
-            if (bits >> (7 - col)) & 1 == 1 {
-                draw_pixel(x + col as u32, y + row as u32, color);
+    if x >= width || y >= height { return; }
+    
+    // Fast path: write directly to backbuffer with single lock
+    if USE_BACKBUFFER.load(Ordering::SeqCst) {
+        if let Some(ref mut buf) = *BACKBUFFER.lock() {
+            let stride = width as usize;
+            for row in 0..CHAR_HEIGHT {
+                let py = y as usize + row;
+                if py >= height as usize { break; }
+                let bits = glyph[row];
+                let row_offset = py * stride;
+                for col in 0..CHAR_WIDTH {
+                    if (bits >> (7 - col)) & 1 == 1 {
+                        let px = x as usize + col;
+                        if px < width as usize {
+                            let offset = row_offset + px;
+                            if offset < buf.len() {
+                                buf[offset] = color;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        // Fallback: direct framebuffer
+        let addr = FB_ADDR.load(Ordering::SeqCst);
+        if addr.is_null() { return; }
+        let pitch = FB_PITCH.load(Ordering::SeqCst) as usize;
+        for row in 0..CHAR_HEIGHT {
+            let py = y as usize + row;
+            if py >= height as usize { break; }
+            let bits = glyph[row];
+            for col in 0..CHAR_WIDTH {
+                if (bits >> (7 - col)) & 1 == 1 {
+                    let px = x as usize + col;
+                    if px < width as usize {
+                        let offset = py * pitch + px * 4;
+                        unsafe {
+                            let ptr = addr.add(offset) as *mut u32;
+                            *ptr = color;
+                        }
+                    }
+                }
             }
         }
     }

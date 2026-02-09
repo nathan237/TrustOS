@@ -201,7 +201,13 @@ pub fn parse_server_hello(session: &mut TlsSession, data: &[u8]) -> Result<(), T
     
     // Compute shared secret
     let server_key = server_public_key.ok_or(TlsError::HandshakeFailed)?;
+    
+    crate::serial_println!("[TLS] Server public key: {:02x?}", &server_key[..16]);
+    crate::serial_println!("[TLS] Client private key: {:02x?}", &session.ecdhe_private[..16]);
+    
     let shared_secret = crypto::x25519(&session.ecdhe_private, &server_key);
+    
+    crate::serial_println!("[TLS] Shared secret: {:02x?}", &shared_secret[..16]);
     
     // Derive handshake secrets using HKDF
     derive_handshake_secrets(session, &shared_secret)?;
@@ -241,12 +247,18 @@ fn derive_handshake_secrets(session: &mut TlsSession, shared_secret: &[u8; 32]) 
         &transcript_hash,
     );
     
+    crate::serial_println!("[TLS] Handshake secrets derived");
+    crate::serial_println!("[TLS] Transcript hash: {:02x?}", &transcript_hash[..16]);
+    
     // Derive traffic keys for handshake
     derive_traffic_keys(
         &session.server_handshake_traffic_secret,
         &mut session.server_write_key,
         &mut session.server_write_iv,
     );
+    
+    crate::serial_println!("[TLS] Server write key: {:02x?}", &session.server_write_key[..8]);
+    crate::serial_println!("[TLS] Server write IV: {:02x?}", &session.server_write_iv);
     
     derive_traffic_keys(
         &session.client_handshake_traffic_secret,

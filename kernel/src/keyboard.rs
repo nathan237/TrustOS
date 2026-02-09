@@ -266,6 +266,9 @@ const SCANCODE_TO_ASCII_SHIFT: [u8; 128] = [
 
 /// Process a scancode from the keyboard interrupt
 pub fn handle_scancode(scancode: u8) {
+    // Debug: log all scancodes
+    crate::serial_println!("[KB-IRQ] scancode=0x{:02X}", scancode);
+    
     // Ignore invalid/spurious scancodes
     if scancode == 0x00 || scancode == 0xFF {
         return;
@@ -407,6 +410,24 @@ pub fn handle_scancode(scancode: u8) {
         KEYBOARD_BUFFER.lock().push(12); // ASCII FF (form feed)
         return;
     }
+
+    // Handle Ctrl+S (save)
+    if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x1F {
+        KEYBOARD_BUFFER.lock().push(0x13); // ASCII DC3 (save)
+        return;
+    }
+
+    // Handle Ctrl+G (goto line)
+    if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x22 {
+        KEYBOARD_BUFFER.lock().push(0x07); // ASCII BEL (goto)
+        return;
+    }
+
+    // Handle Ctrl+Z (undo)
+    if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x2C {
+        KEYBOARD_BUFFER.lock().push(0x1A); // ASCII SUB (undo)
+        return;
+    }
     
     // Convert scancode to ASCII
     let shift = SHIFT_PRESSED.load(Ordering::SeqCst);
@@ -433,6 +454,7 @@ pub fn handle_scancode(scancode: u8) {
     
     // If valid ASCII, add to buffer
     if ascii != 0 {
+        crate::serial_println!("[KB-BUF] push ascii={} (0x{:02X}) char='{}'", ascii, ascii, ascii as char);
         KEYBOARD_BUFFER.lock().push(ascii);
     }
 }
@@ -440,6 +462,7 @@ pub fn handle_scancode(scancode: u8) {
 /// Read a character from the keyboard buffer (non-blocking)
 pub fn read_char() -> Option<u8> {
     if let Some(b) = KEYBOARD_BUFFER.lock().pop() {
+        crate::serial_println!("[KB-READ] popped {} (0x{:02X})", b, b);
         return Some(b);
     }
     serial::read_byte()
@@ -869,4 +892,27 @@ pub fn read_line_hidden(buffer: &mut [u8]) -> usize {
     }
     
     pos
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BLOCKING KEY INPUT for GUI
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Try to read a key without blocking (returns scancode as ASCII equivalent)
+/// Returns None if no key available
+pub fn try_read_key() -> Option<u8> {
+    read_char()
+}
+
+/// Wait for any key press (blocking)
+pub fn wait_for_key() -> u8 {
+    loop {
+        if let Some(key) = read_char() {
+            return key;
+        }
+        // Small delay to avoid burning CPU
+        for _ in 0..1000 {
+            core::hint::spin_loop();
+        }
+    }
 }

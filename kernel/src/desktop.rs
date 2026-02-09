@@ -11,9 +11,11 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::format;
+use alloc::collections::BTreeMap;
 use spin::Mutex;
 use crate::framebuffer::{self, COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN, COLOR_WHITE, COLOR_BLACK};
 use crate::graphics::desktop_gfx;
+use crate::apps::text_editor::{EditorState, render_editor};
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🧮 MATH UTILITIES for no_std environment
@@ -114,6 +116,281 @@ const DOCK_WIDTH: u32 = 60;                   // Official: 56-64px
 // Animation state (minimal - no flashy effects)
 const FADE_STEPS: u8 = 8;
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🎬 ANIMATION SYSTEM - Smooth transitions for modern desktop feel
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Global animation settings
+static ANIMATIONS_ENABLED: Mutex<bool> = Mutex::new(true);
+static ANIMATION_SPEED: Mutex<f32> = Mutex::new(1.0); // 1.0 = normal, 2.0 = fast, 0.5 = slow
+
+/// Animation duration in frames (at 60 FPS)
+const ANIM_DURATION_OPEN: u32 = 12;      // 200ms window open
+const ANIM_DURATION_CLOSE: u32 = 8;      // 133ms window close
+const ANIM_DURATION_MINIMIZE: u32 = 10;  // 166ms minimize
+const ANIM_DURATION_MAXIMIZE: u32 = 10;  // 166ms maximize
+
+/// Animation state for a window
+#[derive(Clone, Copy, PartialEq)]
+pub enum AnimationState {
+    None,
+    Opening,      // Scale up from center
+    Closing,      // Scale down + fade out
+    Minimizing,   // Move to taskbar
+    Maximizing,   // Expand to full screen
+    Restoring,    // Restore from maximized/minimized
+}
+
+/// Animation data for interpolation
+#[derive(Clone)]
+pub struct WindowAnimation {
+    pub state: AnimationState,
+    pub progress: f32,           // 0.0 to 1.0
+    pub start_x: i32,
+    pub start_y: i32,
+    pub start_width: u32,
+    pub start_height: u32,
+    pub target_x: i32,
+    pub target_y: i32,
+    pub target_width: u32,
+    pub target_height: u32,
+    pub alpha: f32,              // 0.0 to 1.0 for fade effects
+}
+
+impl WindowAnimation {
+    pub fn new() -> Self {
+        Self {
+            state: AnimationState::None,
+            progress: 0.0,
+            start_x: 0,
+            start_y: 0,
+            start_width: 0,
+            start_height: 0,
+            target_x: 0,
+            target_y: 0,
+            target_width: 0,
+            target_height: 0,
+            alpha: 1.0,
+        }
+    }
+    
+    /// Start opening animation
+    pub fn start_open(&mut self, x: i32, y: i32, width: u32, height: u32) {
+        self.state = AnimationState::Opening;
+        self.progress = 0.0;
+        // Start from center, small
+        self.start_x = x + width as i32 / 2 - 10;
+        self.start_y = y + height as i32 / 2 - 10;
+        self.start_width = 20;
+        self.start_height = 20;
+        self.target_x = x;
+        self.target_y = y;
+        self.target_width = width;
+        self.target_height = height;
+        self.alpha = 0.0;
+    }
+    
+    /// Start closing animation
+    pub fn start_close(&mut self, x: i32, y: i32, width: u32, height: u32) {
+        self.state = AnimationState::Closing;
+        self.progress = 0.0;
+        self.start_x = x;
+        self.start_y = y;
+        self.start_width = width;
+        self.start_height = height;
+        // End at center, small
+        self.target_x = x + width as i32 / 2 - 10;
+        self.target_y = y + height as i32 / 2 - 10;
+        self.target_width = 20;
+        self.target_height = 20;
+        self.alpha = 1.0;
+    }
+    
+    /// Start minimize animation
+    pub fn start_minimize(&mut self, x: i32, y: i32, width: u32, height: u32, taskbar_x: i32, taskbar_y: i32) {
+        self.state = AnimationState::Minimizing;
+        self.progress = 0.0;
+        self.start_x = x;
+        self.start_y = y;
+        self.start_width = width;
+        self.start_height = height;
+        self.target_x = taskbar_x;
+        self.target_y = taskbar_y;
+        self.target_width = 48;
+        self.target_height = 32;
+        self.alpha = 1.0;
+    }
+    
+    /// Start maximize animation  
+    pub fn start_maximize(&mut self, x: i32, y: i32, width: u32, height: u32, max_w: u32, max_h: u32) {
+        self.state = AnimationState::Maximizing;
+        self.progress = 0.0;
+        self.start_x = x;
+        self.start_y = y;
+        self.start_width = width;
+        self.start_height = height;
+        self.target_x = 0;
+        self.target_y = 0;
+        self.target_width = max_w;
+        self.target_height = max_h - TASKBAR_HEIGHT;
+        self.alpha = 1.0;
+    }
+    
+    /// Start restore animation
+    pub fn start_restore(&mut self, curr_x: i32, curr_y: i32, curr_w: u32, curr_h: u32,
+                         saved_x: i32, saved_y: i32, saved_w: u32, saved_h: u32) {
+        self.state = AnimationState::Restoring;
+        self.progress = 0.0;
+        self.start_x = curr_x;
+        self.start_y = curr_y;
+        self.start_width = curr_w;
+        self.start_height = curr_h;
+        self.target_x = saved_x;
+        self.target_y = saved_y;
+        self.target_width = saved_w;
+        self.target_height = saved_h;
+        self.alpha = 1.0;
+    }
+    
+    /// Update animation progress (call each frame)
+    pub fn update(&mut self) -> bool {
+        if self.state == AnimationState::None {
+            return false;
+        }
+        
+        let speed = *ANIMATION_SPEED.lock();
+        let duration = match self.state {
+            AnimationState::Opening => ANIM_DURATION_OPEN,
+            AnimationState::Closing => ANIM_DURATION_CLOSE,
+            AnimationState::Minimizing => ANIM_DURATION_MINIMIZE,
+            AnimationState::Maximizing | AnimationState::Restoring => ANIM_DURATION_MAXIMIZE,
+            AnimationState::None => return false,
+        };
+        
+        let step = speed / duration as f32;
+        self.progress += step;
+        
+        // Update alpha for fade effects
+        match self.state {
+            AnimationState::Opening => {
+                self.alpha = ease_out_cubic(self.progress);
+            }
+            AnimationState::Closing | AnimationState::Minimizing => {
+                self.alpha = 1.0 - ease_in_cubic(self.progress);
+            }
+            _ => {}
+        }
+        
+        if self.progress >= 1.0 {
+            self.progress = 1.0;
+            let completed_state = self.state;
+            self.state = AnimationState::None;
+            return completed_state == AnimationState::Closing;
+        }
+        
+        false // Animation still running
+    }
+    
+    /// Get current interpolated position and size
+    pub fn get_current(&self) -> (i32, i32, u32, u32, f32) {
+        let t = match self.state {
+            AnimationState::Opening | AnimationState::Restoring => ease_out_back(self.progress),
+            AnimationState::Closing => ease_in_back(self.progress),
+            AnimationState::Minimizing => ease_in_cubic(self.progress),
+            AnimationState::Maximizing => ease_out_cubic(self.progress),
+            AnimationState::None => 1.0,
+        };
+        
+        let x = lerp_i32(self.start_x, self.target_x, t);
+        let y = lerp_i32(self.start_y, self.target_y, t);
+        let w = lerp_u32(self.start_width, self.target_width, t);
+        let h = lerp_u32(self.start_height, self.target_height, t);
+        
+        (x, y, w, h, self.alpha)
+    }
+    
+    /// Check if currently animating
+    pub fn is_animating(&self) -> bool {
+        self.state != AnimationState::None
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// 🎯 EASING FUNCTIONS - Smooth animation curves
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Linear interpolation for i32
+fn lerp_i32(a: i32, b: i32, t: f32) -> i32 {
+    (a as f32 + (b - a) as f32 * t) as i32
+}
+
+/// Linear interpolation for u32
+fn lerp_u32(a: u32, b: u32, t: f32) -> u32 {
+    if a > b {
+        (a as f32 - (a - b) as f32 * t) as u32
+    } else {
+        (a as f32 + (b - a) as f32 * t) as u32
+    }
+}
+
+/// Ease-out cubic: decelerating end
+fn ease_out_cubic(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    1.0 - (1.0 - t) * (1.0 - t) * (1.0 - t)
+}
+
+/// Ease-in cubic: accelerating start
+fn ease_in_cubic(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * t
+}
+
+/// Ease-out back: overshoot then settle (bouncy opening)
+fn ease_out_back(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    let c1: f32 = 1.70158;
+    let c3 = c1 + 1.0;
+    let tm1 = t - 1.0;
+    1.0 + c3 * tm1 * tm1 * tm1 + c1 * tm1 * tm1
+}
+
+/// Ease-in back: pull back before moving (anticipation)
+fn ease_in_back(t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    let c1: f32 = 1.70158;
+    let c3 = c1 + 1.0;
+    c3 * t * t * t - c1 * t * t
+}
+
+/// Check if animations are enabled
+pub fn animations_enabled() -> bool {
+    *ANIMATIONS_ENABLED.lock()
+}
+
+/// Enable/disable animations
+pub fn set_animations_enabled(enabled: bool) {
+    *ANIMATIONS_ENABLED.lock() = enabled;
+    crate::serial_println!("[ANIM] Animations {}", if enabled { "ENABLED" } else { "DISABLED" });
+}
+
+/// Toggle animations on/off
+pub fn toggle_animations() {
+    let mut enabled = ANIMATIONS_ENABLED.lock();
+    *enabled = !*enabled;
+    crate::serial_println!("[ANIM] Animations {}", if *enabled { "ENABLED" } else { "DISABLED" });
+}
+
+/// Set animation speed multiplier
+pub fn set_animation_speed(speed: f32) {
+    *ANIMATION_SPEED.lock() = speed.clamp(0.25, 4.0);
+    crate::serial_println!("[ANIM] Speed set to {}x", speed);
+}
+
+/// Get animation speed
+pub fn get_animation_speed() -> f32 {
+    *ANIMATION_SPEED.lock()
+}
+
 /// Window ID counter
 static NEXT_WINDOW_ID: Mutex<u32> = Mutex::new(1);
 
@@ -183,6 +460,7 @@ pub enum IconAction {
     OpenGame,
     OpenEditor,
     OpenGL3D,
+    OpenBrowser,
 }
 
 /// Window type for content
@@ -202,6 +480,7 @@ pub enum WindowType {
     FileAssociations,
     Demo3D,  // New: 3D graphics demo
     Game,    // Snake game
+    Browser, // Web browser
 }
 
 /// Window structure
@@ -233,6 +512,9 @@ pub struct Window {
     pub file_path: Option<String>,
     pub selected_index: usize,
     pub scroll_offset: usize,
+    // Animation state
+    pub animation: WindowAnimation,
+    pub pending_close: bool,  // Window should close after animation
 }
 
 /// Resize edge being dragged
@@ -276,6 +558,75 @@ impl Window {
             file_path: None,
             selected_index: 0,
             scroll_offset: 0,
+            animation: WindowAnimation::new(),
+            pending_close: false,
+        }
+    }
+    
+    /// Start open animation if animations are enabled
+    pub fn animate_open(&mut self) {
+        if animations_enabled() {
+            self.animation.start_open(self.x, self.y, self.width, self.height);
+        }
+    }
+    
+    /// Start close animation if animations are enabled
+    pub fn animate_close(&mut self) -> bool {
+        if animations_enabled() {
+            self.animation.start_close(self.x, self.y, self.width, self.height);
+            self.pending_close = true;
+            true // Animation started
+        } else {
+            false // Close immediately
+        }
+    }
+    
+    /// Start minimize animation if animations are enabled
+    pub fn animate_minimize(&mut self, taskbar_y: i32) {
+        if animations_enabled() {
+            let taskbar_x = 100; // Approximate position in taskbar
+            self.animation.start_minimize(self.x, self.y, self.width, self.height, taskbar_x, taskbar_y);
+        }
+    }
+    
+    /// Start maximize animation if animations are enabled
+    pub fn animate_maximize(&mut self, screen_w: u32, screen_h: u32) {
+        if animations_enabled() {
+            self.animation.start_maximize(self.x, self.y, self.width, self.height, screen_w, screen_h);
+        }
+    }
+    
+    /// Start restore animation if animations are enabled
+    pub fn animate_restore(&mut self) {
+        if animations_enabled() {
+            self.animation.start_restore(
+                self.x, self.y, self.width, self.height,
+                self.saved_x, self.saved_y, self.saved_width, self.saved_height
+            );
+        }
+    }
+    
+    /// Update animation state (call each frame)
+    pub fn update_animation(&mut self) -> bool {
+        if self.animation.is_animating() {
+            let should_close = self.animation.update();
+            
+            // If animation completed and it was maximizing/restoring, apply final state
+            if !self.animation.is_animating() && !should_close {
+                // Animation completed normally
+            }
+            
+            return should_close && self.pending_close;
+        }
+        false
+    }
+    
+    /// Get render position (considering animation)
+    pub fn get_render_bounds(&self) -> (i32, i32, u32, u32, f32) {
+        if self.animation.is_animating() {
+            self.animation.get_current()
+        } else {
+            (self.x, self.y, self.width, self.height, 1.0)
         }
     }
     
@@ -401,6 +752,11 @@ pub struct Desktop {
     // OpenGL compositor
     pub render_mode: RenderMode,
     pub compositor_theme: CompositorTheme,
+    // Browser state
+    pub browser: Option<crate::browser::Browser>,
+    pub browser_url_input: String,
+    // Editor states (window_id -> EditorState)
+    pub editor_states: BTreeMap<u32, EditorState>,
 }
 
 impl Desktop {
@@ -435,6 +791,9 @@ impl Desktop {
             last_context_menu_visible: false,
             render_mode: RenderMode::Classic,
             compositor_theme: CompositorTheme::Modern,
+            browser: None,
+            browser_url_input: String::new(),
+            editor_states: BTreeMap::new(),
         }
     }
     
@@ -464,10 +823,72 @@ impl Desktop {
         crate::serial_println!("[Desktop] init_desktop_icons...");
         self.init_desktop_icons();
         
+        // Auto-open TrustCode editor with a sample Rust file for demo
+        self.open_trustcode_demo();
+        
         // Mark that we need to render background on first frame
         self.background_cached = false;
         self.needs_full_redraw = true;
         crate::serial_println!("[Desktop] init complete");
+    }
+    
+    /// Open TrustCode with a demo Rust file
+    fn open_trustcode_demo(&mut self) {
+        // Create a sample Rust file in ramfs
+        let sample_code = r#"//! TrustOS — A Modern Operating System in Rust
+//!
+//! This file demonstrates TrustCode's syntax highlighting
+
+use core::fmt;
+
+/// Main kernel entry point
+pub fn kernel_main() -> ! {
+    let message = "Hello from TrustOS!";
+    serial_println!("{}", message);
+
+    // Initialize hardware
+    let cpu_count: u32 = 4;
+    let memory_mb: u64 = 256;
+
+    for i in 0..cpu_count {
+        init_cpu(i);
+    }
+
+    // Start the desktop environment
+    let mut desktop = Desktop::new();
+    desktop.init(1280, 800);
+
+    loop {
+        desktop.render();
+        desktop.handle_input();
+    }
+}
+
+/// Initialize a CPU core
+fn init_cpu(id: u32) {
+    // Setup GDT, IDT, APIC
+    serial_println!("CPU {} initialized", id);
+}
+
+#[derive(Debug, Clone)]
+struct AppConfig {
+    name: String,
+    version: (u8, u8, u8),
+    features: Vec<&'static str>,
+}
+"#;
+        
+        let _ = crate::ramfs::with_fs(|fs| {
+            fs.write_file("/demo.rs", sample_code.as_bytes())
+        });
+        
+        let id = self.create_window("TrustCode: demo.rs", 200, 80, 720, 520, WindowType::TextEditor);
+        if let Some(editor) = self.editor_states.get_mut(&id) {
+            editor.load_file("demo.rs");
+        }
+        // Focus the editor window
+        self.focus_window(id);
+        crate::serial_println!("[TrustCode] Demo editor opened");
     }
     
     /// Set render mode (Classic or OpenGL)
@@ -590,6 +1011,14 @@ impl Desktop {
             y: start_y,
             action: IconAction::OpenGL3D,
         });
+        
+        self.icons.push(DesktopIcon {
+            name: String::from("Browser"),
+            icon_type: IconType::Browser,
+            x: start_x + 80,
+            y: start_y + icon_spacing,
+            action: IconAction::OpenBrowser,
+        });
     }
     
     /// Check if click is on a desktop icon
@@ -672,12 +1101,11 @@ impl Desktop {
                 window.content.push(String::from("  [Enter] Open | [Up/Down] Navigate"));
             },
             WindowType::TextEditor => {
-                window.content.push(String::from("=== Text Editor ==="));
-                window.content.push(String::from(""));
-                window.content.push(String::from("Enter text below:"));
-                window.content.push(String::from("___________________"));
-                window.content.push(String::from(""));
-                window.content.push(String::from("|"));
+                // Editor state is managed in editor_states BTreeMap
+                // Initialize with a new empty editor
+                let mut editor = EditorState::new();
+                editor.language = crate::apps::text_editor::Language::Plain;
+                self.editor_states.insert(window.id, editor);
             },
             WindowType::NetworkInfo => {
                 window.content.push(String::from("=== Network Status ==="));
@@ -702,9 +1130,15 @@ impl Desktop {
                 window.content.push(format!("Resolution: {}x{}", self.width, self.height));
                 window.content.push(String::from("Theme: Dark Green"));
                 window.content.push(String::from(""));
-                window.content.push(String::from("[1] File Associations"));
-                window.content.push(String::from("[2] Display Settings"));
-                window.content.push(String::from("[3] About System"));
+                window.content.push(String::from("--- Animations ---"));
+                let anim_status = if animations_enabled() { "ON " } else { "OFF" };
+                let anim_speed = *ANIMATION_SPEED.lock();
+                window.content.push(format!("[1] Animations: {}", anim_status));
+                window.content.push(format!("[2] Speed: {:.1}x", anim_speed));
+                window.content.push(String::from(""));
+                window.content.push(String::from("--- Other ---"));
+                window.content.push(String::from("[3] File Associations"));
+                window.content.push(String::from("[4] About System"));
             },
             WindowType::ImageViewer => {
                 window.content.push(String::from("=== Image Viewer ==="));
@@ -746,23 +1180,64 @@ impl Desktop {
                 window.content.push(String::from(""));
                 window.content.push(String::from("Click extension to change program"));
             },
+            WindowType::Browser => {
+                // Initialize browser if not already done
+                if self.browser.is_none() {
+                    self.browser = Some(crate::browser::Browser::new(width, height));
+                }
+                self.browser_url_input = String::from("http://example.com");
+            },
             _ => {}
         }
+        
+        // Start opening animation
+        window.animate_open();
         
         let id = window.id;
         self.windows.push(window);
         id
     }
     
-    /// Close a window
+    /// Close a window (with animation if enabled)
     pub fn close_window(&mut self, id: u32) {
+        if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
+            if w.animate_close() {
+                // Animation started, window will be removed after animation
+                return;
+            }
+        }
+        // No animation, remove immediately
         self.windows.retain(|w| w.id != id);
+        // Clean up editor state if it was a text editor
+        self.editor_states.remove(&id);
     }
     
-    /// Minimize/restore a window
+    /// Minimize/restore a window (with animation)
     pub fn minimize_window(&mut self, id: u32) {
+        let taskbar_y = (self.height - TASKBAR_HEIGHT) as i32;
         if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
+            if !w.minimized {
+                w.animate_minimize(taskbar_y);
+            }
             w.minimized = !w.minimized;
+        }
+    }
+    
+    /// Update all window animations (call each frame)
+    pub fn update_animations(&mut self) {
+        let mut to_remove = Vec::new();
+        
+        for w in &mut self.windows {
+            if w.update_animation() {
+                // Animation completed and window should close
+                to_remove.push(w.id);
+            }
+        }
+        
+        // Remove windows that finished closing animation
+        for id in to_remove {
+            self.windows.retain(|w| w.id != id);
+            self.editor_states.remove(&id);
         }
     }
     
@@ -953,6 +1428,11 @@ impl Desktop {
                         self.windows[i].dragging = true;
                         self.windows[i].drag_offset_x = x - win_x;
                         self.windows[i].drag_offset_y = y - win_y;
+                    }
+                    
+                    // Handle browser content clicks
+                    if self.windows[i].window_type == WindowType::Browser {
+                        self.handle_browser_click(x, y, &self.windows[i].clone());
                     }
                     
                     self.focus_window(id);
@@ -1190,10 +1670,13 @@ impl Desktop {
                 self.create_window("Snake Game", 250 + offset, 120 + offset, 320, 320, WindowType::Game);
             },
             IconAction::OpenEditor => {
-                self.create_window("Text Editor", 200 + offset, 100 + offset, 450, 350, WindowType::TextEditor);
+                self.create_window("TrustCode", 150 + offset, 80 + offset, 700, 500, WindowType::TextEditor);
             },
             IconAction::OpenGL3D => {
                 self.create_window("TrustGL 3D Demo", 150 + offset, 80 + offset, 400, 350, WindowType::Demo3D);
+            },
+            IconAction::OpenBrowser => {
+                self.create_window("TrustBrowser", 120 + offset, 60 + offset, 600, 450, WindowType::Browser);
             },
         }
     }
@@ -1201,6 +1684,14 @@ impl Desktop {
     fn handle_taskbar_click(&mut self, x: i32, _y: i32) {
         if x < 48 {
             self.start_menu_open = !self.start_menu_open;
+            return;
+        }
+        
+        // Settings button in system tray (gear icon)
+        let tray_x = self.width - 120;
+        let settings_x = tray_x - 44;
+        if x >= settings_x as i32 && x < (settings_x + 40) as i32 {
+            self.open_settings_panel();
             return;
         }
         
@@ -1213,6 +1704,20 @@ impl Desktop {
             }
             btn_x += 124;
         }
+    }
+    
+    /// Open or focus the settings panel
+    fn open_settings_panel(&mut self) {
+        // Check if settings window already exists
+        for w in &self.windows {
+            if w.window_type == WindowType::Settings {
+                let id = w.id;
+                self.focus_window(id);
+                return;
+            }
+        }
+        // Create new settings window
+        self.create_window("Settings", 250, 140, 400, 350, WindowType::Settings);
     }
     
     /// Menu actions enum
@@ -1276,9 +1781,11 @@ impl Desktop {
     
     /// Handle keyboard input for the focused window
     pub fn handle_keyboard_input(&mut self, key: u8) {
-        // Find focused window
-        if let Some(window) = self.windows.iter_mut().find(|w| w.focused) {
-            match window.window_type {
+        // Extract type and id to avoid borrow conflict
+        let focused_info = self.windows.iter().find(|w| w.focused).map(|w| (w.window_type, w.id));
+        
+        if let Some((wtype, win_id)) = focused_info {
+            match wtype {
                 WindowType::Terminal => {
                     self.handle_terminal_key(key);
                 },
@@ -1292,19 +1799,9 @@ impl Desktop {
                     self.handle_settings_key(key);
                 },
                 WindowType::TextEditor => {
-                    // For text editor, just add characters
-                    if key == 0x08 { // Backspace
-                        if !self.input_buffer.is_empty() {
-                            self.input_buffer.pop();
-                        }
-                    } else if key == 0x0D || key == 0x0A { // Enter
-                        // Add line to content
-                        if let Some(w) = self.windows.iter_mut().find(|w| w.focused) {
-                            w.content.push(self.input_buffer.clone());
-                            self.input_buffer.clear();
-                        }
-                    } else if key >= 0x20 && key < 0x7F {
-                        self.input_buffer.push(key as char);
+                    // Forward to TrustCode editor state
+                    if let Some(editor) = self.editor_states.get_mut(&win_id) {
+                        editor.handle_key(key);
                     }
                 },
                 _ => {}
@@ -1368,29 +1865,12 @@ impl Desktop {
         
         match program {
             Program::TextEditor => {
-                let mut id = self.create_window(&format!("Edit: {}", filename), 200 + offset, 120 + offset, 450, 350, WindowType::TextEditor);
-                // Load file content
-                if let Some(window) = self.windows.iter_mut().find(|w| w.id == id) {
-                    window.file_path = Some(String::from(filename));
-                    window.content.clear();
-                    window.content.push(format!("=== {} ===", filename));
-                    window.content.push(String::new());
-                    // Try to read file (copy to avoid lifetime issue)
-                    let file_path = format!("/{}", filename);
-                    if let Ok(content) = crate::ramfs::with_fs(|fs| {
-                        fs.read_file(&file_path).map(|d| d.to_vec())
-                    }) {
-                        if let Ok(text) = core::str::from_utf8(&content) {
-                            for line in text.lines().take(20) {
-                                window.content.push(String::from(line));
-                            }
-                        } else {
-                            window.content.push(String::from("(binary file)"));
-                        }
-                    } else {
-                        window.content.push(String::from("(could not read file)"));
-                    }
+                let id = self.create_window(&format!("TrustCode: {}", filename), 150 + offset, 80 + offset, 700, 500, WindowType::TextEditor);
+                // Load file into editor state
+                if let Some(editor) = self.editor_states.get_mut(&id) {
+                    editor.load_file(filename);
                 }
+                crate::serial_println!("[TrustCode] Opened: {}", filename);
             },
             Program::ImageViewer => {
                 let id = self.create_window(&format!("View: {}", filename), 180 + offset, 100 + offset, 400, 320, WindowType::ImageViewer);
@@ -1465,15 +1945,45 @@ impl Desktop {
     /// Handle settings keyboard input
     fn handle_settings_key(&mut self, key: u8) {
         if key == b'1' {
+            // Toggle animations
+            toggle_animations();
+            // Refresh settings window content
+            self.refresh_settings_window();
+        } else if key == b'2' {
+            // Cycle animation speed: 0.5 -> 1.0 -> 2.0 -> 0.5
+            let current = *ANIMATION_SPEED.lock();
+            let next = if current <= 0.5 { 1.0 } else if current <= 1.0 { 2.0 } else { 0.5 };
+            *ANIMATION_SPEED.lock() = next;
+            self.refresh_settings_window();
+        } else if key == b'3' {
             // Open file associations
             let offset = (self.windows.len() as i32 * 20) % 100;
             self.create_window("File Associations", 250 + offset, 130 + offset, 500, 400, WindowType::FileAssociations);
-        } else if key == b'2' {
-            // Display settings - just show info for now
-        } else if key == b'3' {
+        } else if key == b'4' {
             // About
             let offset = (self.windows.len() as i32 * 20) % 100;
             self.create_window("About TrustOS", 280 + offset, 150 + offset, 350, 200, WindowType::About);
+        }
+    }
+    
+    /// Refresh settings window content to show current values
+    fn refresh_settings_window(&mut self) {
+        if let Some(window) = self.windows.iter_mut().find(|w| w.window_type == WindowType::Settings) {
+            window.content.clear();
+            window.content.push(String::from("=== Settings ==="));
+            window.content.push(String::from(""));
+            window.content.push(format!("Resolution: {}x{}", self.width, self.height));
+            window.content.push(String::from("Theme: Dark Green"));
+            window.content.push(String::from(""));
+            window.content.push(String::from("--- Animations ---"));
+            let anim_status = if animations_enabled() { "ON " } else { "OFF" };
+            let anim_speed = *ANIMATION_SPEED.lock();
+            window.content.push(format!("[1] Animations: {}", anim_status));
+            window.content.push(format!("[2] Speed: {:.1}x", anim_speed));
+            window.content.push(String::from(""));
+            window.content.push(String::from("--- Other ---"));
+            window.content.push(String::from("[3] File Associations"));
+            window.content.push(String::from("[4] About System"));
         }
     }
     
@@ -1568,6 +2078,9 @@ impl Desktop {
         let mut output = Vec::new();
         let cmd = cmd.trim();
         
+        // Debug: log command to serial
+        crate::serial_println!("[TERM] Executing command: '{}' len={}", cmd, cmd.len());
+        
         if cmd.is_empty() {
             return output;
         }
@@ -1577,14 +2090,57 @@ impl Desktop {
                 output.push(String::from("TrustOS GUI Terminal - Commands:"));
                 output.push(String::from("  help      - Show this help"));
                 output.push(String::from("  ls [dir]  - List directory contents"));
+                output.push(String::from("  cd <dir>  - Change directory"));
                 output.push(String::from("  pwd       - Print working directory"));
+                output.push(String::from("  cat <file>- Show file contents"));
+                output.push(String::from("  mkdir     - Create directory"));
+                output.push(String::from("  touch     - Create file"));
+                output.push(String::from("  rm        - Remove file"));
                 output.push(String::from("  date      - Show current date/time"));
                 output.push(String::from("  uname     - System information"));
                 output.push(String::from("  free      - Memory usage"));
                 output.push(String::from("  net       - Network status"));
-                output.push(String::from("  cat <file>- Show file contents"));
+                output.push(String::from("  ps        - List processes"));
+                output.push(String::from("  uptime    - System uptime"));
+                output.push(String::from("  matrix3d  - 3D Matrix tunnel (ESC=exit)"));
+                output.push(String::from("  shader    - Graphics demos"));
                 output.push(String::from("  clear     - Clear terminal"));
                 output.push(String::from("  exit      - Close terminal"));
+            },
+            // Direct shortcut for 3D Matrix tunnel
+            "matrix3d" | "tunnel" | "holomatrix" | "3d" => {
+                output.push(String::from("✓ Matrix Tunnel 3D - ESC to exit"));
+                
+                // Get framebuffer info
+                let fb = crate::framebuffer::get_framebuffer();
+                let width = crate::framebuffer::width();
+                let height = crate::framebuffer::height();
+                
+                // Init virtual GPU with tunnel shader
+                crate::gpu_emu::init(fb, width, height);
+                if let Some(shader_fn) = crate::gpu_emu::get_shader("tunnel") {
+                    crate::gpu_emu::set_shader(shader_fn);
+                }
+                
+                let mut frames = 0u32;
+                loop {
+                    if let Some(key) = crate::keyboard::try_read_key() {
+                        if key == 27 { break; }
+                    }
+                    
+                    #[cfg(target_arch = "x86_64")]
+                    crate::gpu_emu::draw_simd();
+                    #[cfg(not(target_arch = "x86_64"))]
+                    crate::gpu_emu::draw();
+                    
+                    crate::gpu_emu::tick(16);
+                    frames += 1;
+                    
+                    if frames % 60 == 0 {
+                        crate::framebuffer::draw_text("MATRIX 3D TUNNEL | ESC=exit", 10, 10, 0xFF00FF00);
+                    }
+                }
+                output.push(format!("Tunnel ended ({} frames)", frames));
             },
             "ls" | "ls /" => {
                 output.push(String::from("Directory: /"));
@@ -1649,11 +2205,124 @@ impl Desktop {
                 }
             },
             _ if cmd.starts_with("cat ") => {
-                let filename = &cmd[4..];
-                output.push(format!("cat: {} - use shell for file operations", filename));
+                let filename = &cmd[4..].trim();
+                if let Ok(content) = crate::ramfs::with_fs(|fs| fs.read_file(filename).map(|d| d.to_vec())) {
+                    if let Ok(text) = core::str::from_utf8(&content) {
+                        for line in text.lines().take(20) {
+                            output.push(String::from(line));
+                        }
+                    } else {
+                        output.push(format!("cat: {}: binary file", filename));
+                    }
+                } else {
+                    output.push(format!("cat: {}: No such file", filename));
+                }
             },
             _ if cmd.starts_with("echo ") => {
                 output.push(String::from(&cmd[5..]));
+            },
+            _ if cmd.starts_with("cd ") => {
+                let path = &cmd[3..];
+                match crate::ramfs::with_fs(|fs| fs.cd(path)) {
+                    Ok(()) => output.push(format!("Changed to: {}", path)),
+                    Err(e) => output.push(format!("cd: {}: {}", path, e.as_str())),
+                }
+            },
+            _ if cmd.starts_with("mkdir ") => {
+                let path = &cmd[6..];
+                match crate::ramfs::with_fs(|fs| fs.mkdir(path)) {
+                    Ok(()) => output.push(format!("Created directory: {}", path)),
+                    Err(e) => output.push(format!("mkdir: {}: {}", path, e.as_str())),
+                }
+            },
+            _ if cmd.starts_with("touch ") => {
+                let path = &cmd[6..];
+                match crate::ramfs::with_fs(|fs| fs.touch(path)) {
+                    Ok(()) => output.push(format!("Created file: {}", path)),
+                    Err(e) => output.push(format!("touch: {}: {}", path, e.as_str())),
+                }
+            },
+            _ if cmd.starts_with("rm ") => {
+                let path = &cmd[3..];
+                match crate::ramfs::with_fs(|fs| fs.rm(path)) {
+                    Ok(()) => output.push(format!("Removed: {}", path)),
+                    Err(e) => output.push(format!("rm: {}: {}", path, e.as_str())),
+                }
+            },
+            "shader" | "vgpu" => {
+                output.push(String::from("╔═══════════════════════════════════════╗"));
+                output.push(String::from("║     Virtual GPU - Shader Demo         ║"));
+                output.push(String::from("╠═══════════════════════════════════════╣"));
+                output.push(String::from("║ shader plasma    - Plasma waves       ║"));
+                output.push(String::from("║ shader fire      - Fire effect        ║"));
+                output.push(String::from("║ shader mandelbrot- Fractal zoom       ║"));
+                output.push(String::from("║ shader matrix    - Matrix rain        ║"));
+                output.push(String::from("║ shader tunnel    - 3D HOLOMATRIX      ║"));
+                output.push(String::from("║ shader shapes    - 3D OBJECTS         ║"));
+                output.push(String::from("║ shader parallax  - Depth layers       ║"));
+                output.push(String::from("║ shader gradient  - Test gradient      ║"));
+                output.push(String::from("╚═══════════════════════════════════════╝"));
+                output.push(String::from("Press ESC to exit shader demo"));
+            },
+            _ if cmd.starts_with("shader ") => {
+                let shader_name = cmd.trim_start_matches("shader ").trim();
+                if let Some(shader_fn) = crate::gpu_emu::get_shader(shader_name) {
+                    output.push(format!("✓ Starting shader: {} (ESC to exit)", shader_name));
+                    
+                    // Get framebuffer info
+                    let fb = crate::framebuffer::get_framebuffer();
+                    let width = crate::framebuffer::width();
+                    let height = crate::framebuffer::height();
+                    
+                    // Init virtual GPU
+                    crate::gpu_emu::init(fb, width, height);
+                    crate::gpu_emu::set_shader(shader_fn);
+                    
+                    // Run shader demo loop
+                    let mut frames = 0u32;
+                    
+                    loop {
+                        // Check for ESC key
+                        if let Some(key) = crate::keyboard::try_read_key() {
+                            if key == 27 { break; }
+                        }
+                        
+                        // Draw shader
+                        #[cfg(target_arch = "x86_64")]
+                        crate::gpu_emu::draw_simd();
+                        #[cfg(not(target_arch = "x86_64"))]
+                        crate::gpu_emu::draw();
+                        
+                        // Update time (~16ms per frame target)
+                        crate::gpu_emu::tick(16);
+                        frames += 1;
+                        
+                        // Show FPS every 60 frames
+                        if frames % 60 == 0 {
+                            crate::framebuffer::draw_text(&format!("FPS: ~60 | {} | ESC=exit", shader_name), 10, 10, 0xFFFFFFFF);
+                        }
+                    }
+                    
+                    output.push(format!("Shader ended ({} frames)", frames));
+                } else {
+                    output.push(format!("Unknown shader: {}", shader_name));
+                    output.push(String::from("Available: plasma, fire, mandelbrot, matrix, tunnel, parallax, gradient"));
+                }
+            },
+            "ps" | "procs" => {
+                output.push(String::from("PID  STATE    NAME"));
+                output.push(String::from("  1  Running  init"));
+                output.push(String::from("  2  Running  desktop"));
+            },
+            "uptime" => {
+                let ticks = crate::logger::get_ticks();
+                let secs = ticks / 100;
+                let mins = secs / 60;
+                output.push(format!("Uptime: {}m {}s", mins, secs % 60));
+            },
+            "df" => {
+                output.push(String::from("Filesystem      Size  Used  Avail Use%"));
+                output.push(String::from("ramfs           32M   1M    31M   3%"));
             },
             "exit" | "quit" => {
                 output.push(String::from("Use the X button to close the terminal"));
@@ -1737,6 +2406,9 @@ impl Desktop {
     pub fn draw(&mut self) {
         self.frame_count += 1;
         
+        // Update animations each frame
+        self.update_animations();
+        
         // Toggle cursor blink every ~30 frames
         if self.frame_count % 30 == 0 {
             self.cursor_blink = !self.cursor_blink;
@@ -1789,6 +2461,9 @@ impl Desktop {
                 self.draw_window(window);
             }
         }
+        
+        // Second pass: render editor content (needs &mut for blink counter)
+        self.draw_editor_windows();
         
         // Only redraw taskbar if there are windows (to show active indicators)
         // Otherwise the cached taskbar is already in the background
@@ -1875,79 +2550,87 @@ impl Desktop {
         framebuffer::swap_buffers();
     }
     
-    /// Draw context menu - Windows 11 style
+    /// Draw context menu - Windows 11 style with rounded corners and glass
     fn draw_context_menu(&self) {
         let menu_x = self.context_menu.x;
         let menu_y = self.context_menu.y;
-        let menu_width = 200;
+        let menu_width = 200i32;
         let item_height = 28;
         let menu_height = self.context_menu.items.len() as i32 * item_height + 8;
         let padding = 4;
+        let corner_r: u32 = 8;
         
-        // Soft multi-layer shadow
-        for i in (1..=8).rev() {
-            let alpha = (20 - i * 2).max(4) as u32;
+        // Soft rounded shadow (multiple layers, increasingly offset)
+        for i in (1..=6).rev() {
+            let alpha = (18 - i * 2).max(4) as u32;
             let shadow_color = alpha << 24;
-            framebuffer::fill_rect(
-                (menu_x + i) as u32, (menu_y + i + 2) as u32,
+            draw_rounded_rect(
+                menu_x + i, menu_y + i + 2,
                 menu_width as u32, menu_height as u32,
-                shadow_color
+                corner_r + 2, shadow_color,
             );
         }
         
-        // Background with glassmorphism
-        framebuffer::fill_rect(
-            menu_x as u32, menu_y as u32,
+        // Background: dark glass panel with rounded corners
+        draw_rounded_rect(
+            menu_x, menu_y,
             menu_width as u32, menu_height as u32,
-            BG_MEDIUM
+            corner_r, 0xFF0C1210,
         );
         
-        // Subtle gradient overlay
-        for row in 0..menu_height {
-            let alpha = (row * 10 / menu_height) as u32;
-            let overlay = alpha << 24;
-            framebuffer::fill_rect(
-                menu_x as u32, (menu_y + row) as u32,
-                menu_width as u32, 1,
-                overlay
-            );
+        // Glass-like gradient overlay (lighter at top, fading down)
+        // We draw thin horizontal slices clipped to the rounded shape
+        for row in 0..menu_height.min(20) {
+            let glass_alpha = (12 - row * 12 / 20).max(0) as u32;
+            if glass_alpha > 0 {
+                let overlay = (glass_alpha << 24) | 0x00FFFFFF;
+                // Inset to respect rounded corners
+                let inset = if row < corner_r as i32 { (corner_r as i32 - fast_sqrt_i32((corner_r as i32 * corner_r as i32) - (corner_r as i32 - row) * (corner_r as i32 - row))) } else { 0 };
+                let lx = menu_x + inset;
+                let lw = menu_width - inset * 2;
+                if lw > 0 {
+                    crate::framebuffer::fill_rect(lx as u32, (menu_y + row) as u32, lw as u32, 1, overlay);
+                }
+            }
         }
         
-        // Border with gradient effect
-        framebuffer::draw_rect(
-            menu_x as u32, menu_y as u32,
+        // Rounded border
+        draw_rounded_rect_border(
+            menu_x, menu_y,
             menu_width as u32, menu_height as u32,
-            GREEN_MUTED
+            corner_r, GREEN_MUTED,
         );
         
-        // Brighter top edge
-        framebuffer::fill_rect(menu_x as u32, menu_y as u32, menu_width as u32, 1, GREEN_TERTIARY);
+        // Bright top edge (slightly inset for rounded look)
+        crate::framebuffer::fill_rect(
+            (menu_x + corner_r as i32) as u32, menu_y as u32,
+            (menu_width - corner_r as i32 * 2) as u32, 1, GREEN_TERTIARY,
+        );
         
         // Draw items
         for (idx, item) in self.context_menu.items.iter().enumerate() {
             let item_y = menu_y + padding + idx as i32 * item_height;
             
-            // Check if cursor is hovering this item
             let is_hovered = self.cursor_x >= menu_x && self.cursor_x < menu_x + menu_width
                 && self.cursor_y >= item_y && self.cursor_y < item_y + item_height;
             
             if is_hovered && item.action != ContextAction::Cancel && !item.label.starts_with("─") {
-                // Hover with glow effect
-                framebuffer::fill_rect(
-                    (menu_x + 4) as u32, item_y as u32,
+                // Hover with rounded pill shape
+                draw_rounded_rect(
+                    menu_x + 4, item_y,
                     (menu_width - 8) as u32, (item_height - 2) as u32,
-                    GREEN_GHOST
+                    6, GREEN_GHOST,
                 );
-                framebuffer::fill_rect(
-                    (menu_x + 6) as u32, (item_y + 1) as u32,
+                draw_rounded_rect(
+                    menu_x + 6, item_y + 1,
                     (menu_width - 12) as u32, (item_height - 4) as u32,
-                    BG_LIGHT
+                    5, BG_LIGHT,
                 );
-                // Left accent bar
-                framebuffer::fill_rect(
-                    (menu_x + 4) as u32, (item_y + 4) as u32,
+                // Left accent bar (rounded)
+                draw_rounded_rect(
+                    menu_x + 4, item_y + 4,
                     2, (item_height - 10) as u32,
-                    GREEN_PRIMARY
+                    1, GREEN_PRIMARY,
                 );
             }
             
@@ -2033,14 +2716,53 @@ impl Desktop {
         
         match mode {
             WallpaperMode::Stretch => {
-                // Scale to fit screen
+                // Bilinear interpolation for smooth scaling
+                let wp_w = wp_data.width;
+                let wp_h = wp_data.height;
+                let scr_w = self.width;
+                
                 for sy in 0..screen_height {
-                    let src_y = (sy as u64 * wp_data.height as u64 / screen_height as u64) as u32;
-                    for sx in 0..self.width {
-                        let src_x = (sx as u64 * wp_data.width as u64 / self.width as u64) as u32;
-                        let idx = (src_y * wp_data.width + src_x) as usize;
-                        if idx < wp_data.pixels.len() {
-                            framebuffer::put_pixel(sx, sy, wp_data.pixels[idx]);
+                    // Fixed-point source coordinate (8-bit fractional)
+                    let src_y_fp = (sy as u64 * ((wp_h as u64 - 1) << 8)) / screen_height as u64;
+                    let y0 = (src_y_fp >> 8) as u32;
+                    let y1 = (y0 + 1).min(wp_h - 1);
+                    let fy = (src_y_fp & 0xFF) as u32; // 0..255 fractional part
+                    let ify = 256 - fy;
+                    
+                    for sx in 0..scr_w {
+                        let src_x_fp = (sx as u64 * ((wp_w as u64 - 1) << 8)) / scr_w as u64;
+                        let x0 = (src_x_fp >> 8) as u32;
+                        let x1 = (x0 + 1).min(wp_w - 1);
+                        let fx = (src_x_fp & 0xFF) as u32;
+                        let ifx = 256 - fx;
+                        
+                        // 4 neighboring pixels
+                        let i00 = (y0 * wp_w + x0) as usize;
+                        let i10 = (y0 * wp_w + x1) as usize;
+                        let i01 = (y1 * wp_w + x0) as usize;
+                        let i11 = (y1 * wp_w + x1) as usize;
+                        
+                        if i11 < wp_data.pixels.len() {
+                            let c00 = wp_data.pixels[i00];
+                            let c10 = wp_data.pixels[i10];
+                            let c01 = wp_data.pixels[i01];
+                            let c11 = wp_data.pixels[i11];
+                            
+                            // Bilinear blend each channel
+                            let r = ( ((c00 >> 16) & 0xFF) * ifx * ify
+                                    + ((c10 >> 16) & 0xFF) * fx * ify
+                                    + ((c01 >> 16) & 0xFF) * ifx * fy
+                                    + ((c11 >> 16) & 0xFF) * fx * fy ) >> 16;
+                            let g = ( ((c00 >> 8) & 0xFF) * ifx * ify
+                                    + ((c10 >> 8) & 0xFF) * fx * ify
+                                    + ((c01 >> 8) & 0xFF) * ifx * fy
+                                    + ((c11 >> 8) & 0xFF) * fx * fy ) >> 16;
+                            let b = ( (c00 & 0xFF) * ifx * ify
+                                    + (c10 & 0xFF) * fx * ify
+                                    + (c01 & 0xFF) * ifx * fy
+                                    + (c11 & 0xFF) * fx * fy ) >> 16;
+                            
+                            framebuffer::put_pixel(sx, sy, 0xFF000000 | (r << 16) | (g << 8) | b);
                         }
                     }
                 }
@@ -2171,17 +2893,21 @@ impl Desktop {
             let is_hovered = self.cursor_x >= x as i32 && self.cursor_x < (x + 64) as i32
                 && self.cursor_y >= y as i32 && self.cursor_y < (y + 72) as i32;
             
-            // Background container
-            let icon_bg = if is_hovered { BG_LIGHT } else { 0x00000000 };
+            // Background container - rounded glass pill
             if is_hovered {
-                // Halo/glow effect
+                // Halo/glow effect with rounded shape
                 self.draw_icon_glow(x, y, 64, 52);
-                framebuffer::fill_rect(x + 8, y + 4, 48, 48, icon_bg);
-                framebuffer::draw_rect(x + 8, y + 4, 48, 48, GREEN_MUTED);
+                // Glass-like rounded background
+                framebuffer::fill_rounded_rect(x + 6, y + 2, 52, 52, 12, 0xFF0D1310);
+                // Subtle bright border
+                framebuffer::stroke_rounded_rect(x + 6, y + 2, 52, 52, 12, GREEN_MUTED);
+                // Inner glass highlight (top half)
+                framebuffer::fill_rounded_rect(x + 8, y + 4, 48, 8, 6, 0x08FFFFFF);
             }
             
             // Draw the actual pixel-art icon
             let icon_color = if is_hovered { GREEN_PRIMARY } else { GREEN_SECONDARY };
+            let icon_bg = if is_hovered { 0xFF0D1310 } else { 0x00000000 };
             icons::draw_icon(icon.icon_type, x + 16, y + 10, icon_color, icon_bg);
             
             // Label below - smaller, muted
@@ -2192,10 +2918,10 @@ impl Desktop {
         }
     }
     
-    /// Draw a subtle glow effect around an icon
+    /// Draw a subtle glow effect around an icon (rounded)
     fn draw_icon_glow(&self, x: u32, y: u32, w: u32, h: u32) {
-        // Multiple layers of increasingly transparent green
-        let layers = [
+        // Multiple layers of increasingly transparent green rounded rects
+        let layers: [(u32, u32); 3] = [
             (0xFF001108, 6),
             (0xFF001A0D, 4),
             (0xFF002211, 2),
@@ -2204,7 +2930,9 @@ impl Desktop {
         for (color, offset) in layers {
             let ox = if x > offset { x - offset } else { 0 };
             let oy = if y > offset { y - offset } else { 0 };
-            framebuffer::draw_rect(ox + 8, oy + 4, w + offset * 2 - 16, h + offset * 2 - 8, color);
+            let gw = w + offset * 2;
+            let gh = h + offset * 2;
+            framebuffer::stroke_rounded_rect(ox + 6, oy + 2, gw.saturating_sub(12), gh.saturating_sub(4), 14, color);
         }
     }
     
@@ -2217,11 +2945,21 @@ impl Desktop {
         // Windows 11 Style Taskbar (centered icons)
         // ═══════════════════════════════════════════════════════════════
         
-        // Acrylic-like background
+        // Glass-like taskbar: dark base + gradient highlight at top
+        // Base layer
         framebuffer::fill_rect(0, y, self.width, TASKBAR_HEIGHT, colors::TASKBAR_BG);
         
-        // Subtle top border
-        framebuffer::draw_hline(0, y, self.width, colors::BORDER_SUBTLE);
+        // Glass highlight gradient (brighter at top, fade down over 8px)
+        for dy in 0..8u32 {
+            let glass_alpha = (10 - dy * 10 / 8).min(10);
+            if glass_alpha > 0 {
+                let overlay = ((glass_alpha as u32) << 24) | 0x00FFFFFF;
+                framebuffer::fill_rect(0, y + dy, self.width, 1, overlay);
+            }
+        }
+        
+        // Subtle bright top border line
+        framebuffer::draw_hline(0, y, self.width, 0xFF1A2A20);
         
         // Start button (left side for now, Win11 centers it but left is more familiar)
         let start_hover = self.cursor_x >= 4 && self.cursor_x < 52 && self.cursor_y >= y as i32;
@@ -2284,6 +3022,25 @@ impl Desktop {
         // System tray (right side)
         let tray_x = self.width - 120;
         
+        // Settings button (gear icon) - before the clock
+        let settings_x = tray_x - 44;
+        let settings_hover = self.cursor_x >= settings_x as i32 && self.cursor_x < (settings_x + 40) as i32 
+            && self.cursor_y >= y as i32;
+        if settings_hover {
+            crate::gui::windows11::draw_rounded_rect(settings_x as i32, (y + 4) as i32, 36, TASKBAR_HEIGHT - 8, 4, colors::SURFACE_HOVER);
+        }
+        // Draw gear icon (simplified)
+        let gear_color = if settings_hover { colors::ACCENT_LIGHT } else { colors::TEXT_SECONDARY };
+        let gear_cx = settings_x + 18;
+        let gear_cy = y + TASKBAR_HEIGHT / 2;
+        // Outer ring
+        framebuffer::draw_hline(gear_cx - 6, gear_cy - 2, 12, gear_color);
+        framebuffer::draw_hline(gear_cx - 6, gear_cy + 2, 12, gear_color);
+        framebuffer::draw_vline(gear_cx - 2, gear_cy - 6, 12, gear_color);
+        framebuffer::draw_vline(gear_cx + 2, gear_cy - 6, 12, gear_color);
+        // Center
+        framebuffer::fill_rect(gear_cx - 2, gear_cy - 2, 4, 4, gear_color);
+        
         // Clock
         let time = self.get_time_string();
         let date = self.get_date_string();
@@ -2326,6 +3083,16 @@ impl Desktop {
         // Main background with rounded corners
         crate::gui::windows11::draw_rounded_rect(menu_x, menu_y, menu_w, menu_h, 8, colors::MICA_DARK);
         crate::gui::windows11::draw_rounded_rect_border(menu_x, menu_y, menu_w, menu_h, 8, colors::BORDER_SUBTLE);
+        
+        // Glass sheen at top of start menu
+        for dy in 0..12u32 {
+            let glass_a = (10 - dy * 10 / 12).min(10);
+            if glass_a > 0 {
+                let overlay = ((glass_a as u32) << 24) | 0x00FFFFFF;
+                let inset = if dy < 8 { 8u32.saturating_sub(fast_sqrt_i32((64 - (8i32 - dy as i32) * (8i32 - dy as i32)) as i32) as u32) } else { 0 };
+                framebuffer::fill_rect((menu_x as u32 + inset), (menu_y as u32 + dy), menu_w - inset * 2, 1, overlay);
+            }
+        }
         
         // Search bar at top
         let search_y = menu_y + 16;
@@ -2511,6 +3278,18 @@ impl Desktop {
         }
         framebuffer::fill_rect((x + 1) as u32, (y + radius as i32) as u32, w - 2, titlebar_h - radius, title_bg);
         
+        // Glass sheen on title bar (subtle light gradient at top)
+        if window.focused && radius > 0 {
+            for dy in 0..6u32 {
+                let glass_a = (8 - dy * 8 / 6).min(8);
+                if glass_a > 0 {
+                    let overlay = ((glass_a as u32) << 24) | 0x00FFFFFF;
+                    let inset = if dy < radius { radius - fast_sqrt_i32((radius as i32 * radius as i32 - (radius as i32 - dy as i32) * (radius as i32 - dy as i32)) as i32) as u32 } else { 0 };
+                    framebuffer::fill_rect((x as u32 + inset) as u32, (y as u32 + dy), w - inset * 2, 1, overlay);
+                }
+            }
+        }
+        
         // Window icon and title
         let text_color = if window.focused { colors::TEXT_PRIMARY } else { colors::TEXT_SECONDARY };
         let icon = match window.window_type {
@@ -2528,6 +3307,7 @@ impl Desktop {
             WindowType::HexViewer => "🔍",
             WindowType::Demo3D => "🎮",
             WindowType::Game => "🎯",
+            WindowType::Browser => "🌍",
         };
         
         // Icon (simple 2-char representation for now)
@@ -2535,6 +3315,7 @@ impl Desktop {
             WindowType::Terminal => ">_",
             WindowType::FileManager => "[]",
             WindowType::Calculator => "##",
+            WindowType::Browser => "WW",
             _ => "::",
         };
         self.draw_text(x + 12, y + 8, icon_str, colors::ACCENT);
@@ -2648,6 +3429,11 @@ impl Desktop {
         let content_x = window.x + 8;
         let content_y = window.y + TITLE_BAR_HEIGHT as i32 + 8;
         
+        // TextEditor rendering is handled separately in draw_editor_windows
+        if window.window_type == WindowType::TextEditor {
+            return;
+        }
+        
         // Special rendering for 3D demo window
         if window.window_type == WindowType::Demo3D {
             self.draw_3d_demo(window);
@@ -2657,6 +3443,12 @@ impl Desktop {
         // Special rendering for Snake game
         if window.window_type == WindowType::Game {
             self.draw_snake_game(window);
+            return;
+        }
+        
+        // Special rendering for Browser
+        if window.window_type == WindowType::Browser {
+            self.draw_browser(window);
             return;
         }
         
@@ -2699,9 +3491,44 @@ impl Desktop {
         }
     }
     
+    /// Render all TextEditor windows (separate pass because we need &mut for editor state)
+    fn draw_editor_windows(&mut self) {
+        // Collect editor window info first to avoid borrow issues
+        let editor_windows: Vec<(u32, i32, i32, u32, u32)> = self.windows.iter()
+            .filter(|w| w.window_type == WindowType::TextEditor && w.visible && !w.minimized)
+            .map(|w| (w.id, w.x, w.y, w.width, w.height))
+            .collect();
+        
+        for (win_id, wx, wy, ww, wh) in editor_windows {
+            if let Some(editor) = self.editor_states.get_mut(&win_id) {
+                let content_x = wx;
+                let content_y = wy + TITLE_BAR_HEIGHT as i32;
+                let content_w = ww;
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                
+                render_editor(
+                    editor,
+                    content_x, content_y, content_w, content_h,
+                    &|x, y, text, color| {
+                        // Use the font renderer char by char
+                        for (i, ch) in text.chars().enumerate() {
+                            let cx = (x + (i as i32 * 8)) as u32;
+                            let cy = y as u32;
+                            crate::framebuffer::draw_char_at(cx, cy, ch, color);
+                        }
+                    },
+                    &|x, y, ch, color| {
+                        crate::framebuffer::draw_char_at(x as u32, y as u32, ch, color);
+                    },
+                );
+            }
+        }
+    }
+    
     /// Draw 3D graphics demo using TrustGL (OpenGL-like API)
     fn draw_3d_demo(&self, window: &Window) {
         use crate::graphics::opengl::*;
+        use crate::graphics::texture;
         
         let demo_x = window.x as u32 + 10;
         let demo_y = window.y as u32 + TITLE_BAR_HEIGHT + 10;
@@ -2798,6 +3625,23 @@ impl Desktop {
         
         gl_end();
         
+        // === TEXTURED CUBE (offset to the right) ===
+        gl_push_matrix();
+        gl_translatef(2.5, 0.0, 0.0); // Offset to the right
+        gl_rotatef(angle * 0.7, 0.3, 1.0, 0.2);
+        
+        // Create/use checkerboard texture
+        static mut DEMO_TEX_ID: u32 = 0;
+        static mut TEX_INIT: bool = false;
+        unsafe {
+            if !TEX_INIT {
+                demo_init_checkerboard_texture(&mut DEMO_TEX_ID);
+                TEX_INIT = true;
+            }
+            demo_render_textured_cube(0.0, DEMO_TEX_ID);
+        }
+        gl_pop_matrix();
+        
         // Draw coordinate axes with lines
         gl_load_identity();
         glu_look_at(3.0, 2.0, 4.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0);
@@ -2819,11 +3663,11 @@ impl Desktop {
         
         // Draw text overlay
         self.draw_text(demo_x as i32 + 8, demo_y as i32 + 8, "TrustGL OpenGL Demo", GREEN_SECONDARY);
-        self.draw_text(demo_x as i32 + 8, demo_y as i32 + 24, "Software 3D Renderer", GREEN_TERTIARY);
+        self.draw_text(demo_x as i32 + 8, demo_y as i32 + 24, "Software 3D + Textures", GREEN_TERTIARY);
         
         // Stats
         let stats_y = demo_y as i32 + demo_h as i32 - 24;
-        self.draw_text(demo_x as i32 + 8, stats_y, "Rotating Cube | Depth Test ON", GREEN_MUTED);
+        self.draw_text(demo_x as i32 + 8, stats_y, "Left: Color Cube | Right: Textured Cube", GREEN_MUTED);
         self.draw_text(demo_x as i32 + 8, stats_y, "Vertices: 8 | Edges: 12 | Faces: 6", GREEN_MUTED);
     }
     
@@ -2929,6 +3773,271 @@ impl Desktop {
         // Score display
         self.draw_text(game_x as i32 + game_w as i32 - 80, game_y as i32 + 8, 
                        "Score: 60", GREEN_SECONDARY);
+    }
+    
+    /// Draw Browser window content
+    fn draw_browser(&self, window: &Window) {
+        let toolbar_height: u32 = 36;
+        let browser_x = window.x as u32 + 4;
+        let browser_y = window.y as u32 + TITLE_BAR_HEIGHT + 4;
+        let browser_w = window.width.saturating_sub(8);
+        let browser_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
+        
+        if browser_w < 100 || browser_h < 80 {
+            return;
+        }
+        
+        // Draw toolbar background
+        framebuffer::fill_rect(browser_x, browser_y, browser_w, toolbar_height, 0xFF303030);
+        
+        // Navigation buttons
+        let btn_y = browser_y + 6;
+        let btn_size: u32 = 24;
+        
+        // Back button (◀)
+        framebuffer::fill_rect(browser_x + 8, btn_y, btn_size, btn_size, 0xFF404040);
+        self.draw_text(browser_x as i32 + 14, btn_y as i32 + 4, "<", 0xFFCCCCCC);
+        
+        // Forward button (▶)
+        framebuffer::fill_rect(browser_x + 8 + btn_size + 4, btn_y, btn_size, btn_size, 0xFF404040);
+        self.draw_text(browser_x as i32 + 14 + btn_size as i32 + 4, btn_y as i32 + 4, ">", 0xFFCCCCCC);
+        
+        // Refresh button (⟳)
+        framebuffer::fill_rect(browser_x + 8 + (btn_size + 4) * 2, btn_y, btn_size, btn_size, 0xFF404040);
+        self.draw_text(browser_x as i32 + 14 + (btn_size as i32 + 4) * 2, btn_y as i32 + 4, "R", 0xFFCCCCCC);
+        
+        // Parse/Raw toggle button
+        let toggle_btn_x = browser_x + 8 + (btn_size + 4) * 3;
+        let toggle_btn_w: u32 = 40;
+        let is_raw = self.browser.as_ref().map(|b| b.show_raw_html).unwrap_or(false);
+        let toggle_color = if is_raw { 0xFF0066CC } else { 0xFF404040 };
+        framebuffer::fill_rect(toggle_btn_x, btn_y, toggle_btn_w, btn_size, toggle_color);
+        let toggle_text = if is_raw { "RAW" } else { "HTML" };
+        self.draw_text(toggle_btn_x as i32 + 6, btn_y as i32 + 4, toggle_text, 0xFFFFFFFF);
+        
+        // URL bar (after toggle button)
+        let url_bar_x = toggle_btn_x + toggle_btn_w + 8;
+        let url_bar_w = browser_w.saturating_sub(url_bar_x - browser_x + 8);
+        framebuffer::fill_rect(url_bar_x, btn_y, url_bar_w, btn_size, 0xFF1A1A1A);
+        
+        // Draw current URL or placeholder
+        let url_text = if self.browser_url_input.is_empty() {
+            "Enter URL..."
+        } else {
+            &self.browser_url_input
+        };
+        let text_color = if self.browser_url_input.is_empty() { 0xFF666666 } else { 0xFFFFFFFF };
+        self.draw_text(url_bar_x as i32 + 8, btn_y as i32 + 4, url_text, text_color);
+        
+        // Content area
+        let content_y = browser_y + toolbar_height + 2;
+        let content_h = browser_h.saturating_sub(toolbar_height + 4);
+        
+        // Draw browser content
+        if let Some(ref browser) = self.browser {
+            if browser.show_raw_html && !browser.raw_html.is_empty() {
+                // RAW HTML view - display source code
+                framebuffer::fill_rect(browser_x, content_y, browser_w, content_h, 0xFF1A1A1A);
+                self.draw_raw_html_view(browser_x as i32, content_y as i32, browser_w, content_h, &browser.raw_html, browser.scroll_y);
+            } else if let Some(ref doc) = browser.document {
+                // PARSED view - use the browser renderer
+                crate::browser::render_html(
+                    doc,
+                    browser_x as i32,
+                    content_y as i32,
+                    browser_w,
+                    content_h,
+                    browser.scroll_y,
+                );
+            } else {
+                // No document loaded - show welcome page
+                framebuffer::fill_rect(browser_x, content_y, browser_w, content_h, 0xFFFFFFFF);
+                
+                // Centered welcome text
+                let center_x = browser_x as i32 + browser_w as i32 / 2 - 100;
+                let center_y = content_y as i32 + content_h as i32 / 2 - 40;
+                
+                self.draw_text(center_x, center_y, "TrustBrowser", 0xFF000000);
+                self.draw_text(center_x - 20, center_y + 24, "Enter a URL to get started", 0xFF666666);
+                self.draw_text(center_x - 10, center_y + 48, "Try: http://example.com", 0xFF0066CC);
+            }
+        } else {
+            // Browser not initialized - show blank page
+            framebuffer::fill_rect(browser_x, content_y, browser_w, content_h, 0xFFFFFFFF);
+            let center_x = browser_x as i32 + browser_w as i32 / 2 - 80;
+            let center_y = content_y as i32 + content_h as i32 / 2;
+            self.draw_text(center_x, center_y, "Welcome to TrustBrowser", 0xFF000000);
+        }
+        
+        // Status bar at bottom - show resources info
+        let status_y = browser_y + browser_h - 18;
+        framebuffer::fill_rect(browser_x, status_y, browser_w, 18, 0xFF2A2A2A);
+        
+        let status_text = if let Some(ref browser) = self.browser {
+            let resources_info = if !browser.pending_resources.is_empty() {
+                alloc::format!(" | {} resources pending", browser.pending_resources.len())
+            } else if !browser.resources.is_empty() {
+                alloc::format!(" | {} resources loaded", browser.resources.len())
+            } else {
+                alloc::string::String::new()
+            };
+            match &browser.status {
+                crate::browser::BrowserStatus::Idle => alloc::format!("Ready{}", resources_info),
+                crate::browser::BrowserStatus::Loading => alloc::format!("Loading...{}", resources_info),
+                crate::browser::BrowserStatus::Ready => alloc::format!("Done{}", resources_info),
+                crate::browser::BrowserStatus::Error(e) => e.clone(),
+            }
+        } else {
+            alloc::string::String::from("Ready")
+        };
+        self.draw_text(browser_x as i32 + 8, status_y as i32 + 2, &status_text, 0xFF999999);
+    }
+    
+    /// Draw raw HTML source code view
+    fn draw_raw_html_view(&self, x: i32, y: i32, width: u32, height: u32, html: &str, scroll_y: i32) {
+        let line_height = 14;
+        let char_width = 7;
+        let max_chars = (width as usize).saturating_sub(20) / char_width;
+        
+        let mut draw_y = y + 8 - scroll_y;
+        let max_y = y + height as i32 - 8;
+        let mut line_num = 1;
+        
+        for line in html.lines() {
+            if draw_y > max_y {
+                break;
+            }
+            
+            if draw_y >= y - line_height {
+                // Line number (gray)
+                let line_str = alloc::format!("{:4} ", line_num);
+                self.draw_text(x + 4, draw_y, &line_str, 0xFF666666);
+                
+                // Truncate long lines
+                let display_line: alloc::string::String = if line.len() > max_chars {
+                    let truncated: alloc::string::String = line.chars().take(max_chars.saturating_sub(3)).collect();
+                    alloc::format!("{}...", truncated)
+                } else {
+                    alloc::string::String::from(line)
+                };
+                
+                // Syntax highlight: tags in blue, attributes in green, strings in orange
+                self.draw_syntax_highlighted(x + 40, draw_y, &display_line);
+            }
+            
+            draw_y += line_height;
+            line_num += 1;
+        }
+    }
+    
+    /// Draw syntax-highlighted HTML
+    fn draw_syntax_highlighted(&self, x: i32, y: i32, line: &str) {
+        let mut current_x = x;
+        let char_width = 7;
+        let mut in_tag = false;
+        let mut in_string = false;
+        let mut in_attr = false;
+        let mut string_char = '"';
+        
+        let chars: alloc::vec::Vec<char> = line.chars().collect();
+        let mut i = 0;
+        
+        while i < chars.len() {
+            let c = chars[i];
+            let color = if in_string {
+                0xFFE9967A // Orange for strings
+            } else if c == '<' || c == '>' || c == '/' {
+                in_tag = c == '<';
+                if c == '>' { in_attr = false; }
+                0xFF569CD6 // Blue for < > /
+            } else if in_tag && c == '=' {
+                in_attr = true;
+                0xFF9CDCFE // Light blue for =
+            } else if in_tag && (c == '"' || c == '\'') {
+                in_string = true;
+                string_char = c;
+                0xFFE9967A // Orange
+            } else if in_attr && !c.is_whitespace() {
+                0xFF4EC9B0 // Teal for attribute names
+            } else if in_tag && !c.is_whitespace() && c != '=' {
+                0xFF569CD6 // Blue for tag names
+            } else {
+                0xFFD4D4D4 // Light gray for text
+            };
+            
+            // Check for end of string
+            if in_string && i > 0 && c == string_char && chars[i-1] != '\\' {
+                in_string = false;
+            }
+            
+            // Draw character
+            let s = alloc::format!("{}", c);
+            self.draw_text(current_x, y, &s, color);
+            current_x += char_width as i32;
+            i += 1;
+        }
+    }
+    
+    /// Handle mouse click inside browser window
+    fn handle_browser_click(&mut self, x: i32, y: i32, window: &Window) {
+        let toolbar_height: u32 = 36;
+        let browser_x = window.x as u32 + 4;
+        let browser_y = window.y as u32 + TITLE_BAR_HEIGHT + 4;
+        let browser_w = window.width.saturating_sub(8);
+        
+        if browser_w < 100 {
+            return;
+        }
+        
+        let btn_y = browser_y + 6;
+        let btn_size: u32 = 24;
+        
+        let click_x = x as u32;
+        let click_y = y as u32;
+        
+        // Check if click is in toolbar area
+        if click_y >= btn_y && click_y < btn_y + btn_size {
+            // Back button
+            let back_x = browser_x + 8;
+            if click_x >= back_x && click_x < back_x + btn_size {
+                crate::serial_println!("[BROWSER] Back button clicked");
+                if let Some(ref mut browser) = self.browser {
+                    let _ = browser.back();
+                }
+                return;
+            }
+            
+            // Forward button
+            let fwd_x = browser_x + 8 + btn_size + 4;
+            if click_x >= fwd_x && click_x < fwd_x + btn_size {
+                crate::serial_println!("[BROWSER] Forward button clicked");
+                if let Some(ref mut browser) = self.browser {
+                    let _ = browser.forward();
+                }
+                return;
+            }
+            
+            // Refresh button
+            let refresh_x = browser_x + 8 + (btn_size + 4) * 2;
+            if click_x >= refresh_x && click_x < refresh_x + btn_size {
+                crate::serial_println!("[BROWSER] Refresh button clicked");
+                if let Some(ref mut browser) = self.browser {
+                    let _ = browser.refresh();
+                }
+                return;
+            }
+            
+            // Parse/Raw toggle button
+            let toggle_btn_x = browser_x + 8 + (btn_size + 4) * 3;
+            let toggle_btn_w: u32 = 40;
+            if click_x >= toggle_btn_x && click_x < toggle_btn_x + toggle_btn_w {
+                crate::serial_println!("[BROWSER] View toggle clicked");
+                if let Some(ref mut browser) = self.browser {
+                    browser.toggle_view_mode();
+                }
+                return;
+            }
+        }
     }
     
     fn draw_cursor(&self) {
@@ -3492,26 +4601,132 @@ fn draw_rect(x: i32, y: i32, w: u32, h: u32, color: u32) {
     }
 }
 
-/// Helper: Draw rounded rect
+/// Helper: Draw filled rounded rect with proper quarter-circle corners and alpha support
 fn draw_rounded_rect(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
-    // Simple implementation - just draw rect for now
-    // Alpha blending for transparency
-    let alpha = ((color >> 24) & 0xFF) as u32;
-    if alpha < 255 {
-        // With alpha - blend each pixel
-        for dy in 0..h {
-            for dx in 0..w {
-                let px = x + dx as i32;
-                let py = y + dy as i32;
-                if px >= 0 && py >= 0 {
-                    // Simple alpha blend
-                    crate::framebuffer::draw_pixel(px as u32, py as u32, color | 0xFF000000);
-                }
-            }
+    if w == 0 || h == 0 { return; }
+    let r = radius.min(w / 2).min(h / 2);
+
+    if r == 0 {
+        // No rounding — just fill
+        if x >= 0 && y >= 0 {
+            crate::framebuffer::fill_rect(x as u32, y as u32, w, h, color);
         }
-    } else {
-        draw_rect(x, y, w, h, color);
+        return;
     }
+
+    let wi = w as i32;
+    let hi = h as i32;
+    let ri = r as i32;
+
+    // ── Center body (3 rectangles that avoid corners) ──
+    // Middle band full width
+    fill_rect_signed(x, y + ri, wi, hi - ri * 2, color);
+    // Top band between corners
+    fill_rect_signed(x + ri, y, wi - ri * 2, ri, color);
+    // Bottom band between corners
+    fill_rect_signed(x + ri, y + hi - ri, wi - ri * 2, ri, color);
+
+    // ── Quarter-circle corners ──
+    // Use filled scanline approach (fast: one hline per dy)
+    let r2 = ri * ri;
+    for dy in 0..ri {
+        // Number of pixels from corner inward that are inside the circle
+        let dx = fast_sqrt_i32(r2 - dy * dy);
+        // Top-left corner
+        fill_rect_signed(x + ri - dx, y + ri - dy - 1, dx, 1, color);
+        // Top-right corner
+        fill_rect_signed(x + wi - ri, y + ri - dy - 1, dx, 1, color);
+        // Bottom-left corner
+        fill_rect_signed(x + ri - dx, y + hi - ri + dy, dx, 1, color);
+        // Bottom-right corner
+        fill_rect_signed(x + wi - ri, y + hi - ri + dy, dx, 1, color);
+    }
+}
+
+/// Helper: Draw rounded rectangle border (outline only)
+fn draw_rounded_rect_border(x: i32, y: i32, w: u32, h: u32, radius: u32, color: u32) {
+    if w == 0 || h == 0 { return; }
+    let r = radius.min(w / 2).min(h / 2);
+    let wi = w as i32;
+    let hi = h as i32;
+    let ri = r as i32;
+
+    if r == 0 {
+        if x >= 0 && y >= 0 {
+            crate::framebuffer::draw_rect(x as u32, y as u32, w, h, color);
+        }
+        return;
+    }
+
+    // Straight edges
+    for px in ri..wi - ri {
+        put_pixel_signed(x + px, y, color);            // top
+        put_pixel_signed(x + px, y + hi - 1, color);   // bottom
+    }
+    for py in ri..hi - ri {
+        put_pixel_signed(x, y + py, color);            // left
+        put_pixel_signed(x + wi - 1, y + py, color);   // right
+    }
+
+    // Corner arcs (Bresenham midpoint)
+    let mut cx = ri;
+    let mut cy = 0i32;
+    let mut err = 0i32;
+    while cx >= cy {
+        // Top-left
+        put_pixel_signed(x + ri - cx, y + ri - cy, color);
+        put_pixel_signed(x + ri - cy, y + ri - cx, color);
+        // Top-right
+        put_pixel_signed(x + wi - 1 - ri + cx, y + ri - cy, color);
+        put_pixel_signed(x + wi - 1 - ri + cy, y + ri - cx, color);
+        // Bottom-left
+        put_pixel_signed(x + ri - cx, y + hi - 1 - ri + cy, color);
+        put_pixel_signed(x + ri - cy, y + hi - 1 - ri + cx, color);
+        // Bottom-right
+        put_pixel_signed(x + wi - 1 - ri + cx, y + hi - 1 - ri + cy, color);
+        put_pixel_signed(x + wi - 1 - ri + cy, y + hi - 1 - ri + cx, color);
+
+        cy += 1;
+        err += 1 + 2 * cy;
+        if 2 * (err - cx) + 1 > 0 {
+            cx -= 1;
+            err += 1 - 2 * cx;
+        }
+    }
+}
+
+/// Signed-coord fill_rect helper (clips negative coords)
+#[inline]
+fn fill_rect_signed(x: i32, y: i32, w: i32, h: i32, color: u32) {
+    if w <= 0 || h <= 0 { return; }
+    let px = x.max(0) as u32;
+    let py = y.max(0) as u32;
+    let cw = if x < 0 { (w + x).max(0) as u32 } else { w as u32 };
+    let ch = if y < 0 { (h + y).max(0) as u32 } else { h as u32 };
+    if cw > 0 && ch > 0 {
+        crate::framebuffer::fill_rect(px, py, cw, ch, color);
+    }
+}
+
+/// Signed-coord pixel helper
+#[inline]
+fn put_pixel_signed(x: i32, y: i32, color: u32) {
+    if x >= 0 && y >= 0 {
+        crate::framebuffer::draw_pixel(x as u32, y as u32, color);
+    }
+}
+
+/// Integer square root for corner calculations
+#[inline]
+fn fast_sqrt_i32(v: i32) -> i32 {
+    if v <= 0 { return 0; }
+    let mut x = v;
+    let mut y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + v / x) / 2;
+    }
+    x
 }
 
 /// Read CPU timestamp counter for timing

@@ -490,6 +490,79 @@ pub fn enable_io_space(dev: &PciDevice) {
     config_write(dev.bus, dev.device, dev.function, 0x04, new_command as u32);
 }
 
+/// Walk PCI capabilities list and find a specific capability type
+/// Returns the offset of the capability in PCI config space, or None
+pub fn find_capability(dev: &PciDevice, cap_id: u8) -> Option<u8> {
+    // Check if capabilities list is supported (status register bit 4)
+    let status = config_read16(dev.bus, dev.device, dev.function, 0x06);
+    if status & (1 << 4) == 0 {
+        return None; // No capabilities
+    }
+    
+    // Capabilities pointer is at offset 0x34
+    let mut cap_ptr = config_read8(dev.bus, dev.device, dev.function, 0x34);
+    let mut visited = 0u32;
+    
+    while cap_ptr != 0 && visited < 48 {
+        let cap_type = config_read8(dev.bus, dev.device, dev.function, cap_ptr);
+        if cap_type == cap_id {
+            return Some(cap_ptr);
+        }
+        cap_ptr = config_read8(dev.bus, dev.device, dev.function, cap_ptr + 1);
+        visited += 1;
+    }
+    
+    None
+}
+
+/// Find all VirtIO vendor-specific capabilities (cap_id = 0x09)
+/// Returns Vec of (cap_offset, cfg_type, bar, offset_within_bar, length)
+pub fn find_virtio_capabilities(dev: &PciDevice) -> Vec<(u8, u8, u8, u32, u32)> {
+    let mut caps = Vec::new();
+    
+    // Check if capabilities list is supported
+    let status = config_read16(dev.bus, dev.device, dev.function, 0x06);
+    if status & (1 << 4) == 0 {
+        return caps;
+    }
+    
+    let mut cap_ptr = config_read8(dev.bus, dev.device, dev.function, 0x34);
+    let mut visited = 0u32;
+    
+    while cap_ptr != 0 && visited < 48 {
+        let cap_type = config_read8(dev.bus, dev.device, dev.function, cap_ptr);
+        
+        if cap_type == 0x09 { // Vendor-specific (VirtIO uses this)
+            // VirtIO PCI capability structure:
+            // +0: cap_vndr (0x09)
+            // +1: cap_next
+            // +2: cap_len
+            // +3: cfg_type (1=common, 2=notify, 3=isr, 4=device, 5=pci_cfg)
+            // +4: bar
+            // +5..+7: padding
+            // +8: offset (u32)
+            // +12: length (u32)
+            let cfg_type = config_read8(dev.bus, dev.device, dev.function, cap_ptr + 3);
+            let bar = config_read8(dev.bus, dev.device, dev.function, cap_ptr + 4);
+            let offset = config_read(dev.bus, dev.device, dev.function, cap_ptr + 8);
+            let length = config_read(dev.bus, dev.device, dev.function, cap_ptr + 12);
+            
+            caps.push((cap_ptr, cfg_type, bar, offset, length));
+        }
+        
+        cap_ptr = config_read8(dev.bus, dev.device, dev.function, cap_ptr + 1);
+        visited += 1;
+    }
+    
+    caps
+}
+
+/// Read notify_off_multiplier from a VirtIO notify capability
+pub fn read_notify_off_multiplier(dev: &PciDevice, cap_offset: u8) -> u32 {
+    // The notify_off_multiplier is at cap_offset + 16
+    config_read(dev.bus, dev.device, dev.function, cap_offset + 16)
+}
+
 /// Get summary of detected hardware
 pub fn hardware_summary() -> String {
     let devices = DEVICES.lock();

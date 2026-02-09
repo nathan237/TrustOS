@@ -11,6 +11,8 @@
 //! - opengl: OpenGL 1.x style immediate mode API
 //! - compositor: TrustGL-based window compositor with effects
 //! - fast_render: Optimized software rendering engine
+//! - holomatrix: Volumetric 3D via matrix layer superposition
+//! - raytracer: Real-time ray tracing engine
 
 pub mod render2d;
 pub mod render3d;
@@ -20,6 +22,10 @@ pub mod desktop_gfx;
 pub mod opengl;
 pub mod compositor;
 pub mod fast_render;
+pub mod simd;
+pub mod holomatrix;
+pub mod raytracer;
+pub mod texture;
 
 pub use render2d::*;
 pub use render3d::*;
@@ -29,3 +35,6 @@ pub use desktop_gfx::*;
 pub use opengl::*;
 pub use compositor::*;
 pub use fast_render::*;
+pub use simd::*;
+pub use holomatrix::*;
+pub use texture::*;

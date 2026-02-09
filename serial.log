@@ -1,26 +1,21 @@
 [2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01H[2J[01;01H[01;01H[2J[01;01H[01;01HT-RustOs Kernel v0.1.0
 Limine protocol supported
 Framebuffer: 1024x768 @ 0xffff800080000000
-╔══════════════════════════════════════════════════════════════╗
-║                      T R U S T - O S                         ║
-║                 FAST • SECURE • RELIABLE                     ║
-╚══════════════════════════════════════════════════════════════╝
-
 Initializing memory management...
 HHDM offset: 0xffff800000000000
 Memory map entries: 34
-  0x0000000000 - 0x00000a0000 (      655360 bytes) USABLE
-  0x0000100000 - 0x001908d000 (   418959360 bytes) USABLE
-  0x001908d000 - 0x00191a2000 (     1134592 bytes) KERNEL
-  0x00191a2000 - 0x00192ec000 (     1351680 bytes) BOOTLOADER
-  0x00192ec000 - 0x001bc27000 (    43233280 bytes) USABLE
-  0x001bc27000 - 0x001bc2d000 (       24576 bytes) BOOTLOADER
+  0x0000000000 - 0x0000001000 (        4096 bytes) USABLE
+  0x0000001000 - 0x0000002000 (        4096 bytes) BOOTLOADER
+  0x0000002000 - 0x00000a0000 (      647168 bytes) USABLE
+  0x0000100000 - 0x0018faf000 (   418050048 bytes) USABLE
+  0x0018faf000 - 0x001912d000 (     1564672 bytes) KERNEL
+  0x001912d000 - 0x00192ec000 (     1830912 bytes) BOOTLOADER
+  0x00192ec000 - 0x001bc12000 (    43147264 bytes) USABLE
+  0x001bc12000 - 0x001bc2d000 (      110592 bytes) BOOTLOADER
   0x001bc2d000 - 0x001d316000 (    24023040 bytes) USABLE
   0x001d316000 - 0x001d31b000 (       20480 bytes) RESERVED
   0x001d31b000 - 0x001d32d000 (       73728 bytes) USABLE
-  0x001d32d000 - 0x001d36a000 (      249856 bytes) BOOTLOADER
-  0x001d36a000 - 0x001d36c000 (        8192 bytes) USABLE
-  0x001d36c000 - 0x001d3a8000 (      245760 bytes) BOOTLOADER
+  0x001d32d000 - 0x001d3a8000 (      503808 bytes) BOOTLOADER
   0x001d3a8000 - 0x001d3c9000 (      135168 bytes) USABLE
   0x001d3c9000 - 0x001d3e5000 (      114688 bytes) BOOTLOADER
   0x001d3e5000 - 0x001d3f0000 (       45056 bytes) RESERVED
@@ -43,7 +38,16 @@ Memory map entries: 34
   0x001ffef000 - 0x001fff0000 (        4096 bytes) RESERVED
   0x0080000000 - 0x0080300000 (     3145728 bytes) FRAMEBUFFER
   0x00ffc00000 - 0x0100000000 (     4194304 bytes) RESERVED
-[         0][CPU0][INFO ] Heap initialized (fallback): 524288 KB at 0xffff800001000000
+[HEAP] Using mmap region at phys 0x100000, size 32 MB
+[         0][CPU0][INFO ] Heap initialized: 32768 KB at virt 0xffff800000100000 (phys 0x100000)
+[HEAP] Initialized: free=32768 KB
+[FB] Initializing scrollback buffer...
+[FB] Scrollback buffer initialized (1000 lines max)
+╔══════════════════════════════════════════════════════════════╗
+║                      T R U S T - O S                         ║
+║                 FAST • SECURE • RELIABLE                     ║
+╚══════════════════════════════════════════════════════════════╝
+
 [OK] Memory management initialized
 Initializing GDT with Ring 0/3 support...
 [         0][CPU0][DEBUG] GDT initialized with Ring 0/3 support
@@ -55,13 +59,13 @@ Initializing early interrupts...
 Detecting CPU capabilities...
 [CPU] AMD Ryzen 7 5800X 8-Core Processor
 [CPU] Vendor: Amd, Family: 25, Model: 33
-[CPU] TSC: true (invariant: true, freq: 3738 MHz)
+[CPU] TSC: true (invariant: true, freq: 36 MHz)
 [CPU] SIMD: SSE=true SSE2=true SSE4.2=true AVX=true AVX2=true
 [CPU] Crypto: AES-NI=true PCLMULQDQ=true SHA=true RDRAND=true
 [CPU] Security: SMEP=false SMAP=false NX=true
 [CPU] Virt: VMX=false SVM=false
 [SIMD] SSE/SSE2 enabled
-[TSC] Initialized: 3738007560 Hz (3 GHz)
+[TSC] Initialized: 36568160 Hz (0 GHz)
 [OK] CPU capabilities detected
 Parsing ACPI tables...
 [DEBUG] RSDP pointer from Limine: 0x1e97e014
@@ -87,14 +91,18 @@ Parsing ACPI tables...
 [ACPI] Table: BGRT at 0x1e976000, len=56
 [OK] ACPI: 2 CPUs, 1 I/O APICs
 Initializing SMP...
-[SMP] BSP APIC ID: 0
-[SMP] Single-core mode (AP startup not yet implemented)
-[OK] SMP initialized
+[SMP] BSP initialized (APIC ID: 0)
+[SMP] Found 2 CPUs via Limine
+[SMP] Starting AP 1 (LAPIC ID: 1)
+[SIMD] SSE/SSE2 enabled
+[SMP] AP 1 online (LAPIC ID: 1)
+[SMP] 2 of 2 CPUs online
+[OK] SMP: 2 cores active
 Initializing paging subsystem...
 [         0][CPU0][DEBUG] Paging initialized, kernel CR3: 0x1d3ce000
 [OK] Paging initialized (NX enabled)
 Initializing userland support...
-[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff800fb8a0
+[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff8017d0b4
 [         0][CPU0][INFO ] [USERLAND] SYSCALL/SYSRET configured (STAR, LSTAR, SFMASK)
 [OK] Userland support ready
 Initializing thread subsystem...
@@ -169,8 +177,8 @@ Keyboard driver ready
 [         0][CPU0][DEBUG] [E1000] Initializing RX ring (32 descriptors)
 [         0][CPU0][DEBUG] [E1000] Initializing TX ring (8 descriptors)
 [         0][CPU0][WARN ] [E1000] Link not detected - continuing anyway (VirtualBox NAT mode)
-[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:FB:BE:AA
-[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:FB:BE:AA
+[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:97:77:B9
+[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:97:77:B9
 [OK] Network driver: e1000
 [OK] Network ready
 [         0][CPU0][INFO ] [DHCP] Client started
@@ -217,10 +225,16 @@ Mounted filesystems:
   /dev -> devfs
 
 Processes: 1
-Heap used: 272 KB
+Heap used: 3279 KB
 
 [OK] Init process started (PID 1)
 [PHASE] Init process done
+[PHASE] RAM filesystem init
+[OK] RAM filesystem ready
+[PHASE] Persistence init
+[PERSIST] Initializing persistence system...
+[PERSIST] No AHCI disk found, persistence disabled
+[OK] Persistence system ready
 
 
   System ready - TRust-OS v0.1.0
@@ -236,175 +250,4 @@ Starting shell...
 
   T-RustOs v0.1.0 - Type 'help' for commands
 
-trustos:/$ gui isntal               nstall
-╔══════════════════════════════════════════════════════════════╗
-║              TrustOS GUI Installer                           ║
-╚══════════════════════════════════════════════════════════════╝
-
-[1/4] Checking network connection...
-      Network: OK
-
-[2/4] Downloading Alpine Linux from 10.0.2.2:8080/alpine-minirootfs.tar.gz...
-[GUI_INSTALL] DHCP suspended for download
-[E1000] RX check #0 status=0x07
-[E1000] RX packet received! len=590
-[IP] 10.0.2.2 -> 255.255.255.255 proto=17 ttl=64
-[DHCP] OFFER: 10.0.2.15
-[DHCP] Sending REQUEST
-[E1000] RX packet received! len=590
-[IP] 10.0.2.2 -> 255.255.255.255 proto=17 ttl=64
-[       191][CPU0][INFO ] [DHCP] ACK: 10.0.2.15 (lease=86400s)
-[DHCP] Suspended - ignoring ACK
-[TCP] src_ip=10.0.2.15 dest_ip=10.0.2.2
-[TCP] SYN segment: c000 1f90 00000001 00000000 5002 ffffb840 0000 csum=0xb840
-[TCP] SYN -> 10.0.2.2:8080
-[IP] Header: 4500 0028 0000 4000 4006 22c0 src=10.0.2.15 dst=10.0.2.2
-[       191][CPU0][DEBUG] [ARP] Sent request for 10.0.2.2
-[E1000] RX packet received! len=64
-[ETH] len=64 etype=0x0806 dst=08:00:27:fb:be:aa
-[       191][CPU0][DEBUG] [ARP] Reply from 10.0.2.2 = 52:55:0A:00:02:02
-[IP] Sent 40 bytes to 10.0.2.2 proto=6 (next hop 10.0.2.2)
-[E1000] RX packet received! len=82
-[ETH] len=82 etype=0x0800 dst=08:00:27:fb:be:aa
-[IP] 10.0.2.2 -> 10.0.2.15 proto=1 ttl=255
-[ICMP] Type 3 code 0 (unhandled)
-[E1000] RX check #10000 status=0x00
-[E1000] RX check #20000 status=0x00
-[E1000] RX check #30000 status=0x00
-[E1000] RX check #40000 status=0x00
-[E1000] RX check #50000 status=0x00
-[E1000] RX check #60000 status=0x00
-[E1000] RX check #70000 status=0x00
-[E1000] RX check #80000 status=0x00
-[E1000] RX check #90000 status=0x00
-[E1000] RX check #100000 status=0x00
-[E1000] RX check #110000 status=0x00
-[E1000] RX check #120000 status=0x00
-[E1000] RX check #130000 status=0x00
-[E1000] RX check #140000 status=0x00
-[E1000] RX check #150000 status=0x00
-[E1000] RX check #160000 status=0x00
-[E1000] RX check #170000 status=0x00
-[E1000] RX check #180000 status=0x00
-[E1000] RX check #190000 status=0x00
-[E1000] RX check #200000 status=0x00
-[E1000] RX check #210000 status=0x00
-[E1000] RX check #220000 status=0x00
-[E1000] RX check #230000 status=0x00
-[E1000] RX check #240000 status=0x00
-[E1000] RX check #250000 status=0x00
-[E1000] RX check #260000 status=0x00
-[E1000] RX check #270000 status=0x00
-[E1000] RX check #280000 status=0x00
-[E1000] RX check #290000 status=0x00
-[E1000] RX check #300000 status=0x00
-[E1000] RX check #310000 status=0x00
-[E1000] RX check #320000 status=0x00
-[E1000] RX check #330000 status=0x00
-[E1000] RX check #340000 status=0x00
-[E1000] RX check #350000 status=0x00
-[E1000] RX check #360000 status=0x00
-[E1000] RX check #370000 status=0x00
-[E1000] RX check #380000 status=0x00
-[E1000] RX check #390000 status=0x00
-[E1000] RX check #400000 status=0x00
-[E1000] RX check #410000 status=0x00
-[E1000] RX check #420000 status=0x00
-[E1000] RX check #430000 status=0x00
-[E1000] RX check #440000 status=0x00
-[E1000] RX check #450000 status=0x00
-[E1000] RX check #460000 status=0x00
-[E1000] RX check #470000 status=0x00
-[E1000] RX check #480000 status=0x00
-[E1000] RX check #490000 status=0x00
-[E1000] RX check #500000 status=0x00
-[E1000] RX check #510000 status=0x00
-[E1000] RX check #520000 status=0x00
-[E1000] RX check #530000 status=0x00
-[E1000] RX check #540000 status=0x00
-[E1000] RX check #550000 status=0x00
-[E1000] RX check #560000 status=0x00
-[E1000] RX check #570000 status=0x00
-[E1000] RX check #580000 status=0x00
-[E1000] RX check #590000 status=0x00
-[E1000] RX check #600000 status=0x00
-[E1000] RX check #610000 status=0x00
-[E1000] RX check #620000 status=0x00
-[E1000] RX check #630000 status=0x00
-[E1000] RX check #640000 status=0x00
-[E1000] RX check #650000 status=0x00
-[E1000] RX check #660000 status=0x00
-[E1000] RX check #670000 status=0x00
-[E1000] RX check #680000 status=0x00
-[E1000] RX check #690000 status=0x00
-[E1000] RX check #700000 status=0x00
-[E1000] RX check #710000 status=0x00
-[E1000] RX check #720000 status=0x00
-[E1000] RX check #730000 status=0x00
-[E1000] RX check #740000 status=0x00
-[E1000] RX check #750000 status=0x00
-[E1000] RX check #760000 status=0x00
-[E1000] RX check #770000 status=0x00
-[E1000] RX check #780000 status=0x00
-[E1000] RX check #790000 status=0x00
-[E1000] RX check #800000 status=0x00
-[E1000] RX check #810000 status=0x00
-[E1000] RX check #820000 status=0x00
-[E1000] RX check #830000 status=0x00
-[E1000] RX check #840000 status=0x00
-[E1000] RX check #850000 status=0x00
-[E1000] RX check #860000 status=0x00
-[E1000] RX check #870000 status=0x00
-[E1000] RX check #880000 status=0x00
-[E1000] RX check #890000 status=0x00
-[E1000] RX check #900000 status=0x00
-[E1000] RX check #910000 status=0x00
-[E1000] RX check #920000 status=0x00
-[E1000] RX check #930000 status=0x00
-[E1000] RX check #940000 status=0x00
-[E1000] RX check #950000 status=0x00
-[E1000] RX check #960000 status=0x00
-[E1000] RX check #970000 status=0x00
-[E1000] RX check #980000 status=0x00
-[E1000] RX check #990000 status=0x00
-[E1000] RX check #1000000 status=0x00
-[E1000] RX check #1010000 status=0x00
-[E1000] RX check #1020000 status=0x00
-[E1000] RX check #1030000 status=0x00
-[E1000] RX check #1040000 status=0x00
-[E1000] RX check #1050000 status=0x00
-[E1000] RX check #1060000 status=0x00
-[E1000] RX check #1070000 status=0x00
-[E1000] RX check #1080000 status=0x00
-[E1000] RX check #1090000 status=0x00
-[E1000] RX check #1100000 status=0x00
-[E1000] RX check #1110000 status=0x00
-[E1000] RX check #1120000 status=0x00
-[E1000] RX check #1130000 status=0x00
-[E1000] RX check #1140000 status=0x00
-[E1000] RX check #1150000 status=0x00
-[E1000] RX check #1160000 status=0x00
-[E1000] RX check #1170000 status=0x00
-[E1000] RX check #1180000 status=0x00
-[E1000] RX check #1190000 status=0x00
-[E1000] RX check #1200000 status=0x00
-[E1000] RX check #1210000 status=0x00
-[E1000] RX check #1220000 status=0x00
-[E1000] RX check #1230000 status=0x00
-[E1000] RX check #1240000 status=0x00
-[E1000] RX check #1250000 status=0x00
-[E1000] RX check #1260000 status=0x00
-[E1000] RX check #1270000 status=0x00
-[E1000] RX check #1280000 status=0x00
-[E1000] RX check #1290000 status=0x00
-[E1000] RX check #1300000 status=0x00
-[E1000] RX check #1310000 status=0x00
-[E1000] RX check #1320000 status=0x00
-[E1000] RX check #1330000 status=0x00
-[E1000] RX check #1340000 status=0x00
-[E1000] RX check #1350000 status=0x00
-[E1000] RX check #1360000 status=0x00
-[E1000] RX check #1370000 status=0x00
-[E1000] RX check #1380000 status=0x00
-[E1000] RX check #1390000 status=0x00
-[E1000] RX check #1400000 status=0x00
+[15:34:16] trustos:/$ █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █ 

@@ -30,6 +30,7 @@ use micromath::F32Ext;
 
 use super::math3d::{Vec3, Vec4, Mat4, deg_to_rad};
 use super::render2d::Color2D;
+use super::texture;
 use crate::framebuffer;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -478,8 +479,11 @@ pub fn gl_end() {
     let vp_width = state.viewport_width;
     let depth_buffer = &mut state.depth_buffer as *mut Vec<f32>;
     
-    // Project vertices
-    let mut projected: Vec<Option<(i32, i32, f32, Color2D)>> = Vec::with_capacity(vertices.len());
+    // Check if texturing is enabled
+    let texturing_enabled = texture::is_texture_2d_enabled();
+    
+    // Project vertices - now includes UV coords (x, y, z, color, u, v)
+    let mut projected: Vec<Option<(i32, i32, f32, Color2D, f32, f32)>> = Vec::with_capacity(vertices.len());
     for v in &vertices {
         let clip = mvp.transform_vec4(Vec4::from_vec3(v.position, 1.0));
         if clip.w > 0.0 {
@@ -505,7 +509,7 @@ pub fn gl_end() {
                 );
             }
             
-            projected.push(Some((screen_x, screen_y, ndc_z, color)));
+            projected.push(Some((screen_x, screen_y, ndc_z, color, v.texcoord.0, v.texcoord.1)));
         } else {
             projected.push(None);
         }
@@ -515,14 +519,25 @@ pub fn gl_end() {
     match prim_type {
         GL_POINTS => {
             for p in &projected {
-                if let Some((x, y, z, color)) = p {
+                if let Some((x, y, z, color, u, v)) = p {
+                    // Sample texture if enabled
+                    let final_color = if texturing_enabled {
+                        if let Some(tex_color) = texture::sample_bound_texture(*u, *v) {
+                            tex_color
+                        } else {
+                            color.to_u32()
+                        }
+                    } else {
+                        color.to_u32()
+                    };
+                    
                     if *x >= 0 && *y >= 0 && (*x as u32) < vp_width && (*y as u32) < (vp_h as u32) {
                         let idx = (*y as usize) * (vp_width as usize) + (*x as usize);
                         unsafe {
                             let db = &mut *depth_buffer;
                             if !depth_test || *z < db[idx] {
                                 db[idx] = *z;
-                                framebuffer::put_pixel(*x as u32, *y as u32, color.to_u32());
+                                framebuffer::put_pixel(*x as u32, *y as u32, final_color);
                             }
                         }
                     }
@@ -533,7 +548,7 @@ pub fn gl_end() {
         GL_LINES => {
             for i in (0..projected.len()).step_by(2) {
                 if i + 1 < projected.len() {
-                    if let (Some((x0, y0, _, c0)), Some((x1, y1, _, _))) = 
+                    if let (Some((x0, y0, _, c0, _, _)), Some((x1, y1, _, _, _, _))) = 
                         (&projected[i], &projected[i + 1]) 
                     {
                         draw_line(*x0, *y0, *x1, *y1, c0.to_u32());
@@ -544,7 +559,7 @@ pub fn gl_end() {
         
         GL_LINE_STRIP => {
             for i in 0..projected.len().saturating_sub(1) {
-                if let (Some((x0, y0, _, c0)), Some((x1, y1, _, _))) = 
+                if let (Some((x0, y0, _, c0, _, _)), Some((x1, y1, _, _, _, _))) = 
                     (&projected[i], &projected[i + 1]) 
                 {
                     draw_line(*x0, *y0, *x1, *y1, c0.to_u32());
@@ -555,7 +570,7 @@ pub fn gl_end() {
         GL_LINE_LOOP => {
             for i in 0..projected.len() {
                 let next = (i + 1) % projected.len();
-                if let (Some((x0, y0, _, c0)), Some((x1, y1, _, _))) = 
+                if let (Some((x0, y0, _, c0, _, _)), Some((x1, y1, _, _, _, _))) = 
                     (&projected[i], &projected[next]) 
                 {
                     draw_line(*x0, *y0, *x1, *y1, c0.to_u32());
@@ -575,16 +590,17 @@ pub fn gl_end() {
                             draw_line(p1.0, p1.1, p2.0, p2.1, p1.3.to_u32());
                             draw_line(p2.0, p2.1, p0.0, p0.1, p2.3.to_u32());
                         } else {
-                            // Filled triangle
+                            // Filled triangle (with optional texturing)
                             unsafe {
                                 let db = &mut *depth_buffer;
-                                draw_filled_triangle(
-                                    p0.0, p0.1, p0.2, p0.3,
-                                    p1.0, p1.1, p1.2, p1.3,
-                                    p2.0, p2.1, p2.2, p2.3,
+                                draw_filled_triangle_textured(
+                                    p0.0, p0.1, p0.2, p0.3, p0.4, p0.5,
+                                    p1.0, p1.1, p1.2, p1.3, p1.4, p1.5,
+                                    p2.0, p2.1, p2.2, p2.3, p2.4, p2.5,
                                     vp_width,
                                     depth_test,
                                     shade_model == GL_SMOOTH,
+                                    texturing_enabled,
                                     db,
                                 );
                             }
@@ -610,23 +626,25 @@ pub fn gl_end() {
                             unsafe {
                                 let db = &mut *depth_buffer;
                                 // First triangle
-                                draw_filled_triangle(
-                                    p0.0, p0.1, p0.2, p0.3,
-                                    p1.0, p1.1, p1.2, p1.3,
-                                    p2.0, p2.1, p2.2, p2.3,
+                                draw_filled_triangle_textured(
+                                    p0.0, p0.1, p0.2, p0.3, p0.4, p0.5,
+                                    p1.0, p1.1, p1.2, p1.3, p1.4, p1.5,
+                                    p2.0, p2.1, p2.2, p2.3, p2.4, p2.5,
                                     vp_width,
                                     depth_test,
                                     shade_model == GL_SMOOTH,
+                                    texturing_enabled,
                                     db,
                                 );
                                 // Second triangle
-                                draw_filled_triangle(
-                                    p0.0, p0.1, p0.2, p0.3,
-                                    p2.0, p2.1, p2.2, p2.3,
-                                    p3.0, p3.1, p3.2, p3.3,
+                                draw_filled_triangle_textured(
+                                    p0.0, p0.1, p0.2, p0.3, p0.4, p0.5,
+                                    p2.0, p2.1, p2.2, p2.3, p2.4, p2.5,
+                                    p3.0, p3.1, p3.2, p3.3, p3.4, p3.5,
                                     vp_width,
                                     depth_test,
                                     shade_model == GL_SMOOTH,
+                                    texturing_enabled,
                                     db,
                                 );
                             }
@@ -851,6 +869,146 @@ fn lerp_color(c0: Color2D, c1: Color2D, t: f32) -> Color2D {
     )
 }
 
+/// Draw a filled triangle with optional texture mapping
+fn draw_filled_triangle_textured(
+    x0: i32, y0: i32, z0: f32, c0: Color2D, u0: f32, v0: f32,
+    x1: i32, y1: i32, z1: f32, c1: Color2D, u1: f32, v1: f32,
+    x2: i32, y2: i32, z2: f32, c2: Color2D, u2: f32, v2: f32,
+    width: u32,
+    depth_test: bool,
+    smooth_shading: bool,
+    texturing: bool,
+    depth_buffer: &mut Vec<f32>,
+) {
+    // Sort vertices by Y (with UV coords)
+    let mut verts = [
+        (x0, y0, z0, c0, u0, v0), 
+        (x1, y1, z1, c1, u1, v1), 
+        (x2, y2, z2, c2, u2, v2)
+    ];
+    verts.sort_by_key(|v| v.1);
+    
+    let (x0, y0, z0, c0, u0, v0) = verts[0];
+    let (x1, y1, z1, c1, u1, v1) = verts[1];
+    let (x2, y2, z2, c2, u2, v2) = verts[2];
+    
+    if y0 == y2 { return; }
+    
+    let flat_color = c0;
+    
+    for y in y0.max(0)..=y2 {
+        if y < 0 { continue; }
+        
+        // Calculate scanline endpoints with UV interpolation
+        let (xa, za, ca, ua, va, xb, zb, cb, ub, vb) = if y < y1 {
+            if y1 == y0 {
+                let t = if y2 != y0 { (y - y0) as f32 / (y2 - y0) as f32 } else { 0.0 };
+                let xa = x0 + ((x2 - x0) as f32 * t) as i32;
+                let za = z0 + (z2 - z0) * t;
+                let ua = u0 + (u2 - u0) * t;
+                let va = v0 + (v2 - v0) * t;
+                (xa, za, lerp_color(c0, c2, t), ua, va, xa, za, lerp_color(c0, c2, t), ua, va)
+            } else {
+                let t1 = (y - y0) as f32 / (y1 - y0) as f32;
+                let t2 = (y - y0) as f32 / (y2 - y0) as f32;
+                (
+                    x0 + ((x1 - x0) as f32 * t1) as i32,
+                    z0 + (z1 - z0) * t1,
+                    lerp_color(c0, c1, t1),
+                    u0 + (u1 - u0) * t1,
+                    v0 + (v1 - v0) * t1,
+                    x0 + ((x2 - x0) as f32 * t2) as i32,
+                    z0 + (z2 - z0) * t2,
+                    lerp_color(c0, c2, t2),
+                    u0 + (u2 - u0) * t2,
+                    v0 + (v2 - v0) * t2,
+                )
+            }
+        } else {
+            if y2 == y1 {
+                (x1, z1, c1, u1, v1, x2, z2, c2, u2, v2)
+            } else {
+                let t1 = (y - y1) as f32 / (y2 - y1) as f32;
+                let t2 = (y - y0) as f32 / (y2 - y0) as f32;
+                (
+                    x1 + ((x2 - x1) as f32 * t1) as i32,
+                    z1 + (z2 - z1) * t1,
+                    lerp_color(c1, c2, t1),
+                    u1 + (u2 - u1) * t1,
+                    v1 + (v2 - v1) * t1,
+                    x0 + ((x2 - x0) as f32 * t2) as i32,
+                    z0 + (z2 - z0) * t2,
+                    lerp_color(c0, c2, t2),
+                    u0 + (u2 - u0) * t2,
+                    v0 + (v2 - v0) * t2,
+                )
+            }
+        };
+        
+        let (start_x, end_x, start_z, end_z, start_c, end_c, start_u, end_u, start_v, end_v) = 
+            if xa < xb {
+                (xa, xb, za, zb, ca, cb, ua, ub, va, vb)
+            } else {
+                (xb, xa, zb, za, cb, ca, ub, ua, vb, va)
+            };
+        
+        for x in start_x.max(0)..=end_x {
+            if x < 0 || x as u32 >= width { continue; }
+            
+            let t = if end_x != start_x {
+                (x - start_x) as f32 / (end_x - start_x) as f32
+            } else {
+                0.0
+            };
+            
+            let z = start_z + (end_z - start_z) * t;
+            let u = start_u + (end_u - start_u) * t;
+            let v = start_v + (end_v - start_v) * t;
+            
+            // Get color from texture or interpolation
+            let final_color = if texturing {
+                if let Some(tex_color) = texture::sample_bound_texture(u, v) {
+                    // Modulate texture with vertex color if smooth shading
+                    if smooth_shading {
+                        let vc = lerp_color(start_c, end_c, t);
+                        let tr = ((tex_color >> 16) & 0xFF) as u32;
+                        let tg = ((tex_color >> 8) & 0xFF) as u32;
+                        let tb = (tex_color & 0xFF) as u32;
+                        let r = (tr * vc.r as u32 / 255).min(255);
+                        let g = (tg * vc.g as u32 / 255).min(255);
+                        let b = (tb * vc.b as u32 / 255).min(255);
+                        (0xFF << 24) | (r << 16) | (g << 8) | b
+                    } else {
+                        tex_color
+                    }
+                } else {
+                    let color = if smooth_shading {
+                        lerp_color(start_c, end_c, t)
+                    } else {
+                        flat_color
+                    };
+                    color.to_u32()
+                }
+            } else {
+                let color = if smooth_shading {
+                    lerp_color(start_c, end_c, t)
+                } else {
+                    flat_color
+                };
+                color.to_u32()
+            };
+            
+            let idx = (y as usize) * (width as usize) + (x as usize);
+            if idx < depth_buffer.len() {
+                if !depth_test || z < depth_buffer[idx] {
+                    depth_buffer[idx] = z;
+                    framebuffer::put_pixel(x as u32, y as u32, final_color);
+                }
+            }
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // CONVENIENT SHAPES
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -977,4 +1135,86 @@ pub fn glut_solid_teapot(size: f32) {
         gl_vertex3f(vc.x, vc.y, vc.z);
     }
     gl_end();
+}
+
+/// Draw a textured cube with UV mapping
+pub fn glut_textured_cube(size: f32) {
+    let s = size / 2.0;
+    
+    gl_begin(GL_QUADS);
+    
+    // Front face
+    gl_normal3f(0.0, 0.0, 1.0);
+    gl_tex_coord2f(0.0, 0.0); gl_vertex3f(-s, -s, s);
+    gl_tex_coord2f(1.0, 0.0); gl_vertex3f(s, -s, s);
+    gl_tex_coord2f(1.0, 1.0); gl_vertex3f(s, s, s);
+    gl_tex_coord2f(0.0, 1.0); gl_vertex3f(-s, s, s);
+    
+    // Back face
+    gl_normal3f(0.0, 0.0, -1.0);
+    gl_tex_coord2f(0.0, 0.0); gl_vertex3f(s, -s, -s);
+    gl_tex_coord2f(1.0, 0.0); gl_vertex3f(-s, -s, -s);
+    gl_tex_coord2f(1.0, 1.0); gl_vertex3f(-s, s, -s);
+    gl_tex_coord2f(0.0, 1.0); gl_vertex3f(s, s, -s);
+    
+    // Top face
+    gl_normal3f(0.0, 1.0, 0.0);
+    gl_tex_coord2f(0.0, 0.0); gl_vertex3f(-s, s, s);
+    gl_tex_coord2f(1.0, 0.0); gl_vertex3f(s, s, s);
+    gl_tex_coord2f(1.0, 1.0); gl_vertex3f(s, s, -s);
+    gl_tex_coord2f(0.0, 1.0); gl_vertex3f(-s, s, -s);
+    
+    // Bottom face
+    gl_normal3f(0.0, -1.0, 0.0);
+    gl_tex_coord2f(0.0, 0.0); gl_vertex3f(-s, -s, -s);
+    gl_tex_coord2f(1.0, 0.0); gl_vertex3f(s, -s, -s);
+    gl_tex_coord2f(1.0, 1.0); gl_vertex3f(s, -s, s);
+    gl_tex_coord2f(0.0, 1.0); gl_vertex3f(-s, -s, s);
+    
+    // Right face
+    gl_normal3f(1.0, 0.0, 0.0);
+    gl_tex_coord2f(0.0, 0.0); gl_vertex3f(s, -s, s);
+    gl_tex_coord2f(1.0, 0.0); gl_vertex3f(s, -s, -s);
+    gl_tex_coord2f(1.0, 1.0); gl_vertex3f(s, s, -s);
+    gl_tex_coord2f(0.0, 1.0); gl_vertex3f(s, s, s);
+    
+    // Left face
+    gl_normal3f(-1.0, 0.0, 0.0);
+    gl_tex_coord2f(0.0, 0.0); gl_vertex3f(-s, -s, -s);
+    gl_tex_coord2f(1.0, 0.0); gl_vertex3f(-s, -s, s);
+    gl_tex_coord2f(1.0, 1.0); gl_vertex3f(-s, s, s);
+    gl_tex_coord2f(0.0, 1.0); gl_vertex3f(-s, s, -s);
+    
+    gl_end();
+}
+
+/// Demo: Initialize a checkerboard texture
+pub fn demo_init_checkerboard_texture(tex_id: &mut u32) {
+    texture::gl_gen_textures(1, core::slice::from_mut(tex_id));
+    texture::gl_bind_texture(texture::GL_TEXTURE_2D, *tex_id);
+    
+    let tex_data = texture::create_checkerboard_texture(64, 0xFFFFFFFF, 0xFF404040);
+    texture::gl_tex_image_2d(
+        texture::GL_TEXTURE_2D, 0, texture::GL_RGBA,
+        64, 64, 0, texture::GL_RGBA, 0, &tex_data
+    );
+    texture::gl_tex_parameteri(texture::GL_TEXTURE_2D, texture::GL_TEXTURE_MAG_FILTER, texture::GL_LINEAR);
+    texture::gl_tex_parameteri(texture::GL_TEXTURE_2D, texture::GL_TEXTURE_MIN_FILTER, texture::GL_NEAREST);
+}
+
+/// Demo: Render a spinning textured cube
+pub fn demo_render_textured_cube(angle: f32, tex_id: u32) {
+    // Bind texture
+    texture::gl_bind_texture(texture::GL_TEXTURE_2D, tex_id);
+    texture::gl_enable_texture(texture::GL_TEXTURE_2D);
+    
+    // Set white color for texture modulation
+    gl_color3f(1.0, 1.0, 1.0);
+    
+    gl_push_matrix();
+    gl_rotatef(angle, 0.5, 1.0, 0.3);
+    glut_textured_cube(1.5);
+    gl_pop_matrix();
+    
+    texture::gl_disable_texture(texture::GL_TEXTURE_2D);
 }

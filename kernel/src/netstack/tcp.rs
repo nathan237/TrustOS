@@ -155,6 +155,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
 
         if new_ack > conn.ack {
             if !payload.is_empty() {
+                crate::serial_println!("[TCP] Storing {} bytes payload for port {}", payload.len(), dst_port);
                 // Store payload in RX buffer
                 let mut rx = RX_DATA.lock();
                 rx.entry(conn_id).or_insert_with(Vec::new).push(payload.to_vec());
