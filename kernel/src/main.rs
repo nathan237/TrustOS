@@ -84,6 +84,9 @@ mod transpiler;
 // TrustLang — integrated programming language (Rust-like, bytecode VM)
 mod trustlang;
 
+// TrustVideo — custom video codec & player (delta+RLE, no external APIs)
+mod video;
+
 // Subsystems
 mod memory;
 mod interrupts;

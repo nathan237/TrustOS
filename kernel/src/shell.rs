@@ -815,6 +815,9 @@ fn execute_command(cmd: &str) {
         // TrustLang — integrated programming language
         "trustlang" | "tl" => cmd_trustlang(args),
         
+        // TrustVideo — video codec & player
+        "video" | "tv" => cmd_video(args),
+        
         // Persistence commands
         "persist" | "persistence" => cmd_persistence(args),
         
@@ -13469,4 +13472,113 @@ fn execute_transpiled_binary(analysis: &crate::transpiler::BinaryAnalysis) -> i3
     
     // Default exit code if no exit syscall was found
     0
+}
+
+/// TrustVideo command: video codec, player, and demo animations
+fn cmd_video(args: &[&str]) {
+    let subcmd = args.first().copied().unwrap_or("help");
+
+    match subcmd {
+        "demo" => {
+            let effect = args.get(1).copied().unwrap_or("plasma");
+            let fps = 30u64;
+            let frame_ms = 1000 / fps;
+
+            crate::println!("=== TrustVideo Demo: {} ===", effect);
+            crate::println!("Rendering in real-time @ {}fps", fps);
+            crate::println!("Press Q or ESC to stop");
+
+            // Real-time streaming render — no file accumulation
+            let sw = crate::framebuffer::width();
+            let sh = crate::framebuffer::height();
+            let vw = sw.min(640) as u16;
+            let vh = sh.min(480) as u16;
+
+            match effect {
+                "plasma" | "fire" | "matrix" => {
+                    crate::video::player::render_realtime(effect, vw, vh, fps as u16);
+                }
+                _ => {
+                    crate::println!("Unknown effect: {}. Available: plasma, fire, matrix", effect);
+                }
+            }
+        }
+
+        "play" => {
+            let filename = match args.get(1) {
+                Some(f) => *f,
+                None => { crate::println!("Usage: video play <file.tv>"); return; }
+            };
+
+            let path = if filename.starts_with('/') {
+                alloc::string::String::from(filename)
+            } else {
+                alloc::format!("/home/{}", filename)
+            };
+
+            match crate::vfs::read_file(&path) {
+                Ok(data) => {
+                    crate::println!("Playing {}...", filename);
+                    let mut player = crate::video::player::VideoPlayer::new();
+                    match player.play_data(data) {
+                        Ok(msg) => crate::println!("{}", msg),
+                        Err(e) => crate::println!("Error: {}", e),
+                    }
+                }
+                Err(_) => crate::println!("File not found: {}", path),
+            }
+        }
+
+        "info" => {
+            let filename = match args.get(1) {
+                Some(f) => *f,
+                None => { crate::println!("Usage: video info <file.tv>"); return; }
+            };
+
+            let path = if filename.starts_with('/') {
+                alloc::string::String::from(filename)
+            } else {
+                alloc::format!("/home/{}", filename)
+            };
+
+            match crate::vfs::read_file(&path) {
+                Ok(data) => {
+                    if let Some(hdr) = crate::video::codec::TvHeader::from_bytes(&data) {
+                        crate::println!("=== TrustVideo Info ===");
+                        crate::println!("  Format:     TrustVideo v{}", hdr.version);
+                        crate::println!("  Resolution: {}x{}", hdr.width, hdr.height);
+                        crate::println!("  FPS:        {}", hdr.fps);
+                        crate::println!("  Frames:     {}", hdr.frame_count);
+                        crate::println!("  Duration:   {:.1}s", hdr.frame_count as f64 / hdr.fps as f64);
+                        crate::println!("  Keyframe:   every {} frames", hdr.keyframe_interval);
+                        crate::println!("  File size:  {} bytes ({} KB)", data.len(), data.len() / 1024);
+                        let raw_size = hdr.width as usize * hdr.height as usize * 4 * hdr.frame_count as usize;
+                        if raw_size > 0 {
+                            let ratio = raw_size as f64 / data.len() as f64;
+                            crate::println!("  Compression: {:.1}x (raw would be {} KB)", ratio, raw_size / 1024);
+                        }
+                    } else {
+                        crate::println!("Not a valid TrustVideo file");
+                    }
+                }
+                Err(_) => crate::println!("File not found: {}", path),
+            }
+        }
+
+        _ => {
+            crate::println!("TrustVideo — Custom video codec for TrustOS");
+            crate::println!("");
+            crate::println!("Usage: video <command> [args]");
+            crate::println!("");
+            crate::println!("Commands:");
+            crate::println!("  demo [effect]  Generate & play a demo animation");
+            crate::println!("                 Effects: plasma, fire, matrix");
+            crate::println!("  play <file>    Play a .tv video file");
+            crate::println!("  info <file>    Show video file info");
+            crate::println!("");
+            crate::println!("Controls during playback:");
+            crate::println!("  Q / ESC        Stop playback");
+            crate::println!("  Space          Pause / Resume");
+        }
+    }
 }
