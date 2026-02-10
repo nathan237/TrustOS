@@ -9,6 +9,7 @@
 //! Now using the TrustOS Graphics Engine for optimized rendering
 
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 use alloc::format;
 use alloc::collections::BTreeMap;
@@ -771,6 +772,11 @@ pub struct Desktop {
     pub snake_states: BTreeMap<u32, SnakeState>,
     // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
     pub scale_factor: u32,
+    // Matrix rain state
+    matrix_chars: Vec<u8>,
+    matrix_heads: Vec<i32>,
+    matrix_speeds: Vec<u32>,
+    matrix_initialized: bool,
 }
 
 /// Calculator state for interactive calculator windows
@@ -1068,6 +1074,10 @@ impl Desktop {
             calculator_states: BTreeMap::new(),
             snake_states: BTreeMap::new(),
             scale_factor: 1,
+            matrix_chars: Vec::new(),
+            matrix_heads: Vec::new(),
+            matrix_speeds: Vec::new(),
+            matrix_initialized: false,
         }
     }
     
@@ -1108,7 +1118,33 @@ impl Desktop {
         // Mark that we need to render background on first frame
         self.background_cached = false;
         self.needs_full_redraw = true;
+        
+        // Initialize matrix rain
+        self.init_matrix_rain();
+        
         crate::serial_println!("[Desktop] init complete");
+    }
+    
+    /// Initialize matrix rain background data
+    fn init_matrix_rain(&mut self) {
+        const MATRIX_COLS: usize = 240;
+        const MATRIX_ROWS: usize = 68;
+        const CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
+        
+        self.matrix_chars = vec![0u8; MATRIX_COLS * MATRIX_ROWS];
+        self.matrix_heads = vec![0i32; MATRIX_COLS];
+        self.matrix_speeds = vec![1u32; MATRIX_COLS];
+        
+        for col in 0..MATRIX_COLS {
+            let seed = (col as u32).wrapping_mul(2654435761) ^ 0xDEADBEEF;
+            for row in 0..MATRIX_ROWS {
+                let char_seed = seed.wrapping_mul(row as u32 + 1);
+                self.matrix_chars[col * MATRIX_ROWS + row] = CHARS[(char_seed as usize) % CHARS.len()];
+            }
+            self.matrix_heads[col] = -((seed % (MATRIX_ROWS as u32 * 2)) as i32);
+            self.matrix_speeds[col] = 1 + (seed % 3);
+        }
+        self.matrix_initialized = true;
     }
     
     /// Open TrustCode with a demo Rust file
@@ -2957,22 +2993,12 @@ struct AppConfig {
         
         // OPTIMIZATION 1: Background caching
         // Only draw background once, then cache it
-        if !self.background_cached || self.needs_full_redraw {
-            // First time: draw everything to backbuffer
-            framebuffer::clear_backbuffer(DESKTOP_BG_TOP);
-            self.draw_background();
-            self.draw_logo_watermark();
-            self.draw_desktop_icons();
-            self.draw_taskbar();
-            
-            // Cache the static background (everything except windows and cursor)
-            framebuffer::cache_current_background();
-            self.background_cached = true;
-            self.needs_full_redraw = false;
-        } else {
-            // OPTIMIZATION 2: Restore background from cache (very fast memcpy)
-            framebuffer::restore_background_to_backbuffer();
-        }
+        // Matrix rain is animated — redraw background every frame
+        framebuffer::clear_backbuffer(0xFF000000);
+        self.draw_background();
+        self.draw_logo_watermark();
+        self.draw_desktop_icons();
+        self.draw_taskbar();
         
         // Draw windows (these change, so always redraw)
         let has_visible_windows = self.windows.iter().any(|w| w.visible && !w.minimized);
@@ -3171,63 +3197,85 @@ struct AppConfig {
         }
     }
     
-    fn draw_background(&self) {
+    fn draw_background(&mut self) {
+        const MATRIX_COLS: usize = 240;
+        const MATRIX_ROWS: usize = 68;
         let height = self.height - TASKBAR_HEIGHT;
-        let theme_colors = crate::theme::colors();
-        let wallpaper_cfg = &crate::theme::THEME.read().wallpaper;
         
         // ═══════════════════════════════════════════════════════════════
-        // DYNAMIC THEME BACKGROUND
+        // MATRIX RAIN BACKGROUND — Animated digital rain
         // ═══════════════════════════════════════════════════════════════
         
-        // Check if we have a loaded wallpaper
-        if let Some(ref wp_data) = wallpaper_cfg.data {
-            // Draw wallpaper from loaded image
-            self.draw_wallpaper_image(wp_data, height);
-        } else {
-            // Fallback: gradient from theme colors
-            let bg = theme_colors.background;
-            let surface = theme_colors.surface;
-            
-            // Extract RGB components
-            let (tr, tg, tb) = (
-                ((bg >> 16) & 0xFF) as u32,
-                ((bg >> 8) & 0xFF) as u32,
-                (bg & 0xFF) as u32
-            );
-            let (br, bgg, bb) = (
-                ((surface >> 16) & 0xFF) as u32,
-                ((surface >> 8) & 0xFF) as u32,
-                (surface & 0xFF) as u32
-            );
-            
-            // Draw gradient with larger steps for performance
-            let mut y = 0u32;
-            while y < height {
-                let t = y as f32 / height as f32;
-                let r = (tr as f32 * (1.0 - t) + br as f32 * t) as u32;
-                let g = (tg as f32 * (1.0 - t) + bgg as f32 * t) as u32;
-                let b = (tb as f32 * (1.0 - t) + bb as f32 * t) as u32;
-                let color = 0xFF000000 | (r << 16) | (g << 8) | b;
-                framebuffer::draw_hline(0, y, self.width, color);
-                if y + 1 < height {
-                    framebuffer::draw_hline(0, y + 1, self.width, color);
-                }
-                y += 2;
+        if !self.matrix_initialized {
+            // Fallback: black background
+            framebuffer::fill_rect(0, 0, self.width, height, 0xFF000000);
+            return;
+        }
+        
+        // Update head positions each frame
+        for col in 0..MATRIX_COLS.min(self.matrix_heads.len()) {
+            self.matrix_heads[col] += self.matrix_speeds[col] as i32;
+            if self.matrix_heads[col] > (MATRIX_ROWS as i32 + 30) {
+                let seed = (col as u32).wrapping_mul(2654435761).wrapping_add(self.frame_count as u32);
+                self.matrix_heads[col] = -((seed % 30) as i32);
+                self.matrix_speeds[col] = 1 + (seed % 3);
             }
+        }
+        
+        // Clear to pure black\n        framebuffer::fill_rect(0, 0, self.width, height, 0xFF000000);
+        
+        // Render matrix columns
+        let col_width = 8u32;
+        for col in 0..MATRIX_COLS.min(self.matrix_heads.len()) {
+            let x = col as u32 * col_width;
+            if x >= self.width { continue; }
             
-            // Accent glow in center
-            let cx = self.width / 2;
-            let cy = height / 2;
-            let accent = theme_colors.accent;
+            let head = self.matrix_heads[col];
             
-            let sizes: [(u32, u32); 3] = [(200, 150), (120, 90), (60, 45)];
-            for (i, (w, h)) in sizes.iter().enumerate() {
-                let alpha = (3 - i as u32) * 6;
-                let color = (alpha << 24) | (accent & 0x00FFFFFF);
-                let rx = cx.saturating_sub(*w / 2);
-                let ry = cy.saturating_sub(*h / 2);
-                framebuffer::fill_rect(rx, ry, *w, *h, color);
+            for row in 0..MATRIX_ROWS {
+                let y = row as u32 * 16;
+                if y >= height { continue; }
+                
+                let dist = row as i32 - head;
+                
+                let green_val = if dist < 0 {
+                    continue;
+                } else if dist == 0 {
+                    255u32  // Bright white-green head
+                } else if dist <= 12 {
+                    (255 - dist as u32 * 8).min(255)
+                } else if dist <= 28 {
+                    let factor = ((dist - 12) as u32).min(15) * 16;
+                    let fade = 255u32.saturating_sub(factor);
+                    (160 * fade) / 255
+                } else {
+                    continue;
+                };
+                
+                // Pure green channel color (head gets slight white tint)
+                let color = if dist == 0 {
+                    0xFF88FF88  // White-green head
+                } else {
+                    0xFF000000 | (green_val << 8)
+                };
+                
+                // Get character from pre-generated grid
+                let c = self.matrix_chars[col * MATRIX_ROWS + row] as char;
+                let glyph = crate::framebuffer::font::get_glyph(c);
+                
+                // Draw glyph pixels
+                for (gr, &bits) in glyph.iter().enumerate() {
+                    let py = y + gr as u32;
+                    if py >= height || bits == 0 { continue; }
+                    for bit in 0..8u32 {
+                        if bits & (0x80 >> bit) != 0 {
+                            let px = x + bit;
+                            if px < self.width {
+                                framebuffer::put_pixel(px, py, color);
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -3460,120 +3508,96 @@ struct AppConfig {
     }
     
     fn draw_taskbar(&mut self) {
-        use crate::gui::windows11::colors;
-        
         let y = self.height - TASKBAR_HEIGHT;
         
         // ═══════════════════════════════════════════════════════════════
-        // Windows 11 Style Taskbar (centered icons)
+        // MATRIX HACKER STYLE TASKBAR — Green on black
         // ═══════════════════════════════════════════════════════════════
         
-        // Glass-like taskbar: dark base + gradient highlight at top
-        // Base layer
-        framebuffer::fill_rect(0, y, self.width, TASKBAR_HEIGHT, colors::TASKBAR_BG);
+        // Opaque near-black background
+        framebuffer::fill_rect(0, y, self.width, TASKBAR_HEIGHT, 0xFF0A0A0A);
         
-        // Glass highlight gradient (brighter at top, fade down over 8px)
-        for dy in 0..8u32 {
-            let glass_alpha = (10 - dy * 10 / 8).min(10);
-            if glass_alpha > 0 {
-                let overlay = ((glass_alpha as u32) << 24) | 0x00FFFFFF;
-                framebuffer::fill_rect(0, y + dy, self.width, 1, overlay);
-            }
-        }
+        // Top border: dim green line
+        framebuffer::draw_hline(0, y, self.width, GREEN_MUTED);
+        framebuffer::draw_hline(0, y + 1, self.width, 0xFF003322);
         
-        // Subtle bright top border line
-        framebuffer::draw_hline(0, y, self.width, 0xFF1A2A20);
-        
-        // Start button (left side for now, Win11 centers it but left is more familiar)
-        let start_hover = self.cursor_x >= 4 && self.cursor_x < 52 && self.cursor_y >= y as i32;
-        if start_hover || self.start_menu_open {
-            // Rounded hover background
-            crate::gui::windows11::draw_rounded_rect(4, (y + 4) as i32, 48, TASKBAR_HEIGHT - 8, 4, colors::SURFACE_HOVER);
-        }
-        
-        // Windows logo (simplified as 4 squares)
-        let logo_x = 16;
-        let logo_y = (y + 12) as i32;
-        let logo_color = if start_hover { colors::ACCENT_LIGHT } else { colors::ACCENT };
-        framebuffer::fill_rect(logo_x, logo_y as u32, 7, 7, logo_color);
-        framebuffer::fill_rect(logo_x + 9, logo_y as u32, 7, 7, logo_color);
-        framebuffer::fill_rect(logo_x, (logo_y + 9) as u32, 7, 7, logo_color);
-        framebuffer::fill_rect(logo_x + 9, (logo_y + 9) as u32, 7, 7, logo_color);
+        // TrustOS button (left, with green border)
+        let start_hover = self.cursor_x >= 4 && self.cursor_x < 108 && self.cursor_y >= y as i32;
+        let start_bg = if start_hover || self.start_menu_open { 0xFF002200 } else { 0xFF0A0A0A };
+        framebuffer::fill_rect(4, y + 6, 100, 28, start_bg);
+        framebuffer::draw_rect(4, y + 6, 100, 28, if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_MUTED });
+        self.draw_text(18, (y + 12) as i32, "TrustOS", if start_hover { GREEN_PRIMARY } else { GREEN_SECONDARY });
         
         // Window buttons (centered in taskbar)
         let total_btns = self.windows.len();
-        let btn_w = 48u32;
+        let btn_w = 80u32;
         let btn_gap = 4u32;
         let total_w = total_btns as u32 * (btn_w + btn_gap);
-        let start_x = (self.width - total_w) / 2;
+        let start_x = if total_btns > 0 { (self.width - total_w) / 2 } else { self.width / 2 };
         
         for (i, w) in self.windows.iter().enumerate() {
             let btn_x = start_x + i as u32 * (btn_w + btn_gap);
-            let btn_y = y + 4;
+            let btn_y = y + 6;
             
             let is_hover = self.cursor_x >= btn_x as i32 && self.cursor_x < (btn_x + btn_w) as i32
                 && self.cursor_y >= y as i32;
             
             // Button background
             let bg = if w.focused { 
-                colors::SURFACE_PRESSED
+                0xFF002200
             } else if is_hover { 
-                colors::SURFACE_HOVER
+                0xFF001500
             } else { 
-                colors::SURFACE
+                0xFF0A0A0A
             };
-            crate::gui::windows11::draw_rounded_rect(btn_x as i32, btn_y as i32, btn_w, TASKBAR_HEIGHT - 8, 4, bg);
+            framebuffer::fill_rect(btn_x, btn_y, btn_w, 28, bg);
+            framebuffer::draw_rect(btn_x, btn_y, btn_w, 28, if w.focused { GREEN_PRIMARY } else { GREEN_SUBTLE });
             
-            // Active indicator (accent line below)
+            // Window title (truncated)
+            let title_max = 8;
+            let title: String = w.title.chars().take(title_max).collect();
+            let text_color = if w.focused { GREEN_PRIMARY } else { GREEN_TERTIARY };
+            self.draw_text((btn_x + 8) as i32, (btn_y + 8) as i32, &title, text_color);
+            
+            // Active indicator (green line at bottom)
             if w.focused {
-                let indicator_w = 20u32;
+                let indicator_w = 60u32.min(btn_w - 10);
                 let indicator_x = btn_x + (btn_w - indicator_w) / 2;
-                crate::gui::windows11::draw_rounded_rect(indicator_x as i32, (y + TASKBAR_HEIGHT - 5) as i32, indicator_w, 3, 1, colors::ACCENT);
+                framebuffer::fill_rect(indicator_x, y + TASKBAR_HEIGHT - 4, indicator_w, 3, GREEN_PRIMARY);
             } else if !w.minimized {
-                // Small dot for open windows
+                // Small green dot for open windows
                 let dot_x = btn_x + btn_w / 2 - 2;
-                framebuffer::fill_rect(dot_x, y + TASKBAR_HEIGHT - 4, 4, 2, colors::TEXT_SECONDARY);
+                framebuffer::fill_rect(dot_x, y + TASKBAR_HEIGHT - 3, 4, 2, GREEN_SUBTLE);
             }
-            
-            // App icon (first letter)
-            let first_char = w.title.chars().next().unwrap_or(' ');
-            let mut icon_buf = [0u8; 4];
-            let icon_str = first_char.encode_utf8(&mut icon_buf);
-            self.draw_text((btn_x + btn_w / 2 - 4) as i32, (btn_y + 8) as i32, icon_str, colors::TEXT_PRIMARY);
         }
         
         // System tray (right side)
-        let tray_x = self.width - 120;
+        // FPS counter
+        let fps_str = format!("{}fps", (60u64).min(self.frame_count.max(1)));
+        self.draw_text((self.width - 200) as i32, (y + 14) as i32, &fps_str, GREEN_SUBTLE);
         
-        // Settings button (gear icon) - before the clock
-        let settings_x = tray_x - 44;
-        let settings_hover = self.cursor_x >= settings_x as i32 && self.cursor_x < (settings_x + 40) as i32 
-            && self.cursor_y >= y as i32;
-        if settings_hover {
-            crate::gui::windows11::draw_rounded_rect(settings_x as i32, (y + 4) as i32, 36, TASKBAR_HEIGHT - 8, 4, colors::SURFACE_HOVER);
-        }
-        // Draw gear icon (simplified)
-        let gear_color = if settings_hover { colors::ACCENT_LIGHT } else { colors::TEXT_SECONDARY };
-        let gear_cx = settings_x + 18;
-        let gear_cy = y + TASKBAR_HEIGHT / 2;
-        // Outer ring
-        framebuffer::draw_hline(gear_cx - 6, gear_cy - 2, 12, gear_color);
-        framebuffer::draw_hline(gear_cx - 6, gear_cy + 2, 12, gear_color);
-        framebuffer::draw_vline(gear_cx - 2, gear_cy - 6, 12, gear_color);
-        framebuffer::draw_vline(gear_cx + 2, gear_cy - 6, 12, gear_color);
-        // Center
-        framebuffer::fill_rect(gear_cx - 2, gear_cy - 2, 4, 4, gear_color);
-        
-        // Clock
+        // Clock (HH:MM:SS format)
         let time = self.get_time_string();
-        let date = self.get_date_string();
-        self.draw_text((tray_x + 20) as i32, (y + 6) as i32, &time, colors::TEXT_PRIMARY);
-        self.draw_text((tray_x + 12) as i32, (y + 20) as i32, &date, colors::TEXT_SECONDARY);
-        
-        // Notification area hover
-        let tray_hover = self.cursor_x >= tray_x as i32 && self.cursor_y >= y as i32;
-        if tray_hover {
-            crate::gui::windows11::draw_rounded_rect((tray_x - 4) as i32, (y + 2) as i32, 120, TASKBAR_HEIGHT - 4, 4, colors::SURFACE_HOVER);
+        self.draw_text((self.width - 130) as i32, (y + 14) as i32, &time, GREEN_PRIMARY);
+
+        // Status circles (green + amber)
+        let cx = self.width - 30;
+        let cy = y + TASKBAR_HEIGHT / 2;
+        // Green circle
+        for dy in 0..6u32 {
+            for dx in 0..6u32 {
+                if (dx as i32 - 3) * (dx as i32 - 3) + (dy as i32 - 3) * (dy as i32 - 3) <= 9 {
+                    framebuffer::put_pixel(cx - 12 + dx, cy - 3 + dy, GREEN_PRIMARY);
+                }
+            }
+        }
+        // Amber circle
+        for dy in 0..6u32 {
+            for dx in 0..6u32 {
+                if (dx as i32 - 3) * (dx as i32 - 3) + (dy as i32 - 3) * (dy as i32 - 3) <= 9 {
+                    framebuffer::put_pixel(cx + dx, cy - 3 + dy, ACCENT_AMBER);
+                }
+            }
         }
     }
     
@@ -3594,338 +3618,202 @@ struct AppConfig {
     }
     
     fn draw_start_menu(&self) {
-        use crate::gui::windows11::colors;
-        
-        let menu_w = 320u32;
-        let menu_h = 530u32;
-        let menu_x = 8i32;
+        let menu_w = 280u32;
+        let menu_h = 400u32;
+        let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
         // ═══════════════════════════════════════════════════════════════
-        // Windows 11 Style Start Menu
+        // MATRIX HACKER STYLE START MENU — Terminal popup
         // ═══════════════════════════════════════════════════════════════
         
-        // Drop shadow
-        crate::gui::windows11::draw_shadow(menu_x, menu_y, menu_w, menu_h, 8, 0, 8, 5);
+        // Semi-transparent near-black background
+        framebuffer::fill_rect(menu_x as u32, menu_y as u32, menu_w, menu_h, 0xFF080808);
         
-        // Main background with rounded corners
-        crate::gui::windows11::draw_rounded_rect(menu_x, menu_y, menu_w, menu_h, 8, colors::MICA_DARK);
-        crate::gui::windows11::draw_rounded_rect_border(menu_x, menu_y, menu_w, menu_h, 8, colors::BORDER_SUBTLE);
+        // Double green border
+        framebuffer::draw_rect(menu_x as u32, menu_y as u32, menu_w, menu_h, GREEN_PRIMARY);
+        framebuffer::draw_rect((menu_x + 1) as u32, (menu_y + 1) as u32, menu_w - 2, menu_h - 2, GREEN_SUBTLE);
         
-        // Glass sheen at top of start menu
-        for dy in 0..12u32 {
-            let glass_a = (10 - dy * 10 / 12).min(10);
-            if glass_a > 0 {
-                let overlay = ((glass_a as u32) << 24) | 0x00FFFFFF;
-                let inset = if dy < 8 { 8u32.saturating_sub(fast_sqrt_i32((64 - (8i32 - dy as i32) * (8i32 - dy as i32)) as i32) as u32) } else { 0 };
-                framebuffer::fill_rect((menu_x as u32 + inset), (menu_y as u32 + dy), menu_w - inset * 2, 1, overlay);
-            }
-        }
+        // Title bar: dark green, "TrustOS Menu"
+        framebuffer::fill_rect((menu_x + 2) as u32, (menu_y + 2) as u32, menu_w - 4, 24, 0xFF001500);
+        self.draw_text(menu_x + 10, menu_y + 6, "TrustOS Menu", GREEN_PRIMARY);
         
-        // Search bar at top
-        let search_y = menu_y + 16;
-        crate::gui::windows11::draw_rounded_rect(menu_x + 16, search_y, menu_w - 32, 36, 4, colors::SURFACE);
-        crate::gui::windows11::draw_rounded_rect_border(menu_x + 16, search_y, menu_w - 32, 36, 4, colors::BORDER_DEFAULT);
-        self.draw_text(menu_x + 28, search_y + 10, "Type to search", colors::TEXT_DISABLED);
+        // Separator
+        framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 26) as u32, menu_w - 4, GREEN_MUTED);
         
-        // "Pinned" section
-        let pinned_y = search_y + 52;
-        self.draw_text(menu_x + 16, pinned_y, "Pinned", colors::TEXT_PRIMARY);
-        
-        // App grid (3 rows x 4 columns)
-        let apps = [
-            ("Terminal", ">_"),
-            ("Files", "[]"),
-            ("Settings", "@@"),
-            ("Editor", "Ed"),
-            ("Network", "~~"),
-            ("Browser", "Wb"),
-            ("Calc", "##"),
-            ("3D Demo", "3D"),
-            ("Snake", "Sk"),
-            ("TrustEdit", "Te"),
-            ("About", "?i"),
-        ];
-        
-        let grid_y = pinned_y + 24;
-        let cell_w = 72;
-        let cell_h = 65;
-        
-        for (i, (name, icon)) in apps.iter().enumerate() {
-            let col = i % 4;
-            let row = i / 4;
-            let cx = menu_x + 16 + (col as i32 * cell_w);
-            let cy = grid_y + (row as i32 * cell_h);
-            
-            // Hover detection
-            let hover = self.cursor_x >= cx && self.cursor_x < cx + cell_w
-                && self.cursor_y >= cy && self.cursor_y < cy + cell_h;
-            
-            if hover {
-                crate::gui::windows11::draw_rounded_rect(cx + 2, cy + 2, (cell_w - 4) as u32, (cell_h - 4) as u32, 4, colors::SURFACE_HOVER);
-            }
-            
-            // Icon (larger)
-            self.draw_text(cx + 24, cy + 12, icon, colors::ACCENT);
-            
-            // Name (centered)
-            let name_w = name.len() as i32 * 8;
-            let name_x = cx + (cell_w - name_w) / 2;
-            self.draw_text(name_x, cy + 44, name, colors::TEXT_PRIMARY);
-        }
-        
-        // "Recommended" section  
-        let rec_y = grid_y + cell_h * 3 + 8;
-        self.draw_text(menu_x + 16, rec_y, "Recommended", colors::TEXT_PRIMARY);
-        
-        // Separator line
-        framebuffer::draw_hline((menu_x + 16) as u32, (rec_y + 24) as u32, menu_w - 32, colors::BORDER_SUBTLE);
-        
-        // User profile at bottom
-        let user_y = menu_y + menu_h as i32 - 60;
-        framebuffer::draw_hline((menu_x + 16) as u32, user_y as u32, menu_w - 32, colors::BORDER_SUBTLE);
-        
-        // User icon (circle with initial)
-        let user_icon_x = menu_x + 24;
-        let user_icon_y = user_y + 16;
-        crate::gui::windows11::draw_rounded_rect(user_icon_x, user_icon_y, 32, 32, 16, colors::ACCENT);
-        self.draw_text(user_icon_x + 10, user_icon_y + 8, "U", colors::TEXT_PRIMARY);
-        
-        // User name
-        self.draw_text(user_icon_x + 44, user_icon_y + 8, "User", colors::TEXT_PRIMARY);
-        
-        // Power button (right side)
-        let power_x = menu_x + menu_w as i32 - 48;
-        let power_hover = self.cursor_x >= power_x && self.cursor_x < power_x + 32
-            && self.cursor_y >= user_icon_y && self.cursor_y < user_icon_y + 32;
-        
-        if power_hover {
-            crate::gui::windows11::draw_rounded_rect(power_x, user_icon_y, 32, 32, 4, colors::SURFACE_HOVER);
-        }
-        self.draw_text(power_x + 8, user_icon_y + 8, "O", colors::TEXT_SECONDARY);
-        
-        // TrustOS branding in header
-        self.draw_text((menu_x + 12) as i32, (menu_y + 6) as i32, "T", GREEN_PRIMARY);
-        self.draw_text((menu_x + 24) as i32, (menu_y + 6) as i32, "TrustOS", GREEN_SECONDARY);
-        self.draw_text((menu_x + 12) as i32, (menu_y + 22) as i32, "v0.1.0", GREEN_SUBTLE);
-        
-        // Separator line
-        framebuffer::fill_rect((menu_x + 12) as u32, (menu_y + 42) as u32, menu_w - 24, 1, GREEN_GHOST);
-        
-        // Menu items with modern styling
-        let items = [
+        // Menu items
+        let items: [(&str, &str, bool); 11] = [
             (">_", "Terminal", false),
             ("[]", "Files", false),
             ("##", "Calculator", false),
             ("~~", "Network", false),
+            ("Tx", "Text Editor", false),
+            ("/\\", "TrustEdit 3D", false),
+            ("WW", "Browser", false),
+            ("Sk", "Snake", false),
             ("@)", "Settings", false),
-            ("(i)", "About", false),
             ("!!", "Shutdown", true),
+            (">>", "Reboot", true),
         ];
         
-        for (i, (icon, label, is_danger)) in items.iter().enumerate() {
-            let item_y = menu_y + 50 + (i as i32 * 28);
+        for (i, (icon, label, is_special)) in items.iter().enumerate() {
+            let item_y = menu_y + 30 + (i as i32 * 32);
+            let item_h = 30u32;
             
             // Hover detection
             let is_hovered = self.cursor_x >= menu_x 
                 && self.cursor_x < menu_x + menu_w as i32
                 && self.cursor_y >= item_y 
-                && self.cursor_y < item_y + 26;
+                && self.cursor_y < item_y + item_h as i32;
             
             if is_hovered {
-                // Hover glow effect
-                framebuffer::fill_rect((menu_x + 6) as u32, item_y as u32, menu_w - 12, 26, GREEN_GHOST);
-                framebuffer::fill_rect((menu_x + 8) as u32, (item_y + 1) as u32, menu_w - 16, 24, BG_LIGHT);
-                
-                // Left accent bar on hover
-                framebuffer::fill_rect((menu_x + 6) as u32, (item_y + 4) as u32, 2, 18, 
-                    if *is_danger { BTN_CLOSE } else { GREEN_PRIMARY });
+                // Green highlight background
+                framebuffer::fill_rect((menu_x + 3) as u32, item_y as u32, menu_w - 6, item_h, 0xFF002200);
+                // Left accent bar
+                framebuffer::fill_rect((menu_x + 3) as u32, (item_y + 4) as u32, 2, item_h - 8, 
+                    if *is_special { ACCENT_RED } else { GREEN_PRIMARY });
             }
             
-            // Icon with muted color
+            // Icon
             let icon_color = if is_hovered {
-                if *is_danger { BTN_CLOSE_HOVER } else { GREEN_PRIMARY }
+                if *is_special { ACCENT_RED } else { GREEN_PRIMARY }
             } else {
-                if *is_danger { BTN_CLOSE } else { GREEN_TERTIARY }
+                if *is_special { 0xFF994444 } else { GREEN_TERTIARY }
             };
-            self.draw_text((menu_x + 16) as i32, (item_y + 6) as i32, icon, icon_color);
+            self.draw_text(menu_x + 14, item_y + 8, icon, icon_color);
             
             // Label
             let label_color = if is_hovered {
-                if *is_danger { BTN_CLOSE_HOVER } else { GREEN_SECONDARY }
+                if *is_special { ACCENT_RED } else { GREEN_SECONDARY }
             } else {
-                if *is_danger { 0xFF994444 } else { GREEN_SECONDARY }
+                if *is_special { 0xFFAA4444 } else { GREEN_SECONDARY }
             };
-            self.draw_text((menu_x + 44) as i32, (item_y + 6) as i32, label, label_color);
+            self.draw_text(menu_x + 40, item_y + 8, label, label_color);
         }
+        
+        // Bottom: version info
+        let ver_y = menu_y + menu_h as i32 - 20;
+        framebuffer::draw_hline((menu_x + 4) as u32, ver_y as u32, menu_w - 8, GREEN_GHOST);
+        self.draw_text(menu_x + 10, ver_y + 6, "TrustOS v0.1.0", GREEN_SUBTLE);
     }
     
     fn draw_window(&self, window: &Window) {
-        use crate::gui::windows11::{self as w11, colors};
-        
         let x = window.x;
         let y = window.y;
         let w = window.width;
         let h = window.height;
-        let radius = if window.maximized { 0 } else { 8 };
         
         // ═══════════════════════════════════════════════════════════════
-        // Windows 11 Style Window Rendering
+        // MATRIX HACKER STYLE WINDOW — Green borders, dark background
         // ═══════════════════════════════════════════════════════════════
         
-        // Drop shadow (only for focused, non-maximized windows)
-        if !window.maximized && window.focused {
-            w11::draw_shadow(x, y, w, h, radius, 0, 6, 4);
-        } else if !window.maximized {
-            // Subtle shadow for unfocused
-            w11::draw_shadow(x, y, w, h, radius, 0, 2, 2);
+        // Window background: near-black
+        framebuffer::fill_rect(x as u32, y as u32, w, h, 0xFF0A0A0A);
+        
+        // Double green border
+        let border_color = if window.focused { GREEN_PRIMARY } else { GREEN_SUBTLE };
+        framebuffer::draw_rect(x as u32, y as u32, w, h, border_color);
+        if w > 4 && h > 4 {
+            framebuffer::draw_rect((x + 1) as u32, (y + 1) as u32, w - 2, h - 2, 
+                if window.focused { GREEN_MUTED } else { GREEN_GHOST });
         }
         
-        // Window background with rounded corners
-        w11::draw_rounded_rect(x, y, w, h, radius, colors::MICA_DARK);
-        
-        // Accent border for focused window
-        let border_color = if window.focused { colors::ACCENT } else { colors::BORDER_SUBTLE };
-        w11::draw_rounded_rect_border(x, y, w, h, radius, border_color);
-        
-        // Title bar
+        // Title bar: dark green tinted
         let titlebar_h = TITLE_BAR_HEIGHT;
-        let title_bg = if window.focused { colors::TITLEBAR_ACTIVE } else { colors::TITLEBAR_INACTIVE };
+        let title_bg = if window.focused { 0xFF0A1A0A } else { 0xFF080C08 };
+        framebuffer::fill_rect((x + 2) as u32, (y + 2) as u32, w - 4, titlebar_h - 2, title_bg);
         
-        // Draw title bar (respecting rounded corners)
-        if radius > 0 {
-            // Fill top corners
-            for dy in 0..radius {
-                for dx in 0..radius {
-                    if dx * dx + dy * dy <= radius * radius {
-                        // Top left corner
-                        framebuffer::draw_pixel((x + radius as i32 - dx as i32 - 1) as u32, (y + radius as i32 - dy as i32 - 1) as u32, title_bg);
-                        // Top right corner  
-                        framebuffer::draw_pixel((x + w as i32 - radius as i32 + dx as i32) as u32, (y + radius as i32 - dy as i32 - 1) as u32, title_bg);
-                    }
-                }
-            }
-            framebuffer::fill_rect((x + radius as i32) as u32, y as u32, w - radius * 2, radius, title_bg);
-        }
-        framebuffer::fill_rect((x + 1) as u32, (y + radius as i32) as u32, w - 2, titlebar_h - radius, title_bg);
+        // Title bar bottom separator
+        framebuffer::draw_hline((x + 2) as u32, (y + titlebar_h as i32) as u32, w - 4, 
+            if window.focused { GREEN_MUTED } else { GREEN_GHOST });
         
-        // Glass sheen on title bar (subtle light gradient at top)
-        if window.focused && radius > 0 {
-            for dy in 0..6u32 {
-                let glass_a = (8 - dy * 8 / 6).min(8);
-                if glass_a > 0 {
-                    let overlay = ((glass_a as u32) << 24) | 0x00FFFFFF;
-                    let inset = if dy < radius { radius - fast_sqrt_i32((radius as i32 * radius as i32 - (radius as i32 - dy as i32) * (radius as i32 - dy as i32)) as i32) as u32 } else { 0 };
-                    framebuffer::fill_rect((x as u32 + inset) as u32, (y as u32 + dy), w - inset * 2, 1, overlay);
-                }
-            }
-        }
-        
-        // Window icon and title
-        let text_color = if window.focused { colors::TEXT_PRIMARY } else { colors::TEXT_SECONDARY };
-        let icon = match window.window_type {
-            WindowType::Terminal => "⌘",
-            WindowType::FileManager => "📁",
-            WindowType::Calculator => "🔢",
-            WindowType::NetworkInfo => "🌐",
-            WindowType::About => "ℹ",
-            WindowType::Settings => "⚙",
-            WindowType::FileAssociations => "📎",
-            WindowType::SystemInfo => "💻",
-            WindowType::Empty => "◻",
-            WindowType::TextEditor => "📝",
-            WindowType::ImageViewer => "🖼",
-            WindowType::HexViewer => "🔍",
-            WindowType::Demo3D => "🎮",
-            WindowType::Game => "🎯",
-            WindowType::Browser => "🌍",
-            WindowType::ModelEditor => "✏",
-        };
-        
-        // Icon (simple 2-char representation for now)
+        // Window icon (2-char representation)
         let icon_str = match window.window_type {
             WindowType::Terminal => ">_",
             WindowType::FileManager => "[]",
             WindowType::Calculator => "##",
             WindowType::Browser => "WW",
+            WindowType::ModelEditor => "/\\",
+            WindowType::TextEditor => "Tx",
+            WindowType::Game => "Sk",
             _ => "::",
         };
-        self.draw_text(x + 12, y + 8, icon_str, colors::ACCENT);
+        let icon_color = if window.focused { GREEN_PRIMARY } else { GREEN_TERTIARY };
+        self.draw_text(x + 10, y + 7, icon_str, icon_color);
         
         // Title text
-        self.draw_text(x + 36, y + 8, &window.title, text_color);
+        let text_color = if window.focused { TEXT_PRIMARY } else { TEXT_SECONDARY };
+        self.draw_text(x + 32, y + 7, &window.title, text_color);
         
         // ═══════════════════════════════════════════════════════════════
-        // Window Control Buttons (Windows 11 style)
+        // Control Buttons (macOS-style colored circles)
         // ═══════════════════════════════════════════════════════════════
-        let btn_w = 46;
-        let btn_h = titlebar_h;
-        let btn_y = y;
+        let btn_r = 5u32;
+        let btn_y_center = y + titlebar_h as i32 / 2;
         let mx = self.cursor_x;
         let my = self.cursor_y;
         
-        // Close button (rightmost) - red on hover
-        let close_x = x + w as i32 - btn_w as i32;
-        let close_hover = mx >= close_x && mx < close_x + btn_w as i32 
-            && my >= btn_y && my < btn_y + btn_h as i32;
+        // Close button (red circle)
+        let close_cx = x + w as i32 - 20;
+        let close_hover = (mx - close_cx).abs() <= btn_r as i32 + 2 && (my - btn_y_center).abs() <= btn_r as i32 + 2;
+        let close_color = if close_hover { 0xFFFF4444 } else { BTN_CLOSE };
+        for dy in 0..btn_r * 2 + 1 {
+            for dx in 0..btn_r * 2 + 1 {
+                let ddx = dx as i32 - btn_r as i32;
+                let ddy = dy as i32 - btn_r as i32;
+                if ddx * ddx + ddy * ddy <= (btn_r * btn_r) as i32 {
+                    framebuffer::put_pixel((close_cx + ddx) as u32, (btn_y_center + ddy) as u32, close_color);
+                }
+            }
+        }
         if close_hover {
-            framebuffer::fill_rect(close_x as u32, btn_y as u32, btn_w as u32, btn_h, colors::CLOSE_HOVER);
-        }
-        // X icon
-        let cx = close_x + btn_w as i32 / 2;
-        let cy = btn_y + btn_h as i32 / 2;
-        let icon_color = if close_hover { colors::TEXT_PRIMARY } else { text_color };
-        for i in -4..=4i32 {
-            framebuffer::draw_pixel((cx + i) as u32, (cy + i) as u32, icon_color);
-            framebuffer::draw_pixel((cx + i) as u32, (cy - i) as u32, icon_color);
+            // X inside
+            for i in -2..=2i32 {
+                framebuffer::put_pixel((close_cx + i) as u32, (btn_y_center + i) as u32, 0xFFFFFFFF);
+                framebuffer::put_pixel((close_cx + i) as u32, (btn_y_center - i) as u32, 0xFFFFFFFF);
+            }
         }
         
-        // Maximize/Restore button
-        let max_x = close_x - btn_w as i32;
-        let max_hover = mx >= max_x && mx < max_x + btn_w as i32
-            && my >= btn_y && my < btn_y + btn_h as i32;
-        if max_hover {
-            framebuffer::fill_rect(max_x as u32, btn_y as u32, btn_w as u32, btn_h, colors::CONTROL_HOVER);
+        // Minimize button (yellow circle)
+        let min_cx = close_cx - 18;
+        let min_hover = (mx - min_cx).abs() <= btn_r as i32 + 2 && (my - btn_y_center).abs() <= btn_r as i32 + 2;
+        let min_color = if min_hover { 0xFFFFCC00 } else { BTN_MAXIMIZE };
+        for dy in 0..btn_r * 2 + 1 {
+            for dx in 0..btn_r * 2 + 1 {
+                let ddx = dx as i32 - btn_r as i32;
+                let ddy = dy as i32 - btn_r as i32;
+                if ddx * ddx + ddy * ddy <= (btn_r * btn_r) as i32 {
+                    framebuffer::put_pixel((min_cx + ddx) as u32, (btn_y_center + ddy) as u32, min_color);
+                }
+            }
         }
-        let icon_color = if max_hover { colors::TEXT_PRIMARY } else { text_color };
-        if window.maximized {
-            // Restore icon (two overlapping squares)
-            framebuffer::draw_rect((cx - btn_w as i32 - 2) as u32, (cy - 4) as u32, 8, 8, icon_color);
-            framebuffer::draw_rect((cx - btn_w as i32 - 4) as u32, (cy - 2) as u32, 8, 8, icon_color);
-        } else {
-            // Maximize icon (square)
-            framebuffer::draw_rect((cx - btn_w as i32 - 4) as u32, (cy - 4) as u32, 10, 10, icon_color);
-        }
-        
-        // Minimize button
-        let min_x = max_x - btn_w as i32;
-        let min_hover = mx >= min_x && mx < min_x + btn_w as i32
-            && my >= btn_y && my < btn_y + btn_h as i32;
         if min_hover {
-            framebuffer::fill_rect(min_x as u32, btn_y as u32, btn_w as u32, btn_h, colors::CONTROL_HOVER);
+            framebuffer::fill_rect((min_cx - 3) as u32, btn_y_center as u32, 6, 1, 0xFF000000);
         }
-        let icon_color = if min_hover { colors::TEXT_PRIMARY } else { text_color };
-        framebuffer::fill_rect((min_x + btn_w as i32 / 2 - 5) as u32, (cy) as u32, 10, 1, icon_color);
+        
+        // Maximize button (green circle)
+        let max_cx = min_cx - 18;
+        let max_hover = (mx - max_cx).abs() <= btn_r as i32 + 2 && (my - btn_y_center).abs() <= btn_r as i32 + 2;
+        let max_color = if max_hover { 0xFF44DD44 } else { BTN_MINIMIZE };
+        for dy in 0..btn_r * 2 + 1 {
+            for dx in 0..btn_r * 2 + 1 {
+                let ddx = dx as i32 - btn_r as i32;
+                let ddy = dy as i32 - btn_r as i32;
+                if ddx * ddx + ddy * ddy <= (btn_r * btn_r) as i32 {
+                    framebuffer::put_pixel((max_cx + ddx) as u32, (btn_y_center + ddy) as u32, max_color);
+                }
+            }
+        }
+        if max_hover {
+            framebuffer::draw_rect((max_cx - 2) as u32, (btn_y_center - 2) as u32, 5, 5, 0xFF000000);
+        }
         
         // ═══════════════════════════════════════════════════════════════
         // Content Area
         // ═══════════════════════════════════════════════════════════════
         let content_y = y + titlebar_h as i32;
         let content_h = h - titlebar_h;
-        framebuffer::fill_rect((x + 1) as u32, content_y as u32, w - 2, content_h - 1, colors::MICA_DARKER);
-        
-        // Resize handle (bottom-right corner dots)
-        if !window.maximized {
-            let rx = x + w as i32 - 16;
-            let ry = y + h as i32 - 16;
-            for i in 0..3 {
-                for j in 0..3 {
-                    if i + j >= 2 {
-                        framebuffer::draw_pixel((rx + i * 5) as u32, (ry + j * 5) as u32, colors::BORDER_DEFAULT);
-                    }
-                }
-            }
-        }
+        framebuffer::fill_rect((x + 2) as u32, (content_y + 1) as u32, w - 4, content_h.saturating_sub(3), 0xFF080808);
         
         // Draw window content
         self.draw_window_content(window);
