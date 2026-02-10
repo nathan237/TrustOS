@@ -64,7 +64,10 @@ fn cmos_read(reg: u8) -> u8 {
     unsafe {
         // Disable NMI (bit 7) and select register
         addr_port.write(0x80 | reg);
-        data_port.read()
+        let val = data_port.read();
+        // Re-enable NMI — leaving it disabled crashes VirtualBox (VT-x)
+        addr_port.write(reg & 0x7F);
+        val
     }
 }
 
