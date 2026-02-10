@@ -2427,43 +2427,358 @@ fn cmd_showcase(args: &[&str]) {
         }
     };
 
-    let effect_duration = 6000u64 * speed / 2; // Duration for each video effect
+    let effect_duration = 9000u64 * speed / 2; // Duration for each video effect (9s base)
 
-    // ─── Phase 0: Cinematic Intro ───
-    crate::framebuffer::clear_backbuffer(0xFF000000);
-    crate::framebuffer::swap_buffers();
-
+    // ═══════════════════════════════════════════════════════════════════
+    // CINEMATIC INTRO — Matrix-style big text on framebuffer
+    // ═══════════════════════════════════════════════════════════════════
     let (sw, sh) = crate::framebuffer::get_dimensions();
 
-    // Draw centered TrustOS logo
     {
         let was_db = crate::framebuffer::is_double_buffer_enabled();
         if !was_db {
             crate::framebuffer::init_double_buffer();
             crate::framebuffer::set_double_buffer_mode(true);
         }
-        crate::framebuffer::clear_backbuffer(0xFF0A0A1A);
-        
-        // Draw gradient accent bar at top
-        if let Some((bb_ptr, bb_w, _bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
-            let bb = bb_ptr as *mut u32;
-            for x in 0..bb_w as usize {
-                let t = x as i32;
-                let w = bb_w as i32;
-                let r = ((0x00i32 + (0x66 - 0x00) * t / w) as u32).min(255);
-                let g = ((0x88i32 + (0xFF - 0x88) * t / w) as u32).min(255);
-                let b = ((0xFFi32 + (0x66 - 0xFF) * t / w) as u32).min(255);
-                let color = 0xFF000000 | (r << 16) | (g << 8) | b;
-                for y in 0..4usize {
-                    unsafe { *bb.add(y * bb_stride as usize + x) = color; }
+
+        let w = sw as usize;
+        let h = sh as usize;
+        let mut buf = alloc::vec![0u32; w * h];
+
+        // ── Helper: draw scaled character into buffer ──
+        let draw_big_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+            let glyph = crate::framebuffer::font::get_glyph(c);
+            for (row, &bits) in glyph.iter().enumerate() {
+                for bit in 0..8u32 {
+                    if bits & (0x80 >> bit) != 0 {
+                        for sy in 0..scale {
+                            for sx in 0..scale {
+                                let px = cx + bit as usize * scale + sx;
+                                let py = cy + row * scale + sy;
+                                if px < w && py < h {
+                                    buf[py * w + px] = color;
+                                }
+                            }
+                        }
+                    }
                 }
             }
+        };
+
+        // ── Helper: draw big text centered ──
+        let draw_big_text_centered = |buf: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
+            let text_w = text.len() * 8 * scale;
+            let start_x = if text_w < w { (w - text_w) / 2 } else { 0 };
+            for (i, c) in text.chars().enumerate() {
+                draw_big_char(buf, w, h, start_x + i * 8 * scale, y, c, color, scale);
+            }
+        };
+
+        // ── Helper: Matrix rain background ──
+        let mut rain_cols: alloc::vec::Vec<u16> = alloc::vec![0u16; w / 8 + 1];
+        let mut rain_speeds: alloc::vec::Vec<u8> = alloc::vec![1u8; w / 8 + 1];
+        // Seed rain columns
+        for i in 0..rain_cols.len() {
+            rain_cols[i] = ((i * 37 + 13) % h) as u16;
+            rain_speeds[i] = (((i * 7 + 3) % 4) + 1) as u8;
         }
-        crate::framebuffer::swap_buffers();
+
+        let draw_rain_step = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
+            // Dim existing pixels slightly (trail effect)
+            for pixel in buf.iter_mut() {
+                let g = ((*pixel >> 8) & 0xFF) as u32;
+                if g > 0 {
+                    let new_g = g.saturating_sub(8);
+                    *pixel = 0xFF000000 | (new_g << 8);
+                }
+            }
+            // Advance rain drops
+            for col_idx in 0..cols.len() {
+                let x = col_idx * 8;
+                if x >= w { continue; }
+                cols[col_idx] = cols[col_idx].wrapping_add(speeds[col_idx] as u16);
+                if cols[col_idx] as usize >= h { cols[col_idx] = 0; }
+                let y = cols[col_idx] as usize;
+                // Draw lead char (bright green)
+                let c = (((frame as usize + col_idx * 13) % 94) + 33) as u8 as char;
+                let glyph = crate::framebuffer::font::get_glyph(c);
+                for (row, &bits) in glyph.iter().enumerate() {
+                    let py = y + row;
+                    if py >= h { break; }
+                    for bit in 0..8u32 {
+                        if bits & (0x80 >> bit) != 0 {
+                            let px = x + bit as usize;
+                            if px < w {
+                                buf[py * w + px] = 0xFF00FF44;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        // ── Helper: blit buffer to backbuffer ──
+        let blit_buf = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+                let bb = bb_ptr as *mut u32;
+                let bb_s = bb_stride as usize;
+                for y in 0..h.min(bb_h as usize) {
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            buf[y * w..].as_ptr(),
+                            bb.add(y * bb_s),
+                            w,
+                        );
+                    }
+                }
+            }
+            crate::framebuffer::swap_buffers();
+        };
+
+        // ── Helper: Scene — type text with matrix rain bg ──
+        // Renders text that "types in" char by char with Matrix rain bg
+        let render_scene = |buf: &mut [u32], w: usize, h: usize,
+                           rain_cols: &mut [u16], rain_speeds: &[u8],
+                           lines: &[(&str, u32, usize)], // (text, color, scale)
+                           hold_ms: u64, speed: u64| {
+            let freq = crate::cpu::tsc::frequency_hz();
+            if freq == 0 { return; }
+
+            // Phase 1: Type in text (rain + typed text appearing)
+            let total_chars: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
+            let type_ms = 80u64 * speed / 2; // ms per char typed
+            let type_total_ms = total_chars as u64 * type_ms;
+            
+            let start_tsc = crate::cpu::tsc::read_tsc();
+            let type_target = freq / 1000 * type_total_ms;
+            let hold_target = freq / 1000 * (type_total_ms + hold_ms * speed / 2);
+
+            let mut frame = 0u32;
+            loop {
+                let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
+                if elapsed >= hold_target { break; }
+                if let Some(key) = crate::keyboard::try_read_key() {
+                    if key == 0x1B || key == b'q' { break; }
+                }
+
+                // Rain background
+                draw_rain_step(buf, w, h, rain_cols, rain_speeds, frame);
+
+                // Calculate how many chars to show
+                let elapsed_ms = elapsed / (freq / 1000).max(1);
+                let chars_shown = if elapsed_ms < type_total_ms {
+                    (elapsed_ms / type_ms.max(1)) as usize
+                } else {
+                    total_chars
+                };
+
+                // Draw text lines
+                let total_text_h: usize = lines.iter().map(|(_, _, s)| 16 * s + 8).sum::<usize>();
+                let mut y_start = if total_text_h < h { (h - total_text_h) / 2 } else { 20 };
+                let mut chars_counted = 0usize;
+
+                for &(text, color, scale) in lines {
+                    let text_w = text.len() * 8 * scale;
+                    let start_x = if text_w < w { (w - text_w) / 2 } else { 0 };
+
+                    for (i, c) in text.chars().enumerate() {
+                        if chars_counted + i >= chars_shown { break; }
+                        draw_big_char(buf, w, h, start_x + i * 8 * scale, y_start, c, color, scale);
+                    }
+                    // Cursor blink
+                    if chars_shown > chars_counted && chars_shown < chars_counted + text.len() {
+                        let cursor_i = chars_shown - chars_counted;
+                        let cx = start_x + cursor_i * 8 * scale;
+                        for cy in y_start..y_start + 16 * scale {
+                            if cy < h && cx + 2 < w {
+                                buf[cy * w + cx] = 0xFF00FF88;
+                                buf[cy * w + cx + 1] = 0xFF00FF88;
+                            }
+                        }
+                    }
+
+                    chars_counted += text.len();
+                    y_start += 16 * scale + 8;
+                }
+
+                blit_buf(buf, w, h);
+                frame += 1;
+                // ~30 FPS pacing
+                crate::cpu::tsc::delay_millis(33);
+            }
+
+            // Fade out
+            let fade_start = crate::cpu::tsc::read_tsc();
+            let fade_ms = 800u64;
+            let fade_target = freq / 1000 * fade_ms;
+            loop {
+                let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(fade_start);
+                if elapsed >= fade_target { break; }
+                let progress = (elapsed * 255 / fade_target) as u32;
+                for pixel in buf.iter_mut() {
+                    let r = ((*pixel >> 16) & 0xFF) as u32;
+                    let g = ((*pixel >> 8) & 0xFF) as u32;
+                    let b = (*pixel & 0xFF) as u32;
+                    let nr = r.saturating_sub(r * progress / 512 + 1);
+                    let ng = g.saturating_sub(g * progress / 512 + 1);
+                    let nb = b.saturating_sub(b * progress / 512 + 1);
+                    *pixel = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
+                }
+                blit_buf(buf, w, h);
+                crate::cpu::tsc::delay_millis(33);
+            }
+
+            // Clear to black
+            for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
+            blit_buf(buf, w, h);
+        };
+
+        // ── Scene 1: "Do you think life is a simulation?" ──
+        crate::serial_println!("[SHOWCASE] Scene 1: Simulation question");
+        for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
+        render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+            &[("Do you think", 0xFF00DD55, 4),
+              ("life is a simulation?", 0xFF00FF66, 4)],
+            3000, speed);
+
+        // ── Scene 2: "Can it run in a 6MB OS?" ──
+        crate::serial_println!("[SHOWCASE] Scene 2: 6MB OS");
+        render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+            &[("Can it run", 0xFF00DD55, 5),
+              ("in a 6MB OS?", 0xFF00FF88, 5)],
+            3000, speed);
+
+        // ── Scene 3: "TrustOS" + 3D + "Written in Rust by Nated0ge" ──
+        crate::serial_println!("[SHOWCASE] Scene 3: TrustOS title");
+        {
+            // Special scene: TrustOS big title + 3D wireframe + credits
+            let freq = crate::cpu::tsc::frequency_hz();
+            let scene3_ms = 8000u64 * speed / 2;
+            let scene3_target = freq / 1000 * scene3_ms;
+            let start_tsc = crate::cpu::tsc::read_tsc();
+
+            let mut renderer3d = crate::formula3d::FormulaRenderer::new();
+            renderer3d.set_scene(crate::formula3d::FormulaScene::Character);
+            renderer3d.wire_color = 0xFF00FFAA;
+
+            // Small 3D viewport
+            let vp_w = 200usize;
+            let vp_h = 200usize;
+            let mut vp_buf = alloc::vec![0u32; vp_w * vp_h];
+
+            let mut frame = 0u32;
+            loop {
+                let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
+                if elapsed >= scene3_target { break; }
+                if let Some(key) = crate::keyboard::try_read_key() {
+                    if key == 0x1B { break; }
+                }
+
+                // Rain background
+                draw_rain_step(&mut buf, w, h, &mut rain_cols, &rain_speeds, frame);
+
+                // Title: "TRUST OS" big
+                let title = "TRUST OS";
+                let title_scale = 6;
+                let title_w = title.len() * 8 * title_scale;
+                let title_x = if title_w < w { (w - title_w) / 2 } else { 0 };
+                let title_y = h / 8;
+                for (i, c) in title.chars().enumerate() {
+                    // Color cycle per char
+                    let hue = ((frame as usize * 3 + i * 30) % 360) as u32;
+                    let color = if hue < 120 {
+                        let t = hue * 255 / 120;
+                        0xFF000000 | ((255 - t) << 16) | (t << 8)
+                    } else if hue < 240 {
+                        let t = (hue - 120) * 255 / 120;
+                        0xFF000000 | ((255 - t) << 8) | t
+                    } else {
+                        let t = (hue - 240) * 255 / 120;
+                        0xFF000000 | (t << 16) | (255 - t)
+                    };
+                    draw_big_char(&mut buf, w, h, title_x + i * 8 * title_scale, title_y, c, color, title_scale);
+                }
+
+                // 3D animated character in center
+                renderer3d.update();
+                for p in vp_buf.iter_mut() { *p = 0x00000000; } // transparent
+                renderer3d.render(&mut vp_buf, vp_w, vp_h);
+
+                // Blit 3D viewport centered below title
+                let vp_x = if vp_w < w { (w - vp_w) / 2 } else { 0 };
+                let vp_y = title_y + 16 * title_scale + 20;
+                for vy in 0..vp_h {
+                    for vx in 0..vp_w {
+                        let src = vp_buf[vy * vp_w + vx];
+                        if src & 0x00FFFFFF != 0 { // not black = has content
+                            let dy = vp_y + vy;
+                            let dx = vp_x + vx;
+                            if dy < h && dx < w {
+                                buf[dy * w + dx] = src;
+                            }
+                        }
+                    }
+                }
+
+                // Credits text
+                let credit = "Written in Rust by Nated0ge";
+                let credit_scale = 3;
+                let credit_w = credit.len() * 8 * credit_scale;
+                let credit_x = if credit_w < w { (w - credit_w) / 2 } else { 0 };
+                let credit_y = vp_y + vp_h + 30;
+                for (i, c) in credit.chars().enumerate() {
+                    draw_big_char(&mut buf, w, h, credit_x + i * 8 * credit_scale, credit_y, c, 0xFF88CCFF, credit_scale);
+                }
+
+                blit_buf(&buf, w, h);
+                frame += 1;
+                crate::cpu::tsc::delay_millis(33);
+            }
+
+            // Fade out
+            let fade_start = crate::cpu::tsc::read_tsc();
+            let fade_target = freq / 1000 * 800;
+            loop {
+                let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(fade_start);
+                if elapsed >= fade_target { break; }
+                for pixel in buf.iter_mut() {
+                    let r = ((*pixel >> 16) & 0xFF).saturating_sub(4) as u32;
+                    let g = ((*pixel >> 8) & 0xFF).saturating_sub(4) as u32;
+                    let b = (*pixel & 0xFF).saturating_sub(4) as u32;
+                    *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+                }
+                blit_buf(&buf, w, h);
+                crate::cpu::tsc::delay_millis(33);
+            }
+            for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
+            blit_buf(&buf, w, h);
+        }
+
+        // ── Scene 4: Specs comparison ──
+        crate::serial_println!("[SHOWCASE] Scene 4: Specs");
+        render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+            &[("6MB ISO vs 6GB Windows",  0xFF00FF66, 3),
+              ("0 lines of C. Pure Rust.", 0xFF44FFAA, 3),
+              ("Boots in 0.8s not 45s",    0xFF00DDFF, 3),
+              ("No kernel panics. Ever.",  0xFFFFCC44, 3),
+              ("GPU desktop at 144 FPS",   0xFF88FF44, 3),
+              ("Built in 7 days solo",     0xFFFF8844, 3)],
+            3000, speed);
+
+        // ── Scene 5: "Are you ready?" ──
+        crate::serial_println!("[SHOWCASE] Scene 5: Are you ready?");
+        render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+            &[("Are you ready?", 0xFF00FF44, 6)],
+            2000, speed);
+
+        // Restore double buffer state
         if !was_db {
             crate::framebuffer::set_double_buffer_mode(false);
         }
     }
+
+    // ─── Phase 0: Banner ───
+    crate::framebuffer::clear();
 
     crate::println!();
     crate::println!();
@@ -2486,40 +2801,40 @@ fn cmd_showcase(args: &[&str]) {
     crate::println_color!(0xFF00FF88, "                        ▶  FEATURE SHOWCASE  ▶");
     crate::println!();
     
-    pause(4);
+    pause(6);
 
     // ─── Phase 1: System Info ───
     crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
     crate::println_color!(0xFF00CCFF, "║  PHASE 1 ──── SYSTEM INFO                                   ║");
     crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
     crate::println!();
-    pause(2);
+    pause(3);
 
     cmd_neofetch();
-    pause(3);
+    pause(4);
 
     crate::println_color!(COLOR_CYAN, "$ uname -a");
     cmd_uname(&["-a"]);
-    pause(2);
+    pause(4);
 
     crate::println_color!(COLOR_CYAN, "$ free");
     cmd_free();
-    pause(2);
+    pause(4);
 
     crate::println_color!(COLOR_CYAN, "$ lscpu");
     cmd_lscpu();
-    pause(3);
+    pause(5);
 
     // ─── Phase 2: Filesystem ───
     crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
     crate::println_color!(0xFF00CCFF, "║  PHASE 2 ──── FILESYSTEM (TrustFS + VFS)                    ║");
     crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
     crate::println!();
-    pause(2);
+    pause(3);
 
     crate::println_color!(COLOR_CYAN, "$ mkdir /demo");
     cmd_mkdir(&["/demo"]);
-    pause(1);
+    pause(2);
 
     crate::println_color!(COLOR_CYAN, "$ echo 'Hello TrustOS!' > /demo/hello.txt");
     crate::ramfs::with_fs(|fs| {
@@ -2527,22 +2842,22 @@ fn cmd_showcase(args: &[&str]) {
         let _ = fs.write_file("/demo/hello.txt", b"Hello TrustOS!\nThis file was created live during the showcase.\n");
     });
     crate::println_color!(COLOR_GREEN, "Written: /demo/hello.txt");
-    pause(1);
+    pause(2);
 
     crate::println_color!(COLOR_CYAN, "$ cat /demo/hello.txt");
     cmd_cat(&["/demo/hello.txt"], None);
-    pause(2);
+    pause(3);
 
     crate::println_color!(COLOR_CYAN, "$ tree /");
     cmd_tree(&["/"]);
-    pause(3);
+    pause(4);
 
     // ─── Phase 3: TrustLang ───
     crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
     crate::println_color!(0xFF00CCFF, "║  PHASE 3 ──── TRUSTLANG (Built-in Compiler + VM)            ║");
     crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
     crate::println!();
-    pause(2);
+    pause(3);
 
     // Create and run a real TrustLang program
     let tl_code = r#"fn fibonacci(n: i64) -> i64 {
@@ -2569,7 +2884,7 @@ fn main() {
 
     crate::println_color!(COLOR_CYAN, "$ cat /demo/showcase.tl");
     crate::println_color!(0xFFDDDDDD, "{}", tl_code);
-    pause(3);
+    pause(4);
 
     crate::println_color!(COLOR_CYAN, "$ trustlang run /demo/showcase.tl");
     crate::println_color!(0xFF00FF88, "[TrustLang] Compiling showcase.tl...");
@@ -2578,66 +2893,154 @@ fn main() {
         Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
     }
     crate::println_color!(COLOR_GREEN, "[TrustLang] Program finished successfully.");
-    pause(4);
+    pause(6);
 
     // ─── Phase 4: Network Stack ───
     crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
     crate::println_color!(0xFF00CCFF, "║  PHASE 4 ──── NETWORK STACK (TCP/IP, DHCP, DNS, TLS 1.3)    ║");
     crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
     crate::println!();
-    pause(2);
+    pause(3);
 
     crate::println_color!(COLOR_CYAN, "$ ifconfig");
     cmd_ifconfig();
-    pause(2);
+    pause(3);
 
     crate::println_color!(COLOR_CYAN, "$ netstat");
     cmd_netstat();
-    pause(3);
+    pause(4);
 
     // ─── Phase 5: Video Demos ───
     crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
     crate::println_color!(0xFF00CCFF, "║  PHASE 5 ──── TRUSTVIDEO (Real-time procedural rendering)   ║");
     crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
     crate::println!();
-    pause(2);
+    pause(3);
 
     // Fire demo
     crate::println_color!(0xFFFF4400, "▸ Demo 1/3: FIRE EFFECT — Real-time procedural flame");
-    pause(1);
+    pause(2);
 
-    let vw = sw.min(640) as u16;
-    let vh = sh.min(480) as u16;
+    let vw = sw as u16;
+    let vh = sh as u16;
     crate::video::player::render_realtime_timed("fire", vw, vh, 30, effect_duration);
     
     // Restore console
     crate::framebuffer::clear();
-    pause(1);
+    pause(2);
 
     // Matrix demo
     crate::println_color!(0xFF00FF44, "▸ Demo 2/3: MATRIX RAIN — Digital rain effect");
-    pause(1);
+    pause(2);
 
     crate::video::player::render_realtime_timed("matrix", vw, vh, 30, effect_duration);
     
     crate::framebuffer::clear();
-    pause(1);
+    pause(2);
 
     // Plasma demo
     crate::println_color!(0xFFFF00FF, "▸ Demo 3/3: PLASMA — Integer sine LUT psychedelic");
-    pause(1);
+    pause(2);
 
     crate::video::player::render_realtime_timed("plasma", vw, vh, 30, effect_duration);
     
     crate::framebuffer::clear();
-    pause(1);
+    pause(2);
+
+    // ─── Phase 5b: 3D Wireframe Character ───
+    crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
+    crate::println_color!(0xFF00CCFF, "║  PHASE 5b ── FORMULA3D (Wireframe 3D engine)                ║");
+    crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
+    crate::println!();
+    pause(2);
+
+    crate::println_color!(0xFF00FF88, "▸ 3D wireframe character — perspective projection + depth shading");
+    pause(2);
+
+    // Render rotating 3D character using FormulaRenderer
+    {
+        let mut renderer = crate::formula3d::FormulaRenderer::new();
+        renderer.set_scene(crate::formula3d::FormulaScene::Character);
+        renderer.wire_color = 0xFF00FFAA; // bright cyan-green
+
+        let rw = sw as usize;
+        let rh = sh as usize;
+        let ox = if sw > rw as u32 { (sw - rw as u32) / 2 } else { 0 } as usize;
+        let oy = if sh > rh as u32 { (sh - rh as u32) / 2 } else { 0 } as usize;
+
+        let mut buf = alloc::vec![0u32; rw * rh];
+
+        let was_db = crate::framebuffer::is_double_buffer_enabled();
+        if !was_db {
+            crate::framebuffer::init_double_buffer();
+            crate::framebuffer::set_double_buffer_mode(true);
+        }
+        crate::framebuffer::clear_backbuffer(0xFF000000);
+        crate::framebuffer::swap_buffers();
+
+        let start_tsc = crate::cpu::tsc::read_tsc();
+        let freq = crate::cpu::tsc::frequency_hz();
+        let duration_ms = effect_duration;
+        let target_cycles = if freq > 0 { freq / 1000 * duration_ms } else { u64::MAX };
+
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
+            if elapsed >= target_cycles { break; }
+            if let Some(key) = crate::keyboard::try_read_key() {
+                if key == 0x1B || key == b'q' { break; }
+            }
+
+            renderer.update();
+            renderer.render(&mut buf, rw, rh);
+
+            // Blit to backbuffer
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+                let bb = bb_ptr as *mut u32;
+                let bb_s = bb_stride as usize;
+                for y in 0..rh {
+                    let dy = oy + y;
+                    if dy >= bb_h as usize { break; }
+                    let src_row = &buf[y * rw..y * rw + rw];
+                    unsafe {
+                        let dst = bb.add(dy * bb_s + ox);
+                        core::ptr::copy_nonoverlapping(src_row.as_ptr(), dst, rw);
+                    }
+                }
+            }
+            crate::framebuffer::swap_buffers();
+        }
+
+        if !was_db {
+            crate::framebuffer::set_double_buffer_mode(false);
+        }
+    }
+
+    crate::framebuffer::clear();
+    pause(2);
+
+    // ─── Phase 5c: Desktop + Web Browser ───
+    crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
+    crate::println_color!(0xFF00CCFF, "║  PHASE 5c ── COSMIC2 DESKTOP + WEB BROWSER                  ║");
+    crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
+    crate::println!();
+    pause(2);
+
+    crate::println_color!(0xFF00FF88, "▸ COSMIC2 Desktop — GPU-composited multi-layer windowing system");
+    crate::println_color!(0xFF00FF88, "▸ Launching with built-in Web Browser → google.com");
+    pause(3);
+
+    // Launch desktop in browser mode with auto-exit after effect_duration ms
+    cmd_cosmic_v2_with_app_timed(Some("browser"), effect_duration);
+
+    crate::framebuffer::clear();
+    pause(2);
 
     // ─── Phase 6: Commands overview ───
     crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
     crate::println_color!(0xFF00CCFF, "║  PHASE 6 ──── 200+ BUILT-IN COMMANDS                       ║");
     crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
     crate::println!();
-    pause(1);
+    pause(2);
 
     crate::println_color!(0xFFAADDFF, "  ┌─ File System ──────────────────────────────────────────┐");
     crate::println_color!(0xFFDDDDDD, "  │ ls cd pwd mkdir rm cp mv cat head tail tree find grep  │");
@@ -2653,7 +3056,7 @@ fn main() {
     crate::println_color!(0xFFDDDDDD, "  │ benchmark (SSE2 SIMD) · HoloMatrix (3D volumetric)   │");
     crate::println_color!(0xFFAADDFF, "  └────────────────────────────────────────────────────────┘");
     crate::println!();
-    pause(4);
+    pause(6);
 
     // ─── Phase 7: Outro ───
     crate::println!();
@@ -2690,6 +3093,11 @@ fn cmd_cosmic_v2() {
 
 /// Open desktop with optional app to launch
 fn cmd_cosmic_v2_with_app(initial_app: Option<&str>) {
+    cmd_cosmic_v2_with_app_timed(initial_app, 0);
+}
+
+/// Open desktop with optional app and optional auto-exit timeout (0 = no timeout)
+fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms: u64) {
     use crate::compositor::{Compositor, LayerType};
     use alloc::format;
     use alloc::string::String;
@@ -2965,6 +3373,7 @@ fn cmd_cosmic_v2_with_app(initial_app: Option<&str>) {
     let mut browser_loading = false;
     let mut browser_url_focused = true;
     let mut browser_view_mode: u8 = 0;  // 0=DevTools, 1=Rendered
+    let mut auto_navigate_pending = timeout_ms > 0 && active_mode == AppMode::Browser;
     
     // Helper to add a simple line
     fn make_simple_line(text: &str, color: u32, line_type: LineType) -> BrowserLine {
@@ -3482,7 +3891,80 @@ fn cmd_cosmic_v2_with_app(initial_app: Option<&str>) {
     
     crate::serial_println!("[COSMIC2] Entering render loop...");
     
+    // Auto-exit timer for showcase mode
+    let auto_start_tsc = crate::cpu::tsc::read_tsc();
+    let auto_freq = crate::cpu::tsc::frequency_hz();
+    let auto_target = if timeout_ms > 0 && auto_freq > 0 { auto_freq / 1000 * timeout_ms } else { u64::MAX };
+    
     while running {
+        // Auto-navigate for showcase mode (trigger browser load on frame 5)
+        if auto_navigate_pending && frame_count == 5 {
+            auto_navigate_pending = false;
+            // Simulate Enter press: navigate browser
+            if browser_mode {
+                browser_lines.clear();
+                browser_status = format!("Loading {}...", browser_url);
+                browser_loading = true;
+                let is_https = browser_url.starts_with("https://");
+                if let Some((host, port, path, url_is_https)) = parse_http_url(&browser_url) {
+                    let protocol = if url_is_https { "HTTPS" } else { "HTTP" };
+                    browser_lines.push(make_simple_line(&format!("\u{25ba} {} {}:{}{}...", protocol, host, port, path), 0xFF88FF88, LineType::PlainText));
+                    if url_is_https {
+                        browser_lines.push(make_simple_line("\u{25ba} Establishing TLS 1.3 connection...", 0xFF88CCFF, LineType::PlainText));
+                        match crate::netstack::https::get(&browser_url) {
+                            Ok(response) => {
+                                browser_lines.push(make_simple_line(&format!("\u{25ba} TLS OK, {} bytes", response.body.len()), 0xFF88FF88, LineType::PlainText));
+                                browser_lines.push(make_simple_line("", 0xFFDDDDDD, LineType::PlainText));
+                                browser_lines.push(make_simple_line("\u{2500}\u{2500} Response Headers \u{2500}\u{2500}", 0xFF61AFEF, LineType::HttpHeader));
+                                browser_lines.push(make_simple_line(&format!("HTTP/1.1 {}", response.status_code), HTML_COLOR_HTTP, LineType::HttpHeader));
+                                for (key, value) in &response.headers {
+                                    browser_lines.push(make_simple_line(&format!("{}: {}", key, value), HTML_COLOR_HTTP, LineType::HttpHeader));
+                                }
+                                browser_lines.push(make_simple_line("", 0xFFDDDDDD, LineType::PlainText));
+                                browser_lines.push(make_simple_line("\u{2500}\u{2500} HTML Source \u{2500}\u{2500}", 0xFF61AFEF, LineType::HttpHeader));
+                                if let Ok(body_str) = core::str::from_utf8(&response.body) {
+                                    for line in body_str.lines().take(200) {
+                                        browser_lines.push(make_html_line(line));
+                                    }
+                                }
+                                browser_status = format!("\u{2713} Loaded: {} ({} bytes, HTTPS)", browser_url, response.body.len());
+                            }
+                            Err(e) => {
+                                browser_lines.push(make_simple_line(&format!("\u{2718} HTTPS Error: {}", e), 0xFFFF4444, LineType::PlainText));
+                                browser_status = format!("Error: {}", e);
+                            }
+                        }
+                    } else {
+                        // HTTP fallback
+                        match crate::netstack::http::get(&browser_url) {
+                            Ok(response) => {
+                                if let Some(body_str) = response.body_str() {
+                                    for line in body_str.lines().take(200) {
+                                        browser_lines.push(make_html_line(line));
+                                    }
+                                }
+                                browser_status = format!("\u{2713} Loaded: {} ({} bytes)", browser_url, response.body.len());
+                            }
+                            Err(e) => {
+                                browser_lines.push(make_simple_line(&format!("\u{2718} HTTP Error: {}", e), 0xFFFF4444, LineType::PlainText));
+                                browser_status = format!("Error: {}", e);
+                            }
+                        }
+                    }
+                } else {
+                    browser_lines.push(make_simple_line("\u{2718} Invalid URL", 0xFFFF4444, LineType::PlainText));
+                    browser_status = String::from("Invalid URL");
+                }
+                browser_loading = false;
+            }
+        }
+
+        // Auto-exit for showcase mode
+        if timeout_ms > 0 {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(auto_start_tsc);
+            if elapsed >= auto_target { break; }
+        }
+        
         // Frame start tracking (frame_count incremented at end of loop)
         if frame_count <= 3 || frame_count % 500 == 0 {
             crate::serial_println!("[COSMIC2] Loop iteration {}", frame_count);

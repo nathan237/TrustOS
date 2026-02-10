@@ -1019,6 +1019,7 @@ struct AppConfig {
             y: start_y + icon_spacing,
             action: IconAction::OpenBrowser,
         });
+
     }
     
     /// Check if click is on a desktop icon
@@ -1678,6 +1679,7 @@ struct AppConfig {
             IconAction::OpenBrowser => {
                 self.create_window("TrustBrowser", 120 + offset, 60 + offset, 600, 450, WindowType::Browser);
             },
+
         }
     }
     

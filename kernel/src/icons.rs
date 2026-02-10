@@ -428,3 +428,4 @@ pub fn draw_browser_icon(x: u32, y: u32, color: u32, _bg: u32) {
     framebuffer::fill_rect(x + 2, y + 26, 28, 4, dark);
     framebuffer::fill_rect(x + 4, y + 27, 24, 2, 0xFF202020);
 }
+

@@ -337,9 +337,8 @@ pub fn render_realtime(effect: &str, width: u16, height: u16, fps: u16) {
 
     let sw = crate::framebuffer::width();
     let sh = crate::framebuffer::height();
-    // Use a smaller render size for speed (max 200x150)
-    let rw = (width as u32).min(sw).min(200) as usize;
-    let rh = (height as u32).min(sh).min(150) as usize;
+    let rw = (width as u32).min(sw) as usize;
+    let rh = (height as u32).min(sh) as usize;
     let ox = if sw > rw as u32 { (sw - rw as u32) / 2 } else { 0 } as usize;
     let oy = if sh > rh as u32 { (sh - rh as u32) / 2 } else { 0 } as usize;
 
@@ -432,8 +431,8 @@ pub fn render_realtime(effect: &str, width: u16, height: u16, fps: u16) {
 pub fn render_realtime_timed(effect: &str, width: u16, height: u16, fps: u16, duration_ms: u64) {
     let sw = crate::framebuffer::width();
     let sh = crate::framebuffer::height();
-    let rw = (width as u32).min(sw).min(200) as usize;
-    let rh = (height as u32).min(sh).min(150) as usize;
+    let rw = (width as u32).min(sw) as usize;
+    let rh = (height as u32).min(sh) as usize;
     let ox = if sw > rw as u32 { (sw - rw as u32) / 2 } else { 0 } as usize;
     let oy = if sh > rh as u32 { (sh - rh as u32) / 2 } else { 0 } as usize;
 

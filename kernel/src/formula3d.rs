@@ -126,6 +126,8 @@ fn transform_vertex(v: V3, angle_y: f32, angle_x: f32, dz: f32, w: usize, h: usi
 pub struct Mesh {
     pub vertices: alloc::vec::Vec<V3>,
     pub edges: alloc::vec::Vec<(usize, usize)>,
+    /// Optional per-edge color (ARGB). If set, overrides wire_color for each edge.
+    pub edge_colors: Option<alloc::vec::Vec<u32>>,
 }
 
 pub fn mesh_cube() -> Mesh {
@@ -140,7 +142,7 @@ pub fn mesh_cube() -> Mesh {
         (4,5),(5,6),(6,7),(7,4), // back
         (0,4),(1,5),(2,6),(3,7), // sides
     ];
-    Mesh { vertices: v, edges: e }
+    Mesh { vertices: v, edges: e, edge_colors: None }
 }
 
 pub fn mesh_pyramid() -> Mesh {
@@ -153,7 +155,7 @@ pub fn mesh_pyramid() -> Mesh {
         (0,1),(1,2),(2,3),(3,0), // base
         (0,4),(1,4),(2,4),(3,4), // sides to apex
     ];
-    Mesh { vertices: v, edges: e }
+    Mesh { vertices: v, edges: e, edge_colors: None }
 }
 
 pub fn mesh_diamond() -> Mesh {
@@ -168,7 +170,7 @@ pub fn mesh_diamond() -> Mesh {
         (0,1),(0,2),(0,3),(0,4), // top edges
         (5,1),(5,2),(5,3),(5,4), // bottom edges
     ];
-    Mesh { vertices: v, edges: e }
+    Mesh { vertices: v, edges: e, edge_colors: None }
 }
 
 pub fn mesh_torus(major_r: f32, minor_r: f32, major_seg: usize, minor_seg: usize) -> Mesh {
@@ -195,7 +197,7 @@ pub fn mesh_torus(major_r: f32, minor_r: f32, major_seg: usize, minor_seg: usize
             edges.push((idx, next_i));
         }
     }
-    Mesh { vertices: verts, edges }
+    Mesh { vertices: verts, edges, edge_colors: None }
 }
 
 pub fn mesh_icosphere(radius: f32) -> Mesh {
@@ -224,7 +226,7 @@ pub fn mesh_icosphere(radius: f32) -> Mesh {
         (8,9),
         (10,11),
     ];
-    Mesh { vertices: v, edges: e }
+    Mesh { vertices: v, edges: e, edge_colors: None }
 }
 
 pub fn mesh_grid(half: f32, divisions: usize) -> Mesh {
@@ -243,7 +245,7 @@ pub fn mesh_grid(half: f32, divisions: usize) -> Mesh {
             if i + 1 < n { edges.push((idx, idx + n)); }
         }
     }
-    Mesh { vertices: verts, edges }
+    Mesh { vertices: verts, edges, edge_colors: None }
 }
 
 /// Simplified Penger (blocky penguin meme character) — hand-crafted low-poly wireframe
@@ -414,7 +416,7 @@ pub fn mesh_penger() -> Mesh {
     edges.push((crown + 4, head_top + 3)); // back-left area
     edges.push((crown + 6, head_top));     // front-left
 
-    Mesh { vertices: verts, edges }
+    Mesh { vertices: verts, edges, edge_colors: None }
 }
 
 /// 3D block text "TRUSTOS" — wireframe letters with depth extrusion
@@ -490,7 +492,213 @@ pub fn mesh_trustos_text() -> Mesh {
     add_polyline(&mut verts, &mut edges,
         &[(lw, top), (0.0, top), (0.0, mid), (lw, mid), (lw, bot), (0.0, bot)], ox, depth);
 
-    Mesh { vertices: verts, edges }
+    Mesh { vertices: verts, edges, edge_colors: None }
+}
+
+/// Low-poly volumetric humanoid — inspired by paper-craft / mannequin style
+/// Every body part is a proper 3D box with volume. Per-edge colors for
+/// a clean, professional look: cool blue-grey body, warm amber accents.
+pub fn mesh_character() -> Mesh {
+    let mut verts = alloc::vec::Vec::with_capacity(120);
+    let mut edges = alloc::vec::Vec::with_capacity(200);
+    let mut colors = alloc::vec::Vec::with_capacity(200);
+
+    // Color palette (ARGB)
+    let col_body   = 0xFF88BBDD; // soft blue-grey torso
+    let col_head   = 0xFFAADDFF; // lighter blue head
+    let col_limb   = 0xFF7799BB; // darker blue-grey arms/legs
+    let col_accent = 0xFFFFCC44; // warm amber joints/details
+    let col_foot   = 0xFF6688AA; // dark blue-grey feet
+
+    // Helper: add a box (8 verts, 12 edges) and return base index
+    let mut add_box = |verts: &mut alloc::vec::Vec<V3>, edges: &mut alloc::vec::Vec<(usize, usize)>,
+                       colors: &mut alloc::vec::Vec<u32>,
+                       cx: f32, cy: f32, cz: f32, hw: f32, hh: f32, hd: f32, color: u32| -> usize {
+        let b = verts.len();
+        // 8 corners: bottom 4, top 4
+        verts.push(V3 { x: cx - hw, y: cy - hh, z: cz - hd }); // 0 bottom-front-left
+        verts.push(V3 { x: cx + hw, y: cy - hh, z: cz - hd }); // 1 bottom-front-right
+        verts.push(V3 { x: cx + hw, y: cy - hh, z: cz + hd }); // 2 bottom-back-right
+        verts.push(V3 { x: cx - hw, y: cy - hh, z: cz + hd }); // 3 bottom-back-left
+        verts.push(V3 { x: cx - hw, y: cy + hh, z: cz - hd }); // 4 top-front-left
+        verts.push(V3 { x: cx + hw, y: cy + hh, z: cz - hd }); // 5 top-front-right
+        verts.push(V3 { x: cx + hw, y: cy + hh, z: cz + hd }); // 6 top-back-right
+        verts.push(V3 { x: cx - hw, y: cy + hh, z: cz + hd }); // 7 top-back-left
+        // Bottom ring
+        edges.push((b, b+1)); edges.push((b+1, b+2)); edges.push((b+2, b+3)); edges.push((b+3, b));
+        // Top ring
+        edges.push((b+4, b+5)); edges.push((b+5, b+6)); edges.push((b+6, b+7)); edges.push((b+7, b+4));
+        // Verticals
+        edges.push((b, b+4)); edges.push((b+1, b+5)); edges.push((b+2, b+6)); edges.push((b+3, b+7));
+        // 12 edges per box
+        for _ in 0..12 { colors.push(color); }
+        b
+    };
+
+    // ── HEAD — faceted gem shape (wider top, tapered jaw) ──
+    // Bottom jaw ring (4 verts)
+    let head_base = verts.len(); // 0..3
+    let jaw_w = 0.10; let jaw_d = 0.09; let jaw_y = 0.58;
+    verts.push(V3 { x: -jaw_w, y: jaw_y, z: -jaw_d });
+    verts.push(V3 { x:  jaw_w, y: jaw_y, z: -jaw_d });
+    verts.push(V3 { x:  jaw_w, y: jaw_y, z:  jaw_d });
+    verts.push(V3 { x: -jaw_w, y: jaw_y, z:  jaw_d });
+    // Mid face ring — wider (4 verts)
+    let face_base = verts.len(); // 4..7
+    let face_w = 0.14; let face_d = 0.12; let face_y = 0.68;
+    verts.push(V3 { x: -face_w, y: face_y, z: -face_d });
+    verts.push(V3 { x:  face_w, y: face_y, z: -face_d });
+    verts.push(V3 { x:  face_w, y: face_y, z:  face_d });
+    verts.push(V3 { x: -face_w, y: face_y, z:  face_d });
+    // Top crown ring — slightly narrower (4 verts)
+    let crown_base = verts.len(); // 8..11
+    let crown_w = 0.12; let crown_d = 0.10; let crown_y = 0.78;
+    verts.push(V3 { x: -crown_w, y: crown_y, z: -crown_d });
+    verts.push(V3 { x:  crown_w, y: crown_y, z: -crown_d });
+    verts.push(V3 { x:  crown_w, y: crown_y, z:  crown_d });
+    verts.push(V3 { x: -crown_w, y: crown_y, z:  crown_d });
+    // Top point
+    let head_top = verts.len(); // 12
+    verts.push(V3 { x: 0.0, y: 0.84, z: 0.0 });
+    // Head edges — jaw ring
+    edges.push((head_base, head_base+1)); edges.push((head_base+1, head_base+2));
+    edges.push((head_base+2, head_base+3)); edges.push((head_base+3, head_base));
+    for _ in 0..4 { colors.push(col_head); }
+    // Face ring
+    edges.push((face_base, face_base+1)); edges.push((face_base+1, face_base+2));
+    edges.push((face_base+2, face_base+3)); edges.push((face_base+3, face_base));
+    for _ in 0..4 { colors.push(col_head); }
+    // Crown ring
+    edges.push((crown_base, crown_base+1)); edges.push((crown_base+1, crown_base+2));
+    edges.push((crown_base+2, crown_base+3)); edges.push((crown_base+3, crown_base));
+    for _ in 0..4 { colors.push(col_accent); } // amber crown
+    // Jaw → face verticals
+    for i in 0..4 { edges.push((head_base + i, face_base + i)); colors.push(col_head); }
+    // Face → crown verticals
+    for i in 0..4 { edges.push((face_base + i, crown_base + i)); colors.push(col_head); }
+    // Crown → top point
+    for i in 0..4 { edges.push((crown_base + i, head_top)); colors.push(col_accent); }
+
+    // ── NECK — connection edges ──
+    let neck_base = verts.len(); // 13..14
+    verts.push(V3 { x: -0.06, y: 0.52, z: 0.0 }); // left
+    verts.push(V3 { x:  0.06, y: 0.52, z: 0.0 }); // right
+    edges.push((head_base, neck_base)); colors.push(col_accent);
+    edges.push((head_base+1, neck_base+1)); colors.push(col_accent);
+    edges.push((neck_base, neck_base+1)); colors.push(col_accent);
+
+    // ── TORSO — tapered box: wider at shoulders, narrower at waist ──
+    // Shoulder ring
+    let sh = verts.len(); // 15..18
+    let shw = 0.22; let shd = 0.11; let shy = 0.48;
+    verts.push(V3 { x: -shw, y: shy, z: -shd });
+    verts.push(V3 { x:  shw, y: shy, z: -shd });
+    verts.push(V3 { x:  shw, y: shy, z:  shd });
+    verts.push(V3 { x: -shw, y: shy, z:  shd });
+    // Chest ring (mid torso)
+    let ch = verts.len(); // 19..22
+    let chw = 0.20; let chd = 0.10; let chy = 0.30;
+    verts.push(V3 { x: -chw, y: chy, z: -chd });
+    verts.push(V3 { x:  chw, y: chy, z: -chd });
+    verts.push(V3 { x:  chw, y: chy, z:  chd });
+    verts.push(V3 { x: -chw, y: chy, z:  chd });
+    // Waist ring
+    let wa = verts.len(); // 23..26
+    let waw = 0.16; let wad = 0.09; let way = 0.08;
+    verts.push(V3 { x: -waw, y: way, z: -wad });
+    verts.push(V3 { x:  waw, y: way, z: -wad });
+    verts.push(V3 { x:  waw, y: way, z:  wad });
+    verts.push(V3 { x: -waw, y: way, z:  wad });
+    // Hip ring
+    let hp = verts.len(); // 27..30
+    let hpw = 0.17; let hpd = 0.09; let hpy = -0.04;
+    verts.push(V3 { x: -hpw, y: hpy, z: -hpd });
+    verts.push(V3 { x:  hpw, y: hpy, z: -hpd });
+    verts.push(V3 { x:  hpw, y: hpy, z:  hpd });
+    verts.push(V3 { x: -hpw, y: hpy, z:  hpd });
+    // Neck → shoulder
+    edges.push((neck_base, sh)); colors.push(col_body);
+    edges.push((neck_base+1, sh+1)); colors.push(col_body);
+    // Shoulder ring
+    edges.push((sh, sh+1)); edges.push((sh+1, sh+2)); edges.push((sh+2, sh+3)); edges.push((sh+3, sh));
+    for _ in 0..4 { colors.push(col_body); }
+    // Chest ring
+    edges.push((ch, ch+1)); edges.push((ch+1, ch+2)); edges.push((ch+2, ch+3)); edges.push((ch+3, ch));
+    for _ in 0..4 { colors.push(col_body); }
+    // Waist ring
+    edges.push((wa, wa+1)); edges.push((wa+1, wa+2)); edges.push((wa+2, wa+3)); edges.push((wa+3, wa));
+    for _ in 0..4 { colors.push(col_accent); } // amber belt
+    // Hip ring
+    edges.push((hp, hp+1)); edges.push((hp+1, hp+2)); edges.push((hp+2, hp+3)); edges.push((hp+3, hp));
+    for _ in 0..4 { colors.push(col_body); }
+    // Vertical connections
+    for i in 0..4 { edges.push((sh + i, ch + i)); colors.push(col_body); }
+    for i in 0..4 { edges.push((ch + i, wa + i)); colors.push(col_body); }
+    for i in 0..4 { edges.push((wa + i, hp + i)); colors.push(col_body); }
+
+    // ── LEFT ARM — upper arm box + forearm box ──
+    let lua = add_box(&mut verts, &mut edges, &mut colors,
+        -0.30, 0.38, 0.0,   0.06, 0.10, 0.06,  col_limb); // upper arm
+    let lfa = add_box(&mut verts, &mut edges, &mut colors,
+        -0.32, 0.16, 0.0,   0.05, 0.10, 0.05,  col_limb); // forearm
+    // Connect shoulder to upper arm (amber joint)
+    edges.push((sh, lua + 4)); colors.push(col_accent); // top-front-left of box
+    edges.push((sh, lua + 7)); colors.push(col_accent);
+    // Connect upper arm bottom to forearm top
+    edges.push((lua, lfa + 4)); colors.push(col_accent);
+    edges.push((lua + 3, lfa + 7)); colors.push(col_accent);
+    // Left hand — small box
+    let lhand = add_box(&mut verts, &mut edges, &mut colors,
+        -0.33, 0.02, 0.0,   0.04, 0.04, 0.04,  col_accent);
+    edges.push((lfa, lhand + 4)); colors.push(col_limb);
+    edges.push((lfa + 1, lhand + 5)); colors.push(col_limb);
+
+    // ── RIGHT ARM — upper arm box + forearm box ──
+    let rua = add_box(&mut verts, &mut edges, &mut colors,
+        0.30, 0.38, 0.0,   0.06, 0.10, 0.06,  col_limb);
+    let rfa = add_box(&mut verts, &mut edges, &mut colors,
+        0.32, 0.16, 0.0,   0.05, 0.10, 0.05,  col_limb);
+    edges.push((sh + 1, rua + 5)); colors.push(col_accent);
+    edges.push((sh + 1, rua + 6)); colors.push(col_accent);
+    edges.push((rua + 1, rfa + 5)); colors.push(col_accent);
+    edges.push((rua + 2, rfa + 6)); colors.push(col_accent);
+    let rhand = add_box(&mut verts, &mut edges, &mut colors,
+        0.33, 0.02, 0.0,   0.04, 0.04, 0.04,  col_accent);
+    edges.push((rfa, rhand + 4)); colors.push(col_limb);
+    edges.push((rfa + 1, rhand + 5)); colors.push(col_limb);
+
+    // ── LEFT LEG — thigh box + shin box ──
+    let lth = add_box(&mut verts, &mut edges, &mut colors,
+        -0.09, -0.18, 0.0,   0.06, 0.12, 0.06,  col_limb);
+    let lsh = add_box(&mut verts, &mut edges, &mut colors,
+        -0.09, -0.40, 0.0,   0.05, 0.10, 0.05,  col_limb);
+    // Hip → thigh
+    edges.push((hp, lth + 4)); colors.push(col_accent);
+    edges.push((hp + 3, lth + 7)); colors.push(col_accent);
+    // Thigh → shin (knee joint)
+    edges.push((lth, lsh + 4)); colors.push(col_accent);
+    edges.push((lth + 3, lsh + 7)); colors.push(col_accent);
+    // Left foot — flat wide box
+    let lft = add_box(&mut verts, &mut edges, &mut colors,
+        -0.09, -0.53, -0.02,   0.06, 0.03, 0.08,  col_foot);
+    edges.push((lsh, lft + 4)); colors.push(col_limb);
+    edges.push((lsh + 1, lft + 5)); colors.push(col_limb);
+
+    // ── RIGHT LEG — thigh box + shin box ──
+    let rth = add_box(&mut verts, &mut edges, &mut colors,
+        0.09, -0.18, 0.0,   0.06, 0.12, 0.06,  col_limb);
+    let rsh = add_box(&mut verts, &mut edges, &mut colors,
+        0.09, -0.40, 0.0,   0.05, 0.10, 0.05,  col_limb);
+    edges.push((hp + 1, rth + 5)); colors.push(col_accent);
+    edges.push((hp + 2, rth + 6)); colors.push(col_accent);
+    edges.push((rth + 1, rsh + 5)); colors.push(col_accent);
+    edges.push((rth + 2, rsh + 6)); colors.push(col_accent);
+    let rft = add_box(&mut verts, &mut edges, &mut colors,
+        0.09, -0.53, -0.02,   0.06, 0.03, 0.08,  col_foot);
+    edges.push((rsh, rft + 4)); colors.push(col_limb);
+    edges.push((rsh + 1, rft + 5)); colors.push(col_limb);
+
+    Mesh { vertices: verts, edges, edge_colors: Some(colors) }
 }
 
 pub fn mesh_helix(radius: f32, height: f32, turns: f32, seg: usize) -> Mesh {
@@ -516,7 +724,7 @@ pub fn mesh_helix(radius: f32, height: f32, turns: f32, seg: usize) -> Mesh {
     for i in (0..seg).step_by(seg / 8) {
         edges.push((i, i + half));
     }
-    Mesh { vertices: verts, edges }
+    Mesh { vertices: verts, edges, edge_colors: None }
 }
 
 // ─── Drawing ─────────────────────────────────────────────────────────────
@@ -612,6 +820,7 @@ pub enum FormulaScene {
     Penger,
     TrustOs,
     HoloMatrix,
+    Character,
 }
 
 // ─── Main renderer ───────────────────────────────────────────────────────
@@ -638,6 +847,7 @@ pub struct FormulaRenderer {
     mesh_helix: Option<Mesh>,
     mesh_penger: Option<Mesh>,
     mesh_trustos: Option<Mesh>,
+    mesh_character: Option<Mesh>,
 }
 
 impl FormulaRenderer {
@@ -662,6 +872,7 @@ impl FormulaRenderer {
             mesh_helix: None,
             mesh_penger: None,
             mesh_trustos: None,
+            mesh_character: None,
         }
     }
 
@@ -682,6 +893,7 @@ impl FormulaRenderer {
             FormulaScene::Helix => { if self.mesh_helix.is_none() { self.mesh_helix = Some(mesh_helix(0.4, 1.2, 3.0, 60)); } }
             FormulaScene::Penger => { if self.mesh_penger.is_none() { self.mesh_penger = Some(mesh_penger()); } }
             FormulaScene::TrustOs => { if self.mesh_trustos.is_none() { self.mesh_trustos = Some(mesh_trustos_text()); } }
+            FormulaScene::Character => { if self.mesh_character.is_none() { self.mesh_character = Some(mesh_character()); } }
             FormulaScene::HoloMatrix => { /* no mesh — procedural */ }
             FormulaScene::Multi => {
                 if self.mesh_cube.is_none() { self.mesh_cube = Some(mesh_cube()); }
@@ -703,6 +915,7 @@ impl FormulaRenderer {
             FormulaScene::Helix => self.mesh_helix.as_ref(),
             FormulaScene::Penger => self.mesh_penger.as_ref(),
             FormulaScene::TrustOs => self.mesh_trustos.as_ref(),
+            FormulaScene::Character => self.mesh_character.as_ref(),
             FormulaScene::HoloMatrix => None, // procedural
             FormulaScene::Multi => None, // Multi renders multiple meshes
         }
@@ -716,6 +929,12 @@ impl FormulaRenderer {
                 self.angle_y += 0.012;
                 self.angle_x = 0.15 + fast_sin(self.frame as f32 * 0.006) * 0.1;
                 self.dz = 3.2 + fast_sin(self.frame as f32 * 0.005) * 0.2;
+            }
+            FormulaScene::Character => {
+                // Slow elegant rotation with gentle vertical bob
+                self.angle_y += 0.018;
+                self.angle_x = 0.20 + fast_sin(self.frame as f32 * 0.007) * 0.12;
+                self.dz = 2.2 + fast_sin(self.frame as f32 * 0.004) * 0.15;
             }
             FormulaScene::HoloMatrix => {
                 // NO rotation — camera fixed, staring straight into the infinite tunnel
@@ -758,8 +977,13 @@ impl FormulaRenderer {
             return;
         }
 
-        // Render rain background
-        self.render_rain(buf, w, h);
+        if self.scene == FormulaScene::Character {
+            // Special background: dark gradient + subtle ground grid
+            self.render_character_bg(buf, w, h);
+        } else {
+            // Render rain background
+            self.render_rain(buf, w, h);
+        }
         
         // Render wireframe(s)
         if self.scene == FormulaScene::Multi {
@@ -770,19 +994,24 @@ impl FormulaRenderer {
         }
 
         // Hologram scanline effect
-        if self.scene == FormulaScene::TrustOs {
+        if self.scene == FormulaScene::TrustOs || self.scene == FormulaScene::Character {
             self.render_scanlines(buf, w, h);
         }
     }
 
     fn render_wireframe(&self, buf: &mut [u32], w: usize, h: usize, mesh: &Mesh,
                         ay: f32, ax: f32, dz: f32, color: u32) {
-        for &(a, b) in &mesh.edges {
+        for (idx, &(a, b)) in mesh.edges.iter().enumerate() {
             if a >= mesh.vertices.len() || b >= mesh.vertices.len() { continue; }
             let (x0, y0, z0) = transform_vertex(mesh.vertices[a], ay, ax, dz, w, h);
             let (x1, y1, z1) = transform_vertex(mesh.vertices[b], ay, ax, dz, w, h);
             let avg_z = (z0 + z1) * 0.5;
-            let c = depth_color(avg_z, color);
+            // Use per-edge color if available, otherwise fallback to wire_color
+            let base_color = match &mesh.edge_colors {
+                Some(ec) if idx < ec.len() => ec[idx],
+                _ => color,
+            };
+            let c = depth_color(avg_z, base_color);
             draw_line_thick(buf, w, h, x0, y0, x1, y1, c);
         }
     }
@@ -1159,6 +1388,61 @@ impl FormulaRenderer {
             }
         }
 
+    }
+
+    /// Character scene background: dark blue gradient + radial vignette + subtle floor grid
+    fn render_character_bg(&self, buf: &mut [u32], w: usize, h: usize) {
+        let cx = w as f32 * 0.5;
+        let cy = h as f32 * 0.5;
+        let max_dist = fast_sqrt(cx * cx + cy * cy);
+
+        for y in 0..h {
+            for x in 0..w {
+                let idx = y * w + x;
+                if idx >= buf.len() { break; }
+                // Vertical gradient: dark navy at top → slightly lighter at bottom
+                let t = y as f32 / h as f32;
+                let base_r = (8.0 + t * 12.0) as u32;
+                let base_g = (12.0 + t * 20.0) as u32;
+                let base_b = (30.0 + t * 35.0) as u32;
+                // Radial vignette: darken edges
+                let dx = x as f32 - cx;
+                let dy = y as f32 - cy;
+                let dist = fast_sqrt(dx * dx + dy * dy) / max_dist;
+                let vig = 1.0 - dist * dist * 0.6;
+                let r = ((base_r as f32 * vig) as u32).min(255);
+                let g = ((base_g as f32 * vig) as u32).min(255);
+                let b = ((base_b as f32 * vig) as u32).min(255);
+                buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+        }
+
+        // Subtle floor grid (lower half) — perspective converging lines
+        let horizon = h * 45 / 100; // 45% from top
+        let grid_color: u32 = 0x18;
+        let num_horiz = 10;
+        for i in 0..num_horiz {
+            let t = i as f32 / num_horiz as f32;
+            let screen_y = horizon + ((1.0 - t) * (1.0 - t) * (h - horizon) as f32) as usize;
+            if screen_y >= h { continue; }
+            let fade = (1.0 - t) * (1.0 - t);
+            let g = (grid_color as f32 * fade * 1.5) as u32;
+            if g < 2 { continue; }
+            let line_color = 0xFF000000 | (g.min(60) / 3 << 16) | (g.min(60) / 2 << 8) | g.min(60);
+            let row_off = screen_y * w;
+            let mut px = 0;
+            while px < w {
+                let idx = row_off + px;
+                if idx < buf.len() {
+                    let dst = buf[idx];
+                    let rr = ((dst >> 16) & 0xFF) + ((line_color >> 16) & 0xFF);
+                    let gg = ((dst >> 8) & 0xFF) + ((line_color >> 8) & 0xFF);
+                    let bb = (dst & 0xFF) + (line_color & 0xFF);
+                    buf[idx] = 0xFF000000 | (rr.min(255) << 16) | (gg.min(255) << 8) | bb.min(255);
+                }
+                px += 2;
+            }
+        }
     }
 
     /// Hologram scanline effect — Star Wars-style horizontal sweep + CRT scanlines
