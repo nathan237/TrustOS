@@ -7,9 +7,9 @@ Memory map entries: 34
   0x0000000000 - 0x0000001000 (        4096 bytes) USABLE
   0x0000001000 - 0x0000002000 (        4096 bytes) BOOTLOADER
   0x0000002000 - 0x00000a0000 (      647168 bytes) USABLE
-  0x0000100000 - 0x0018d0e000 (   415293440 bytes) USABLE
-  0x0018d0e000 - 0x0018fce000 (     2883584 bytes) KERNEL
-  0x0018fce000 - 0x00192ec000 (     3268608 bytes) BOOTLOADER
+  0x0000100000 - 0x0018d0c000 (   415285248 bytes) USABLE
+  0x0018d0c000 - 0x0018fcd000 (     2887680 bytes) KERNEL
+  0x0018fcd000 - 0x00192ec000 (     3272704 bytes) BOOTLOADER
   0x00192ec000 - 0x001bc10000 (    43139072 bytes) USABLE
   0x001bc10000 - 0x001bc54000 (      278528 bytes) BOOTLOADER
   0x001bc54000 - 0x001d33b000 (    24014848 bytes) USABLE
@@ -45,9 +45,9 @@ Memory map entries: 34
 [HEAP] Initialized: free=134008 KB
 [FB] Initializing scrollback buffer...
 [FB] Scrollback buffer initialized (1000 lines max)
-[INTEGRITY] .text   : 2305701 bytes, SHA-256: 0717ed4542ef8b2d...d9250afa
-[INTEGRITY] .rodata : 316488 bytes, SHA-256: 2993ac936a270e51...04cdde65
-[INTEGRITY] kernel digest: 24c70013d01a7dc2...f62799c1
+[INTEGRITY] .text   : 2309973 bytes, SHA-256: 7bfceff08510a994...faf837ce
+[INTEGRITY] .rodata : 316696 bytes, SHA-256: 150f2e2714d5df1f...5bb3e981
+[INTEGRITY] kernel digest: 843d391fcea675ee...3d5a38ff
 ╔══════════════════════════════════════════════════════════════╗
 ║                      T R U S T - O S                         ║
 ║                 FAST • SECURE • RELIABLE                     ║
@@ -64,13 +64,13 @@ Initializing early interrupts...
 Detecting CPU capabilities...
 [CPU] AMD Ryzen 7 5800X 8-Core Processor
 [CPU] Vendor: Amd, Family: 25, Model: 33
-[CPU] TSC: true (invariant: true, freq: 33 MHz)
+[CPU] TSC: true (invariant: true, freq: 39 MHz)
 [CPU] SIMD: SSE=true SSE2=true SSE4.2=true AVX=true AVX2=true
 [CPU] Crypto: AES-NI=true PCLMULQDQ=true SHA=true RDRAND=true
 [CPU] Security: SMEP=false SMAP=false NX=true
 [CPU] Virt: VMX=false SVM=false
 [SIMD] SSE/SSE2 enabled
-[TSC] Initialized: 33018200 Hz (0 GHz)
+[TSC] Initialized: 39138480 Hz (0 GHz)
 [OK] CPU capabilities detected
 Parsing ACPI tables...
 [DEBUG] RSDP pointer from Limine: 0x1e97e014
@@ -108,7 +108,7 @@ Initializing paging subsystem...
 [OK] Paging initialized (NX enabled)
 [PAT] Skipping Write-Combining on VirtualBox (VMSVGA compat)
 Initializing userland support...
-[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff802bf578
+[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff802a5bc4
 [         0][CPU0][INFO ] [USERLAND] SYSCALL/SYSRET configured (STAR, LSTAR, SFMASK)
 [OK] Userland support ready
 Initializing thread subsystem...
@@ -119,7 +119,7 @@ Initializing security subsystem...
 Keyboard driver ready
 [OK] Keyboard ready
 [RTC] init start
-[RTC] Initialized: 2026-02-10 15:56:01
+[RTC] Initialized: 2026-02-10 16:12:12
 [OK] RTC initialized
 [RTC] init done
 [KB-IRQ] scancode=0x47
@@ -196,8 +196,8 @@ Keyboard driver ready
 [         0][CPU0][DEBUG] [E1000] Initializing RX ring (32 descriptors)
 [         0][CPU0][DEBUG] [E1000] Initializing TX ring (8 descriptors)
 [         0][CPU0][WARN ] [E1000] Link not detected - continuing anyway (VirtualBox NAT mode)
-[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:C5:5F:7C
-[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:C5:5F:7C
+[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:44:49:5D
+[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:44:49:5D
 [OK] Network driver: e1000
 [OK] Network ready
 [         0][CPU0][INFO ] [DHCP] Client started
@@ -287,8 +287,8 @@ Starting shell...
 
   T-RustOs v0.1.0 - Type 'help' for commands
 
-[15:56:02] trustos:/$ █ [KB-READ] popped 244 (0xF4)
-  █   █ [KB-IRQ] scancode=0x20
+[16:12:13] trustos:/$ █ [KB-READ] popped 244 (0xF4)
+  █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   [KB-IRQ] scancode=0x20
 [KB-BUF] push ascii=100 (0x64) char='d'
 [KB-READ] popped 100 (0x64)
   d   dir   del   date   df   deluser   desktop   distro   disk█ [KB-IRQ] scancode=0x12
@@ -311,11 +311,11 @@ Starting shell...
 [KB-IRQ] scancode=0x18
 [KB-BUF] push ascii=111 (0x6F) char='o'
 [KB-READ] popped 111 (0x6F)
-                                          o   desktop█ [KB-IRQ] scancode=0x98
-[KB-IRQ] scancode=0x19
+                                          o   desktop█ [KB-IRQ] scancode=0x19
 [KB-BUF] push ascii=112 (0x70) char='p'
 [KB-READ] popped 112 (0x70)
-                                          p█ [KB-IRQ] scancode=0x99
+                                          p█ [KB-IRQ] scancode=0x98
+[KB-IRQ] scancode=0x99
 [KB-IRQ] scancode=0x1C
 [KB-BUF] push ascii=10 (0x0A) char='
 '
@@ -335,322 +335,10 @@ Starting shell...
 [TrustCode] Demo editor opened
 [Desktop] init complete
 [Desktop] Entering desktop run loop
-[GUI] Frame timing init: TSC 33 MHz
+[GUI] Frame timing init: TSC 39 MHz
 [GUI] Starting desktop environment...
 [GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start
 [GUI] Target: 60 FPS with HLT-based frame limiting
-[KB-IRQ] scancode=0x23
-[KB-BUF] push ascii=104 (0x68) char='h'
-[KB-READ] popped 104 (0x68)
-[KB-IRQ] scancode=0xA3
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-[KB-IRQ] scancode=0x13
-[KB-BUF] push ascii=114 (0x72) char='r'
-[KB-READ] popped 114 (0x72)
-[KB-IRQ] scancode=0x93
-[KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x0E
-[KB-BUF] push ascii=8 (0x08) char=' '
-[KB-READ] popped 8 (0x08)
-[KB-IRQ] scancode=0x8E
-[KB-IRQ] scancode=0x26
-[KB-BUF] push ascii=108 (0x6C) char='l'
-[KB-READ] popped 108 (0x6C)
-[KB-IRQ] scancode=0xA6
-[KB-IRQ] scancode=0x19
-[KB-BUF] push ascii=112 (0x70) char='p'
-[KB-READ] popped 112 (0x70)
-[KB-IRQ] scancode=0x99
-[KB-IRQ] scancode=0x1C
-[KB-BUF] push ascii=10 (0x0A) char='
-'
-[KB-READ] popped 10 (0x0A)
-[TERM] Executing command: 'help' len=4
-[KB-IRQ] scancode=0x9C
-[KB-IRQ] scancode=0x1F
-[KB-BUF] push ascii=115 (0x73) char='s'
-[KB-READ] popped 115 (0x73)
-[KB-IRQ] scancode=0x9F
-[KB-IRQ] scancode=0x23
-[KB-BUF] push ascii=104 (0x68) char='h'
-[KB-READ] popped 104 (0x68)
-[KB-IRQ] scancode=0xA3
-[KB-IRQ] scancode=0x1E
-[KB-BUF] push ascii=97 (0x61) char='a'
-[KB-READ] popped 97 (0x61)
-[KB-IRQ] scancode=0x9E
-[KB-IRQ] scancode=0x20
-[KB-BUF] push ascii=100 (0x64) char='d'
-[KB-READ] popped 100 (0x64)
-[KB-IRQ] scancode=0xA0
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-[KB-IRQ] scancode=0x13
-[KB-BUF] push ascii=114 (0x72) char='r'
-[KB-READ] popped 114 (0x72)
-[KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x93
-[KB-IRQ] scancode=0x1C
-[KB-BUF] push ascii=10 (0x0A) char='
-'
-[KB-READ] popped 10 (0x0A)
-[TERM] Executing command: 'shader' len=6
-[KB-IRQ] scancode=0x9C
-[KB-IRQ] scancode=0x1F
-[KB-BUF] push ascii=115 (0x73) char='s'
-[KB-READ] popped 115 (0x73)
-[KB-IRQ] scancode=0x9F
-[KB-IRQ] scancode=0x23
-[KB-BUF] push ascii=104 (0x68) char='h'
-[KB-READ] popped 104 (0x68)
-[KB-IRQ] scancode=0x1E
-[KB-BUF] push ascii=97 (0x61) char='a'
-[KB-READ] popped 97 (0x61)
-[KB-IRQ] scancode=0xA3
-[KB-IRQ] scancode=0x9E
-[KB-IRQ] scancode=0x20
-[KB-BUF] push ascii=100 (0x64) char='d'
-[KB-READ] popped 100 (0x64)
-[KB-IRQ] scancode=0xA0
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-[KB-IRQ] scancode=0x13
-[KB-BUF] push ascii=114 (0x72) char='r'
-[KB-READ] popped 114 (0x72)
-[KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x93
-[KB-IRQ] scancode=0x39
-[KB-BUF] push ascii=32 (0x20) char=' '
-[KB-READ] popped 32 (0x20)
-[KB-IRQ] scancode=0xB9
-[KB-IRQ] scancode=0x14
-[KB-BUF] push ascii=116 (0x74) char='t'
-[KB-READ] popped 116 (0x74)
-[KB-IRQ] scancode=0x94
-[KB-IRQ] scancode=0x16
-[KB-BUF] push ascii=117 (0x75) char='u'
-[KB-READ] popped 117 (0x75)
-[KB-IRQ] scancode=0x96
-[KB-IRQ] scancode=0x31
-[KB-BUF] push ascii=110 (0x6E) char='n'
-[KB-READ] popped 110 (0x6E)
-[KB-IRQ] scancode=0xB1
-[KB-IRQ] scancode=0x31
-[KB-BUF] push ascii=110 (0x6E) char='n'
-[KB-READ] popped 110 (0x6E)
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-[KB-IRQ] scancode=0xB1
-[KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x26
-[KB-BUF] push ascii=108 (0x6C) char='l'
-[KB-READ] popped 108 (0x6C)
-[KB-IRQ] scancode=0xA6
-[KB-IRQ] scancode=0x1C
-[KB-BUF] push ascii=10 (0x0A) char='
-'
-[KB-READ] popped 10 (0x0A)
-[TERM] Executing command: 'shader tunnel' len=13
-[VGPU] Initialized 1920x1080 virtual GPU (32 virtual cores)
-[KB-IRQ] scancode=0x9C
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-IRQ] scancode=0x81
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[KB-READ] popped 27 (0x1B)
-[KB-IRQ] scancode=0x1F
-[KB-BUF] push ascii=115 (0x73) char='s'
-[KB-READ] popped 115 (0x73)
-[KB-IRQ] scancode=0x9F
-[KB-IRQ] scancode=0x23
-[KB-BUF] push ascii=104 (0x68) char='h'
-[KB-READ] popped 104 (0x68)
-[KB-IRQ] scancode=0xA3
-[KB-IRQ] scancode=0x1E
-[KB-BUF] push ascii=97 (0x61) char='a'
-[KB-READ] popped 97 (0x61)
-[KB-IRQ] scancode=0x9E
-[KB-IRQ] scancode=0x20
-[KB-BUF] push ascii=100 (0x64) char='d'
-[KB-READ] popped 100 (0x64)
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-[KB-IRQ] scancode=0xA0
-[KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x13
-[KB-BUF] push ascii=114 (0x72) char='r'
-[KB-READ] popped 114 (0x72)
-[KB-IRQ] scancode=0x93
-[KB-IRQ] scancode=0x39
-[KB-BUF] push ascii=32 (0x20) char=' '
-[KB-READ] popped 32 (0x20)
-[KB-IRQ] scancode=0xB9
-[KB-IRQ] scancode=0x32
-[KB-BUF] push ascii=109 (0x6D) char='m'
-[KB-READ] popped 109 (0x6D)
-[KB-IRQ] scancode=0xB2
-[KB-IRQ] scancode=0x1E
-[KB-BUF] push ascii=97 (0x61) char='a'
-[KB-READ] popped 97 (0x61)
-[KB-IRQ] scancode=0x9E
-[KB-IRQ] scancode=0x31
-[KB-BUF] push ascii=110 (0x6E) char='n'
-[KB-READ] popped 110 (0x6E)
-[KB-IRQ] scancode=0xB1
-[KB-IRQ] scancode=0x20
-[KB-BUF] push ascii=100 (0x64) char='d'
-[KB-READ] popped 100 (0x64)
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-[KB-IRQ] scancode=0xA0
-[KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x26
-[KB-BUF] push ascii=108 (0x6C) char='l'
-[KB-READ] popped 108 (0x6C)
-[KB-IRQ] scancode=0xA6
-[KB-IRQ] scancode=0x30
-[KB-BUF] push ascii=98 (0x62) char='b'
-[KB-READ] popped 98 (0x62)
-[KB-IRQ] scancode=0xB0
-[KB-IRQ] scancode=0x13
-[KB-BUF] push ascii=114 (0x72) char='r'
-[KB-READ] popped 114 (0x72)
-[KB-IRQ] scancode=0x93
-[KB-IRQ] scancode=0x18
-[KB-BUF] push ascii=111 (0x6F) char='o'
-[KB-READ] popped 111 (0x6F)
-[KB-IRQ] scancode=0x98
-[KB-IRQ] scancode=0x14
-[KB-BUF] push ascii=116 (0x74) char='t'
-[KB-READ] popped 116 (0x74)
-[KB-IRQ] scancode=0x94
-[KB-IRQ] scancode=0x1C
-[KB-BUF] push ascii=10 (0x0A) char='
-'
-[KB-READ] popped 10 (0x0A)
-[TERM] Executing command: 'shader mandelbrot' len=17
-[VGPU] Initialized 1920x1080 virtual GPU (32 virtual cores)
-[KB-IRQ] scancode=0x9C
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[KB-READ] popped 27 (0x1B)
-[KB-IRQ] scancode=0x81
-[KB-IRQ] scancode=0x1F
-[KB-BUF] push ascii=115 (0x73) char='s'
-[KB-READ] popped 115 (0x73)
-[KB-IRQ] scancode=0x9F
-[KB-IRQ] scancode=0x23
-[KB-BUF] push ascii=104 (0x68) char='h'
-[KB-READ] popped 104 (0x68)
-[KB-IRQ] scancode=0xA3
-[KB-IRQ] scancode=0x1E
-[KB-BUF] push ascii=97 (0x61) char='a'
-[KB-READ] popped 97 (0x61)
-[KB-IRQ] scancode=0x9E
-[KB-IRQ] scancode=0x20
-[KB-BUF] push ascii=100 (0x64) char='d'
-[KB-READ] popped 100 (0x64)
-[KB-IRQ] scancode=0xA0
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-[KB-IRQ] scancode=0x13
-[KB-BUF] push ascii=114 (0x72) char='r'
-[KB-READ] popped 114 (0x72)
-[KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x93
-[KB-IRQ] scancode=0x0E
-[KB-BUF] push ascii=8 (0x08) char=' '
-[KB-READ] popped 8 (0x08)
-[KB-IRQ] scancode=0x8E
-[KB-IRQ] scancode=0x0E
-[KB-BUF] push ascii=8 (0x08) char=' '
-[KB-READ] popped 8 (0x08)
-[KB-IRQ] scancode=0x8E
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-[KB-IRQ] scancode=0x13
-[KB-BUF] push ascii=114 (0x72) char='r'
-[KB-READ] popped 114 (0x72)
-[KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x93
-[KB-IRQ] scancode=0x39
-[KB-BUF] push ascii=32 (0x20) char=' '
-[KB-READ] popped 32 (0x20)
-[KB-IRQ] scancode=0xB9
-[KB-IRQ] scancode=0x19
-[KB-BUF] push ascii=112 (0x70) char='p'
-[KB-READ] popped 112 (0x70)
-[KB-IRQ] scancode=0x99
-[KB-IRQ] scancode=0x1E
-[KB-BUF] push ascii=97 (0x61) char='a'
-[KB-READ] popped 97 (0x61)
-[KB-IRQ] scancode=0x9E
-[KB-IRQ] scancode=0x13
-[KB-BUF] push ascii=114 (0x72) char='r'
-[KB-READ] popped 114 (0x72)
-[KB-IRQ] scancode=0x1E
-[KB-BUF] push ascii=97 (0x61) char='a'
-[KB-READ] popped 97 (0x61)
-[KB-IRQ] scancode=0x93
-[KB-IRQ] scancode=0x9E
-[KB-IRQ] scancode=0x26
-[KB-BUF] push ascii=108 (0x6C) char='l'
-[KB-READ] popped 108 (0x6C)
-[KB-IRQ] scancode=0xA6
-[KB-IRQ] scancode=0x26
-[KB-BUF] push ascii=108 (0x6C) char='l'
-[KB-READ] popped 108 (0x6C)
-[KB-IRQ] scancode=0x1E
-[KB-BUF] push ascii=97 (0x61) char='a'
-[KB-READ] popped 97 (0x61)
-[KB-IRQ] scancode=0xA6
-[KB-IRQ] scancode=0x9E
-[KB-IRQ] scancode=0x2D
-[KB-BUF] push ascii=120 (0x78) char='x'
-[KB-READ] popped 120 (0x78)
-[KB-IRQ] scancode=0xAD
-[KB-IRQ] scancode=0x1C
-[KB-BUF] push ascii=10 (0x0A) char='
-'
-[KB-READ] popped 10 (0x0A)
-[TERM] Executing command: 'shader parallax' len=15
-[VGPU] Initialized 1920x1080 virtual GPU (32 virtual cores)
-[KB-IRQ] scancode=0x9C
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-IRQ] scancode=0x81
-[SMP] WARNING: Timeout waiting for APs, completed 1/2
-[KB-READ] popped 27 (0x1B)
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-READ] popped 27 (0x1B)
-[KB-IRQ] scancode=0x81
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-READ] popped 27 (0x1B)
-[KB-IRQ] scancode=0x81
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-READ] popped 27 (0x1B)
-[KB-IRQ] scancode=0x81
 [KB-IRQ] scancode=0x01
 [KB-BUF] push ascii=27 (0x1B) char=''
 [KB-READ] popped 27 (0x1B)

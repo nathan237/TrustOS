@@ -1803,13 +1803,10 @@ struct AppConfig {
                 }
             }
             
-            // Check desktop icons - handle double-click
+            // Check desktop icons - single click to open
             if let Some(idx) = self.check_icon_index(x, y) {
-                if crate::mouse::is_double_click() {
-                    crate::mouse::reset_click_count();
-                    let action = self.icons[idx].action;
-                    self.handle_icon_action(action);
-                }
+                let action = self.icons[idx].action;
+                self.handle_icon_action(action);
                 return;
             }
             
@@ -2005,12 +2002,22 @@ struct AppConfig {
         }
     }
     
-    /// Get icon index at position (for context menu)
+    /// Get icon index at position — uses same dynamic layout as draw_desktop_icons
     fn check_icon_index(&self, x: i32, y: i32) -> Option<usize> {
-        for (idx, icon) in self.icons.iter().enumerate() {
-            let icon_x = icon.x as i32;
-            let icon_y = icon.y as i32;
-            if x >= icon_x && x < icon_x + 64 && y >= icon_y && y < icon_y + 72 {
+        // Must be within dock strip
+        if x < 0 || x >= (DOCK_WIDTH + 10) as i32 {
+            return None;
+        }
+        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let n_icons = self.icons.len().max(1) as u32;
+        let padding = 12u32;
+        let available = dock_h.saturating_sub(padding * 2);
+        let icon_total = available / n_icons;
+        let start_y = padding + (available - icon_total * n_icons) / 2;
+        
+        for (idx, _icon) in self.icons.iter().enumerate() {
+            let iy = (start_y + idx as u32 * icon_total) as i32;
+            if y >= iy && y < iy + icon_total as i32 {
                 return Some(idx);
             }
         }
