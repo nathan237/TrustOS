@@ -5282,6 +5282,9 @@ fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms: u64) {
                                 shell_output.push(String::from("║ shader matrix    - Matrix rain        ║"));
                                 shell_output.push(String::from("║ shader tunnel    - 3D HOLOMATRIX      ║"));
                                 shell_output.push(String::from("║ shader parallax  - Depth layers       ║"));
+                                shell_output.push(String::from("║ shader shapes    - Ray-marched 3D     ║"));
+                                shell_output.push(String::from("║ shader rain3d    - Matrix fly-through ║"));
+                                shell_output.push(String::from("║ shader cosmic    - Fractal vortex     ║"));
                                 shell_output.push(String::from("║ shader gradient  - Test gradient      ║"));
                                 shell_output.push(String::from("╚═══════════════════════════════════════╝"));
                                 shell_output.push(String::from("Press ESC to exit shader demo"));
@@ -5294,13 +5297,27 @@ fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms: u64) {
                                     shell_output.push(format!("✓ Loading shader: {}", shader_name));
                                     shell_output.push(String::from("Press ESC to exit..."));
                                     
-                                    // Get framebuffer info
-                                    let fb = crate::framebuffer::get_framebuffer();
                                     let width = crate::framebuffer::width();
                                     let height = crate::framebuffer::height();
                                     
-                                    // Init virtual GPU
-                                    crate::gpu_emu::init(fb, width, height);
+                                    // Use double-buffered rendering for correct display + performance
+                                    let was_db = crate::framebuffer::is_double_buffer_enabled();
+                                    if !was_db {
+                                        crate::framebuffer::init_double_buffer();
+                                        crate::framebuffer::set_double_buffer_mode(true);
+                                    }
+                                    
+                                    // Get backbuffer pointer (stride = width in pixels, no pitch mismatch)
+                                    let bb_info = crate::framebuffer::get_backbuffer_info();
+                                    let (fb_ptr, bb_stride) = if let Some((ptr, _w, _h, stride)) = bb_info {
+                                        (ptr as *mut u32, stride)
+                                    } else {
+                                        // Fallback to direct MMIO (will have stride issues on some hw)
+                                        (crate::framebuffer::get_framebuffer(), width)
+                                    };
+                                    
+                                    // Init virtual GPU with backbuffer
+                                    crate::gpu_emu::init_stride(fb_ptr, width, height, bb_stride);
                                     crate::gpu_emu::set_shader(shader_fn);
                                     
                                     // Run shader demo loop
@@ -5313,11 +5330,14 @@ fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms: u64) {
                                             if key == 27 { break; }
                                         }
                                         
-                                        // Draw shader
+                                        // Draw shader to backbuffer
                                         #[cfg(target_arch = "x86_64")]
                                         crate::gpu_emu::draw_simd();
                                         #[cfg(not(target_arch = "x86_64"))]
                                         crate::gpu_emu::draw();
+                                        
+                                        // Swap backbuffer → MMIO (SSE2 optimized)
+                                        crate::framebuffer::swap_buffers();
                                         
                                         // Update time (~16ms per frame target)
                                         crate::gpu_emu::tick(16);
@@ -5328,15 +5348,20 @@ fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms: u64) {
                                             let elapsed = crate::cpu::tsc::read_tsc() - start_tsc;
                                             let elapsed_sec = elapsed as f32 / crate::cpu::tsc::frequency_hz() as f32;
                                             let fps = frames as f32 / elapsed_sec;
-                                            crate::framebuffer::draw_text(&format!("FPS: {:.1}", fps), 10, 10, 0xFFFFFFFF);
+                                            crate::serial_println!("[SHADER] FPS: {:.1}", fps);
                                         }
+                                    }
+                                    
+                                    // Restore double buffer state
+                                    if !was_db {
+                                        crate::framebuffer::set_double_buffer_mode(false);
                                     }
                                     
                                     shell_output.push(format!("Shader demo ended ({} frames)", frames));
                                 } else {
                                     crate::serial_println!("[SHADER] Shader '{}' NOT FOUND!", shader_name);
                                     shell_output.push(format!("Unknown shader: {}", shader_name));
-                                    shell_output.push(String::from("Available: plasma, fire, mandelbrot, matrix, gradient"));
+                                    shell_output.push(String::from("Available: plasma, fire, mandelbrot, matrix, tunnel, parallax, shapes, rain3d, cosmic, gradient"));
                                 }
                             },
                             "echo" => shell_output.push(String::new()),
@@ -15213,7 +15238,7 @@ fn cmd_video(args: &[&str]) {
             crate::println!("");
             crate::println!("Commands:");
             crate::println!("  demo [effect]  Generate & play a demo animation");
-            crate::println!("                 Effects: plasma, fire, matrix");
+            crate::println!("                 Effects: plasma, fire, matrix, shader");
             crate::println!("  play <file>    Play a .tv video file");
             crate::println!("  info <file>    Show video file info");
             crate::println!("");

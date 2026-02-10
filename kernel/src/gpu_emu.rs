@@ -87,6 +87,8 @@ pub struct VirtualGpu {
     /// Framebuffer dimensions
     width: u32,
     height: u32,
+    /// Row stride in pixels (may differ from width on MMIO fb)
+    stride: u32,
     /// Virtual core busy flags
     core_busy: [AtomicBool; VIRTUAL_CORES],
     /// Work items completed
@@ -107,16 +109,19 @@ impl VirtualGpu {
             framebuffer: core::ptr::null_mut(),
             width: 0,
             height: 0,
+            stride: 0,
             core_busy: [INIT_BOOL; VIRTUAL_CORES],
             work_completed: AtomicU32::new(0),
         }
     }
     
     /// Initialize with framebuffer
-    pub fn init(&mut self, framebuffer: *mut u32, width: u32, height: u32) {
+    /// stride = row stride in pixels (width for backbuffer, pitch/4 for MMIO)
+    pub fn init(&mut self, framebuffer: *mut u32, width: u32, height: u32, stride: u32) {
         self.framebuffer = framebuffer;
         self.width = width;
         self.height = height;
+        self.stride = stride;
     }
     
     /// Set active pixel shader
@@ -151,6 +156,7 @@ impl VirtualGpu {
             framebuffer: self.framebuffer,
             width,
             height,
+            stride: self.stride,
             time,
             frame,
         };
@@ -182,6 +188,7 @@ impl VirtualGpu {
             framebuffer: self.framebuffer,
             width,
             height,
+            stride: self.stride,
             time,
             frame,
         };
@@ -234,11 +241,25 @@ pub fn dispatch_fullscreen(
     frame: u32,
     shader: PixelShaderFn,
 ) {
+    dispatch_fullscreen_stride(framebuffer, width, height, width, time, frame, shader);
+}
+
+/// Dispatch a shader with explicit stride (pixels per row)
+pub fn dispatch_fullscreen_stride(
+    framebuffer: *mut u32,
+    width: u32,
+    height: u32,
+    stride: u32,
+    time: f32,
+    frame: u32,
+    shader: PixelShaderFn,
+) {
     let ctx = ShaderContext {
         shader,
         framebuffer,
         width,
         height,
+        stride,
         time,
         frame,
     };
@@ -274,6 +295,7 @@ struct ShaderContext {
     framebuffer: *mut u32,
     width: u32,
     height: u32,
+    stride: u32,  // row stride in pixels (may differ from width for MMIO fb)
     time: f32,
     frame: u32,
 }
@@ -288,9 +310,10 @@ fn dispatch_shader_row(start: usize, end: usize, data: *mut u8) {
     let fb = ctx.framebuffer;
     let width = ctx.width;
     let height = ctx.height;
+    let stride = ctx.stride as usize;
 
     for y in start..end {
-        let row_offset = y * (width as usize);
+        let row_offset = y * stride;
         for x in 0..width as usize {
             let input = PixelInput {
                 x: x as u32,
@@ -319,9 +342,10 @@ fn dispatch_shader_row_simd(start: usize, end: usize, data: *mut u8) {
     let fb = ctx.framebuffer;
     let width = ctx.width as usize;
     let height = ctx.height;
+    let stride = ctx.stride as usize;
     
     for y in start..end {
-        let row_offset = y * width;
+        let row_offset = y * stride;
         
         // Process 4 pixels at a time using SIMD
         let mut x = 0;
@@ -1171,10 +1195,18 @@ use spin::Mutex;
 static VGPU: Mutex<VirtualGpu> = Mutex::new(VirtualGpu::new());
 
 /// Initialize the virtual GPU with framebuffer
+/// stride = row stride in pixels (width for backbuffer, pitch/4 for MMIO)
 pub fn init(framebuffer: *mut u32, width: u32, height: u32) {
-    VGPU.lock().init(framebuffer, width, height);
+    VGPU.lock().init(framebuffer, width, height, width);
     crate::serial_println!("[VGPU] Initialized {}x{} virtual GPU ({} virtual cores)", 
         width, height, VIRTUAL_CORES);
+}
+
+/// Initialize with explicit stride
+pub fn init_stride(framebuffer: *mut u32, width: u32, height: u32, stride: u32) {
+    VGPU.lock().init(framebuffer, width, height, stride);
+    crate::serial_println!("[VGPU] Initialized {}x{} stride={} virtual GPU ({} virtual cores)", 
+        width, height, stride, VIRTUAL_CORES);
 }
 
 /// Set the active shader
@@ -1326,6 +1358,78 @@ pub fn time() -> f32 {
 // SHADER REGISTRY - Named shaders for easy switching
 // ============================================================================
 
+/// Cosmic Deformation shader — GLSL-golf style fractal vortex
+/// Port of the complex "render_shader_frame" from video/player.rs
+/// Iterative cosine deformation with radial/exponential color mapping
+pub fn shader_cosmic_deform(input: PixelInput) -> PixelOutput {
+    let w = input.width as f32;
+    let h = input.height as f32;
+    let t = input.time;
+    
+    // Normalized coords centered on screen
+    let p_x = (input.x as f32 * 2.0 - w) / h;
+    let p_y = (input.y as f32 * 2.0 - h) / h;
+    
+    let dot_pp = p_x * p_x + p_y * p_y;
+    let l = fast_abs(0.7 - dot_pp);
+    
+    let s = (1.0 - l) * 5.0;
+    let mut vx = p_x * s;
+    let mut vy = p_y * s;
+    
+    let mut o_r: f32 = 0.0;
+    let mut o_g: f32 = 0.0;
+    let mut o_b: f32 = 0.0;
+    
+    // 6 iterations of cosine deformation
+    let mut i: f32 = 1.0;
+    while i <= 6.0 {
+        let inv_i = 1.0 / i;
+        vx += fast_cos(vy * i + t) * inv_i + 0.7;
+        vy += fast_cos(vx * i + i + t) * inv_i + 0.7;
+        
+        let diff = fast_abs(vx - vy) * 0.2;
+        o_r += (fast_sin(vx) + 1.0) * diff;
+        o_g += (fast_sin(vy) + 1.0) * diff;
+        o_b += (fast_sin(vy) + 1.0) * diff;
+        i += 1.0;
+    }
+    
+    // Radial + exponential color mapping
+    let radial = fast_exp(-4.0 * l);
+    let e_py1 = fast_exp(p_y);
+    let e_pyn1 = fast_exp(-p_y);
+    let e_pyn2 = fast_exp(p_y * -2.0);
+    
+    let fr = fast_tanh(e_py1 * radial / (o_r + 0.001));
+    let fg = fast_tanh(e_pyn1 * radial / (o_g + 0.001));
+    let fb = fast_tanh(e_pyn2 * radial / (o_b + 0.001));
+    
+    let r = (fast_abs(fr) * 255.0).min(255.0) as u8;
+    let g = (fast_abs(fg) * 255.0).min(255.0) as u8;
+    let b = (fast_abs(fb) * 255.0).min(255.0) as u8;
+    PixelOutput::from_rgb(r, g, b)
+}
+
+/// Approximate tanh for shader math
+#[inline]
+fn fast_tanh(x: f32) -> f32 {
+    let x2 = x * x;
+    x / (1.0 + x.abs() + x2 * 0.28)
+}
+
+/// Approximate exp for shader math (fast, rough)
+#[inline]
+fn fast_exp(x: f32) -> f32 {
+    let x = x.clamp(-10.0, 10.0);
+    let t = 1.0 + x / 256.0;
+    let mut r = t;
+    // 8 squarings: (1+x/256)^256 ≈ e^x
+    r = r * r; r = r * r; r = r * r; r = r * r;
+    r = r * r; r = r * r; r = r * r; r = r * r;
+    r
+}
+
 /// Get shader by name
 pub fn get_shader(name: &str) -> Option<PixelShaderFn> {
     match name.to_lowercase().as_str() {
@@ -1338,13 +1442,14 @@ pub fn get_shader(name: &str) -> Option<PixelShaderFn> {
         "parallax" | "holoparallax" | "depth" => Some(shader_holomatrix_parallax),
         "shapes" | "objects" | "cubes" | "matrix3dshapes" => Some(shader_matrix_shapes),
         "rain3d" | "matrix3d" | "matrixrain3d" | "fly" => Some(shader_matrix_rain_3d),
+        "cosmic" | "deform" | "vortex" | "complex" => Some(shader_cosmic_deform),
         _ => None,
     }
 }
 
 /// List available shaders
 pub fn list_shaders() -> &'static [&'static str] {
-    &["plasma", "matrix", "mandelbrot", "gradient", "fire", "tunnel", "parallax", "shapes", "rain3d"]
+    &["plasma", "matrix", "mandelbrot", "gradient", "fire", "tunnel", "parallax", "shapes", "rain3d", "cosmic"]
 }
 
 // ============================================================================
