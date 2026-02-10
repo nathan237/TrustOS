@@ -144,6 +144,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "desktop", "gui", "cosmic", "open", "trustedit",
     // Kernel signature
     "signature",
+    // Security
+    "security",
     // Linux/VM
     "linux", "distro", "alpine",
     // Tasks
@@ -986,6 +988,9 @@ fn execute_command(cmd: &str) {
         // Kernel signature & proof of authorship
         "signature" | "sig" => cmd_signature(args),
         
+        // Security subsystem management
+        "security" | "sec" | "caps" => cmd_security(args),
+        
         // Hypervisor commands
         "hv" | "hypervisor" => cmd_hypervisor(args),
         "vm" => cmd_vm(args),
@@ -1068,6 +1073,7 @@ fn cmd_help(args: &[&str]) {
         crate::println!("     open <app>     - Open desktop with app (browser, files, editor...)");
         crate::println!("     trustedit      - Launch TrustEdit 3D model editor");
         crate::println!("     signature      - Kernel signature & proof of authorship");
+        crate::println!("     security       - Security status, capabilities & isolation");
         crate::println!();
         
         crate::println_color!(COLOR_CYAN, "  🔍 Utilities:");
@@ -2657,8 +2663,9 @@ fn cmd_signature(args: &[&str]) {
                 crate::println!("{}", line);
             }
             crate::println!();
-            crate::println_color!(COLOR_GRAY, "  This compares the SHA-256 of the .text section at boot vs now.");
-            crate::println_color!(COLOR_GRAY, "  Any runtime code modification (rootkit, corruption) is detected.");
+            crate::println_color!(COLOR_GRAY, "  SHA-256 of .text + .rodata sections measured at boot vs now.");
+            crate::println_color!(COLOR_GRAY, "  Detects runtime code injection, ROP gadget insertion, and");
+            crate::println_color!(COLOR_GRAY, "  constant/vtable tampering (rootkits, memory corruption).");
             crate::println!();
         }
         Some("clear") => {
@@ -2714,7 +2721,7 @@ fn cmd_signature(args: &[&str]) {
             crate::println!("Usage:");
             crate::println!("  signature                - Show signature certificate");
             crate::println!("  signature verify         - Show & verify signature certificate");
-            crate::println!("  signature integrity      - Verify kernel .text section integrity");
+            crate::println!("  signature integrity      - Verify kernel .text+.rodata integrity");
             crate::println!("  signature sign <name>    - Co-sign the kernel with your identity");
             crate::println!("  signature prove <name>   - Prove a user signature with passphrase");
             crate::println!("  signature prove-creator  - Prove creator authorship (requires seed)");
@@ -2754,6 +2761,128 @@ fn read_passphrase() -> alloc::string::String {
     }
     passphrase
 }
+
+/// Security subsystem management command
+fn cmd_security(args: &[&str]) {
+    match args.first().copied() {
+        Some("status") | None => {
+            // Show overall security status
+            let stats = crate::security::stats();
+            crate::println!();
+            crate::println_color!(COLOR_BRIGHT_GREEN, "TrustOS Security Status");
+            crate::println!("═══════════════════════════════════════════════════════════════");
+            crate::println!("  Active capabilities : {}", stats.active_capabilities);
+            crate::println!("  Security violations : {}", stats.violations);
+            crate::println!("  Dynamic types       : {}", stats.dynamic_types);
+            crate::println!("  Isolated subsystems : {}", stats.subsystems);
+            crate::println!("  Gate checks         : {}", crate::security::isolation::total_gate_checks());
+            crate::println!("  Gate violations     : {}", crate::security::isolation::total_gate_violations());
+            crate::println!();
+            
+            // Integrity summary
+            match crate::signature::verify_integrity() {
+                Ok(true) => crate::println_color!(COLOR_BRIGHT_GREEN, "  Kernel integrity    : ✅ INTACT"),
+                Ok(false) => crate::println_color!(COLOR_RED, "  Kernel integrity    : ❌ TAMPERED"),
+                Err(_) => crate::println_color!(COLOR_YELLOW, "  Kernel integrity    : ⚠️  not initialized"),
+            }
+            crate::println!();
+        }
+        Some("caps") | Some("capabilities") => {
+            // List all active capabilities
+            let caps = crate::security::list_capabilities();
+            crate::println!();
+            crate::println_color!(COLOR_CYAN, "Active Capabilities ({} total)", caps.len());
+            crate::println!("──────────────────────────────────────────────────────────");
+            crate::println!("  {:>6} │ {:<20} │ {:<10} │ Owner", "ID", "Type", "Category");
+            crate::println!("  ───────┼──────────────────────┼────────────┼──────");
+            for (id, cap_type, _rights, owner) in &caps {
+                crate::println!("  {:>6} │ {:<20} │ {:<10} │ 0x{:04X}",
+                    id.0,
+                    alloc::format!("{:?}", cap_type),
+                    cap_type.category(),
+                    owner
+                );
+            }
+            crate::println!();
+        }
+        Some("isolation") | Some("iso") | Some("subsystems") => {
+            // Show subsystem isolation status
+            crate::println!();
+            crate::println_color!(COLOR_BRIGHT_GREEN, "Subsystem Isolation Boundaries");
+            crate::println!("═══════════════════════════════════════════════════════════════");
+            let report = crate::security::isolation::isolation_report();
+            for line in &report {
+                crate::println!("{}", line);
+            }
+            crate::println!();
+            crate::println_color!(COLOR_GRAY, "  ring0-tcb       = Part of TCB, must stay in ring 0");
+            crate::println_color!(COLOR_GRAY, "  ring0-isolated  = Ring 0 but logically isolated");
+            crate::println_color!(COLOR_GRAY, "  ring3-candidate = Could be moved to ring 3 in future");
+            crate::println!();
+        }
+        Some("gate") => {
+            // Test a gate check
+            if let Some(subsystem_name) = args.get(1).copied() {
+                let subsystem = match subsystem_name {
+                    "storage" | "disk" => Some(crate::security::isolation::Subsystem::Storage),
+                    "network" | "net" => Some(crate::security::isolation::Subsystem::Network),
+                    "graphics" | "gpu" => Some(crate::security::isolation::Subsystem::Graphics),
+                    "process" | "proc" => Some(crate::security::isolation::Subsystem::ProcessMgr),
+                    "hypervisor" | "hv" => Some(crate::security::isolation::Subsystem::Hypervisor),
+                    "shell" => Some(crate::security::isolation::Subsystem::Shell),
+                    "crypto" => Some(crate::security::isolation::Subsystem::Crypto),
+                    "power" => Some(crate::security::isolation::Subsystem::Power),
+                    "serial" => Some(crate::security::isolation::Subsystem::SerialDebug),
+                    "memory" | "mem" => Some(crate::security::isolation::Subsystem::Memory),
+                    _ => None,
+                };
+                if let Some(sub) = subsystem {
+                    match crate::security::isolation::gate_check(
+                        sub, crate::security::CapabilityRights::READ
+                    ) {
+                        Ok(()) => crate::println_color!(COLOR_BRIGHT_GREEN, 
+                            "  ✅ Gate check PASSED for {:?}", sub),
+                        Err(e) => crate::println_color!(COLOR_RED, 
+                            "  ❌ Gate check DENIED for {:?}: {:?}", sub, e),
+                    }
+                } else {
+                    crate::println_color!(COLOR_RED, "Unknown subsystem: {}", subsystem_name);
+                }
+            } else {
+                crate::println!("Usage: security gate <subsystem>");
+                crate::println!("  Subsystems: storage, network, graphics, process, hypervisor,");
+                crate::println!("              shell, crypto, power, serial, memory");
+            }
+        }
+        Some("dynamic") => {
+            // List dynamic capability types
+            let types = crate::security::list_dynamic_types();
+            crate::println!();
+            if types.is_empty() {
+                crate::println_color!(COLOR_GRAY, "No dynamic capability types registered.");
+            } else {
+                crate::println_color!(COLOR_CYAN, "Dynamic Capability Types ({} registered)", types.len());
+                for (id, info) in &types {
+                    crate::println!("  [{}] {} (danger:{}, category:{})", 
+                        id, info.name, info.danger_level, info.category);
+                    crate::println!("       {}", info.description);
+                }
+            }
+            crate::println!();
+        }
+        _ => {
+            crate::println_color!(COLOR_CYAN, "TrustOS Security Subsystem");
+            crate::println!();
+            crate::println!("Usage:");
+            crate::println!("  security                 - Show security status overview");
+            crate::println!("  security caps            - List all active capabilities");
+            crate::println!("  security isolation       - Show subsystem isolation boundaries");
+            crate::println!("  security gate <subsys>   - Test a gate check on a subsystem");
+            crate::println!("  security dynamic         - List dynamic capability types");
+        }
+    }
+}
+
 // Runs through all TrustOS features with timed pauses between steps.
 // Perfect for screen recording with OBS to create marketing videos.
 
