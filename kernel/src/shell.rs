@@ -2528,15 +2528,60 @@ fn cmd_signature(args: &[&str]) {
             signature::clear_user_signature();
             crate::println_color!(COLOR_YELLOW, "User co-signature cleared.");
         }
+        Some("export") => {
+            // Export signature in SIGNATURES.md format for GitHub PR
+            if let Some((name, hex, _ts)) = signature::get_user_signature() {
+                let dt = crate::rtc::read_rtc();
+                crate::println!();
+                crate::println_color!(COLOR_CYAN, "=== Copy everything below and submit as a PR to SIGNATURES.md ===");
+                crate::println!();
+                crate::println!("### #NNN -- {}", name);
+                crate::println!();
+                crate::println!("| Field | Value |");
+                crate::println!("|-------|-------|");
+                crate::println!("| **Name** | {} |", name);
+                crate::println!("| **GitHub** | [@YOURUSERNAME](https://github.com/YOURUSERNAME) |");
+                crate::println!("| **Algorithm** | HMAC-SHA256 |");
+                crate::println!("| **Fingerprint** | `{}` |", hex);
+                crate::println!("| **Kernel Version** | v{} |", signature::KERNEL_VERSION);
+                crate::println!("| **Date** | {:04}-{:02}-{:02} |", dt.year, dt.month, dt.day);
+                crate::println!("| **Status** | Verified signer |");
+                crate::println!();
+                crate::println_color!(COLOR_GRAY, "Replace YOURUSERNAME with your GitHub username and #NNN with the next number.");
+                crate::println_color!(COLOR_GRAY, "Submit as a Pull Request to: github.com/nathan237/TrustOS");
+                crate::println!();
+            } else {
+                crate::println_color!(COLOR_RED, "No user signature found. Run 'signature sign <name>' first.");
+            }
+        }
+        Some("list") => {
+            // Show all registered signatures info
+            crate::println!();
+            crate::println_color!(COLOR_CYAN, "TrustOS Signature Registry");
+            crate::println_color!(COLOR_WHITE, "──────────────────────────────────────────────────────");
+            crate::println!();
+            crate::println_color!(COLOR_BRIGHT_GREEN, "  #001  Nated0ge (Creator)");
+            crate::println!("        {}", signature::creator_fingerprint_hex());
+            crate::println!();
+            if let Some((name, hex, _)) = signature::get_user_signature() {
+                crate::println_color!(COLOR_CYAN, "  #---  {} (Local)", name);
+                crate::println!("        {}", hex);
+                crate::println!();
+            }
+            crate::println_color!(COLOR_GRAY, "  Full registry: github.com/nathan237/TrustOS/blob/main/SIGNATURES.md");
+            crate::println!();
+        }
         _ => {
             crate::println_color!(COLOR_CYAN, "TrustOS Kernel Signature System");
             crate::println!();
             crate::println!("Usage:");
-            crate::println!("  signature                - Show all signatures (creator + user)");
+            crate::println!("  signature                - Show signature certificate");
             crate::println!("  signature verify         - Show & verify signature certificate");
             crate::println!("  signature sign <name>    - Co-sign the kernel with your identity");
             crate::println!("  signature prove <name>   - Prove a user signature with passphrase");
             crate::println!("  signature prove-creator  - Prove creator authorship (requires seed)");
+            crate::println!("  signature export         - Export signature for GitHub PR submission");
+            crate::println!("  signature list           - Show registered signatures");
             crate::println!("  signature clear          - Remove user co-signature");
         }
     }
