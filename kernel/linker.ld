@@ -39,6 +39,7 @@ SECTIONS
 
     .requests_end_marker : {
         KEEP(*(.requests_end_marker))
+        __rodata_end = .;
     } :rodata
 
     . = ALIGN(CONSTANT(MAXPAGESIZE));
