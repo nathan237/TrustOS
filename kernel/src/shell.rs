@@ -141,7 +141,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // Test and debug
     "test", "keytest", "hexdump", "xxd", "panic",
     // Desktop GUI (multi-layer compositor)
-    "desktop", "gui", "cosmic", "open",
+    "desktop", "gui", "cosmic", "open", "trustedit",
     // Linux/VM
     "linux", "distro", "alpine",
     // Tasks
@@ -968,6 +968,9 @@ fn execute_command(cmd: &str) {
         // Open app directly (launches desktop with app)
         "open" => cmd_open(args),
         
+        // TrustEdit 3D model editor (launches desktop with TrustEdit)
+        "trustedit" | "edit3d" | "3dedit" => cmd_trustedit(),
+        
         // Hypervisor commands
         "hv" | "hypervisor" => cmd_hypervisor(args),
         "vm" => cmd_vm(args),
@@ -1048,6 +1051,7 @@ fn cmd_help(args: &[&str]) {
         crate::println_color!(COLOR_CYAN, "  🖥️  Desktop:");
         crate::println!("     desktop, gui   - Launch COSMIC Desktop (multi-layer, no flicker)");
         crate::println!("     open <app>     - Open desktop with app (browser, files, editor...)");
+        crate::println!("     trustedit      - Launch TrustEdit 3D model editor");
         crate::println!();
         
         crate::println_color!(COLOR_CYAN, "  🔍 Utilities:");
@@ -2398,6 +2402,25 @@ fn cmd_open(args: &[&str]) {
     
     let app = args[0].to_lowercase();
     cmd_cosmic_v2_with_app(Some(&app));
+}
+
+/// Launch desktop directly with TrustEdit 3D model editor
+fn cmd_trustedit() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Launching TrustEdit 3D...");
+    // Launch the desktop with the model editor icon action
+    use crate::desktop;
+    let (width, height) = crate::framebuffer::get_dimensions();
+    if width == 0 || height == 0 {
+        crate::println_color!(COLOR_RED, "Error: Invalid framebuffer!");
+        return;
+    }
+    crate::mouse::set_screen_size(width, height);
+    let mut d = desktop::DESKTOP.lock();
+    d.init(width, height);
+    // Open TrustEdit window
+    d.create_window("TrustEdit 3D", 100, 60, 700, 500, desktop::WindowType::ModelEditor);
+    drop(d);
+    desktop::run();
 }
 
 // ==================== SHOWCASE — AUTOMATED DEMO FOR VIDEO ====================

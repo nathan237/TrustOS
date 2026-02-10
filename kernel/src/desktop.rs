@@ -761,6 +761,263 @@ pub struct Desktop {
     pub editor_states: BTreeMap<u32, EditorState>,
     // Model editor states (window_id -> ModelEditorState)
     pub model_editor_states: BTreeMap<u32, crate::model_editor::ModelEditorState>,
+    // Calculator states (window_id -> CalculatorState)
+    pub calculator_states: BTreeMap<u32, CalculatorState>,
+    // Snake game states (window_id -> SnakeState)
+    pub snake_states: BTreeMap<u32, SnakeState>,
+}
+
+/// Calculator state for interactive calculator windows
+pub struct CalculatorState {
+    pub display: String,
+    pub accumulator: f64,
+    pub current_input: String,
+    pub operator: Option<char>,
+    pub just_evaluated: bool,
+}
+
+impl CalculatorState {
+    pub fn new() -> Self {
+        CalculatorState {
+            display: String::from("0"),
+            accumulator: 0.0,
+            current_input: String::new(),
+            operator: None,
+            just_evaluated: false,
+        }
+    }
+    
+    pub fn press_digit(&mut self, d: char) {
+        if self.just_evaluated {
+            self.current_input.clear();
+            self.just_evaluated = false;
+        }
+        if self.current_input.len() < 12 {
+            self.current_input.push(d);
+            self.display = self.current_input.clone();
+        }
+    }
+    
+    pub fn press_dot(&mut self) {
+        if self.just_evaluated {
+            self.current_input = String::from("0");
+            self.just_evaluated = false;
+        }
+        if !self.current_input.contains('.') {
+            if self.current_input.is_empty() {
+                self.current_input.push('0');
+            }
+            self.current_input.push('.');
+            self.display = self.current_input.clone();
+        }
+    }
+    
+    pub fn press_operator(&mut self, op: char) {
+        if !self.current_input.is_empty() {
+            let val = self.parse_input();
+            if let Some(prev_op) = self.operator {
+                self.accumulator = self.evaluate(self.accumulator, prev_op, val);
+            } else {
+                self.accumulator = val;
+            }
+            self.display = self.format_number(self.accumulator);
+            self.current_input.clear();
+        }
+        self.operator = Some(op);
+        self.just_evaluated = false;
+    }
+    
+    pub fn press_equals(&mut self) {
+        if !self.current_input.is_empty() {
+            let val = self.parse_input();
+            if let Some(op) = self.operator {
+                self.accumulator = self.evaluate(self.accumulator, op, val);
+            } else {
+                self.accumulator = val;
+            }
+        }
+        self.display = self.format_number(self.accumulator);
+        self.current_input.clear();
+        self.operator = None;
+        self.just_evaluated = true;
+    }
+    
+    pub fn press_clear(&mut self) {
+        self.display = String::from("0");
+        self.accumulator = 0.0;
+        self.current_input.clear();
+        self.operator = None;
+        self.just_evaluated = false;
+    }
+    
+    pub fn press_backspace(&mut self) {
+        if !self.current_input.is_empty() {
+            self.current_input.pop();
+            if self.current_input.is_empty() {
+                self.display = String::from("0");
+            } else {
+                self.display = self.current_input.clone();
+            }
+        }
+    }
+    
+    fn parse_input(&self) -> f64 {
+        // Simple integer/float parser for no_std
+        let s = &self.current_input;
+        let mut result: f64 = 0.0;
+        let mut decimal_part = false;
+        let mut decimal_factor = 0.1;
+        let mut negative = false;
+        
+        for (i, ch) in s.chars().enumerate() {
+            if ch == '-' && i == 0 {
+                negative = true;
+            } else if ch == '.' {
+                decimal_part = true;
+            } else if ch.is_ascii_digit() {
+                let digit = (ch as u8 - b'0') as f64;
+                if decimal_part {
+                    result += digit * decimal_factor;
+                    decimal_factor *= 0.1;
+                } else {
+                    result = result * 10.0 + digit;
+                }
+            }
+        }
+        if negative { -result } else { result }
+    }
+    
+    fn evaluate(&self, a: f64, op: char, b: f64) -> f64 {
+        match op {
+            '+' => a + b,
+            '-' => a - b,
+            '*' => a * b,
+            '/' => if b != 0.0 { a / b } else { 0.0 },
+            '%' => if b != 0.0 { a % b } else { 0.0 },
+            _ => b,
+        }
+    }
+    
+    fn format_number(&self, n: f64) -> String {
+        // Check if it's an integer
+        if n == (n as i64) as f64 && n.abs() < 1e15 {
+            format!("{}", n as i64)
+        } else {
+            // Format with up to 6 decimal places, trimming trailing zeros
+            let s = format!("{:.6}", n);
+            let s = s.trim_end_matches('0');
+            let s = s.trim_end_matches('.');
+            String::from(s)
+        }
+    }
+}
+
+/// Snake game state for interactive game windows
+pub struct SnakeState {
+    pub snake: Vec<(i32, i32)>,
+    pub direction: (i32, i32),
+    pub food: (i32, i32),
+    pub score: u32,
+    pub game_over: bool,
+    pub grid_w: i32,
+    pub grid_h: i32,
+    pub tick_counter: u32,
+    pub speed: u32,
+    pub rng_state: u32,
+}
+
+impl SnakeState {
+    pub fn new() -> Self {
+        let mut state = SnakeState {
+            snake: Vec::new(),
+            direction: (1, 0),
+            food: (12, 5),
+            score: 0,
+            game_over: false,
+            grid_w: 20,
+            grid_h: 15,
+            tick_counter: 0,
+            speed: 8, // Move every 8 frames
+            rng_state: 42,
+        };
+        // Initial snake in the middle
+        for i in 0..4 {
+            state.snake.push((10 - i, 7));
+        }
+        state
+    }
+    
+    fn next_rng(&mut self) -> u32 {
+        self.rng_state ^= self.rng_state << 13;
+        self.rng_state ^= self.rng_state >> 17;
+        self.rng_state ^= self.rng_state << 5;
+        self.rng_state
+    }
+    
+    pub fn spawn_food(&mut self) {
+        loop {
+            let fx = (self.next_rng() % self.grid_w as u32) as i32;
+            let fy = (self.next_rng() % self.grid_h as u32) as i32;
+            if !self.snake.iter().any(|&(sx, sy)| sx == fx && sy == fy) {
+                self.food = (fx, fy);
+                break;
+            }
+        }
+    }
+    
+    pub fn handle_key(&mut self, key: u8) {
+        use crate::keyboard::{KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT};
+        if self.game_over {
+            if key == b' ' || key == 0x0D {
+                // Restart
+                *self = SnakeState::new();
+            }
+            return;
+        }
+        match key {
+            KEY_UP    if self.direction != (0, 1)  => self.direction = (0, -1),
+            KEY_DOWN  if self.direction != (0, -1) => self.direction = (0, 1),
+            KEY_LEFT  if self.direction != (1, 0)  => self.direction = (-1, 0),
+            KEY_RIGHT if self.direction != (-1, 0) => self.direction = (1, 0),
+            _ => {}
+        }
+    }
+    
+    pub fn tick(&mut self) {
+        if self.game_over { return; }
+        self.tick_counter += 1;
+        if self.tick_counter < self.speed { return; }
+        self.tick_counter = 0;
+        
+        let head = self.snake[0];
+        let new_head = (head.0 + self.direction.0, head.1 + self.direction.1);
+        
+        // Wall collision
+        if new_head.0 < 0 || new_head.0 >= self.grid_w || new_head.1 < 0 || new_head.1 >= self.grid_h {
+            self.game_over = true;
+            return;
+        }
+        
+        // Self collision
+        if self.snake.iter().any(|&s| s == new_head) {
+            self.game_over = true;
+            return;
+        }
+        
+        self.snake.insert(0, new_head);
+        
+        // Check food
+        if new_head == self.food {
+            self.score += 10;
+            self.spawn_food();
+            // Speed up slightly every 50 points
+            if self.score % 50 == 0 && self.speed > 3 {
+                self.speed -= 1;
+            }
+        } else {
+            self.snake.pop();
+        }
+    }
 }
 
 impl Desktop {
@@ -799,6 +1056,8 @@ impl Desktop {
             browser_url_input: String::new(),
             editor_states: BTreeMap::new(),
             model_editor_states: BTreeMap::new(),
+            calculator_states: BTreeMap::new(),
+            snake_states: BTreeMap::new(),
         }
     }
     
@@ -1075,14 +1334,7 @@ struct AppConfig {
                 window.content.push(String::from("(c) 2026 Nathan"));
             },
             WindowType::Calculator => {
-                window.content.push(String::from("[ Calculator ]"));
-                window.content.push(String::from(""));
-                window.content.push(String::from("  Display: 0"));
-                window.content.push(String::from(""));
-                window.content.push(String::from(" [7] [8] [9] [/]"));
-                window.content.push(String::from(" [4] [5] [6] [*]"));
-                window.content.push(String::from(" [1] [2] [3] [-]"));
-                window.content.push(String::from(" [0] [.] [=] [+]"));
+                self.calculator_states.insert(window.id, CalculatorState::new());
             },
             WindowType::FileManager => {
                 window.content.push(String::from("=== File Manager ==="));
@@ -1205,6 +1457,9 @@ struct AppConfig {
                 let state = crate::model_editor::ModelEditorState::new();
                 self.model_editor_states.insert(window.id, state);
             },
+            WindowType::Game => {
+                self.snake_states.insert(window.id, SnakeState::new());
+            },
             _ => {}
         }
         
@@ -1226,9 +1481,11 @@ struct AppConfig {
         }
         // No animation, remove immediately
         self.windows.retain(|w| w.id != id);
-        // Clean up editor state if it was a text editor
+        // Clean up states
         self.editor_states.remove(&id);
         self.model_editor_states.remove(&id);
+        self.calculator_states.remove(&id);
+        self.snake_states.remove(&id);
     }
     
     /// Minimize/restore a window (with animation)
@@ -1466,6 +1723,60 @@ struct AppConfig {
                         if vy >= 0 {
                             if let Some(state) = self.model_editor_states.get_mut(&win_id) {
                                 state.handle_click(vx, vy, vw, vh, true);
+                            }
+                        }
+                    }
+                    
+                    // Handle calculator button clicks
+                    if self.windows[i].window_type == WindowType::Calculator {
+                        let win = &self.windows[i];
+                        let cx_start = win.x as u32 + 4;
+                        let cy_start = win.y as u32 + TITLE_BAR_HEIGHT + 4;
+                        let cw = win.width.saturating_sub(8);
+                        let ch = win.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
+                        let display_h = 56u32;
+                        let btn_area_y = cy_start + display_h + 12;
+                        let btn_cols = 4u32;
+                        let btn_rows = 5u32;
+                        let btn_gap = 4u32;
+                        let btn_w = (cw - 12 - btn_gap * (btn_cols - 1)) / btn_cols;
+                        let btn_h = ((ch - display_h - 20 - btn_gap * (btn_rows - 1)) / btn_rows).min(40);
+                        
+                        let click_x = x as u32;
+                        let click_y = y as u32;
+                        
+                        if click_y >= btn_area_y {
+                            let buttons = [
+                                ['C', '(', ')', '%'],
+                                ['7', '8', '9', '/'],
+                                ['4', '5', '6', '*'],
+                                ['1', '2', '3', '-'],
+                                ['0', '.', '=', '+'],
+                            ];
+                            
+                            for (row, btn_row) in buttons.iter().enumerate() {
+                                for (col, &label) in btn_row.iter().enumerate() {
+                                    let bx = cx_start + 4 + col as u32 * (btn_w + btn_gap);
+                                    let by = btn_area_y + row as u32 * (btn_h + btn_gap);
+                                    
+                                    if click_x >= bx && click_x < bx + btn_w && click_y >= by && click_y < by + btn_h {
+                                        let win_id = win.id;
+                                        if let Some(calc) = self.calculator_states.get_mut(&win_id) {
+                                            match label {
+                                                '0'..='9' => calc.press_digit(label),
+                                                '.' => calc.press_dot(),
+                                                '+' => calc.press_operator('+'),
+                                                '-' => calc.press_operator('-'),
+                                                '*' => calc.press_operator('*'),
+                                                '/' => calc.press_operator('/'),
+                                                '%' => calc.press_operator('%'),
+                                                '=' => calc.press_equals(),
+                                                'C' => calc.press_clear(),
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1771,19 +2082,48 @@ struct AppConfig {
     
     /// Menu actions enum
     fn check_start_menu_click(&self, x: i32, y: i32) -> Option<u8> {
-        let menu_x = 2i32;
-        let menu_y = (self.height - TASKBAR_HEIGHT - 200) as i32;
-        let menu_w = 180;
-        let menu_h = 200;
+        let menu_w = 320u32;
+        let menu_h = 530u32;
+        let menu_x = 8i32;
+        let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
-        // Check if click is inside menu
-        if x < menu_x || x >= menu_x + menu_w || y < menu_y || y >= menu_y + menu_h {
+        // Check if click is inside the start menu at all
+        if x < menu_x || x >= menu_x + menu_w as i32 || y < menu_y || y >= menu_y + menu_h as i32 {
             return None;
         }
         
-        // Check which item was clicked (skip header)
-        let item_start_y = menu_y + 28;
-        let item_height = 26;
+        // Check pinned app grid (3 rows x 4 cols, 11 apps)
+        let search_y = menu_y + 16;
+        let pinned_y = search_y + 52;
+        let grid_y = pinned_y + 24;
+        let cell_w = 72i32;
+        let cell_h = 65i32;
+        
+        for i in 0..11 {
+            let col = i % 4;
+            let row = i / 4;
+            let cx = menu_x + 16 + (col as i32 * cell_w);
+            let cy = grid_y + (row as i32 * cell_h);
+            
+            if x >= cx && x < cx + cell_w && y >= cy && y < cy + cell_h {
+                // Pinned apps: 0=Terminal, 1=Files, 2=Settings, 3=Editor,
+                //              4=Network, 5=Browser, 6=Calc, 7=3D Demo,
+                //              8=Snake, 9=TrustEdit, 10=About
+                return Some(10 + i as u8); // Use 10+ range for pinned grid
+            }
+        }
+        
+        // Check power button
+        let user_y = menu_y + menu_h as i32 - 60;
+        let user_icon_y = user_y + 16;
+        let power_x = menu_x + menu_w as i32 - 48;
+        if x >= power_x && x < power_x + 32 && y >= user_icon_y && y < user_icon_y + 32 {
+            return Some(6); // Shutdown
+        }
+        
+        // Check text menu items (7 items starting at menu_y + 50)
+        let item_start_y = menu_y + 50;
+        let item_height = 28;
         
         if y >= item_start_y {
             let item_index = ((y - item_start_y) / item_height) as u8;
@@ -1806,7 +2146,7 @@ struct AppConfig {
                 self.create_window("Files", 150, 100, 400, 350, WindowType::FileManager);
             },
             2 => { // Calculator
-                self.create_window("Calculator", 400, 150, 200, 220, WindowType::Calculator);
+                self.create_window("Calculator", 400, 150, 280, 350, WindowType::Calculator);
             },
             3 => { // Network
                 self.create_window("Network", 200, 120, 320, 200, WindowType::NetworkInfo);
@@ -1820,9 +2160,43 @@ struct AppConfig {
             6 => { // Shutdown
                 crate::println!("\n\n=== SYSTEM SHUTDOWN ===");
                 crate::println!("Goodbye!");
-                // In a real OS we'd ACPI shutdown here
-                // For now, just halt
                 loop { x86_64::instructions::hlt(); }
+            },
+            // Pinned grid apps (10+ range)
+            10 => { // Terminal
+                let x = 100 + (self.windows.len() as i32 * 30);
+                let y = 80 + (self.windows.len() as i32 * 20);
+                self.create_window("Terminal", x, y, 500, 350, WindowType::Terminal);
+            },
+            11 => { // Files
+                self.create_window("Files", 150, 100, 400, 350, WindowType::FileManager);
+            },
+            12 => { // Settings
+                self.create_window("Settings", 250, 140, 350, 250, WindowType::Settings);
+            },
+            13 => { // Editor (TrustCode)
+                self.create_window("TrustCode", 150, 80, 700, 500, WindowType::TextEditor);
+            },
+            14 => { // Network
+                self.create_window("Network", 200, 120, 320, 200, WindowType::NetworkInfo);
+            },
+            15 => { // Browser
+                self.create_window("TrustBrowser", 120, 60, 600, 450, WindowType::Browser);
+            },
+            16 => { // Calculator
+                self.create_window("Calculator", 400, 150, 280, 350, WindowType::Calculator);
+            },
+            17 => { // 3D Demo
+                self.create_window("TrustGL 3D Demo", 150, 80, 400, 350, WindowType::Demo3D);
+            },
+            18 => { // Snake
+                self.create_window("Snake Game", 250, 120, 340, 360, WindowType::Game);
+            },
+            19 => { // TrustEdit
+                self.create_window("TrustEdit 3D", 100, 60, 700, 500, WindowType::ModelEditor);
+            },
+            20 => { // About
+                self.create_window("About TrustOS", 300, 180, 350, 200, WindowType::About);
             },
             _ => {}
         }
@@ -1857,6 +2231,52 @@ struct AppConfig {
                     // Forward to model editor state
                     if let Some(state) = self.model_editor_states.get_mut(&win_id) {
                         state.handle_key(key);
+                    }
+                },
+                WindowType::Calculator => {
+                    if let Some(calc) = self.calculator_states.get_mut(&win_id) {
+                        match key {
+                            b'0'..=b'9' => calc.press_digit(key as char),
+                            b'.' => calc.press_dot(),
+                            b'+' => calc.press_operator('+'),
+                            b'-' => calc.press_operator('-'),
+                            b'*' => calc.press_operator('*'),
+                            b'/' => calc.press_operator('/'),
+                            b'%' => calc.press_operator('%'),
+                            b'=' | 0x0D | 0x0A => calc.press_equals(), // = or Enter
+                            b'c' | b'C' => calc.press_clear(),
+                            0x08 => calc.press_backspace(), // Backspace
+                            0x7F => calc.press_backspace(), // Delete
+                            _ => {}
+                        }
+                    }
+                },
+                WindowType::Game => {
+                    if let Some(snake) = self.snake_states.get_mut(&win_id) {
+                        snake.handle_key(key);
+                    }
+                },
+                WindowType::Browser => {
+                    // Handle keyboard input in browser URL bar
+                    match key {
+                        0x08 => { // Backspace
+                            self.browser_url_input.pop();
+                        },
+                        0x0D | 0x0A => { // Enter - navigate
+                            let url = self.browser_url_input.clone();
+                            if let Some(ref mut browser) = self.browser {
+                                let _ = browser.navigate(&url);
+                            }
+                        },
+                        0x1B => { // Escape - clear URL
+                            self.browser_url_input.clear();
+                        },
+                        32..=126 => { // Printable ASCII
+                            if self.browser_url_input.len() < 256 {
+                                self.browser_url_input.push(key as char);
+                            }
+                        },
+                        _ => {}
                     }
                 },
                 _ => {}
@@ -2485,6 +2905,14 @@ struct AppConfig {
         
         // Update animations each frame
         self.update_animations();
+        
+        // Tick snake games
+        let snake_ids: Vec<u32> = self.snake_states.keys().copied().collect();
+        for id in snake_ids {
+            if let Some(snake) = self.snake_states.get_mut(&id) {
+                snake.tick();
+            }
+        }
         
         // Toggle cursor blink every ~30 frames
         if self.frame_count % 30 == 0 {
@@ -3149,7 +3577,7 @@ struct AppConfig {
         use crate::gui::windows11::colors;
         
         let menu_w = 320u32;
-        let menu_h = 450u32;
+        let menu_h = 530u32;
         let menu_x = 8i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
@@ -3184,21 +3612,24 @@ struct AppConfig {
         let pinned_y = search_y + 52;
         self.draw_text(menu_x + 16, pinned_y, "Pinned", colors::TEXT_PRIMARY);
         
-        // App grid (2 rows x 4 columns)
+        // App grid (3 rows x 4 columns)
         let apps = [
             ("Terminal", ">_"),
             ("Files", "[]"),
             ("Settings", "@@"),
             ("Editor", "Ed"),
             ("Network", "~~"),
-            ("About", "?i"),
+            ("Browser", "Wb"),
             ("Calc", "##"),
             ("3D Demo", "3D"),
+            ("Snake", "Sk"),
+            ("TrustEdit", "Te"),
+            ("About", "?i"),
         ];
         
         let grid_y = pinned_y + 24;
         let cell_w = 72;
-        let cell_h = 70;
+        let cell_h = 65;
         
         for (i, (name, icon)) in apps.iter().enumerate() {
             let col = i % 4;
@@ -3224,7 +3655,7 @@ struct AppConfig {
         }
         
         // "Recommended" section  
-        let rec_y = grid_y + cell_h * 2 + 16;
+        let rec_y = grid_y + cell_h * 3 + 8;
         self.draw_text(menu_x + 16, rec_y, "Recommended", colors::TEXT_PRIMARY);
         
         // Separator line
@@ -3517,6 +3948,12 @@ struct AppConfig {
         
         // ModelEditor is handled separately (needs &mut self)
         if window.window_type == WindowType::ModelEditor {
+            return;
+        }
+        
+        // Calculator is handled separately
+        if window.window_type == WindowType::Calculator {
+            self.draw_calculator(window);
             return;
         }
         
@@ -3845,57 +4282,189 @@ struct AppConfig {
             framebuffer::put_pixel(game_x + game_w - 1, game_y + i, GREEN_MUTED);
         }
         
-        // Draw a simple static snake demo
-        let cell_size: u32 = 12;
-        let grid_offset_x = game_x + 20;
-        let grid_offset_y = game_y + 40;
-        
-        // Snake body segments (demo positions)
-        let snake_segments = [
-            (8, 5), (7, 5), (6, 5), (5, 5), (4, 5), (3, 5), (2, 5)
-        ];
-        
-        // Draw snake
-        for (i, &(sx, sy)) in snake_segments.iter().enumerate() {
-            let px = grid_offset_x + sx * cell_size;
-            let py = grid_offset_y + sy * cell_size;
-            let color = if i == 0 { 
-                0xFF00FF00 // Head is bright green
-            } else {
-                0xFF00CC00 // Body is slightly darker
-            };
+        // Get snake state
+        if let Some(snake) = self.snake_states.get(&window.id) {
+            let cell_size: u32 = 14;
+            let grid_offset_x = game_x + 10;
+            let grid_offset_y = game_y + 36;
             
-            // Draw filled cell
-            for dy in 1..cell_size-1 {
-                for dx in 1..cell_size-1 {
-                    if px + dx < game_x + game_w && py + dy < game_y + game_h {
-                        framebuffer::put_pixel(px + dx, py + dy, color);
+            // Draw grid background (subtle)
+            for gy in 0..snake.grid_h {
+                for gx in 0..snake.grid_w {
+                    let px = grid_offset_x + gx as u32 * cell_size;
+                    let py = grid_offset_y + gy as u32 * cell_size;
+                    if px + cell_size < game_x + game_w && py + cell_size < game_y + game_h {
+                        let bg = if (gx + gy) % 2 == 0 { 0xFF0D120E } else { 0xFF0B100C };
+                        framebuffer::fill_rect(px, py, cell_size, cell_size, bg);
                     }
                 }
             }
+            
+            // Draw snake
+            for (i, &(sx, sy)) in snake.snake.iter().enumerate() {
+                let px = grid_offset_x + sx as u32 * cell_size;
+                let py = grid_offset_y + sy as u32 * cell_size;
+                let color = if i == 0 { 
+                    0xFF00FF00 // Head is bright green
+                } else {
+                    let fade = (0xCC - (i as u32 * 8).min(0x80)) as u32;
+                    0xFF000000 | (fade << 8) // Body fades
+                };
+                
+                if px + cell_size < game_x + game_w && py + cell_size < game_y + game_h {
+                    framebuffer::fill_rect(px + 1, py + 1, cell_size - 2, cell_size - 2, color);
+                    // Head has eyes
+                    if i == 0 {
+                        let (ex1, ey1, ex2, ey2) = match snake.direction {
+                            (1, 0) => (cell_size-4, 3, cell_size-4, cell_size-5), // Right
+                            (-1, 0) => (2, 3, 2, cell_size-5),                     // Left
+                            (0, -1) => (3, 2, cell_size-5, 2),                     // Up
+                            _ => (3, cell_size-4, cell_size-5, cell_size-4),       // Down
+                        };
+                        framebuffer::put_pixel(px + ex1, py + ey1, 0xFF000000);
+                        framebuffer::put_pixel(px + ex2, py + ey2, 0xFF000000);
+                    }
+                }
+            }
+            
+            // Draw food
+            let fx = grid_offset_x + snake.food.0 as u32 * cell_size;
+            let fy = grid_offset_y + snake.food.1 as u32 * cell_size;
+            if fx + cell_size < game_x + game_w && fy + cell_size < game_y + game_h {
+                framebuffer::fill_rect(fx + 2, fy + 2, cell_size - 4, cell_size - 4, 0xFFFF4444);
+                framebuffer::put_pixel(fx + cell_size/2, fy + 1, 0xFF00AA00); // stem
+            }
+            
+            // Title
+            self.draw_text(game_x as i32 + 8, game_y as i32 + 8, "SNAKE", COLOR_BRIGHT_GREEN);
+            
+            // Score
+            let score_str = format!("Score: {}", snake.score);
+            self.draw_text(game_x as i32 + game_w as i32 - 90, game_y as i32 + 8, &score_str, GREEN_SECONDARY);
+            
+            if snake.game_over {
+                // Game over overlay
+                let ox = game_x + game_w / 2 - 60;
+                let oy = game_y + game_h / 2 - 20;
+                framebuffer::fill_rect(ox - 4, oy - 4, 128, 48, 0xCC000000);
+                self.draw_text(ox as i32, oy as i32, "GAME OVER", 0xFFFF4444);
+                self.draw_text(ox as i32 - 8, oy as i32 + 20, "Press ENTER", GREEN_TERTIARY);
+            } else {
+                // Instructions
+                self.draw_text(game_x as i32 + 8, game_y as i32 + game_h as i32 - 18, 
+                               "Arrow Keys to move", GREEN_TERTIARY);
+            }
+        }
+    }
+    
+    /// Draw interactive Calculator
+    fn draw_calculator(&self, window: &Window) {
+        use crate::gui::windows11::colors;
+        
+        let cx = window.x as u32 + 4;
+        let cy = window.y as u32 + TITLE_BAR_HEIGHT + 4;
+        let cw = window.width.saturating_sub(8);
+        let ch = window.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
+        
+        if cw < 100 || ch < 120 {
+            return;
         }
         
-        // Draw food (red apple)
-        let food_x = grid_offset_x + 12 * cell_size;
-        let food_y = grid_offset_y + 5 * cell_size;
-        for dy in 2..cell_size-2 {
-            for dx in 2..cell_size-2 {
-                if food_x + dx < game_x + game_w && food_y + dy < game_y + game_h {
-                    framebuffer::put_pixel(food_x + dx, food_y + dy, 0xFFFF4444);
-                }
+        // Display area
+        let display_h = 56u32;
+        framebuffer::fill_rect(cx + 4, cy + 4, cw - 8, display_h, 0xFF1A1A2E);
+        framebuffer::fill_rect(cx + 5, cy + 5, cw - 10, display_h - 2, 0xFF0D0D1A);
+        
+        // Get calculator state
+        let display_text = if let Some(calc) = self.calculator_states.get(&window.id) {
+            &calc.display
+        } else {
+            "0"
+        };
+        
+        // Draw display text (right-aligned, large)
+        let text_len = display_text.len() as i32;
+        let text_x = cx as i32 + cw as i32 - 16 - text_len * 10;
+        // Draw each char slightly larger (using 2 copies offset)
+        for (i, ch) in display_text.chars().enumerate() {
+            let px = text_x + i as i32 * 10;
+            let py = cy as i32 + 20;
+            let mut buf = [0u8; 4];
+            let s = ch.encode_utf8(&mut buf);
+            self.draw_text(px, py, s, 0xFFFFFFFF);
+            self.draw_text(px + 1, py, s, 0xFFFFFFFF); // Bold effect
+        }
+        
+        // Operator indicator
+        if let Some(calc) = self.calculator_states.get(&window.id) {
+            if let Some(op) = calc.operator {
+                let mut buf = [0u8; 4];
+                let s = op.encode_utf8(&mut buf);
+                self.draw_text(cx as i32 + 10, cy as i32 + 12, s, colors::ACCENT);
             }
         }
         
-        // Title
-        self.draw_text(game_x as i32 + 8, game_y as i32 + 8, "SNAKE", COLOR_BRIGHT_GREEN);
+        // Button grid
+        let btn_area_y = cy + display_h + 12;
+        let btn_rows = 5;
+        let btn_cols = 4;
+        let btn_gap = 4u32;
+        let btn_w = (cw - 12 - btn_gap * (btn_cols - 1)) / btn_cols;
+        let btn_h = (ch - display_h - 20 - btn_gap * (btn_rows - 1)) / btn_rows;
+        let btn_h = btn_h.min(40);
         
-        // Instructions
-        self.draw_text(game_x as i32 + 8, game_y as i32 + game_h as i32 - 20, 
-                       "Use Arrow Keys to Play", GREEN_TERTIARY);
+        let buttons = [
+            ["C", "(", ")", "%"],
+            ["7", "8", "9", "/"],
+            ["4", "5", "6", "*"],
+            ["1", "2", "3", "-"],
+            ["0", ".", "=", "+"],
+        ];
         
-        // Score display
-        self.draw_text(game_x as i32 + game_w as i32 - 80, game_y as i32 + 8, 
-                       "Score: 60", GREEN_SECONDARY);
+        for (row, btn_row) in buttons.iter().enumerate() {
+            for (col, label) in btn_row.iter().enumerate() {
+                let bx = cx + 4 + col as u32 * (btn_w + btn_gap);
+                let by = btn_area_y + row as u32 * (btn_h + btn_gap);
+                
+                // Button color based on type
+                let is_operator = matches!(*label, "+" | "-" | "*" | "/" | "%" | "=");
+                let is_clear = *label == "C" || *label == "(" || *label == ")";
+                
+                let btn_bg = if is_operator {
+                    if *label == "=" { colors::ACCENT } else { 0xFF2A3A30 }
+                } else if is_clear {
+                    0xFF2A2030
+                } else {
+                    0xFF1E2228
+                };
+                
+                // Hover detection
+                let hover = self.cursor_x >= bx as i32 && self.cursor_x < (bx + btn_w) as i32
+                    && self.cursor_y >= by as i32 && self.cursor_y < (by + btn_h) as i32;
+                
+                let bg = if hover { 
+                    (btn_bg & 0x00FFFFFF) | 0xFF000000 // Brighten slightly
+                } else { 
+                    btn_bg 
+                };
+                
+                // Draw button
+                crate::gui::windows11::draw_rounded_rect(bx as i32, by as i32, btn_w, btn_h, 4, bg);
+                if hover {
+                    crate::gui::windows11::draw_rounded_rect_border(bx as i32, by as i32, btn_w, btn_h, 4, colors::ACCENT);
+                }
+                
+                // Label centered
+                let lw = label.len() as u32 * 8;
+                let lx = bx + (btn_w - lw) / 2;
+                let ly = by + (btn_h / 2) - 4;
+                let text_color = if *label == "=" { 0xFF000000 } else { colors::TEXT_PRIMARY };
+                self.draw_text(lx as i32, ly as i32, label, text_color);
+            }
+        }
+        
+        // Instructions at bottom
+        self.draw_text(cx as i32 + 4, (cy + ch - 14) as i32, "Keys: 0-9 +*/- = Enter C", GREEN_TERTIARY);
     }
     
     /// Draw Browser window content
@@ -4328,7 +4897,7 @@ fn get_char_glyph(c: char) -> [u8; 16] {
 }
 
 /// Global desktop
-static DESKTOP: Mutex<Desktop> = Mutex::new(Desktop::new());
+pub static DESKTOP: Mutex<Desktop> = Mutex::new(Desktop::new());
 
 /// Initialize GUI with double buffering
 pub fn init(width: u32, height: u32) {
@@ -4420,7 +4989,10 @@ pub fn run() -> ! {
             
             // Check for Start Menu (Win key alone)
             if engine::check_start_menu_trigger(raw_code, !is_release) {
-                engine::toggle_start_menu();
+                // Toggle Desktop's own start menu (not engine's)
+                let mut d = DESKTOP.lock();
+                d.start_menu_open = !d.start_menu_open;
+                drop(d);
             }
             
             // Check hotkeys on key press
@@ -4484,10 +5056,12 @@ pub fn run() -> ! {
         unsafe {
             if left != LAST_LEFT {
                 // Close start menu on click outside
-                if left && engine::is_start_menu_open() {
-                    // Check if click is outside start menu
-                    // (Simple: close on any click for now)
-                    engine::close_start_menu();
+                if left {
+                    let mut d = DESKTOP.lock();
+                    if d.start_menu_open {
+                        // Will be handled by Desktop's own click handler
+                    }
+                    drop(d);
                 }
                 handle_click(mouse.x, mouse.y, left);
                 LAST_LEFT = left;
@@ -4522,10 +5096,11 @@ pub fn run() -> ! {
             render_alt_tab_overlay();
         }
         
-        // Render Start Menu if open
-        if engine::is_start_menu_open() {
-            render_start_menu();
-        }
+        // Render Start Menu if open (Desktop's own start menu handles this)
+        // Note: gui::engine start menu disabled to avoid dual-menu conflict
+        // if engine::is_start_menu_open() {
+        //     render_start_menu();
+        // }
         
         // Render notifications
         render_notifications();
