@@ -769,6 +769,8 @@ pub struct Desktop {
     pub calculator_states: BTreeMap<u32, CalculatorState>,
     // Snake game states (window_id -> SnakeState)
     pub snake_states: BTreeMap<u32, SnakeState>,
+    // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
+    pub scale_factor: u32,
 }
 
 /// Calculator state for interactive calculator windows
@@ -1065,6 +1067,7 @@ impl Desktop {
             model_editor_states: BTreeMap::new(),
             calculator_states: BTreeMap::new(),
             snake_states: BTreeMap::new(),
+            scale_factor: 1,
         }
     }
     
@@ -1075,6 +1078,11 @@ impl Desktop {
         self.height = height;
         self.cursor_x = (width / 2) as i32;
         self.cursor_y = (height / 2) as i32;
+        
+        // Initialize UI scaling based on resolution
+        crate::graphics::scaling::init(width, height);
+        self.scale_factor = crate::graphics::scaling::get_scale_factor();
+        crate::serial_println!("[Desktop] UI scale factor: {}x", self.scale_factor);
         
         // Initialize double buffering
         crate::serial_println!("[Desktop] init_double_buffer...");
@@ -4802,16 +4810,15 @@ struct AppConfig {
     }
     
     fn draw_text(&self, x: i32, y: i32, text: &str, color: u32) {
-        // Use framebuffer's text drawing
+        // Use scaled text rendering
         let old_fg = framebuffer::get_fg_color();
         framebuffer::set_fg_color(color);
         
-        // Simple approach: just set cursor and print
-        // For now, we'll draw character by character at pixel positions
+        let cw = crate::graphics::scaling::char_width() as i32;
         for (i, c) in text.chars().enumerate() {
-            let px = x + (i as i32 * 8);
+            let px = x + (i as i32 * cw);
             if px >= 0 && px < self.width as i32 && y >= 0 && y < self.height as i32 {
-                self.draw_char(px as u32, y as u32, c, color);
+                crate::graphics::scaling::draw_scaled_char(px as u32, y as u32, c, color);
             }
         }
         
@@ -4819,20 +4826,8 @@ struct AppConfig {
     }
     
     fn draw_char(&self, x: u32, y: u32, c: char, color: u32) {
-        // Simple 8x16 font rendering using basic shapes
-        // This is a minimal implementation - in a real OS you'd use a proper font
-        let glyph = get_char_glyph(c);
-        for (row, &bits) in glyph.iter().enumerate() {
-            for col in 0..8 {
-                if bits & (0x80 >> col) != 0 {
-                    let px = x + col;
-                    let py = y + row as u32;
-                    if px < self.width && py < self.height {
-                        framebuffer::put_pixel(px, py, color);
-                    }
-                }
-            }
-        }
+        // Use scaled character rendering
+        crate::graphics::scaling::draw_scaled_char(x, y, c, color);
     }
 }
 
@@ -5285,20 +5280,14 @@ fn render_notifications() {
     }
 }
 
-/// Helper: Draw text (wrapper)
+/// Helper: Draw text (wrapper) — uses scaling module
 fn draw_text(x: i32, y: i32, text: &str, color: u32) {
-    // Use framebuffer's text rendering
-    for (i, c) in text.chars().enumerate() {
-        let cx = x + (i * 8) as i32;
-        if cx >= 0 {
-            crate::framebuffer::draw_char_at(cx as u32, y as u32, c, color);
-        }
-    }
+    crate::graphics::scaling::draw_scaled_text(x, y, text, color);
 }
 
-/// Helper: Draw centered text
+/// Helper: Draw centered text — uses scaling module
 fn draw_text_centered(cx: i32, y: i32, text: &str, color: u32) {
-    let w = text.len() as i32 * 8;
+    let w = crate::graphics::scaling::measure_text_width(text) as i32;
     draw_text(cx - w / 2, y, text, color);
 }
 

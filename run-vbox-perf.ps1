@@ -147,6 +147,11 @@ Write-Host "[VM] Configuring for max performance..." -ForegroundColor Yellow
     --uart1 0x3F8 4 `
     --uart-mode1 file "$SerialLog"
 
+# Enable GUI scaling so the VM display scales when the window is resized
+& $VBoxManage setextradata $VMName "GUI/ScaleFactor" "1.0"
+& $VBoxManage setextradata $VMName "GUI/AutoresizeGuest" "false"
+& $VBoxManage setextradata $VMName "CustomVideoMode1" "1920x1080x32"
+
 # Attach ISO
 & $VBoxManage storageattach $VMName --storagectl "SATA" --port 0 --device 0 --type dvddrive --medium $ISOPath 2>$null
 # If medium already attached, modify it

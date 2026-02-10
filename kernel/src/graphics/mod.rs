@@ -26,6 +26,7 @@ pub mod simd;
 pub mod holomatrix;
 pub mod raytracer;
 pub mod texture;
+pub mod scaling;
 
 pub use render2d::*;
 pub use render3d::*;

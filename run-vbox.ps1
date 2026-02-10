@@ -88,6 +88,13 @@ if (Test-Path $ISOPath) {
 # Enable serial port for output
 & $VBoxManage modifyvm $VMName --uart1 0x3F8 4 --uartmode1 file "$PSScriptRoot\serial.log"
 
+# Enable GUI scaling so the VM display scales when the window is resized
+# Without Guest Additions, the guest can't change resolution dynamically,
+# but VBox will scale the framebuffer output to fit the window.
+& $VBoxManage setextradata $VMName "GUI/ScaleFactor" "1.0"
+& $VBoxManage setextradata $VMName "GUI/AutoresizeGuest" "false"
+& $VBoxManage setextradata $VMName "CustomVideoMode1" "1920x1080x32"
+
 Write-Host "`n=== VM Ready ===" -ForegroundColor Green
 Write-Host "Name: $VMName" -ForegroundColor Cyan
 Write-Host "Firmware: UEFI" -ForegroundColor Cyan
