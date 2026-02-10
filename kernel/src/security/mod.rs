@@ -3,17 +3,27 @@
 //! All resource access is mediated through unforgeable capability tokens.
 //! Minimal Trusted Computing Base (TCB).
 //! Also provides CPU security feature management (SMAP, SMEP, etc.)
+//!
+//! Architecture (see GitHub issues #1, #4):
+//! - Each subsystem (disk, network, hypervisor, etc.) receives a dedicated
+//!   capability token at boot with the minimum rights it needs.
+//! - Operations must present a valid capability before accessing resources.
+//! - Capabilities can be dynamically registered for extensibility.
+//! - The isolation module (`isolation.rs`) enforces boundary checks.
 
 mod capability;
 mod policy;
 pub mod cpu_features;
 pub mod storage;
+pub mod isolation;
 
 use spin::Mutex;
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 pub use capability::{Capability, CapabilityId, CapabilityType, CapabilityRights};
+pub use capability::{register_dynamic_type, get_dynamic_type_info, list_dynamic_types, dynamic_type_count};
 pub use cpu_features::{enable_smep, enable_smap, enable_umip, disable_smap_for_user_access};
 pub use storage::{StorageOperation, StorageSecurityError, DiskId};
 
@@ -35,10 +45,14 @@ pub fn init() {
     // Initialize CPU security features (SMEP, SMAP, UMIP)
     let features = cpu_features::init();
     
-    crate::log!("[SECURITY] Initialized - SMEP:{} SMAP:{} UMIP:{}",
+    // Initialize subsystem isolation boundaries (issue #1)
+    isolation::init_subsystem_capabilities();
+    
+    crate::log!("[SECURITY] Initialized - SMEP:{} SMAP:{} UMIP:{} subsystems:{}",
         if features.smep { "ON" } else { "off" },
-        if features.smap { "avail" } else { "off" },  // SMAP disabled for now
-        if features.umip { "ON" } else { "off" }
+        if features.smap { "avail" } else { "off" },
+        if features.umip { "ON" } else { "off" },
+        isolation::subsystem_count()
     );
 }
 
@@ -116,11 +130,86 @@ pub fn derive(
     Ok(id)
 }
 
+/// Validate capability for a specific type AND rights (stronger than validate())
+pub fn validate_typed(
+    cap_id: CapabilityId,
+    required_type: CapabilityType,
+    required_rights: CapabilityRights,
+) -> Result<(), SecurityError> {
+    let caps = CAPABILITIES.lock();
+    let cap = caps.get(&cap_id).ok_or(SecurityError::InvalidCapability)?;
+    
+    // Check type match (Kernel type acts as superuser)
+    if cap.cap_type != required_type && cap.cap_type != CapabilityType::Kernel {
+        VIOLATIONS.fetch_add(1, Ordering::Relaxed);
+        crate::log_warn!("Security violation: capability {:?} type mismatch (have {:?}, need {:?})",
+            cap_id, cap.cap_type, required_type);
+        return Err(SecurityError::NotPermitted);
+    }
+    
+    if !cap.has_rights(required_rights) {
+        VIOLATIONS.fetch_add(1, Ordering::Relaxed);
+        return Err(SecurityError::InsufficientRights);
+    }
+    
+    if cap.is_expired() {
+        return Err(SecurityError::ExpiredCapability);
+    }
+    
+    cap.use_once();
+    Ok(())
+}
+
+/// List all active capabilities
+pub fn list_capabilities() -> Vec<(CapabilityId, CapabilityType, CapabilityRights, u64)> {
+    CAPABILITIES.lock()
+        .iter()
+        .map(|(id, cap)| (*id, cap.cap_type, cap.rights, cap.owner))
+        .collect()
+}
+
+/// List capabilities by owner
+pub fn list_by_owner(owner: u64) -> Vec<(CapabilityId, CapabilityType, CapabilityRights)> {
+    CAPABILITIES.lock()
+        .iter()
+        .filter(|(_, cap)| cap.owner == owner)
+        .map(|(id, cap)| (*id, cap.cap_type, cap.rights))
+        .collect()
+}
+
+/// List capabilities by type
+pub fn list_by_type(cap_type: CapabilityType) -> Vec<(CapabilityId, u64, CapabilityRights)> {
+    CAPABILITIES.lock()
+        .iter()
+        .filter(|(_, cap)| cap.cap_type == cap_type)
+        .map(|(id, cap)| (*id, cap.owner, cap.rights))
+        .collect()
+}
+
+/// Revoke all capabilities owned by a specific owner (cascading revocation)
+pub fn revoke_by_owner(owner: u64) -> usize {
+    let mut caps = CAPABILITIES.lock();
+    let to_remove: Vec<CapabilityId> = caps.iter()
+        .filter(|(_, cap)| cap.owner == owner)
+        .map(|(id, _)| *id)
+        .collect();
+    let count = to_remove.len();
+    for id in to_remove {
+        caps.remove(&id);
+    }
+    if count > 0 {
+        crate::log_debug!("Cascade-revoked {} capabilities for owner {}", count, owner);
+    }
+    count
+}
+
 /// Get security statistics
 pub fn stats() -> SecurityStats {
     SecurityStats {
         active_capabilities: CAPABILITIES.lock().len(),
         violations: VIOLATIONS.load(Ordering::Relaxed),
+        dynamic_types: dynamic_type_count(),
+        subsystems: isolation::subsystem_count(),
     }
 }
 
@@ -129,6 +218,8 @@ pub fn stats() -> SecurityStats {
 pub struct SecurityStats {
     pub active_capabilities: usize,
     pub violations: u64,
+    pub dynamic_types: usize,
+    pub subsystems: usize,
 }
 
 /// Security error types

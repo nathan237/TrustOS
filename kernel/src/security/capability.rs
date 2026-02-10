@@ -1,8 +1,14 @@
 //! Capability types and structures
 //! 
 //! Unforgeable capability tokens for resource access control.
+//! Supports both statically-defined kernel capability types and
+//! dynamically registered types for extensibility (see GitHub issue #4).
 
 use core::sync::atomic::{AtomicU64, Ordering};
+use alloc::string::String;
+use alloc::vec::Vec;
+use alloc::collections::BTreeMap;
+use spin::Mutex;
 
 /// Unique capability identifier
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -94,6 +100,13 @@ pub enum CapabilityType {
     LinuxCompat,
     /// Media operations (video codec, audio, image decode)
     Media,
+    
+    // === Dynamic / extensible ===
+    /// Dynamically registered capability type. The u32 is a unique type ID
+    /// assigned by `register_dynamic_type()`. This allows subsystems and
+    /// extensions to define their own capability types at runtime without
+    /// modifying this enum — addressing the extensibility concern in issue #4.
+    Dynamic(u32),
 }
 
 impl CapabilityType {
@@ -121,6 +134,12 @@ impl CapabilityType {
             
             // Catastrophic — full system control
             Self::Kernel | Self::DiskFormat => 5,
+            
+            // Dynamic types — default to moderate risk; override via registry
+            Self::Dynamic(id) => DYNAMIC_TYPE_REGISTRY.lock()
+                .get(&(*id))
+                .map(|info| info.danger_level)
+                .unwrap_or(2),
         }
     }
     
@@ -138,13 +157,17 @@ impl CapabilityType {
             Self::Power | Self::Scheduler | Self::Debug | Self::Syscall => "System",
             Self::ShellExec | Self::ExecBinary | Self::LinuxCompat |
             Self::Hypervisor => "Execution",
+            Self::Dynamic(id) => DYNAMIC_TYPE_REGISTRY.lock()
+                .get(&(*id))
+                .map(|info| info.category)
+                .unwrap_or("Dynamic"),
         }
     }
 }
 
 /// Rights that can be granted
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CapabilityRights(u32);
+pub struct CapabilityRights(pub u32);
 
 impl CapabilityRights {
     pub const NONE: Self = Self(0);
@@ -255,4 +278,69 @@ impl Capability {
     pub fn usage(&self) -> u64 {
         self.usage_count.load(Ordering::Relaxed)
     }
+}
+
+// =============================================================================
+// DYNAMIC CAPABILITY TYPE REGISTRY
+// =============================================================================
+// Allows runtime registration of new capability types without modifying the
+// CapabilityType enum. Each dynamic type gets a unique u32 ID, a name,
+// a danger level, and a category string. This addresses issue #4's request
+// for extensibility — subsystems can define their own capability types.
+
+/// Metadata for a dynamically registered capability type
+#[derive(Debug, Clone)]
+pub struct DynamicTypeInfo {
+    /// Human-readable name (e.g., "AudioMixer", "WasmSandbox")
+    pub name: String,
+    /// Danger level (0-5), same scale as static types
+    pub danger_level: u8,
+    /// Category string for grouping
+    pub category: &'static str,
+    /// Description of what this type controls
+    pub description: String,
+}
+
+/// Global registry of dynamic capability types
+static DYNAMIC_TYPE_REGISTRY: Mutex<BTreeMap<u32, DynamicTypeInfo>> = Mutex::new(BTreeMap::new());
+
+/// Next dynamic type ID
+static NEXT_DYNAMIC_TYPE_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Register a new dynamic capability type.
+/// Returns the unique type ID that can be used with `CapabilityType::Dynamic(id)`.
+pub fn register_dynamic_type(
+    name: &str,
+    danger_level: u8,
+    category: &'static str,
+    description: &str,
+) -> u32 {
+    let id = NEXT_DYNAMIC_TYPE_ID.fetch_add(1, Ordering::Relaxed) as u32;
+    let info = DynamicTypeInfo {
+        name: String::from(name),
+        danger_level: danger_level.min(5),
+        category,
+        description: String::from(description),
+    };
+    DYNAMIC_TYPE_REGISTRY.lock().insert(id, info);
+    crate::log_debug!("Registered dynamic capability type: {} (id={})", name, id);
+    id
+}
+
+/// Look up a dynamic type by ID
+pub fn get_dynamic_type_info(id: u32) -> Option<DynamicTypeInfo> {
+    DYNAMIC_TYPE_REGISTRY.lock().get(&id).cloned()
+}
+
+/// List all registered dynamic types
+pub fn list_dynamic_types() -> Vec<(u32, DynamicTypeInfo)> {
+    DYNAMIC_TYPE_REGISTRY.lock()
+        .iter()
+        .map(|(k, v)| (*k, v.clone()))
+        .collect()
+}
+
+/// Number of registered dynamic types
+pub fn dynamic_type_count() -> usize {
+    DYNAMIC_TYPE_REGISTRY.lock().len()
 }
