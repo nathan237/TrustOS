@@ -10,6 +10,7 @@
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
 [![Lines](https://img.shields.io/badge/code-99%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![ISO](https://img.shields.io/badge/ISO-6.25%20MB-purple?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.1.1-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 
@@ -66,7 +67,7 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 - **Multi-layer GPU compositor** with 8 independent rendering layers
 - **SSE2 SIMD optimized** — 144 FPS with zero flickering
 - **Taskbar, dock, start menu**, window management, settings panel
-- **10 built-in desktop apps**: Terminal, Files, TrustCode, Calculator, Network, Games, Settings, About, TrustGL 3D, TrustBrowser
+- **13 built-in desktop apps**: Terminal, Files, TrustCode, Calculator, Network, Snake Game, Settings, About, TrustGL 3D, TrustBrowser, TrustEdit 3D, and more
 - **HoloMatrix 3D backgrounds**: volumetric wireframe scenes (cube, torus, DNA helix, character...)
 - **Mouse + keyboard** driven with smooth cursor
 
@@ -100,6 +101,20 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 - **Multiple mesh types**: cube, torus, sphere, DNA helix, character model
 - **Per-edge coloring** with volumetric low-poly rendering
 - **Scanline effects**, gradient backgrounds, floor grids
+
+### 🎨 TrustEdit — 3D Model Editor
+- **Wireframe 3D editor** with real-time orbital camera
+- **5 editing tools**: Select, Move, Add Vertex, Add Edge, Delete
+- **Preset models**: Cube, Pyramid, Diamond, Star, House, Rocket, Tree, Spaceship
+- **Save/Load** models in `.t3d` format to TrustFS
+- **Undo system** for safe editing
+- **Mouse-driven** with toolbar, viewport, and status bar
+- Launch with `trustedit` command or from the desktop Start Menu
+
+### 🎮 Interactive Desktop Apps
+- **Calculator** — Full arithmetic with chained operations, keyboard & mouse input
+- **Snake Game** — Real-time gameplay with arrow keys, scoring, progressive speed
+- **TrustBrowser** — Keyboard-driven URL bar, page navigation
 
 ### 📁 TrustFS — Persistent Filesystem
 - **Block-based storage** with indirect block support
@@ -187,6 +202,9 @@ cargo build --release -p trustos_kernel
 
 ## 📸 Screenshots
 
+### COSMIC2 Desktop with Interactive Apps
+![TrustOS Desktop](docs/screenshot_desktop.png)
+
 ### Shell with 200+ Commands
 ```
   _____ ____            _    ___      
@@ -213,6 +231,7 @@ cargo build --release -p trustos_kernel
 | `trustlang demo` | TrustLang compiler demo |
 | `benchmark` | GPU/SIMD performance benchmarks |
 | `neofetch` | System info display |
+| `trustedit` | Launch TrustEdit 3D model editor |
 
 ---
 
@@ -300,6 +319,7 @@ cargo build --release -p trustos_kernel
 | `linux/` | ~3,000 | Linux syscall emulation, ELF loader |
 | `trustlang/` | ~2,000 | Compiler + bytecode VM |
 | `formula3d.rs` | ~1,500 | Wireframe 3D engine with per-edge colors |
+| `model_editor.rs` | ~750 | TrustEdit 3D wireframe model editor |
 | `video/` | ~1,500 | TrustVideo codec & player |
 | `framebuffer/` | ~1,500 | SSE2 SIMD rendering |
 | `filesystem/` | ~2,000 | TrustFS with WAL, VFS, FAT32 |
@@ -367,6 +387,7 @@ kernel/src/
 ├── main.rs              # Kernel entry point
 ├── shell.rs             # Shell + 200+ commands + showcase
 ├── desktop.rs           # COSMIC2 desktop manager
+├── model_editor.rs      # TrustEdit 3D model editor
 ├── formula3d.rs         # Wireframe 3D engine
 ├── compositor/          # 8-layer GPU compositor
 ├── browser/             # HTML/CSS/JS browser engine
@@ -404,7 +425,23 @@ kernel/src/
 
 ---
 
-## 📄 License
+## � Changelog
+
+### v0.1.1 — June 2025
+- **TrustEdit 3D Model Editor** — New wireframe 3D editor with 5 tools, 8 presets, save/load `.t3d`, undo system
+- **Interactive Calculator** — Full arithmetic with keyboard & mouse, chained operations
+- **Interactive Snake Game** — Real-time gameplay with arrow keys, scoring, speed progression
+- **Browser keyboard input** — Type URLs, navigate, clear with Escape
+- **Start Menu fix** — All 13 pinned apps now clickable and functional
+- **`trustedit` shell command** — Launch TrustEdit directly from the shell
+- **Desktop stability** — Fixed dual start menu conflict, improved window management
+
+### v0.1.0 — June 2025
+- Initial release: 99K+ lines, 207+ files, full desktop, shell, browser, network, TrustLang, hypervisor
+
+---
+
+## �📄 License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
