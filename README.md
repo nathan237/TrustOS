@@ -13,6 +13,8 @@
 
 **GPU Compositing · 144 FPS Desktop · Built-in Compiler · TLS 1.3 · Filesystem**
 
+[![Watch the demo](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
+
 [Features](#-features) · [Quick Start](#-quick-start) · [Screenshots](#-screenshots) · [Architecture](#-architecture) · [Contributing](#-contributing)
 
 ---
