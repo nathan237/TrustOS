@@ -45,9 +45,9 @@ Memory map entries: 34
 [HEAP] Initialized: free=134008 KB
 [FB] Initializing scrollback buffer...
 [FB] Scrollback buffer initialized (1000 lines max)
-[INTEGRITY] .text   : 2309973 bytes, SHA-256: 7bfceff08510a994...faf837ce
-[INTEGRITY] .rodata : 316696 bytes, SHA-256: 150f2e2714d5df1f...5bb3e981
-[INTEGRITY] kernel digest: 843d391fcea675ee...3d5a38ff
+[INTEGRITY] .text   : 2309749 bytes, SHA-256: 3130ccb904e4e83c...de556a63
+[INTEGRITY] .rodata : 316720 bytes, SHA-256: ebd129259b1899c8...e72e2af2
+[INTEGRITY] kernel digest: f9f3513272deabd1...7b13ab74
 ╔══════════════════════════════════════════════════════════════╗
 ║                      T R U S T - O S                         ║
 ║                 FAST • SECURE • RELIABLE                     ║
@@ -64,13 +64,13 @@ Initializing early interrupts...
 Detecting CPU capabilities...
 [CPU] AMD Ryzen 7 5800X 8-Core Processor
 [CPU] Vendor: Amd, Family: 25, Model: 33
-[CPU] TSC: true (invariant: true, freq: 39 MHz)
+[CPU] TSC: true (invariant: true, freq: 37 MHz)
 [CPU] SIMD: SSE=true SSE2=true SSE4.2=true AVX=true AVX2=true
 [CPU] Crypto: AES-NI=true PCLMULQDQ=true SHA=true RDRAND=true
 [CPU] Security: SMEP=false SMAP=false NX=true
 [CPU] Virt: VMX=false SVM=false
 [SIMD] SSE/SSE2 enabled
-[TSC] Initialized: 39138480 Hz (0 GHz)
+[TSC] Initialized: 37631400 Hz (0 GHz)
 [OK] CPU capabilities detected
 Parsing ACPI tables...
 [DEBUG] RSDP pointer from Limine: 0x1e97e014
@@ -119,7 +119,7 @@ Initializing security subsystem...
 Keyboard driver ready
 [OK] Keyboard ready
 [RTC] init start
-[RTC] Initialized: 2026-02-10 16:12:12
+[RTC] Initialized: 2026-02-10 16:18:54
 [OK] RTC initialized
 [RTC] init done
 [KB-IRQ] scancode=0x47
@@ -196,8 +196,8 @@ Keyboard driver ready
 [         0][CPU0][DEBUG] [E1000] Initializing RX ring (32 descriptors)
 [         0][CPU0][DEBUG] [E1000] Initializing TX ring (8 descriptors)
 [         0][CPU0][WARN ] [E1000] Link not detected - continuing anyway (VirtualBox NAT mode)
-[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:44:49:5D
-[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:44:49:5D
+[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:06:53:9B
+[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:06:53:9B
 [OK] Network driver: e1000
 [OK] Network ready
 [         0][CPU0][INFO ] [DHCP] Client started
@@ -287,15 +287,15 @@ Starting shell...
 
   T-RustOs v0.1.0 - Type 'help' for commands
 
-[16:12:13] trustos:/$ █ [KB-READ] popped 244 (0xF4)
-  █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   [KB-IRQ] scancode=0x20
+[16:18:55] trustos:/$ █ [KB-READ] popped 244 (0xF4)
+  █ [KB-IRQ] scancode=0x20
 [KB-BUF] push ascii=100 (0x64) char='d'
 [KB-READ] popped 100 (0x64)
-  d   dir   del   date   df   deluser   desktop   distro   disk█ [KB-IRQ] scancode=0x12
+  d   dir   del   date   df   deluser   desktop   distro   disk█ [KB-IRQ] scancode=0xA0
+[KB-IRQ] scancode=0x12
 [KB-BUF] push ascii=101 (0x65) char='e'
 [KB-READ] popped 101 (0x65)
-                                                                                                                                                                                                                                                                                                                                  e   del   deluser   desktop█ [KB-IRQ] scancode=0xA0
-[KB-IRQ] scancode=0x92
+                                                                                                                                                                                                                                                                                                                                  e   del   deluser   desktop█ [KB-IRQ] scancode=0x92
 [KB-IRQ] scancode=0x1F
 [KB-BUF] push ascii=115 (0x73) char='s'
 [KB-READ] popped 115 (0x73)
@@ -335,11 +335,128 @@ Starting shell...
 [TrustCode] Demo editor opened
 [Desktop] init complete
 [Desktop] Entering desktop run loop
-[GUI] Frame timing init: TSC 39 MHz
+[GUI] Frame timing init: TSC 37 MHz
 [GUI] Starting desktop environment...
 [GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start
 [GUI] Target: 60 FPS with HLT-based frame limiting
+[KB-IRQ] scancode=0x0F
+[KB-BUF] push ascii=9 (0x09) char='	'
+[KB-READ] popped 9 (0x09)
+[KB-IRQ] scancode=0x8F
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0x4B
+[KB-READ] popped 242 (0xF2)
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0xCB
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0x5B
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0xDB
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0x5B
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0x4B
+[KB-READ] popped 242 (0xF2)
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0xDB
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0xCB
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0x5B
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0x4B
+[KB-READ] popped 242 (0xF2)
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0xCB
+[KB-IRQ] scancode=0xE0
+[KB-IRQ] scancode=0xDB
+[KB-IRQ] scancode=0x39
+[KB-BUF] push ascii=32 (0x20) char=' '
+[KB-READ] popped 32 (0x20)
+[KB-IRQ] scancode=0xB9
+[KB-IRQ] scancode=0x39
+[KB-BUF] push ascii=32 (0x20) char=' '
+[KB-READ] popped 32 (0x20)
+[KB-IRQ] scancode=0xB9
 [KB-IRQ] scancode=0x01
 [KB-BUF] push ascii=27 (0x1B) char=''
 [KB-READ] popped 27 (0x1B)
 [KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x22
+[KB-BUF] push ascii=103 (0x67) char='g'
+[KB-READ] popped 103 (0x67)
+[KB-IRQ] scancode=0xA2
+[KB-IRQ] scancode=0x18
+[KB-BUF] push ascii=111 (0x6F) char='o'
+[KB-READ] popped 111 (0x6F)
+[KB-IRQ] scancode=0x98
+[KB-IRQ] scancode=0x18
+[KB-BUF] push ascii=111 (0x6F) char='o'
+[KB-READ] popped 111 (0x6F)
+[KB-IRQ] scancode=0x98
+[KB-IRQ] scancode=0x22
+[KB-BUF] push ascii=103 (0x67) char='g'
+[KB-READ] popped 103 (0x67)
+[KB-IRQ] scancode=0xA2
+[KB-IRQ] scancode=0x26
+[KB-BUF] push ascii=108 (0x6C) char='l'
+[KB-READ] popped 108 (0x6C)
+[KB-IRQ] scancode=0xA6
+[KB-IRQ] scancode=0x12
+[KB-BUF] push ascii=101 (0x65) char='e'
+[KB-READ] popped 101 (0x65)
+[KB-IRQ] scancode=0x92
+[KB-IRQ] scancode=0x34
+[KB-BUF] push ascii=46 (0x2E) char='.'
+[KB-READ] popped 46 (0x2E)
+[KB-IRQ] scancode=0xB4
+[KB-IRQ] scancode=0x2E
+[KB-BUF] push ascii=99 (0x63) char='c'
+[KB-READ] popped 99 (0x63)
+[KB-IRQ] scancode=0xAE
+[KB-IRQ] scancode=0x18
+[KB-BUF] push ascii=111 (0x6F) char='o'
+[KB-READ] popped 111 (0x6F)
+[KB-IRQ] scancode=0x32
+[KB-BUF] push ascii=109 (0x6D) char='m'
+[KB-READ] popped 109 (0x6D)
+[KB-IRQ] scancode=0x98
+[KB-IRQ] scancode=0xB2
+[KB-IRQ] scancode=0x1C
+[KB-BUF] push ascii=10 (0x0A) char='
+'
+[KB-READ] popped 10 (0x0A)
+[BROWSER] Navigating to: http://localhost/google.com
+[       966][CPU0][DEBUG] [ARP] Sent request for 192.168.56.1
+[E1000] RX check #0 status=0x07
+[E1000] RX packet received! len=60
+[ETH] len=60 etype=0x0806 dst=08:00:27:06:53:9b
+[       967][CPU0][DEBUG] [ARP] Reply from 192.168.56.1 = 0A:00:27:00:00:08
+[IP] Sent 55 bytes to 10.0.2.3 proto=17 (next hop 192.168.56.1)
+[KB-IRQ] scancode=0x9C
+[E1000] RX check #10000 status=0x00
+[E1000] RX check #20000 status=0x00
+[E1000] RX check #30000 status=0x00
+[E1000] RX check #40000 status=0x00
+[E1000] RX check #50000 status=0x00
+[E1000] RX check #60000 status=0x00
+[E1000] RX check #70000 status=0x00
+[E1000] RX check #80000 status=0x00
+[E1000] RX check #90000 status=0x00
+[E1000] RX check #100000 status=0x00
+[E1000] RX check #110000 status=0x00
+[E1000] RX check #120000 status=0x00
+[E1000] RX check #130000 status=0x00
+[E1000] RX check #140000 status=0x00
+[E1000] RX check #150000 status=0x00
+[E1000] RX check #160000 status=0x00
+[E1000] RX check #170000 status=0x00
+[E1000] RX check #180000 status=0x00
+[E1000] RX check #190000 status=0x00
+[E1000] RX check #200000 status=0x00
+[E1000] RX check #210000 status=0x00
+[E1000] RX check #220000 status=0x00

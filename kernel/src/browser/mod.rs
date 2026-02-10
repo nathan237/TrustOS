@@ -110,6 +110,16 @@ impl Browser {
     
     /// Navigate to URL
     pub fn navigate(&mut self, url: &str) -> Result<(), &'static str> {
+        self.navigate_inner(url, 0)
+    }
+    
+    /// Internal navigate with redirect depth limit
+    fn navigate_inner(&mut self, url: &str, depth: u32) -> Result<(), &'static str> {
+        if depth > 5 {
+            self.status = BrowserStatus::Error(alloc::format!("Too many redirects"));
+            return Err("Too many redirects");
+        }
+        
         self.status = BrowserStatus::Loading;
         
         // Normalize URL
@@ -118,17 +128,41 @@ impl Browser {
         crate::serial_println!("[BROWSER] Navigating to: {}", full_url);
         
         // Fetch the page
-        let response = crate::netstack::http::get(&full_url)?;
+        let response = match crate::netstack::http::get(&full_url) {
+            Ok(r) => r,
+            Err(e) => {
+                crate::serial_println!("[BROWSER] Network error: {}", e);
+                self.status = BrowserStatus::Error(alloc::format!("Network error: {}", e));
+                // Show error page instead of crashing
+                self.raw_html = alloc::format!(
+                    "<html><body><h1>Error</h1><p>Could not load {}</p><p>{}</p></body></html>",
+                    full_url, e
+                );
+                self.document = Some(parse_html(&self.raw_html));
+                self.current_url = full_url;
+                self.scroll_y = 0;
+                return Err(e);
+            }
+        };
         
         if response.status_code >= 400 {
-            self.status = BrowserStatus::Error(alloc::format!("HTTP {}", response.status_code));
+            let msg = alloc::format!("HTTP {}", response.status_code);
+            self.status = BrowserStatus::Error(msg.clone());
+            // Show error page
+            self.raw_html = alloc::format!(
+                "<html><body><h1>HTTP Error {}</h1><p>The server returned an error for {}</p></body></html>",
+                response.status_code, full_url
+            );
+            self.document = Some(parse_html(&self.raw_html));
+            self.current_url = full_url;
+            self.scroll_y = 0;
             return Err("HTTP error");
         }
         
-        // Handle redirects
+        // Handle redirects (with depth limit)
         if response.status_code >= 300 && response.status_code < 400 {
             if let Some(location) = response.header("Location") {
-                return self.navigate(location);
+                return self.navigate_inner(location, depth + 1);
             }
         }
         
@@ -258,6 +292,8 @@ impl Browser {
 
 /// Normalize a URL (handle relative URLs)
 pub fn normalize_url(url: &str, base: &str) -> String {
+    let url = url.trim();
+    
     // Already absolute
     if url.starts_with("http://") || url.starts_with("https://") {
         return url.to_string();
@@ -266,6 +302,21 @@ pub fn normalize_url(url: &str, base: &str) -> String {
     // Protocol-relative
     if url.starts_with("//") {
         return alloc::format!("http:{}", url);
+    }
+    
+    // Bare domain detection: contains a dot and no slashes before it
+    // e.g. "google.com", "example.org/path", "www.site.com"
+    let has_dot = url.contains('.');
+    let first_slash = url.find('/');
+    let first_dot = url.find('.');
+    let is_bare_domain = has_dot && match (first_dot, first_slash) {
+        (Some(d), Some(s)) => d < s,  // dot before slash: "google.com/path"
+        (Some(_), None) => true,       // no slash at all: "google.com"
+        _ => false,
+    };
+    
+    if is_bare_domain {
+        return alloc::format!("http://{}", url);
     }
     
     // Get base components

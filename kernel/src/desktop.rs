@@ -2290,7 +2290,16 @@ struct AppConfig {
                         0x0D | 0x0A => { // Enter - navigate
                             let url = self.browser_url_input.clone();
                             if let Some(ref mut browser) = self.browser {
-                                let _ = browser.navigate(&url);
+                                // Navigate and handle errors gracefully
+                                match browser.navigate(&url) {
+                                    Ok(()) => {
+                                        crate::serial_println!("[DESKTOP] Browser navigated OK");
+                                    }
+                                    Err(e) => {
+                                        crate::serial_println!("[DESKTOP] Browser navigate error: {}", e);
+                                        // Error page is already set by navigate()
+                                    }
+                                }
                             }
                         },
                         0x1B => { // Escape - clear URL
