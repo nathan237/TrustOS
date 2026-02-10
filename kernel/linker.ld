@@ -15,13 +15,16 @@ SECTIONS
     . = 0xffffffff80000000;
 
     .text : {
+        __text_start = .;
         KEEP(*(.text.kmain))
         *(.text .text.*)
+        __text_end = .;
     } :text
 
     . = ALIGN(CONSTANT(MAXPAGESIZE));
 
     .rodata : {
+        __rodata_start = .;
         *(.rodata .rodata.*)
     } :rodata
     

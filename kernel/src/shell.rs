@@ -880,7 +880,6 @@ fn execute_command(cmd: &str) {
         "htop" => cmd_top(),
         "vmstat" => cmd_vmstat(),
         "iostat" => cmd_iostat(),
-        "dmesg" => cmd_dmesg(),
         "lsof" => cmd_lsof(args),
         "strace" => cmd_strace(args),
         "strings" => cmd_strings(args),
@@ -960,6 +959,17 @@ fn execute_command(cmd: &str) {
         
         // Performance benchmarks
         "benchmark" | "bench" => cmd_benchmark(args),
+        
+        // ── Developer Tools ──────────────────────────────────────────
+        "dmesg" => cmd_dmesg(args),
+        "memdbg" | "heapdbg" => cmd_memdbg(),
+        "perf" | "perfstat" => cmd_perfstat(),
+        "irqstat" | "irqs" => cmd_irqstat(),
+        "regs" | "registers" | "cpuregs" => cmd_registers(),
+        "peek" | "memdump" => cmd_peek(args),
+        "poke" | "memwrite" => cmd_poke(args),
+        "devpanel" => cmd_devpanel(),
+        "timecmd" => cmd_timecmd(args),
         
         // Showcase — automated demo for marketing videos
         "showcase" => cmd_showcase(args),
@@ -1064,7 +1074,19 @@ fn cmd_help(args: &[&str]) {
         crate::println!("     echo, grep, sort, cat, hexdump, strings");
         crate::println!();
         
-        crate::println_color!(COLOR_CYAN, "  💀 System Control:");
+        crate::println_color!(COLOR_CYAN, "  �️  Developer Tools:");
+        crate::println!("     perf / perfstat - CPU, IRQ, scheduling, memory stats");
+        crate::println!("     memdbg / heapdbg- Allocation tracking, peak usage, fragmentation");
+        crate::println!("     dmesg [-n N]    - Kernel ring buffer (last N messages)");
+        crate::println!("     irqstat / irqs  - Per-CPU interrupt breakdown");
+        crate::println!("     regs / cpuregs  - CPU register dump (CR0/CR3/CR4/EFER decoded)");
+        crate::println!("     peek <addr> [n] - Hex dump memory at address");
+        crate::println!("     poke <addr> <v> - Write byte to memory address");
+        crate::println!("     devpanel        - Toggle real-time FPS/heap/IRQ overlay (F12)");
+        crate::println!("     timecmd <cmd>   - Run command and show elapsed time");
+        crate::println!();
+        
+        crate::println_color!(COLOR_CYAN, "  �💀 System Control:");
         crate::println!("     exit, reboot, shutdown");
         crate::println!();
         
@@ -1105,6 +1127,83 @@ fn cmd_man(args: &[&str]) {
             crate::println!("SYNOPSIS: cat <file>");
             crate::println!();
             crate::println!("Supports redirection: cat file > newfile");
+        }
+        "perf" | "perfstat" => {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "PERF(1) - Performance Statistics");
+            crate::println!();
+            crate::println!("SYNOPSIS: perf");
+            crate::println!();
+            crate::println!("Shows uptime, FPS, IRQ count/rate, syscalls,");
+            crate::println!("context switches, heap usage, and per-CPU stats.");
+        }
+        "memdbg" | "heapdbg" => {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "MEMDBG(1) - Memory Debug Statistics");
+            crate::println!();
+            crate::println!("SYNOPSIS: memdbg");
+            crate::println!();
+            crate::println!("Shows heap usage, allocation/deallocation counts,");
+            crate::println!("peak usage, fragmentation estimate, live alloc count.");
+        }
+        "dmesg" => {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "DMESG(1) - Kernel Ring Buffer");
+            crate::println!();
+            crate::println!("SYNOPSIS: dmesg [-n <count>] [-c]");
+            crate::println!();
+            crate::println!("Show kernel messages (captured from serial output).");
+            crate::println!("  dmesg          Show all buffered messages");
+            crate::println!("  dmesg -n 20    Show last 20 messages");
+            crate::println!("  dmesg 50       Show last 50 messages");
+            crate::println!("  dmesg -c       Acknowledge buffer");
+        }
+        "irqstat" | "irqs" => {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "IRQSTAT(1) - Interrupt Statistics");
+            crate::println!();
+            crate::println!("SYNOPSIS: irqstat");
+            crate::println!();
+            crate::println!("Shows total IRQ count, IRQ/sec rate, and per-CPU");
+            crate::println!("interrupt breakdown with visual bars.");
+        }
+        "regs" | "registers" | "cpuregs" => {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "REGS(1) - CPU Register Dump");
+            crate::println!();
+            crate::println!("SYNOPSIS: regs");
+            crate::println!();
+            crate::println!("Dumps RSP, RBP, RFLAGS, CR0, CR3, CR4, EFER.");
+            crate::println!("Decodes flag/bit meanings for each register.");
+        }
+        "peek" | "memdump" => {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "PEEK(1) - Memory Inspector");
+            crate::println!();
+            crate::println!("SYNOPSIS: peek <hex_addr> [byte_count]");
+            crate::println!();
+            crate::println!("Hex dump memory at virtual address (max 256 bytes).");
+            crate::println!("  peek 0xFFFF800000000000 64");
+        }
+        "poke" | "memwrite" => {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "POKE(1) - Memory Writer");
+            crate::println!();
+            crate::println!("SYNOPSIS: poke <hex_addr> <hex_byte>");
+            crate::println!();
+            crate::println!("Write a single byte to virtual address. DANGEROUS!");
+            crate::println!("  poke 0xB8000 0x41");
+        }
+        "devpanel" => {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "DEVPANEL(1) - Developer Overlay");
+            crate::println!();
+            crate::println!("SYNOPSIS: devpanel");
+            crate::println!();
+            crate::println!("Toggles real-time overlay in desktop mode showing:");
+            crate::println!("FPS, frame time, heap usage bar, IRQ/s, per-CPU stats.");
+            crate::println!("Also toggled with F12 while in desktop.");
+        }
+        "timecmd" => {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "TIMECMD(1) - Time a Command");
+            crate::println!();
+            crate::println!("SYNOPSIS: timecmd <command> [args...]");
+            crate::println!();
+            crate::println!("Executes a command and displays elapsed time in µs/ms.");
+            crate::println!("  timecmd ls /");
+            crate::println!("  timecmd benchmark cpu");
         }
         _ => {
             crate::println!("No manual entry for '{}'", args[0]);
@@ -1914,8 +2013,12 @@ fn cmd_ps() {
 }
 
 fn cmd_free() {
-    crate::println_color!(COLOR_CYAN, "         total     used     free");
-    crate::println!("Mem:    262144    16384   245760");
+    let used = crate::memory::heap::used();
+    let free = crate::memory::heap::free();
+    let total = used + free;
+    crate::println_color!(COLOR_CYAN, "              total       used       free");
+    crate::println!("Heap:    {:>10}  {:>10}  {:>10}", total, used, free);
+    crate::println!("  (KB)   {:>10}  {:>10}  {:>10}", total / 1024, used / 1024, free / 1024);
 }
 
 fn cmd_df() {
@@ -2545,6 +2648,19 @@ fn cmd_signature(args: &[&str]) {
             }
             crate::println!();
         }
+        Some("integrity") | Some("verify-integrity") => {
+            crate::println!();
+            crate::println_color!(COLOR_BRIGHT_GREEN, "Kernel Integrity Verification");
+            crate::println!("═══════════════════════════════════════════════════════════════");
+            let report = signature::integrity_report();
+            for line in &report {
+                crate::println!("{}", line);
+            }
+            crate::println!();
+            crate::println_color!(COLOR_GRAY, "  This compares the SHA-256 of the .text section at boot vs now.");
+            crate::println_color!(COLOR_GRAY, "  Any runtime code modification (rootkit, corruption) is detected.");
+            crate::println!();
+        }
         Some("clear") => {
             signature::clear_user_signature();
             crate::println_color!(COLOR_YELLOW, "User co-signature cleared.");
@@ -2598,6 +2714,7 @@ fn cmd_signature(args: &[&str]) {
             crate::println!("Usage:");
             crate::println!("  signature                - Show signature certificate");
             crate::println!("  signature verify         - Show & verify signature certificate");
+            crate::println!("  signature integrity      - Verify kernel .text section integrity");
             crate::println!("  signature sign <name>    - Co-sign the kernel with your identity");
             crate::println!("  signature prove <name>   - Prove a user signature with passphrase");
             crate::println!("  signature prove-creator  - Prove creator authorship (requires seed)");
@@ -12263,11 +12380,207 @@ fn cmd_iostat() {
     crate::println!("(I/O statistics not implemented)");
 }
 
-fn cmd_dmesg() {
-    crate::println_color!(COLOR_BRIGHT_GREEN, "Kernel Messages (dmesg)");
-    crate::println!("═══════════════════════════════════════════");
-    crate::println!("(kernel ring buffer not implemented)");
-    crate::println!("Use serial console for boot messages.");
+fn cmd_dmesg(args: &[&str]) {
+    if args.first() == Some(&"-c") || args.first() == Some(&"--clear") {
+        // Clear by reading all (ring buffer auto-overwrites)
+        crate::println_color!(COLOR_GREEN, "dmesg buffer acknowledged.");
+        return;
+    }
+    
+    let count = if let Some(&"-n") = args.first() {
+        args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(20)
+    } else if let Some(n) = args.first().and_then(|s| s.parse::<usize>().ok()) {
+        n
+    } else {
+        0 // show all
+    };
+    
+    let lines = crate::devtools::dmesg_read(count);
+    if lines.is_empty() {
+        crate::println_color!(COLOR_YELLOW, "(no kernel messages recorded)");
+        crate::println!("Tip: messages are captured after devtools init.");
+        return;
+    }
+    let (buf_size, total) = crate::devtools::dmesg_stats();
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Kernel Ring Buffer ({} stored, {} total)", buf_size, total);
+    crate::println!("═══════════════════════════════════════════════════════════════");
+    for line in &lines {
+        crate::println!("{}", line);
+    }
+}
+
+fn cmd_memdbg() {
+    let s = crate::devtools::memdbg_stats();
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Memory Debug Statistics (memdbg)");
+    crate::println!("═══════════════════════════════════════════════════════════════");
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "  Heap Usage:");
+    crate::println!("    Current used : {:>10} bytes ({} KB)", s.current_heap_used, s.current_heap_used / 1024);
+    crate::println!("    Current free : {:>10} bytes ({} KB)", s.current_heap_free, s.current_heap_free / 1024);
+    crate::println!("    Total heap   : {:>10} bytes ({} KB)", s.heap_total, s.heap_total / 1024);
+    crate::println!("    Peak used    : {:>10} bytes ({} KB)", s.peak_heap_used, s.peak_heap_used / 1024);
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "  Allocation Stats:");
+    crate::println!("    Alloc ops    : {:>10}", s.alloc_count);
+    crate::println!("    Dealloc ops  : {:>10}", s.dealloc_count);
+    crate::println!("    Live allocs  : {:>10}", s.live_allocs);
+    crate::println!("    Total alloc'd: {:>10} bytes", s.alloc_bytes_total);
+    crate::println!("    Total freed  : {:>10} bytes", s.dealloc_bytes_total);
+    crate::println!("    Largest alloc: {:>10} bytes", s.largest_alloc);
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "  Fragmentation:");
+    let frag_color = if s.fragmentation_pct > 50.0 { COLOR_RED }
+        else if s.fragmentation_pct > 25.0 { COLOR_YELLOW }
+        else { COLOR_GREEN };
+    crate::println_color!(frag_color, "    Estimate     : {:.1}%", s.fragmentation_pct);
+}
+
+fn cmd_perfstat() {
+    let snap = crate::devtools::perf_snapshot();
+    let uptime_s = snap.uptime_ms / 1000;
+    let hours = uptime_s / 3600;
+    let mins = (uptime_s % 3600) / 60;
+    let secs = uptime_s % 60;
+    
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Performance Statistics (perf)");
+    crate::println!("═══════════════════════════════════════════════════════════════");
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "  System:");
+    crate::println!("    Uptime       : {}h {:02}m {:02}s ({} ms)", hours, mins, secs, snap.uptime_ms);
+    crate::println!("    GUI FPS      : {}", snap.fps);
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "  Interrupts:");
+    crate::println!("    Total IRQs   : {}", snap.total_irqs);
+    crate::println!("    IRQ/sec      : {}", snap.irq_per_sec);
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "  Scheduling:");
+    crate::println!("    Syscalls     : {}", snap.total_syscalls);
+    crate::println!("    Ctx switches : {}", snap.total_ctx_switches);
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "  Memory:");
+    crate::println!("    Heap used    : {} / {} KB ({}%)", 
+        snap.heap_used / 1024, (snap.heap_used + snap.heap_free) / 1024,
+        if snap.heap_used + snap.heap_free > 0 { snap.heap_used * 100 / (snap.heap_used + snap.heap_free) } else { 0 });
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "  Per-CPU:");
+    for s in &snap.cpu_stats {
+        let state = if s.is_idle { "idle" } else { "busy" };
+        crate::println!("    CPU{}: {} irqs, {} syscalls, {} ctxsw [{}]", 
+            s.cpu_id, s.interrupts, s.syscalls, s.context_switches, state);
+    }
+}
+
+fn cmd_irqstat() {
+    let stats = crate::sync::percpu::all_cpu_stats();
+    let total_irqs: u64 = stats.iter().map(|s| s.interrupts).sum();
+    
+    crate::println_color!(COLOR_BRIGHT_GREEN, "IRQ Statistics");
+    crate::println!("═══════════════════════════════════════════════════════════════");
+    crate::println!();
+    crate::println!("  Total IRQs     : {}", total_irqs);
+    crate::println!("  IRQ rate       : {}/sec", crate::devtools::irq_rate());
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "  Per-CPU Breakdown:");
+    for s in &stats {
+        let bar_len = if total_irqs > 0 { (s.interrupts * 40 / total_irqs.max(1)) as usize } else { 0 };
+        let bar: String = "█".repeat(bar_len);
+        let pct = if total_irqs > 0 { s.interrupts * 100 / total_irqs } else { 0 };
+        crate::println!("    CPU{}: {:>8} ({:>3}%) {}", s.cpu_id, s.interrupts, pct, bar);
+    }
+}
+
+fn cmd_registers() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "CPU Register Dump");
+    crate::println!("═══════════════════════════════════════════════════════════════");
+    let regs = crate::devtools::cpu_registers();
+    for line in &regs {
+        crate::println!("{}", line);
+    }
+}
+
+fn cmd_peek(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: peek <hex_addr> [byte_count]");
+        crate::println!("  e.g.: peek 0xFFFF8000_00000000 64");
+        crate::println!("  Default count: 64 bytes, max: 256 bytes");
+        return;
+    }
+    
+    let addr_str = args[0].trim_start_matches("0x").trim_start_matches("0X");
+    let addr = match usize::from_str_radix(addr_str, 16) {
+        Ok(a) => a,
+        Err(_) => {
+            crate::println_color!(COLOR_RED, "Invalid hex address: {}", args[0]);
+            return;
+        }
+    };
+    
+    let count = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(64);
+    
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Memory dump at 0x{:016x} ({} bytes)", addr, count);
+    crate::println!("═══════════════════════════════════════════════════════════════");
+    let lines = crate::devtools::peek(addr, count);
+    for line in &lines {
+        crate::println!("{}", line);
+    }
+}
+
+fn cmd_poke(args: &[&str]) {
+    if args.len() < 2 {
+        crate::println!("Usage: poke <hex_addr> <hex_value>");
+        crate::println!("  e.g.: poke 0xB8000 0x41");
+        crate::println_color!(COLOR_RED, "  ⚠ WARNING: Writing to arbitrary memory is DANGEROUS!");
+        return;
+    }
+    
+    let addr_str = args[0].trim_start_matches("0x").trim_start_matches("0X");
+    let addr = match usize::from_str_radix(addr_str, 16) {
+        Ok(a) => a,
+        Err(_) => {
+            crate::println_color!(COLOR_RED, "Invalid hex address: {}", args[0]);
+            return;
+        }
+    };
+    
+    let val_str = args[1].trim_start_matches("0x").trim_start_matches("0X");
+    let value = match u8::from_str_radix(val_str, 16) {
+        Ok(v) => v,
+        Err(_) => {
+            crate::println_color!(COLOR_RED, "Invalid hex value: {}", args[1]);
+            return;
+        }
+    };
+    
+    match crate::devtools::poke(addr, value) {
+        Ok(()) => crate::println_color!(COLOR_GREEN, "Wrote 0x{:02x} to 0x{:016x}", value, addr),
+        Err(e) => crate::println_color!(COLOR_RED, "poke error: {}", e),
+    }
+}
+
+fn cmd_devpanel() {
+    crate::devtools::toggle_devpanel();
+    let state = if crate::devtools::is_devpanel_visible() { "ON" } else { "OFF" };
+    crate::println_color!(COLOR_GREEN, "DevPanel overlay: {} (also toggle with F12 in desktop)", state);
+}
+
+fn cmd_timecmd(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: timecmd <command> [args...]");
+        crate::println!("  Runs a command and prints elapsed time.");
+        return;
+    }
+    
+    let start = crate::cpu::tsc::Stopwatch::start();
+    
+    // Reconstruct and execute the sub-command
+    let sub_cmd = args.join(" ");
+    execute_command(&sub_cmd);
+    
+    let elapsed_us = start.elapsed_micros();
+    let elapsed_ms = elapsed_us / 1000;
+    let frac = elapsed_us % 1000;
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "⏱ Elapsed: {}.{:03} ms ({} µs)", elapsed_ms, frac, elapsed_us);
 }
 
 fn cmd_lsof(_args: &[&str]) {

@@ -62,7 +62,7 @@ pub const CREATOR_FINGERPRINT: [u8; 32] = [
 pub const BUILD_TIMESTAMP: &str = env!("TRUSTOS_BUILD_TIME", "unknown");
 
 /// Kernel version
-pub const KERNEL_VERSION: &str = "0.1.1";
+pub const KERNEL_VERSION: &str = "0.1.2";
 
 // =============================================================================
 // USER SIGNATURE (runtime, optional)
@@ -172,4 +172,106 @@ pub fn verify_user_seed(name: &str, passphrase: &[u8]) -> bool {
 pub fn clear_user_signature() {
     let mut slot = USER_SIGNATURE.lock();
     *slot = None;
+}
+
+// =============================================================================
+// KERNEL INTEGRITY VERIFICATION
+// =============================================================================
+// Computes SHA-256 of the kernel .text section at boot and stores it.
+// The `verify-integrity` command re-computes the hash and compares it,
+// detecting runtime code modification (rootkits, memory corruption, etc.).
+
+extern "C" {
+    static __text_start: u8;
+    static __text_end: u8;
+}
+
+/// The SHA-256 hash of the .text section computed at boot
+static BOOT_TEXT_HASH: Mutex<Option<[u8; 32]>> = Mutex::new(None);
+
+/// Compute SHA-256 of the kernel .text section
+fn hash_text_section() -> [u8; 32] {
+    let start = unsafe { &__text_start as *const u8 as usize };
+    let end = unsafe { &__text_end as *const u8 as usize };
+    let size = end.saturating_sub(start);
+    
+    // Read the .text section as a byte slice
+    let text_bytes = unsafe {
+        core::slice::from_raw_parts(start as *const u8, size)
+    };
+    
+    crate::tls13::crypto::sha256(text_bytes)
+}
+
+/// Called once at boot to record the reference hash of the .text section.
+/// Must be called after heap init but before any self-modifying code.
+pub fn init_integrity() {
+    let hash = hash_text_section();
+    let hex = hash_to_hex(&hash);
+    crate::serial_println!("[INTEGRITY] .text section: {} bytes, SHA-256: {}...{}", 
+        text_section_size(), &hex[..16], &hex[56..]);
+    *BOOT_TEXT_HASH.lock() = Some(hash);
+}
+
+/// Get the size of the .text section
+pub fn text_section_size() -> usize {
+    let start = unsafe { &__text_start as *const u8 as usize };
+    let end = unsafe { &__text_end as *const u8 as usize };
+    end.saturating_sub(start)
+}
+
+/// Get the boot-time hash as hex (for display)
+pub fn boot_text_hash_hex() -> Option<String> {
+    BOOT_TEXT_HASH.lock().map(|h| hash_to_hex(&h))
+}
+
+/// Verify kernel integrity: re-hash .text and compare to boot-time hash.
+/// Returns Ok(true) if matching, Ok(false) if tampered, Err if not initialized.
+pub fn verify_integrity() -> Result<bool, &'static str> {
+    let boot_hash = BOOT_TEXT_HASH.lock().ok_or("Integrity not initialized (call init_integrity at boot)")?;
+    let current_hash = hash_text_section();
+    
+    // Constant-time comparison
+    let mut diff = 0u8;
+    for i in 0..32 {
+        diff |= boot_hash[i] ^ current_hash[i];
+    }
+    
+    Ok(diff == 0)
+}
+
+/// Get full integrity report
+pub fn integrity_report() -> Vec<String> {
+    let mut lines = Vec::new();
+    let size = text_section_size();
+    
+    lines.push(String::from("  Kernel Integrity Verification"));
+    lines.push(String::from("  ─────────────────────────────────────────────"));
+    lines.push(alloc::format!("  .text section : {} bytes ({} KB)", size, size / 1024));
+    
+    if let Some(hex) = boot_text_hash_hex() {
+        lines.push(alloc::format!("  Boot hash     : {}", hex));
+    } else {
+        lines.push(String::from("  Boot hash     : NOT INITIALIZED"));
+        return lines;
+    }
+    
+    let current_hash = hash_text_section();
+    let current_hex = hash_to_hex(&current_hash);
+    lines.push(alloc::format!("  Current hash  : {}", current_hex));
+    
+    match verify_integrity() {
+        Ok(true) => {
+            lines.push(String::from("  Status        : ✅ INTEGRITY OK — .text unmodified"));
+        }
+        Ok(false) => {
+            lines.push(String::from("  Status        : ❌ INTEGRITY VIOLATION — .text was modified!"));
+            lines.push(String::from("  WARNING: Kernel code has been tampered with since boot."));
+        }
+        Err(e) => {
+            lines.push(alloc::format!("  Status        : ⚠️  {}", e));
+        }
+    }
+    
+    lines
 }

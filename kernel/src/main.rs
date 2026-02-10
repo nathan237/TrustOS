@@ -103,6 +103,9 @@ mod hypervisor;
 mod rasterizer;
 mod model_editor;
 
+// Developer tools (profiler, dmesg, memdbg, devpanel, peek/poke)
+mod devtools;
+
 // Kernel signature & proof of authorship
 mod signature;
 
@@ -349,6 +352,9 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[FB] Initializing scrollback buffer...");
     framebuffer::init_scrollback();
     
+    // Compute SHA-256 of kernel .text section for runtime integrity verification
+    signature::init_integrity();
+    
     // Now that heap is initialized, show boot banner
     framebuffer::show_simple_boot_header();
     framebuffer::print_boot_status("Memory management initialized", BootStatus::Ok);
@@ -460,7 +466,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // (Set to true only for debugging boot freezes)
     
     // Phase 6: RTC (Real-Time Clock)
-    const ENABLE_RTC: bool = false;
+    const ENABLE_RTC: bool = true;
     if ENABLE_RTC {
         serial_println!("[RTC] init start");
         if rtc::try_init() {
