@@ -103,6 +103,9 @@ mod hypervisor;
 mod rasterizer;
 mod model_editor;
 
+// Kernel signature & proof of authorship
+mod signature;
+
 // Synchronization primitives (Redox-inspired)
 mod sync;
 // POSIX signals

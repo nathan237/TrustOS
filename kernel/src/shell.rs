@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use alloc::vec;
 use alloc::boxed::Box;
 use alloc::format;
-use crate::framebuffer::{COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_CYAN, COLOR_WHITE, COLOR_BLUE, COLOR_MAGENTA};
+use crate::framebuffer::{COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_CYAN, COLOR_WHITE, COLOR_BLUE, COLOR_MAGENTA, COLOR_GRAY};
 use crate::ramfs::FileType;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -142,6 +142,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "test", "keytest", "hexdump", "xxd", "panic",
     // Desktop GUI (multi-layer compositor)
     "desktop", "gui", "cosmic", "open", "trustedit",
+    // Kernel signature
+    "signature",
     // Linux/VM
     "linux", "distro", "alpine",
     // Tasks
@@ -971,6 +973,9 @@ fn execute_command(cmd: &str) {
         // TrustEdit 3D model editor (launches desktop with TrustEdit)
         "trustedit" | "edit3d" | "3dedit" => cmd_trustedit(),
         
+        // Kernel signature & proof of authorship
+        "signature" | "sig" => cmd_signature(args),
+        
         // Hypervisor commands
         "hv" | "hypervisor" => cmd_hypervisor(args),
         "vm" => cmd_vm(args),
@@ -1052,6 +1057,7 @@ fn cmd_help(args: &[&str]) {
         crate::println!("     desktop, gui   - Launch COSMIC Desktop (multi-layer, no flicker)");
         crate::println!("     open <app>     - Open desktop with app (browser, files, editor...)");
         crate::println!("     trustedit      - Launch TrustEdit 3D model editor");
+        crate::println!("     signature      - Kernel signature & proof of authorship");
         crate::println!();
         
         crate::println_color!(COLOR_CYAN, "  🔍 Utilities:");
@@ -2423,7 +2429,148 @@ fn cmd_trustedit() {
     desktop::run();
 }
 
-// ==================== SHOWCASE — AUTOMATED DEMO FOR VIDEO ====================
+// ==================== SIGNATURE — KERNEL PROOF OF AUTHORSHIP ====================
+
+fn cmd_signature(args: &[&str]) {
+    use crate::signature;
+
+    match args.first().copied() {
+        Some("verify") | None => {
+            // Show creator + user signatures
+            crate::println!();
+            crate::println_color!(COLOR_CYAN, "\u{2554}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2557}");
+            crate::println_color!(COLOR_CYAN, "\u{2551}              TrustOS Kernel Signature Certificate                  \u{2551}");
+            crate::println_color!(COLOR_CYAN, "\u{2560}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2563}");
+            crate::println!();
+            crate::println_color!(COLOR_BRIGHT_GREEN, "  🔒 CREATOR SIGNATURE (immutable)");
+            crate::println_color!(COLOR_WHITE, "  ─────────────────────────────────────────────────────────────────");
+            crate::println!("  Author:      {} (@{})", signature::CREATOR_NAME, signature::CREATOR_GITHUB);
+            crate::println!("  Payload:     \"{}\"", signature::CREATOR_SIGNED_PAYLOAD);
+            crate::println!("  Algorithm:   HMAC-SHA256");
+            crate::println_color!(COLOR_YELLOW, "  Fingerprint: {}", signature::creator_fingerprint_hex());
+            crate::println!("  Version:     v{}", signature::KERNEL_VERSION);
+            crate::println!("  Built:       {}", signature::BUILD_TIMESTAMP);
+            crate::println!();
+            crate::println_color!(COLOR_GRAY, "  i  This fingerprint was generated with a secret seed known ONLY");
+            crate::println_color!(COLOR_GRAY, "     to the creator. It cannot be forged without the original seed.");
+            crate::println!();
+
+            // Show user signature if present
+            if let Some((name, hex, ts)) = signature::get_user_signature() {
+                crate::println_color!(COLOR_BLUE, "  USER CO-SIGNATURE");
+                crate::println_color!(COLOR_WHITE, "  ─────────────────────────────────────────────────────────────────");
+                crate::println!("  Signed by:   {}", name);
+                crate::println_color!(COLOR_YELLOW, "  Fingerprint: {}", hex);
+                crate::println!("  Signed at:   {}s after midnight (RTC)", ts);
+                crate::println!();
+            } else {
+                crate::println_color!(COLOR_GRAY, "  No user co-signature. Use 'signature sign <name>' to add yours.");
+                crate::println!();
+            }
+
+            crate::println_color!(COLOR_CYAN, "\u{255a}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{255d}");
+            crate::println!();
+        }
+        Some("sign") => {
+            // signature sign <name>
+            if args.len() < 2 {
+                crate::println_color!(COLOR_RED, "Usage: signature sign <your_name>");
+                return;
+            }
+            let name = args[1];
+            crate::println!("Enter your secret passphrase to sign the kernel:");
+            crate::print!("> ");
+            // Read passphrase (we'll use a simple input method)
+            let passphrase = read_passphrase();
+            if passphrase.is_empty() {
+                crate::println_color!(COLOR_RED, "Empty passphrase. Aborted.");
+                return;
+            }
+            signature::sign_as_user(name, passphrase.as_bytes());
+            crate::println!();
+            crate::println_color!(COLOR_BRIGHT_GREEN, "✓ Kernel co-signed by '{}'", name);
+            if let Some((_, hex, _)) = signature::get_user_signature() {
+                crate::println_color!(COLOR_YELLOW, "  Your fingerprint: {}", hex);
+            }
+            crate::println_color!(COLOR_GRAY, "  Keep your passphrase safe -- you'll need it to prove ownership.");
+            crate::println!();
+        }
+        Some("prove") => {
+            // Verify a user's signature with their passphrase
+            if args.len() < 2 {
+                crate::println_color!(COLOR_RED, "Usage: signature prove <name>");
+                return;
+            }
+            let name = args[1];
+            crate::println!("Enter passphrase to verify:");
+            crate::print!("> ");
+            let passphrase = read_passphrase();
+            if signature::verify_user_seed(name, passphrase.as_bytes()) {
+                crate::println_color!(COLOR_BRIGHT_GREEN, "VERIFIED -- '{}' is the legitimate signer.", name);
+            } else {
+                crate::println_color!(COLOR_RED, "FAILED -- passphrase does not match the signature for '{}'.", name);
+            }
+            crate::println!();
+        }
+        Some("prove-creator") => {
+            // Only the real creator can pass this
+            crate::println!("Enter creator seed to verify authorship:");
+            crate::print!("> ");
+            let seed = read_passphrase();
+            if signature::verify_creator_seed(seed.as_bytes()) {
+                crate::println_color!(COLOR_BRIGHT_GREEN, "CREATOR VERIFIED -- You are the original author of TrustOS.");
+            } else {
+                crate::println_color!(COLOR_RED, "FAILED -- This seed does not match the creator fingerprint.");
+            }
+            crate::println!();
+        }
+        Some("clear") => {
+            signature::clear_user_signature();
+            crate::println_color!(COLOR_YELLOW, "User co-signature cleared.");
+        }
+        _ => {
+            crate::println_color!(COLOR_CYAN, "TrustOS Kernel Signature System");
+            crate::println!();
+            crate::println!("Usage:");
+            crate::println!("  signature                - Show all signatures (creator + user)");
+            crate::println!("  signature verify         - Show & verify signature certificate");
+            crate::println!("  signature sign <name>    - Co-sign the kernel with your identity");
+            crate::println!("  signature prove <name>   - Prove a user signature with passphrase");
+            crate::println!("  signature prove-creator  - Prove creator authorship (requires seed)");
+            crate::println!("  signature clear          - Remove user co-signature");
+        }
+    }
+}
+
+/// Read a passphrase from keyboard input (hidden, returns on Enter)
+fn read_passphrase() -> alloc::string::String {
+    use alloc::string::String;
+    let mut passphrase = String::new();
+    loop {
+        if let Some(key) = crate::keyboard::try_read_key() {
+            match key {
+                b'\n' | b'\r' | 0x0A | 0x0D => {
+                    crate::println!();
+                    break;
+                }
+                0x08 => {
+                    // Backspace
+                    if !passphrase.is_empty() {
+                        passphrase.pop();
+                        crate::print!("\x08 \x08");
+                    }
+                }
+                c if c.is_ascii() && !c.is_ascii_control() => {
+                    passphrase.push(c as char);
+                    crate::print!("*");
+                }
+                _ => {}
+            }
+        }
+        core::hint::spin_loop();
+    }
+    passphrase
+}
 // Runs through all TrustOS features with timed pauses between steps.
 // Perfect for screen recording with OBS to create marketing videos.
 
