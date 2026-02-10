@@ -2105,11 +2105,12 @@ struct AppConfig {
         self.create_window("Settings", 250, 140, 400, 350, WindowType::Settings);
     }
     
-    /// Menu actions enum
+    /// Menu actions enum — must match draw_start_menu layout exactly
     fn check_start_menu_click(&self, x: i32, y: i32) -> Option<u8> {
-        let menu_w = 320u32;
-        let menu_h = 530u32;
-        let menu_x = 8i32;
+        // Same dimensions as draw_start_menu()
+        let menu_w = 280u32;
+        let menu_h = 400u32;
+        let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
         // Check if click is inside the start menu at all
@@ -2117,43 +2118,22 @@ struct AppConfig {
             return None;
         }
         
-        // Check pinned app grid (3 rows x 4 cols, 11 apps)
-        let search_y = menu_y + 16;
-        let pinned_y = search_y + 52;
-        let grid_y = pinned_y + 24;
-        let cell_w = 72i32;
-        let cell_h = 65i32;
+        // 11 list items at menu_y + 30 + (i * 32), each 30px tall
+        // Matches draw_start_menu items array:
+        // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Settings, 9=Shutdown, 10=Reboot
+        let items_start_y = menu_y + 30;
+        let item_spacing = 32;
+        let item_h = 30;
         
-        for i in 0..11 {
-            let col = i % 4;
-            let row = i / 4;
-            let cx = menu_x + 16 + (col as i32 * cell_w);
-            let cy = grid_y + (row as i32 * cell_h);
-            
-            if x >= cx && x < cx + cell_w && y >= cy && y < cy + cell_h {
-                // Pinned apps: 0=Terminal, 1=Files, 2=Settings, 3=Editor,
-                //              4=Network, 5=Browser, 6=Calc, 7=3D Demo,
-                //              8=Snake, 9=TrustEdit, 10=About
-                return Some(10 + i as u8); // Use 10+ range for pinned grid
-            }
-        }
-        
-        // Check power button
-        let user_y = menu_y + menu_h as i32 - 60;
-        let user_icon_y = user_y + 16;
-        let power_x = menu_x + menu_w as i32 - 48;
-        if x >= power_x && x < power_x + 32 && y >= user_icon_y && y < user_icon_y + 32 {
-            return Some(6); // Shutdown
-        }
-        
-        // Check text menu items (7 items starting at menu_y + 50)
-        let item_start_y = menu_y + 50;
-        let item_height = 28;
-        
-        if y >= item_start_y {
-            let item_index = ((y - item_start_y) / item_height) as u8;
-            if item_index < 7 {
-                return Some(item_index);
+        if y >= items_start_y {
+            let idx = ((y - items_start_y) / item_spacing) as u8;
+            if idx < 11 {
+                // Verify within item height (not in gap)
+                let item_top = items_start_y + (idx as i32 * item_spacing);
+                if y < item_top + item_h {
+                    return Some(idx);
+                }
             }
         }
         
@@ -2161,13 +2141,16 @@ struct AppConfig {
     }
     
     fn handle_menu_action(&mut self, action: u8) {
+        // Matches draw_start_menu items array order:
+        // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Settings, 9=Shutdown, 10=Reboot
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
                 let y = 80 + (self.windows.len() as i32 * 20);
                 self.create_window("Terminal", x, y, 500, 350, WindowType::Terminal);
             },
-            1 => { // File Manager
+            1 => { // Files
                 self.create_window("Files", 150, 100, 400, 350, WindowType::FileManager);
             },
             2 => { // Calculator
@@ -2176,52 +2159,34 @@ struct AppConfig {
             3 => { // Network
                 self.create_window("Network", 200, 120, 320, 200, WindowType::NetworkInfo);
             },
-            4 => { // Settings
-                self.create_window("Settings", 250, 140, 350, 250, WindowType::Settings);
+            4 => { // Text Editor (TrustCode)
+                self.create_window("TrustCode", 150, 80, 700, 500, WindowType::TextEditor);
             },
-            5 => { // About
-                self.create_window("About TrustOS", 300, 180, 350, 200, WindowType::About);
+            5 => { // TrustEdit 3D
+                self.create_window("TrustEdit 3D", 100, 60, 700, 500, WindowType::ModelEditor);
             },
-            6 => { // Shutdown
+            6 => { // Browser
+                self.create_window("TrustBrowser", 120, 60, 600, 450, WindowType::Browser);
+            },
+            7 => { // Snake
+                self.create_window("Snake Game", 250, 120, 340, 360, WindowType::Game);
+            },
+            8 => { // Settings
+                self.open_settings_panel();
+            },
+            9 => { // Shutdown
                 crate::println!("\n\n=== SYSTEM SHUTDOWN ===");
                 crate::println!("Goodbye!");
                 loop { x86_64::instructions::hlt(); }
             },
-            // Pinned grid apps (10+ range)
-            10 => { // Terminal
-                let x = 100 + (self.windows.len() as i32 * 30);
-                let y = 80 + (self.windows.len() as i32 * 20);
-                self.create_window("Terminal", x, y, 500, 350, WindowType::Terminal);
-            },
-            11 => { // Files
-                self.create_window("Files", 150, 100, 400, 350, WindowType::FileManager);
-            },
-            12 => { // Settings
-                self.create_window("Settings", 250, 140, 350, 250, WindowType::Settings);
-            },
-            13 => { // Editor (TrustCode)
-                self.create_window("TrustCode", 150, 80, 700, 500, WindowType::TextEditor);
-            },
-            14 => { // Network
-                self.create_window("Network", 200, 120, 320, 200, WindowType::NetworkInfo);
-            },
-            15 => { // Browser
-                self.create_window("TrustBrowser", 120, 60, 600, 450, WindowType::Browser);
-            },
-            16 => { // Calculator
-                self.create_window("Calculator", 400, 150, 280, 350, WindowType::Calculator);
-            },
-            17 => { // 3D Demo
-                self.create_window("TrustGL 3D Demo", 150, 80, 400, 350, WindowType::Demo3D);
-            },
-            18 => { // Snake
-                self.create_window("Snake Game", 250, 120, 340, 360, WindowType::Game);
-            },
-            19 => { // TrustEdit
-                self.create_window("TrustEdit 3D", 100, 60, 700, 500, WindowType::ModelEditor);
-            },
-            20 => { // About
-                self.create_window("About TrustOS", 300, 180, 350, 200, WindowType::About);
+            10 => { // Reboot
+                crate::serial_println!("[SYSTEM] Reboot requested");
+                // Triple fault reboot
+                unsafe {
+                    let mut port = x86_64::instructions::port::Port::<u8>::new(0x64);
+                    port.write(0xFE);
+                }
+                loop { x86_64::instructions::hlt(); }
             },
             _ => {}
         }

@@ -169,6 +169,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "neofetch", "matrix", "cowsay",
     // Showcase
     "showcase",
+    "showcase3d",
     // Hypervisor
     "hv", "hypervisor",
 ];
@@ -975,6 +976,7 @@ fn execute_command(cmd: &str) {
         
         // Showcase — automated demo for marketing videos
         "showcase" => cmd_showcase(args),
+        "showcase3d" | "demo3d" => cmd_showcase3d(),
         
         // Desktop Environment - windowed desktop with full app support
         "desktop" | "gui" => launch_desktop_env(None),
@@ -1292,6 +1294,7 @@ fn cmd_help(args: &[&str]) {
     crate::println!("    matrix              Fullscreen Matrix rain animation");
     crate::println!("    cowsay <text>       ASCII cow says your message");
     crate::println!("    showcase [N]        Automated demo (marketing video)");
+    crate::println!("    showcase3d          3D graphics cinematic showcase");
     crate::println!();
     
     crate::println_color!(COLOR_BRIGHT_GREEN, "  Total: ~170 commands | Type 'man <cmd>' for detailed usage");
@@ -3760,6 +3763,452 @@ fn main() {
     let _ = crate::ramfs::with_fs(|fs| { let _ = fs.rm("/demo/hello.txt"); let _ = fs.rm("/demo/showcase.tl"); });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHOWCASE 3D — Cinematic 3D graphics demo
+// 12 fullscreen scenes, 5 seconds each, hardware stats overlay
+// ═══════════════════════════════════════════════════════════════════════════════
+
+fn cmd_showcase3d() {
+    use crate::gpu_emu::{PixelInput, PixelOutput};
+
+    let (sw, sh) = crate::framebuffer::get_dimensions();
+    let w = sw as usize;
+    let h = sh as usize;
+    if w == 0 || h == 0 { return; }
+
+    let was_db = crate::framebuffer::is_double_buffer_enabled();
+    if !was_db {
+        crate::framebuffer::init_double_buffer();
+        crate::framebuffer::set_double_buffer_mode(true);
+    }
+
+    let mut buf = alloc::vec![0u32; w * h];
+    let freq = crate::cpu::tsc::frequency_hz();
+    if freq == 0 { crate::println!("TSC not calibrated"); return; }
+
+    // ── Helpers ──────────────────────────────────────────────────────────
+
+    let draw_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+        let glyph = crate::framebuffer::font::get_glyph(c);
+        for (row, &bits) in glyph.iter().enumerate() {
+            for bit in 0..8u32 {
+                if bits & (0x80 >> bit) != 0 {
+                    for sy in 0..scale {
+                        for sx in 0..scale {
+                            let px = cx + bit as usize * scale + sx;
+                            let py = cy + row * scale + sy;
+                            if px < w && py < h {
+                                buf[py * w + px] = color;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    let draw_text = |buf: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32, scale: usize| {
+        for (i, c) in text.chars().enumerate() {
+            draw_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
+        }
+    };
+
+    let draw_text_centered = |buf: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
+        let tw = text.len() * 8 * scale;
+        let x = if tw < w { (w - tw) / 2 } else { 0 };
+        for (i, c) in text.chars().enumerate() {
+            draw_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
+        }
+    };
+
+    let blit = |buf: &[u32], w: usize, h: usize| {
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+            let bb = bb_ptr as *mut u32;
+            let bb_s = bb_stride as usize;
+            for y in 0..h.min(bb_h as usize) {
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        buf[y * w..].as_ptr(),
+                        bb.add(y * bb_s),
+                        w,
+                    );
+                }
+            }
+        }
+        crate::framebuffer::swap_buffers();
+    };
+
+    // Draw stats bar at bottom
+    let draw_stats = |buf: &mut [u32], w: usize, h: usize, scene_name: &str, scene_num: usize, fps: u32, frame_ms: u32| {
+        let bar_h = 28usize;
+        let bar_y = h - bar_h;
+        // Semi-transparent dark bar
+        for y in bar_y..h {
+            for x in 0..w {
+                buf[y * w + x] = 0xFF0A0A0A;
+            }
+        }
+        // Top border
+        for x in 0..w {
+            buf[bar_y * w + x] = 0xFF00AA44;
+        }
+        // Stats text
+        let mut stats_str = alloc::string::String::new();
+        use core::fmt::Write;
+        let _ = write!(stats_str, " Scene {}/12: {}  |  {} FPS  |  {}.{}ms  |  {}x{}  |  TrustOS 3D Engine",
+            scene_num, scene_name, fps, frame_ms / 10, frame_ms % 10, w, h);
+        draw_text(buf, w, h, 8, bar_y + 8, &stats_str, 0xFF00FF66, 1);
+    };
+
+    // Render a pixel-shader scene
+    let render_shader_scene = |buf: &mut [u32], w: usize, h: usize,
+                                shader_fn: fn(PixelInput) -> PixelOutput,
+                                title: &str, subtitle: &str, scene_num: usize,
+                                duration_ms: u64, freq: u64| {
+        let start = crate::cpu::tsc::read_tsc();
+        let target = freq / 1000 * duration_ms;
+        let mut frame = 0u32;
+        let mut last_fps_tsc = start;
+        let mut fps_frames = 0u32;
+        let mut cur_fps = 0u32;
+        let mut cur_frame_ms = 0u32;
+        let step = if w > 960 { 2usize } else { 1 };
+
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start);
+            if elapsed >= target { break; }
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { return; }
+            }
+
+            let time = elapsed as f32 / freq as f32;
+
+            // Render shader (optionally skip pixels for perf on high res)
+            for y in (0..h).step_by(step) {
+                for x in (0..w).step_by(step) {
+                    let input = PixelInput { x: x as u32, y: y as u32, width: w as u32, height: h as u32, time, frame };
+                    let out = shader_fn(input);
+                    let color = out.to_u32();
+                    buf[y * w + x] = color;
+                    if step > 1 {
+                        // Fill skipped pixels
+                        if x + 1 < w { buf[y * w + x + 1] = color; }
+                        if y + 1 < h { buf[(y + 1) * w + x] = color; }
+                        if x + 1 < w && y + 1 < h { buf[(y + 1) * w + x + 1] = color; }
+                    }
+                }
+            }
+
+            // FPS counter
+            fps_frames += 1;
+            let fps_elapsed = crate::cpu::tsc::read_tsc().saturating_sub(last_fps_tsc);
+            if fps_elapsed >= freq {
+                cur_fps = fps_frames;
+                cur_frame_ms = if fps_frames > 0 { 10000 / fps_frames } else { 0 };
+                fps_frames = 0;
+                last_fps_tsc = crate::cpu::tsc::read_tsc();
+            }
+
+            // Title overlay (top, with shadow)
+            if elapsed < freq / 1000 * 2000 { // Show title for first 2s
+                let alpha = if elapsed < freq / 1000 * 500 {
+                    (elapsed * 255 / (freq / 1000 * 500)) as u32
+                } else if elapsed > freq / 1000 * 1500 {
+                    let fade = elapsed - freq / 1000 * 1500;
+                    255u32.saturating_sub((fade * 255 / (freq / 1000 * 500)) as u32)
+                } else { 255 };
+                let a = alpha.min(255) as u32;
+                let title_color = 0xFF000000 | (a << 16) | (a << 8) | a;
+                draw_text_centered(buf, w, h, 30, title, title_color, 4);
+                let sub_color = 0xFF000000 | ((a * 180 / 255) << 8);
+                draw_text_centered(buf, w, h, 30 + 70, subtitle, sub_color, 2);
+            }
+
+            // Stats bar
+            draw_stats(buf, w, h, title, scene_num, cur_fps, cur_frame_ms);
+
+            blit(buf, w, h);
+            frame += 1;
+        }
+    };
+
+    // Render a Formula3D wireframe scene
+    let render_formula_scene = |buf: &mut [u32], w: usize, h: usize,
+                                 scene: crate::formula3d::FormulaScene,
+                                 wire_color: u32,
+                                 title: &str, subtitle: &str, scene_num: usize,
+                                 duration_ms: u64, freq: u64| {
+        let mut renderer = crate::formula3d::FormulaRenderer::new();
+        renderer.set_scene(scene);
+        renderer.wire_color = wire_color;
+        let start = crate::cpu::tsc::read_tsc();
+        let target = freq / 1000 * duration_ms;
+        let mut frame = 0u32;
+        let mut last_fps_tsc = start;
+        let mut fps_frames = 0u32;
+        let mut cur_fps = 0u32;
+        let mut cur_frame_ms = 0u32;
+
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start);
+            if elapsed >= target { break; }
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { return; }
+            }
+
+            renderer.update();
+            for p in buf.iter_mut() { *p = 0xFF000000; }
+            renderer.render(buf, w, h);
+
+            // FPS
+            fps_frames += 1;
+            let fps_elapsed = crate::cpu::tsc::read_tsc().saturating_sub(last_fps_tsc);
+            if fps_elapsed >= freq {
+                cur_fps = fps_frames;
+                cur_frame_ms = if fps_frames > 0 { 10000 / fps_frames } else { 0 };
+                fps_frames = 0;
+                last_fps_tsc = crate::cpu::tsc::read_tsc();
+            }
+
+            // Title overlay
+            if elapsed < freq / 1000 * 2000 {
+                let alpha = if elapsed < freq / 1000 * 500 {
+                    (elapsed * 255 / (freq / 1000 * 500)) as u32
+                } else if elapsed > freq / 1000 * 1500 {
+                    let fade = elapsed - freq / 1000 * 1500;
+                    255u32.saturating_sub((fade * 255 / (freq / 1000 * 500)) as u32)
+                } else { 255 };
+                let a = alpha.min(255) as u32;
+                let c = 0xFF000000 | (a << 16) | (a << 8) | a;
+                draw_text_centered(buf, w, h, 30, title, c, 4);
+                let sc = 0xFF000000 | ((a * 180 / 255) << 8);
+                draw_text_centered(buf, w, h, 100, subtitle, sc, 2);
+            }
+
+            draw_stats(buf, w, h, title, scene_num, cur_fps, cur_frame_ms);
+            blit(buf, w, h);
+            frame += 1;
+        }
+    };
+
+    // Fade to black transition
+    let fade_out = |buf: &mut [u32], w: usize, h: usize, ms: u64, freq: u64| {
+        let start = crate::cpu::tsc::read_tsc();
+        let target = freq / 1000 * ms;
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start);
+            if elapsed >= target { break; }
+            for pixel in buf.iter_mut() {
+                let r = ((*pixel >> 16) & 0xFF).saturating_sub(6) as u32;
+                let g = ((*pixel >> 8) & 0xFF).saturating_sub(6) as u32;
+                let b = (*pixel & 0xFF).saturating_sub(6) as u32;
+                *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+            blit(buf, w, h);
+            crate::cpu::tsc::delay_millis(33);
+        }
+        for p in buf.iter_mut() { *p = 0xFF000000; }
+        blit(buf, w, h);
+    };
+
+    crate::serial_println!("[SHOWCASE3D] Starting 3D cinematic showcase ({}x{})", w, h);
+
+    let scene_ms = 5000u64; // 5 seconds per scene
+    let fade_ms = 400u64;
+
+    // ═════════════════════════════════════════════════════════════════
+    // INTRO — Title card
+    // ═════════════════════════════════════════════════════════════════
+    {
+        let start = crate::cpu::tsc::read_tsc();
+        let target = freq / 1000 * 3000;
+        let mut frame = 0u32;
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start);
+            if elapsed >= target { break; }
+            // Animated dark background
+            for y in 0..h {
+                for x in 0..w {
+                    let v = ((x as i32 + frame as i32) ^ (y as i32)) as u32 & 0x0F;
+                    buf[y * w + x] = 0xFF000000 | (v << 8);
+                }
+            }
+            let alpha = (elapsed * 255 / target.max(1)).min(255) as u32;
+            let c = 0xFF000000 | (alpha << 16) | (alpha << 8) | alpha;
+            draw_text_centered(&mut buf, w, h, h / 3, "TrustOS", c, 8);
+            let sc = 0xFF000000 | ((alpha * 120 / 255) << 16) | ((alpha * 255 / 255) << 8) | ((alpha * 120 / 255));
+            draw_text_centered(&mut buf, w, h, h / 3 + 140, "3D Graphics Showcase", sc, 3);
+            let cc = 0xFF000000 | ((alpha * 100 / 255) << 16) | ((alpha * 100 / 255) << 8) | ((alpha * 100 / 255));
+            draw_text_centered(&mut buf, w, h, h / 3 + 200, "Pure software rendering - No GPU hardware", cc, 2);
+            blit(&buf, w, h);
+            frame += 1;
+            crate::cpu::tsc::delay_millis(33);
+        }
+        fade_out(&mut buf, w, h, fade_ms, freq);
+    }
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 1 — Cosmic Deform (Fractal Vortex)
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 1: Cosmic Deform");
+    render_shader_scene(&mut buf, w, h,
+        crate::gpu_emu::shader_cosmic_deform,
+        "Cosmic Vortex", "GLSL fractal deformation - 6 iterations", 1,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 2 — Matrix Rain 3D Flythrough
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 2: Matrix 3D");
+    render_shader_scene(&mut buf, w, h,
+        crate::gpu_emu::shader_matrix_rain_3d,
+        "Matrix Flythrough", "32-column radial depth projection", 2,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 3 — Holomatrix Tunnel
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 3: Holomatrix Tunnel");
+    render_shader_scene(&mut buf, w, h,
+        crate::gpu_emu::shader_holomatrix_tunnel,
+        "Holo Tunnel", "Polar-to-depth perspective with glyphs", 3,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 4 — SDF Ray-Marched Shapes
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 4: SDF Shapes");
+    render_shader_scene(&mut buf, w, h,
+        crate::gpu_emu::shader_matrix_shapes,
+        "Ray Marching", "SDF cube + sphere - 24 step ray march", 4,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 5 — Plasma Genesis
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 5: Plasma");
+    render_shader_scene(&mut buf, w, h,
+        crate::gpu_emu::shader_plasma,
+        "Plasma Genesis", "4 superimposed sine wave interference", 5,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 6 — Wireframe Multi-Shape Orbit
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 6: Multi-Shape");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Multi,
+        0xFF00FFAA,
+        "Multi Shape", "4 wireframe objects - depth colored", 6,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 7 — DNA Double Helix
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 7: DNA Helix");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Helix,
+        0xFF44FFCC,
+        "DNA Helix", "Double-strand helix with cross rungs", 7,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 8 — Parallax Matrix Depth
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 8: Parallax");
+    render_shader_scene(&mut buf, w, h,
+        crate::gpu_emu::shader_holomatrix_parallax,
+        "Parallax Depth", "4 layers of matrix rain with depth", 8,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 9 — Inferno Fire
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 9: Fire");
+    render_shader_scene(&mut buf, w, h,
+        crate::gpu_emu::shader_fire,
+        "Inferno", "Procedural flame with 3-layer noise", 9,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 10 — Animated Mandelbrot
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 10: Mandelbrot");
+    render_shader_scene(&mut buf, w, h,
+        crate::gpu_emu::shader_mandelbrot,
+        "Mandelbrot", "64-iteration fractal with animated zoom", 10,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 11 — Icosphere Wireframe
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 11: Icosphere");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Icosphere,
+        0xFF66CCFF,
+        "Icosphere", "Geodesic sphere with depth shading", 11,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // SCENE 12 — TrustOS 3D Logo + Character
+    // ═════════════════════════════════════════════════════════════════
+    crate::serial_println!("[SHOWCASE3D] Scene 12: TrustOS Logo");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Character,
+        0xFF00FF88,
+        "TrustOS", "Wireframe humanoid - perspective projection", 12,
+        scene_ms, freq);
+    fade_out(&mut buf, w, h, fade_ms, freq);
+
+    // ═════════════════════════════════════════════════════════════════
+    // OUTRO — Credits
+    // ═════════════════════════════════════════════════════════════════
+    {
+        let start = crate::cpu::tsc::read_tsc();
+        let target = freq / 1000 * 4000;
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start);
+            if elapsed >= target { break; }
+            for p in buf.iter_mut() { *p = 0xFF000000; }
+            let alpha = if elapsed < freq / 1000 * 1000 {
+                (elapsed * 255 / (freq / 1000 * 1000)).min(255)
+            } else if elapsed > freq / 1000 * 3000 {
+                let fd = elapsed - freq / 1000 * 3000;
+                255u64.saturating_sub(fd * 255 / (freq / 1000 * 1000))
+            } else { 255 } as u32;
+            let c = 0xFF000000 | (alpha << 16) | (alpha << 8) | alpha;
+            let gc = 0xFF000000 | ((alpha * 200 / 255) << 8);
+            draw_text_centered(&mut buf, w, h, h / 3 - 30, "TrustOS 3D Engine", c, 5);
+            draw_text_centered(&mut buf, w, h, h / 3 + 60, "12 scenes - Pure software rendering", gc, 2);
+            draw_text_centered(&mut buf, w, h, h / 3 + 100, "No GPU hardware - All CPU computed", gc, 2);
+            draw_text_centered(&mut buf, w, h, h / 3 + 160, "Written in Rust by Nated0ge", 0xFF000000 | ((alpha * 140 / 255) << 16) | ((alpha * 180 / 255) << 8) | (alpha * 255 / 255), 3);
+            draw_text_centered(&mut buf, w, h, h / 3 + 220, "github.com/nathan237/TrustOS", 0xFF000000 | ((alpha * 100 / 255) << 16) | ((alpha * 100 / 255) << 8) | ((alpha * 100 / 255)), 2);
+            blit(&buf, w, h);
+            crate::cpu::tsc::delay_millis(33);
+        }
+    }
+
+    // Restore
+    for p in buf.iter_mut() { *p = 0xFF000000; }
+    blit(&buf, w, h);
+    if !was_db {
+        crate::framebuffer::set_double_buffer_mode(false);
+    }
+    crate::framebuffer::clear();
+    crate::serial_println!("[SHOWCASE3D] Showcase complete");
+}
+
 /// Wrapper for desktop without initial app
 fn cmd_cosmic_v2() {
     cmd_cosmic_v2_with_app(None);
@@ -5272,7 +5721,7 @@ fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms: u64) {
                                 crate::cpu::smp::disable_smp();
                                 shell_output.push(String::from("✗ SMP disabled (single-core)"));
                             },
-                            "shader" | "vgpu" => {
+                            "shader" | "shaders" | "vgpu" => {
                                 shell_output.push(String::from("╔═══════════════════════════════════════╗"));
                                 shell_output.push(String::from("║     Virtual GPU - Shader Demo         ║"));
                                 shell_output.push(String::from("╠═══════════════════════════════════════╣"));
