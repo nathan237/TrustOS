@@ -524,8 +524,13 @@ pub struct Window {
 #[derive(Clone, Copy, PartialEq)]
 pub enum ResizeEdge {
     None,
+    Left,
     Right,
+    Top,
     Bottom,
+    TopLeft,
+    TopRight,
+    BottomLeft,
     BottomRight,
 }
 
@@ -672,21 +677,25 @@ impl Window {
         if self.maximized { return ResizeEdge::None; }
         
         let resize_margin = 8i32;
+        let left_edge = self.x;
         let right_edge = self.x + self.width as i32;
+        let top_edge = self.y;
         let bottom_edge = self.y + self.height as i32;
         
+        let on_left = px >= left_edge && px < left_edge + resize_margin;
         let on_right = px >= right_edge - resize_margin && px < right_edge;
+        let on_top = py >= top_edge && py < top_edge + resize_margin;
         let on_bottom = py >= bottom_edge - resize_margin && py < bottom_edge;
         
-        if on_right && on_bottom {
-            ResizeEdge::BottomRight
-        } else if on_right {
-            ResizeEdge::Right
-        } else if on_bottom {
-            ResizeEdge::Bottom
-        } else {
-            ResizeEdge::None
-        }
+        if on_top && on_left { ResizeEdge::TopLeft }
+        else if on_top && on_right { ResizeEdge::TopRight }
+        else if on_bottom && on_left { ResizeEdge::BottomLeft }
+        else if on_bottom && on_right { ResizeEdge::BottomRight }
+        else if on_left { ResizeEdge::Left }
+        else if on_right { ResizeEdge::Right }
+        else if on_top { ResizeEdge::Top }
+        else if on_bottom { ResizeEdge::Bottom }
+        else { ResizeEdge::None }
     }
     
     /// Toggle maximize state
@@ -1153,8 +1162,8 @@ impl Desktop {
             }
             // Start position (randomized, many start off-screen)
             self.matrix_heads[col] = -((seed % (height / 2)) as i32);
-            // Speed 2-6 (determines depth: 2=far/dim, 6=near/bright)
-            self.matrix_speeds[col] = 2 + (seed % 5);
+            // Speed 1-3 (determines depth: 1=far/dim, 3=near/bright) — slower rain
+            self.matrix_speeds[col] = 1 + (seed % 3);
             self.matrix_seeds[col] = seed;
         }
         self.matrix_initialized = true;
@@ -2870,13 +2879,14 @@ struct AppConfig {
                 w.y = (y - w.drag_offset_y).max(0).min(self.height as i32 - TASKBAR_HEIGHT as i32 - TITLE_BAR_HEIGHT as i32);
             }
             
-            // Handle window resizing
+            // Handle window resizing (all edges)
             if w.resizing != ResizeEdge::None {
                 let dx = x - w.drag_offset_x;
                 let dy = y - w.drag_offset_y;
                 
+                // Right edge: expand width
                 match w.resizing {
-                    ResizeEdge::Right | ResizeEdge::BottomRight => {
+                    ResizeEdge::Right | ResizeEdge::BottomRight | ResizeEdge::TopRight => {
                         let new_width = (w.width as i32 + dx).max(w.min_width as i32) as u32;
                         w.width = new_width.min(self.width - w.x as u32);
                         w.drag_offset_x = x;
@@ -2884,10 +2894,37 @@ struct AppConfig {
                     _ => {}
                 }
                 
+                // Left edge: move x and shrink width
                 match w.resizing {
-                    ResizeEdge::Bottom | ResizeEdge::BottomRight => {
+                    ResizeEdge::Left | ResizeEdge::BottomLeft | ResizeEdge::TopLeft => {
+                        let new_width = (w.width as i32 - dx).max(w.min_width as i32) as u32;
+                        if new_width != w.width as u32 {
+                            w.x += (w.width as i32 - new_width as i32);
+                            w.width = new_width;
+                        }
+                        w.drag_offset_x = x;
+                    }
+                    _ => {}
+                }
+                
+                // Bottom edge: expand height
+                match w.resizing {
+                    ResizeEdge::Bottom | ResizeEdge::BottomRight | ResizeEdge::BottomLeft => {
                         let new_height = (w.height as i32 + dy).max(w.min_height as i32) as u32;
                         w.height = new_height.min(self.height - TASKBAR_HEIGHT - w.y as u32);
+                        w.drag_offset_y = y;
+                    }
+                    _ => {}
+                }
+                
+                // Top edge: move y and shrink height
+                match w.resizing {
+                    ResizeEdge::Top | ResizeEdge::TopLeft | ResizeEdge::TopRight => {
+                        let new_height = (w.height as i32 - dy).max(w.min_height as i32) as u32;
+                        if new_height != w.height as u32 {
+                            w.y += (w.height as i32 - new_height as i32);
+                            w.height = new_height;
+                        }
                         w.drag_offset_y = y;
                     }
                     _ => {}
@@ -2995,7 +3032,6 @@ struct AppConfig {
         // Matrix rain is animated — redraw background every frame
         framebuffer::clear_backbuffer(0xFF000000);
         self.draw_background();
-        self.draw_logo_watermark();
         self.draw_desktop_icons();
         
         // Draw windows (these change, so always redraw)
@@ -3194,21 +3230,17 @@ struct AppConfig {
     
     fn draw_background(&mut self) {
         // ═══════════════════════════════════════════════════════════════
-        // ADVANCING MATRIX RAIN + WIREFRAME 3D — Holographic effect
-        // Slow columns = FAR (dim, gray/blue tint)
+        // MATRIX RAIN — Slow, atmospheric depth-parallax
+        // Slow columns = FAR (dim, desaturated)
         // Fast columns = NEAR (bright, vivid green)
-        // Wireframe cube + grid floor emerge through the rain
+        // Center: "TrustOS" text that lights up on matrix contact
         // ═══════════════════════════════════════════════════════════════
         const MATRIX_COLS: usize = 160;
         const TRAIL_LEN: usize = 30;
         const CHAR_H: u32 = 16;
-        const CELL_W: usize = 8;
-        const CELL_H: usize = 16;
         
         let height = self.height.saturating_sub(TASKBAR_HEIGHT);
         let width = self.width;
-        let grid_cols = (width as usize / CELL_W).min(240);
-        let grid_rows = (height as usize / CELL_H).min(68);
         
         // Clear background to pure black
         framebuffer::fill_rect(0, 0, width, height, 0xFF000000);
@@ -3217,105 +3249,40 @@ struct AppConfig {
             return;
         }
         
-        // ── STEP 1: Build wireframe intensity map ──
-        // Rotating cube + perspective grid floor
-        let mut wireframe = [[0u8; 68]; 240];
-        let time = self.frame_count as f32 * 0.02;
-        let cx = grid_cols as f32 / 2.0;
-        let cy = grid_rows as f32 / 2.0;
-        let scale_f = (grid_rows as f32 / 2.5).min(grid_cols as f32 / 3.5);
+        // ── Build "TrustOS" text bitmap in center ──
+        // Large block letters, each char ~20px wide, ~24px tall
+        // "TRUSTOS" = 7 chars → ~140px wide at center
+        let text_str = "TrustOS";
+        let text_px_w = text_str.len() as u32 * 16; // 16px per char (scaled 2x from 8px glyphs)
+        let text_px_h = 32u32; // 2x scale of 16px glyph
+        let text_x0 = (width / 2).saturating_sub(text_px_w / 2);
+        let text_y0 = (height / 2).saturating_sub(text_px_h / 2);
         
-        // Rotating wireframe cube (12 edges, 30 interpolation points each)
-        let half = 0.5f32;
-        let vertices: [(f32, f32, f32); 8] = [
-            (-half, -half, -half), (half, -half, -half),
-            (half, half, -half), (-half, half, -half),
-            (-half, -half, half), (half, -half, half),
-            (half, half, half), (-half, half, half),
-        ];
-        let edges: [(usize, usize); 12] = [
-            (0,1), (1,2), (2,3), (3,0),
-            (4,5), (5,6), (6,7), (7,4),
-            (0,4), (1,5), (2,6), (3,7),
-        ];
-        let rot_x = time * 0.7;
-        let rot_y = time * 0.5;
-        let cos_xr = crate::graphics::holomatrix::cos_approx_pub(rot_x);
-        let sin_xr = crate::graphics::holomatrix::sin_approx_pub(rot_x);
-        let cos_yr = crate::graphics::holomatrix::cos_approx_pub(rot_y);
-        let sin_yr = crate::graphics::holomatrix::sin_approx_pub(rot_y);
-        
-        for (i1, i2) in edges.iter() {
-            let (vx1, vy1, vz1) = vertices[*i1];
-            let (vx2, vy2, vz2) = vertices[*i2];
-            for s in 0..30 {
-                let t = s as f32 / 29.0;
-                let x = vx1 * (1.0 - t) + vx2 * t;
-                let y_3d = vy1 * (1.0 - t) + vy2 * t;
-                let z = vz1 * (1.0 - t) + vz2 * t;
-                // Rotate X then Y
-                let ry = y_3d * cos_xr - z * sin_xr;
-                let rz = y_3d * sin_xr + z * cos_xr;
-                let rx = x * cos_yr + rz * sin_yr;
-                let rz2 = -x * sin_yr + rz * cos_yr;
-                let depth = 1.0 / (2.0 + rz2);
-                let sx = cx + rx * scale_f * depth;
-                let sy = cy + ry * scale_f * depth;
-                let col = sx as usize;
-                let row = sy as usize;
-                if col < grid_cols && row < grid_rows {
-                    let int = (120.0 + 80.0 * (1.0 - ((rz2 + 0.6) * 0.5).max(0.0).min(1.0))) as u8;
-                    wireframe[col][row] = wireframe[col][row].max(int);
-                    // Thicker lines: spread to adjacent cells
-                    if col > 0 { wireframe[col-1][row] = wireframe[col-1][row].max(int / 2); }
-                    if col < grid_cols-1 { wireframe[col+1][row] = wireframe[col+1][row].max(int / 2); }
+        // Build text mask: 1 = pixel belongs to "TrustOS" text
+        // Use 2x scaled glyphs
+        let mut text_mask = [[false; 224]; 32]; // 7*16*2=224 wide, 32 tall max
+        for (ci, ch) in text_str.chars().enumerate() {
+            let glyph = crate::framebuffer::font::get_glyph(ch);
+            for (row, &bits) in glyph.iter().enumerate() {
+                for bit in 0..8u32 {
+                    if bits & (0x80 >> bit) != 0 {
+                        // Scale 2x
+                        let mx = ci * 16 + (bit as usize) * 2;
+                        let my = row * 2;
+                        if mx < 224 && my < 32 {
+                            text_mask[my][mx] = true;
+                            if mx + 1 < 224 { text_mask[my][mx + 1] = true; }
+                            if my + 1 < 32 {
+                                text_mask[my + 1][mx] = true;
+                                if mx + 1 < 224 { text_mask[my + 1][mx + 1] = true; }
+                            }
+                        }
+                    }
                 }
             }
         }
         
-        // Perspective grid floor (8x8 cells)
-        let grid_y_level = 0.4f32; // Below center
-        let grid_size = 1.5f32;
-        let g_half = grid_size / 2.0;
-        let cells = 8i32;
-        let cell_size = grid_size / cells as f32;
-        for i in 0..=cells {
-            let pos = -g_half + i as f32 * cell_size;
-            // Horizontal lines (along X)
-            for s in 0..40 {
-                let t = s as f32 / 39.0;
-                let x = -g_half + t * grid_size;
-                let z = pos;
-                let rx = x * cos_yr + z * sin_yr;
-                let rz = -x * sin_yr + z * cos_yr;
-                let depth = 1.0 / (2.0 + rz);
-                let sx = cx + rx * scale_f * depth;
-                let sy = cy + grid_y_level * scale_f * depth;
-                let col = sx as usize;
-                let row = sy as usize;
-                if col < grid_cols && row < grid_rows {
-                    wireframe[col][row] = wireframe[col][row].max(50);
-                }
-            }
-            // Vertical lines (along Z)
-            for s in 0..40 {
-                let t = s as f32 / 39.0;
-                let x = pos;
-                let z = -g_half + t * grid_size;
-                let rx = x * cos_yr + z * sin_yr;
-                let rz = -x * sin_yr + z * cos_yr;
-                let depth = 1.0 / (2.0 + rz);
-                let sx = cx + rx * scale_f * depth;
-                let sy = cy + grid_y_level * scale_f * depth;
-                let col = sx as usize;
-                let row = sy as usize;
-                if col < grid_cols && row < grid_rows {
-                    wireframe[col][row] = wireframe[col][row].max(50);
-                }
-            }
-        }
-        
-        // ── STEP 2: Render matrix rain with wireframe overlay ──
+        // ── Render matrix rain ──
         let col_width = width / MATRIX_COLS as u32;
         
         for col in 0..MATRIX_COLS.min(self.matrix_heads.len()) {
@@ -3323,7 +3290,7 @@ struct AppConfig {
             let seed = self.matrix_seeds[col];
             let x = (col as u32 * col_width) + col_width / 2;
             
-            // Update position
+            // Update position (slower: speed is now 1-3)
             let new_y = self.matrix_heads[col] + speed as i32;
             if new_y > height as i32 + (TRAIL_LEN as i32 * CHAR_H as i32) {
                 let new_seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
@@ -3339,45 +3306,58 @@ struct AppConfig {
             }
             
             let head_y = self.matrix_heads[col];
-            let depth_factor = (speed as f32 - 2.0) / 4.0;
-            let brightness_mult = 0.4 + depth_factor * 0.6;
-            let saturation = 0.3 + depth_factor * 0.7;
+            
+            // Depth from speed: 1=far(dim), 3=near(bright)
+            let depth_factor = (speed as f32 - 1.0) / 2.0; // 0.0=far, 1.0=near
+            let brightness_mult = 0.3 + depth_factor * 0.7; // 30%→100%
+            let saturation = 0.2 + depth_factor * 0.8; // 20%→100%
             
             for i in 0..TRAIL_LEN {
                 let char_y = head_y - (i as i32 * CHAR_H as i32);
                 if char_y < 0 || char_y >= height as i32 { continue; }
                 
+                // Trail fading
                 let base = if i == 0 { 255u8 }
-                    else if i == 1 { 220u8 }
-                    else { 180u8.saturating_sub((i as u8).saturating_mul(9)) };
-                if base < 20 { continue; }
+                    else if i == 1 { 200u8 }
+                    else { 160u8.saturating_sub((i as u8).saturating_mul(7)) };
+                if base < 15 { continue; }
                 
                 let brightness = ((base as f32) * brightness_mult) as u8;
                 
-                // Check wireframe intensity at this cell
-                let wf_col = (x as usize) / CELL_W;
-                let wf_row = (char_y as usize) / CELL_H;
-                let wf_boost = if wf_col < grid_cols && wf_row < grid_rows {
-                    wireframe[wf_col][wf_row] as u32
-                } else { 0 };
+                // Check if this rain drop touches the "TrustOS" text zone
+                let in_text_zone = x >= text_x0 && x < text_x0 + text_px_w
+                    && (char_y as u32) >= text_y0 && (char_y as u32) < text_y0 + text_px_h;
                 
-                let (r, g, b) = if wf_boost > 0 {
-                    // Wireframe area: bright cyan-green glow
-                    let intensity = (brightness as u32 + wf_boost).min(255) as u8;
-                    let cyan = (wf_boost * 3 / 2).min(200) as u8;
-                    (cyan / 3, intensity, cyan)
+                let mut text_hit = false;
+                if in_text_zone {
+                    let tx = (x - text_x0) as usize;
+                    let ty = (char_y as u32 - text_y0) as usize;
+                    if ty < 32 && tx < 224 && text_mask[ty][tx] {
+                        text_hit = true;
+                    }
+                }
+                
+                // Color computation
+                let (r, g, b) = if text_hit {
+                    // Text pixel: bright white-green glow when rain touches
+                    let glow = brightness.max(180);
+                    let white = (glow as u32 * 3 / 4).min(220) as u8;
+                    (white, glow, white)
                 } else if i == 0 {
-                    let w = (180.0 * brightness_mult) as u8;
-                    (w, 255u8.min((brightness as u16 + 40) as u8), w)
+                    // Head: white-ish glow
+                    let w = (140.0 * brightness_mult) as u8;
+                    (w, brightness.max(w), w)
                 } else {
-                    let gray_tint = ((20.0 * (1.0 - saturation)) as u8).min(60);
-                    let blue_tint = ((40.0 * (1.0 - saturation) + 10.0 * depth_factor) as u8).min(80);
+                    // Trail: green with depth-based atmospheric tint
+                    let gray_tint = ((15.0 * (1.0 - saturation)) as u8).min(40);
+                    let blue_tint = ((30.0 * (1.0 - saturation)) as u8).min(50);
                     (gray_tint, brightness, blue_tint)
                 };
                 
                 let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
                 
-                let char_seed = seed.wrapping_add((i as u32 * 7919) ^ (self.frame_count as u32 / 8));
+                // Character selection with slow mutation
+                let char_seed = seed.wrapping_add((i as u32 * 7919) ^ (self.frame_count as u32 / 12));
                 let chars: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
                 let c = chars[(char_seed as usize) % chars.len()] as char;
                 let glyph = crate::framebuffer::font::get_glyph(c);
@@ -3397,31 +3377,30 @@ struct AppConfig {
             }
         }
         
-        // ── STEP 3: Draw wireframe edges directly (bright green lines) ──
-        // Draw cube edges as solid green lines on top of matrix rain
-        for (i1, i2) in edges.iter() {
-            let (vx1, vy1, vz1) = vertices[*i1];
-            let (vx2, vy2, vz2) = vertices[*i2];
-            for s in 0..60 {
-                let t = s as f32 / 59.0;
-                let x_3d = vx1 * (1.0 - t) + vx2 * t;
-                let y_3d = vy1 * (1.0 - t) + vy2 * t;
-                let z_3d = vz1 * (1.0 - t) + vz2 * t;
-                let ry = y_3d * cos_xr - z_3d * sin_xr;
-                let rz = y_3d * sin_xr + z_3d * cos_xr;
-                let rx = x_3d * cos_yr + rz * sin_yr;
-                let rz2 = -x_3d * sin_yr + rz * cos_yr;
-                let depth = 1.0 / (2.0 + rz2);
-                let sx = (cx + rx * scale_f * depth) * (CELL_W as f32);
-                let sy = (cy + ry * scale_f * depth) * (CELL_H as f32);
-                let px = sx as u32;
-                let py = sy as u32;
-                if px < width && py < height {
-                    let d_int = ((1.0 - ((rz2 + 0.5) * 0.4).max(0.0).min(1.0)) * 255.0) as u32;
-                    let edge_color = 0xFF000000 | (d_int.min(60) << 16) | (d_int.min(255) << 8) | (d_int.min(100));
-                    framebuffer::put_pixel(px, py, edge_color);
-                    if px + 1 < width { framebuffer::put_pixel(px + 1, py, edge_color); }
-                    if py + 1 < height { framebuffer::put_pixel(px, py + 1, edge_color); }
+        // ── Draw "TrustOS" outline when NOT being rained on ──
+        // Very subtle dark green text that's always visible as ghost
+        for (ci, ch) in text_str.chars().enumerate() {
+            let glyph = crate::framebuffer::font::get_glyph(ch);
+            for (row, &bits) in glyph.iter().enumerate() {
+                for bit in 0..8u32 {
+                    if bits & (0x80 >> bit) != 0 {
+                        for sy in 0..2u32 {
+                            for sx in 0..2u32 {
+                                let px = text_x0 + (ci as u32) * 16 + bit * 2 + sx;
+                                let py = text_y0 + (row as u32) * 2 + sy;
+                                if px < width && py < height {
+                                    // Only draw ghost if pixel is currently black/very dark
+                                    // This creates the "text appears only when rain hits" effect
+                                    // with a faint outline always visible
+                                    let existing = framebuffer::get_pixel(px, py);
+                                    let eg = (existing >> 8) & 0xFF;
+                                    if eg < 20 {
+                                        framebuffer::put_pixel(px, py, 0xFF001A0A);
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -3693,23 +3672,35 @@ struct AppConfig {
     
     fn draw_desktop_icons(&self) {
         // ═══════════════════════════════════════════════════════════════
-        // LEFT DOCK SIDEBAR — COSMIC V2 style vertical app dock
+        // LEFT DOCK SIDEBAR — Dark translucent panel with glow effects
         // Icons dynamically fill the full sidebar height
         // ═══════════════════════════════════════════════════════════════
         let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
         
-        // Semi-transparent dark dock background strip
-        framebuffer::fill_rect(0, 0, DOCK_WIDTH + 10, dock_h, 0xF0080808);
-        // Right edge border
-        framebuffer::fill_rect(DOCK_WIDTH + 9, 0, 1, dock_h, GREEN_GHOST);
+        // Frosted dark dock background — very dark with slight green tint
+        // Draw column by column with opacity blending over matrix rain
+        for dy in 0..dock_h {
+            for dx in 0..(DOCK_WIDTH + 10) {
+                let existing = framebuffer::get_pixel(dx, dy);
+                let er = ((existing >> 16) & 0xFF) as u32;
+                let eg = ((existing >> 8) & 0xFF) as u32;
+                let eb = (existing & 0xFF) as u32;
+                // 75% opacity dark overlay: blend toward 0x040804
+                let nr = (er * 25 / 100 + 4 * 75 / 100).min(255);
+                let ng = (eg * 25 / 100 + 8 * 75 / 100).min(255);
+                let nb = (eb * 25 / 100 + 4 * 75 / 100).min(255);
+                framebuffer::put_pixel(dx, dy, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
+            }
+        }
+        // Right edge: subtle dark green separator
+        framebuffer::fill_rect(DOCK_WIDTH + 9, 0, 1, dock_h, 0xFF002210);
         
         let icon_size = 36u32;
         let n_icons = self.icons.len().max(1) as u32;
         let padding = 12u32;
-        // Each icon cell: icon + label space. Compute total available and distribute evenly
         let available = dock_h.saturating_sub(padding * 2);
-        let icon_total = available / n_icons; // dynamic spacing per icon
-        let start_y = padding + (available - icon_total * n_icons) / 2; // center vertically
+        let icon_total = available / n_icons;
+        let start_y = padding + (available - icon_total * n_icons) / 2;
         
         for (i, icon) in self.icons.iter().enumerate() {
             let ix = 12u32;
@@ -3720,20 +3711,53 @@ struct AppConfig {
             let is_hovered = self.cursor_x >= 0 && self.cursor_x < (DOCK_WIDTH + 10) as i32
                 && self.cursor_y >= iy as i32 && self.cursor_y < (iy + icon_total) as i32;
             
-            let icon_color = if is_hovered { GREEN_PRIMARY } else { GREEN_SECONDARY };
-            let label_color = if is_hovered { 0xFFFFFFFF } else { 0xFF888888 };
+            // Darker muted colors normally, vivid glow on hover
+            let icon_color = if is_hovered { GREEN_PRIMARY } else { GREEN_SUBTLE };
+            let label_color = if is_hovered { GREEN_PRIMARY } else { 0xFF556655 };
             
-            // Active highlight background
+            // Glow effect on hover: soft green glow around icon area
             if is_hovered {
-                framebuffer::fill_rect(ix - 4, iy - 3, icon_size + 8, icon_size + 18, 0xFF002800);
-                framebuffer::draw_rect(ix - 4, iy - 3, icon_size + 8, icon_size + 18, GREEN_PRIMARY);
+                // Outer glow (soft spread)
+                let glow_pad = 6u32;
+                let gx = ix.saturating_sub(glow_pad);
+                let gy = iy.saturating_sub(glow_pad);
+                let gw = icon_size + glow_pad * 2;
+                let gh = icon_size + 20 + glow_pad * 2;
+                for gdy in 0..gh {
+                    for gdx in 0..gw {
+                        let px = gx + gdx;
+                        let py = gy + gdy;
+                        if px >= DOCK_WIDTH + 10 || py >= dock_h { continue; }
+                        // Distance from edge of icon area for falloff
+                        let inner_x = if gdx < glow_pad { glow_pad - gdx } 
+                            else if gdx > gw - glow_pad { gdx - (gw - glow_pad) } 
+                            else { 0 };
+                        let inner_y = if gdy < glow_pad { glow_pad - gdy }
+                            else if gdy > gh - glow_pad { gdy - (gh - glow_pad) }
+                            else { 0 };
+                        let dist = inner_x.max(inner_y);
+                        if dist > 0 {
+                            let intensity = (20u32.saturating_sub(dist * 4)).min(20) as u8;
+                            if intensity > 0 {
+                                let existing = framebuffer::get_pixel(px, py);
+                                let eg = ((existing >> 8) & 0xFF) as u8;
+                                let new_g = eg.saturating_add(intensity);
+                                let blended = (existing & 0xFFFF00FF) | ((new_g as u32) << 8);
+                                framebuffer::put_pixel(px, py, blended);
+                            }
+                        }
+                    }
+                }
+                // Inner highlight
+                framebuffer::fill_rect(ix - 3, iy - 2, icon_size + 6, icon_size + 16, 0xFF001A0A);
+                framebuffer::draw_rect(ix - 3, iy - 2, icon_size + 6, icon_size + 16, 0xFF00AA44);
             }
             
-            // Icon square background
-            framebuffer::fill_rect(ix, iy, icon_size, icon_size, 0xFF0A0A0A);
-            framebuffer::draw_rect(ix, iy, icon_size, icon_size, icon_color);
+            // Icon square background — very dark
+            framebuffer::fill_rect(ix, iy, icon_size, icon_size, 0xFF050805);
+            framebuffer::draw_rect(ix, iy, icon_size, icon_size, if is_hovered { 0xFF00CC55 } else { 0xFF002A15 });
             
-            // Pixel-art icon inside square (matching COSMIC V2 style)
+            // Pixel-art icon inside square
             let cx = ix + icon_size / 2;
             let cy = iy + icon_size / 2;
             use crate::icons::IconType;
