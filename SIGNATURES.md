@@ -24,7 +24,42 @@ The fingerprint is derived from `HMAC-SHA256(passphrase, payload)`. Without the 
 - **Creator signature (#001) is immutable** — it cannot be modified or removed
 - **Do not modify other people's entries**
 - **Include your GitHub username** so we can verify PR authorship
+- **Include your contributed modules** — list the files/modules you worked on
 - Submit via **Pull Request** only
+
+---
+
+## 🤝 Contributor Signature Policy
+
+### How signatures integrate into the official build
+
+Every contributor whose PR is merged can register a **co-signature** in this file. This creates a permanent, cryptographic record of who built what:
+
+1. **You contribute code** — submit a PR with your feature, fix, or module
+2. **PR is reviewed & merged** — your code becomes part of TrustOS
+3. **You sign your build** — boot TrustOS with your changes, run `signature sign <your_name>`
+4. **You register** — add your entry to this file (via PR), listing the modules you contributed
+5. **Official recognition** — you appear in the developer registry forever
+
+### What gets signed
+
+| Element | Description |
+|---------|-------------|
+| **Your fingerprint** | HMAC-SHA256 of your secret passphrase + kernel payload |
+| **Your modules** | The specific files/features you contributed |
+| **Build version** | The kernel version at the time of signing |
+| **Timestamp** | When you signed |
+
+### Hierarchy
+
+```
+#001 — Creator (Nated0ge)       ← Hardcoded in kernel binary, immutable
+#002 — Contributor A             ← Co-signature, modules listed
+#003 — Contributor B             ← Co-signature, modules listed
+...
+```
+
+The creator signature is compiled into every kernel. Contributor signatures are registered here and verified via `signature prove <name>`. Each contributor's modules are attributed — your work carries your name.
 
 ---
 
@@ -66,9 +101,10 @@ The fingerprint is derived from `HMAC-SHA256(passphrase, payload)`. Without the 
   | **GitHub** | [@yourusername](https://github.com/yourusername) |
   | **Algorithm** | HMAC-SHA256 |
   | **Fingerprint** | `your_64_char_hex_fingerprint_here` |
+  | **Modules** | `module1.rs`, `module2.rs` (files you contributed) |
   | **Kernel Version** | v0.1.1 |
   | **Date** | YYYY-MM-DD |
-  | **Status** | ✅ Verified signer |
+  | **Status** | ✅ Verified contributor |
 -->
 
 *No community signatures yet. Be the first to sign your TrustOS kernel and submit a PR!*

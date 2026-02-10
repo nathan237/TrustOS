@@ -130,11 +130,21 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 - **HTTP/HTTPS client** — `curl`, `wget`, `browse`
 - **Commands**: `ping`, `nslookup`, `traceroute`, `netstat`, `arp`, `route`, `ifconfig`
 
-### 🐧 Linux Compatibility Layer
-- **100+ syscalls** emulated (read, write, mmap, fork, exec...)
-- **ELF binary loader** — run Linux binaries directly
-- **Alpine Linux subsystem** — `apk` package manager support
-- **Binary-to-Rust transpiler** — analyze and decompile Linux binaries
+### 🐧 Linux Compatibility Layer (WIP)
+
+TrustOS is being built **with Linux binary compatibility in mind**. The infrastructure is real, but it's not at the "run `apt-get`" stage yet.
+
+| Component | Status | What exists |
+|-----------|--------|-------------|
+| **Syscall interface** | ✅ Functional | 60+ Linux syscalls dispatched (read, write, mmap, fork, socket, exec, uname...) |
+| **ELF64 loader** | ✅ Functional | Parses and loads static ELF binaries with correct segment mapping |
+| **Ring 3 (userland)** | ✅ Working | Real SYSCALL/SYSRET mechanism, IRETQ to Ring 3, kernel stack switching |
+| **Process table** | ✅ Working | Full PCB, PID management, fork/exit/wait, state machine |
+| **Wayland compositor** | 🔨 Internal | 2,700-line in-kernel compositor with surface management, window decorations, VT100 terminal. Protocol opcodes defined but no IPC socket transport — external Wayland clients can't connect yet |
+| **x86_64 interpreter** | 🧪 Proof of concept | ~15 opcodes implemented (mov, push, jmp, call, syscall). Cannot run real binaries |
+| **Alpine subsystem** | 📋 Planned | Infrastructure exists, needs full syscall coverage |
+
+> **TL;DR:** The architecture is designed for Linux compat (ELF + Linux ABI + Wayland-style compositor), and the pieces are being connected. The Wayland mention in commits refers to a real in-kernel compositor module — not yet a full Wayland display server that external clients can talk to.
 
 ### 🛡️ Security & Auth
 - **Capability-based** security model
@@ -381,6 +391,29 @@ git commit -m "Add my feature"
 git push origin feature/my-feature
 # Open a Pull Request
 ```
+
+### 🔐 Contributor Signatures & Developer Registry
+
+TrustOS uses a **cryptographic signature system** to recognize contributors. When your PR is merged, you become a registered developer:
+
+1. **Sign your build** — Boot TrustOS, run `signature sign <your_name>` with a secret passphrase
+2. **Export your signature** — Run `signature export` to get your HMAC-SHA256 fingerprint
+3. **Include it in your PR** — Add your entry to [`SIGNATURES.md`](SIGNATURES.md)
+4. **Get registered** — Once merged, you appear in the official developer registry
+
+**What this means for contributors:**
+
+| Benefit | Description |
+|---------|-------------|
+| **Developer entry** | Your name, GitHub, and fingerprint in the public registry |
+| **Module attribution** | The modules you contributed are listed under your signature |
+| **Cryptographic proof** | Your HMAC-SHA256 fingerprint proves you endorsed this build |
+| **Immutable record** | Your entry is version-controlled in git — permanent history |
+
+The **creator signature (#001)** is hardcoded in every kernel binary and can never be modified. Contributor signatures are co-signatures — they prove that a developer participated in TrustOS development and endorsed the code they contributed.
+
+> Every contributor with an approved signature and a merged PR is integrated into the official developer list.  
+> Your modules carry your signature. Your work is cryptographically attributed to you.
 
 ### Project Structure
 ```
