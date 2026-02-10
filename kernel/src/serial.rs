@@ -28,11 +28,14 @@ pub fn init() {
     let _ = SERIAL1.lock();
 }
 
-/// Print to serial port (internal use)
+/// Print to serial port (internal use) — also captures to dmesg ring buffer
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
     use x86_64::instructions::interrupts;
+    
+    // Capture to dmesg ring buffer (best-effort, never panic)
+    crate::devtools::capture_serial_line(args);
     
     // Disable interrupts to prevent deadlock
     interrupts::without_interrupts(|| {

@@ -129,6 +129,7 @@ pub enum HotkeyAction {
     LockScreen,       // Win+L
     OpenStartMenu,    // Win key alone
     Screenshot,       // PrintScreen
+    ToggleDevPanel,   // F12
 }
 
 /// Scancode constants
@@ -149,6 +150,7 @@ pub mod scancode {
     pub const R: u8 = 0x13;
     pub const L: u8 = 0x26;
     pub const ESC: u8 = 0x01;
+    pub const F12: u8 = 0x58;
 }
 
 /// Update modifier state from scancode
@@ -197,6 +199,11 @@ pub fn check_hotkey(scancode: u8) -> HotkeyAction {
     // Ctrl+Alt+T = Terminal (Linux style)
     if ctrl && alt && scancode == scancode::T {
         return HotkeyAction::OpenTerminal;
+    }
+    
+    // F12 = Toggle DevPanel overlay
+    if scancode == scancode::F12 {
+        return HotkeyAction::ToggleDevPanel;
     }
     
     HotkeyAction::None

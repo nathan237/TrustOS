@@ -1,29 +1,50 @@
 //! Kernel Heap Allocator
 //! 
-//! Lock-free heap allocator for kernel memory allocations.
-//! Provides global allocator implementation.
+//! Tracked heap allocator for kernel memory allocations.
+//! Wraps linked_list_allocator with devtools allocation tracking.
 
 use linked_list_allocator::LockedHeap;
+use core::alloc::{GlobalAlloc, Layout};
 
-/// Global kernel heap allocator
+/// Inner heap allocator
+static INNER: LockedHeap = LockedHeap::empty();
+
+/// Tracked wrapper that forwards to LockedHeap + records stats
+struct TrackedAllocator;
+
+unsafe impl GlobalAlloc for TrackedAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let ptr = unsafe { INNER.alloc(layout) };
+        if !ptr.is_null() {
+            crate::devtools::track_alloc(layout.size());
+        }
+        ptr
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe { INNER.dealloc(ptr, layout); }
+        crate::devtools::track_dealloc(layout.size());
+    }
+}
+
 #[global_allocator]
-static ALLOCATOR: LockedHeap = LockedHeap::empty();
+static ALLOCATOR: TrackedAllocator = TrackedAllocator;
 
 /// Initialize kernel heap at specified address with given size
 pub fn init_at(heap_start: usize, heap_size: usize) {
     unsafe {
-        ALLOCATOR.lock().init(heap_start as *mut u8, heap_size);
+        INNER.lock().init(heap_start as *mut u8, heap_size);
     }
 }
 
 /// Get used heap space in bytes
 pub fn used() -> usize {
-    ALLOCATOR.lock().used()
+    INNER.lock().used()
 }
 
 /// Get free heap space in bytes
 pub fn free() -> usize {
-    ALLOCATOR.lock().free()
+    INNER.lock().free()
 }
 
 /// Allocate memory with alignment

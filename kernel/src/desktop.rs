@@ -742,6 +742,10 @@ pub struct Desktop {
     pub input_buffer: String,
     pub cursor_blink: bool,
     pub context_menu: ContextMenu,
+    // Performance: cached RTC (read once/sec, not every frame)
+    cached_time_str: String,
+    cached_date_str: String,
+    last_rtc_frame: u64,
     // Performance: cached background
     background_cached: bool,
     needs_full_redraw: bool,
@@ -1043,6 +1047,9 @@ impl Desktop {
                 target_icon: None,
                 target_file: None,
             },
+            cached_time_str: String::new(),
+            cached_date_str: String::new(),
+            last_rtc_frame: 0,
             background_cached: false,
             needs_full_redraw: true,
             last_cursor_x: 640,
@@ -3444,7 +3451,7 @@ struct AppConfig {
         }
     }
     
-    fn draw_taskbar(&self) {
+    fn draw_taskbar(&mut self) {
         use crate::gui::windows11::colors;
         
         let y = self.height - TASKBAR_HEIGHT;
@@ -3562,15 +3569,20 @@ struct AppConfig {
         }
     }
     
-    fn get_time_string(&self) -> String {
-        let dt = crate::rtc::read_rtc();
-        format!("{:02}:{:02}", dt.hour, dt.minute)
+    fn get_time_string(&mut self) -> String {
+        // Cache RTC reads: only read once per ~60 frames (~1 second)
+        // Avoids ~960 CMOS port I/O ops/sec that crash VirtualBox (VT-x VM exits)
+        if self.frame_count - self.last_rtc_frame >= 60 || self.cached_time_str.is_empty() {
+            let dt = crate::rtc::read_rtc();
+            self.cached_time_str = format!("{:02}:{:02}", dt.hour, dt.minute);
+            self.cached_date_str = format!("{:02}/{:02}", dt.month, dt.day);
+            self.last_rtc_frame = self.frame_count;
+        }
+        self.cached_time_str.clone()
     }
     
     fn get_date_string(&self) -> String {
-        let dt = crate::rtc::read_rtc();
-        // Format: MM/DD/YYYY (US style) or DD/MM (shorter)
-        format!("{:02}/{:02}", dt.month, dt.day)
+        self.cached_date_str.clone()
     }
     
     fn draw_start_menu(&self) {
@@ -5032,6 +5044,9 @@ pub fn run() -> ! {
                     HotkeyAction::OpenTerminal => {
                         DESKTOP.lock().open_terminal();
                     }
+                    HotkeyAction::ToggleDevPanel => {
+                        crate::devtools::toggle_devpanel();
+                    }
                     HotkeyAction::None => {
                         // Pass to focused window
                         handle_keyboard(key);
@@ -5104,6 +5119,16 @@ pub fn run() -> ! {
         
         // Render notifications
         render_notifications();
+        
+        // Render developer panel overlay (F12 toggle)
+        {
+            let d = DESKTOP.lock();
+            let w = d.width;
+            let h = d.height;
+            drop(d);
+            let frame_elapsed = engine::now_us().saturating_sub(frame_start);
+            crate::devtools::render_devpanel(w, h, frame_elapsed);
+        }
         
         // Render FPS counter (debug)
         #[cfg(debug_assertions)]
