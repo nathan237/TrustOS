@@ -777,6 +777,9 @@ pub struct Desktop {
     matrix_heads: Vec<i32>,
     matrix_speeds: Vec<u32>,
     matrix_initialized: bool,
+    // HoloMatrix 3D volumetric renderer
+    holomatrix: Option<crate::graphics::holomatrix::HoloMatrix>,
+    holo_time: f32,
 }
 
 /// Calculator state for interactive calculator windows
@@ -1078,6 +1081,8 @@ impl Desktop {
             matrix_heads: Vec::new(),
             matrix_speeds: Vec::new(),
             matrix_initialized: false,
+            holomatrix: None,
+            holo_time: 0.0,
         }
     }
     
@@ -1145,6 +1150,13 @@ impl Desktop {
             self.matrix_speeds[col] = 1 + (seed % 3);
         }
         self.matrix_initialized = true;
+        
+        // Initialize HoloMatrix for 3D holographic shapes 
+        // Grid dimensions match matrix rain (each cell = 8x16 pixels)
+        let holo_cols = (self.width as usize / 8).min(240);
+        let holo_rows = ((self.height - TASKBAR_HEIGHT) as usize / 16).min(68);
+        self.holomatrix = Some(crate::graphics::holomatrix::HoloMatrix::new(holo_cols, holo_rows, 32));
+        self.holo_time = 0.0;
     }
     
     /// Open TrustCode with a demo Rust file
@@ -2965,8 +2977,8 @@ struct AppConfig {
             }
         }
         
-        // Toggle cursor blink every ~30 frames
-        if self.frame_count % 30 == 0 {
+        // Toggle cursor blink every ~45 frames (slower for readability)
+        if self.frame_count % 45 == 0 {
             self.cursor_blink = !self.cursor_blink;
         }
         
@@ -3201,18 +3213,18 @@ struct AppConfig {
         const MATRIX_COLS: usize = 240;
         const MATRIX_ROWS: usize = 68;
         let height = self.height - TASKBAR_HEIGHT;
+        let width = self.width;
         
         // ═══════════════════════════════════════════════════════════════
-        // MATRIX RAIN BACKGROUND — Animated digital rain
+        // HOLOMATRIX BACKGROUND — 3D shapes emerge through matrix rain
         // ═══════════════════════════════════════════════════════════════
         
         if !self.matrix_initialized {
-            // Fallback: black background
-            framebuffer::fill_rect(0, 0, self.width, height, 0xFF000000);
+            framebuffer::fill_rect(0, 0, width, height, 0xFF000000);
             return;
         }
         
-        // Update head positions each frame
+        // Update matrix head positions
         for col in 0..MATRIX_COLS.min(self.matrix_heads.len()) {
             self.matrix_heads[col] += self.matrix_speeds[col] as i32;
             if self.matrix_heads[col] > (MATRIX_ROWS as i32 + 30) {
@@ -3222,13 +3234,173 @@ struct AppConfig {
             }
         }
         
-        // Clear to pure black\n        framebuffer::fill_rect(0, 0, self.width, height, 0xFF000000);
+        // ─────────────────────────────────────────────────────────────
+        // STEP 1: Build HoloMatrix intensity map (3D shape projection)
+        // ─────────────────────────────────────────────────────────────
+        self.holo_time += 0.016; // ~60fps frame time
+        let time = self.holo_time;
+        let holo_scene = crate::graphics::holomatrix::get_scene();
         
-        // Render matrix columns
+        // Intensity boost per character cell from 3D shape
+        let mut intensity_map = [[0u8; MATRIX_ROWS]; MATRIX_COLS];
+        
+        let cx = width as f32 / 2.0;
+        let cy = height as f32 / 2.0;
+        let scale = (height as f32 / 3.0).min(width as f32 / 4.0);
+        let cell_w = width as f32 / MATRIX_COLS as f32;
+        let cell_h = height as f32 / MATRIX_ROWS as f32;
+        
+        match holo_scene {
+            crate::graphics::holomatrix::HoloScene::DNA => {
+                // DNA Double Helix
+                let helix_len = 2.2;
+                let radius = 0.45;
+                let turns = 3.5;
+                
+                for i in 0..180 {
+                    let t = i as f32 / 180.0;
+                    let y = -helix_len / 2.0 + t * helix_len;
+                    let angle = t * turns * 6.28318 + time;
+                    
+                    let x1 = radius * crate::graphics::holomatrix::cos_approx_pub(angle);
+                    let z1 = radius * crate::graphics::holomatrix::sin_approx_pub(angle);
+                    let x2 = radius * crate::graphics::holomatrix::cos_approx_pub(angle + 3.14159);
+                    let z2 = radius * crate::graphics::holomatrix::sin_approx_pub(angle + 3.14159);
+                    
+                    let rot_y = time * 0.4;
+                    let cos_r = crate::graphics::holomatrix::cos_approx_pub(rot_y);
+                    let sin_r = crate::graphics::holomatrix::sin_approx_pub(rot_y);
+                    
+                    let rx1 = x1 * cos_r + z1 * sin_r;
+                    let rz1 = -x1 * sin_r + z1 * cos_r;
+                    let rx2 = x2 * cos_r + z2 * sin_r;
+                    let rz2 = -x2 * sin_r + z2 * cos_r;
+                    
+                    let depth1 = 1.0 / (2.0 + rz1);
+                    let sx1 = cx + rx1 * scale * depth1;
+                    let sy1 = cy + y * scale * depth1;
+                    let col1 = (sx1 / cell_w) as usize;
+                    let row1 = (sy1 / cell_h) as usize;
+                    
+                    let depth2 = 1.0 / (2.0 + rz2);
+                    let sx2 = cx + rx2 * scale * depth2;
+                    let sy2 = cy + y * scale * depth2;
+                    let col2 = (sx2 / cell_w) as usize;
+                    let row2 = (sy2 / cell_h) as usize;
+                    
+                    let int1 = (180.0 + 75.0 * (1.0 - ((rz1 + 0.5) * 0.5).max(0.0).min(1.0))) as u8;
+                    let int2 = (180.0 + 75.0 * (1.0 - ((rz2 + 0.5) * 0.5).max(0.0).min(1.0))) as u8;
+                    
+                    if col1 < MATRIX_COLS && row1 < MATRIX_ROWS {
+                        intensity_map[col1][row1] = intensity_map[col1][row1].max(int1);
+                        if col1 > 0 { intensity_map[col1 - 1][row1] = intensity_map[col1 - 1][row1].max(int1 * 2 / 3); }
+                        if col1 < MATRIX_COLS - 1 { intensity_map[col1 + 1][row1] = intensity_map[col1 + 1][row1].max(int1 * 2 / 3); }
+                        if row1 > 0 { intensity_map[col1][row1 - 1] = intensity_map[col1][row1 - 1].max(int1 / 2); }
+                        if row1 < MATRIX_ROWS - 1 { intensity_map[col1][row1 + 1] = intensity_map[col1][row1 + 1].max(int1 / 2); }
+                    }
+                    if col2 < MATRIX_COLS && row2 < MATRIX_ROWS {
+                        intensity_map[col2][row2] = intensity_map[col2][row2].max(int2);
+                        if col2 > 0 { intensity_map[col2 - 1][row2] = intensity_map[col2 - 1][row2].max(int2 * 2 / 3); }
+                        if col2 < MATRIX_COLS - 1 { intensity_map[col2 + 1][row2] = intensity_map[col2 + 1][row2].max(int2 * 2 / 3); }
+                        if row2 > 0 { intensity_map[col2][row2 - 1] = intensity_map[col2][row2 - 1].max(int2 / 2); }
+                        if row2 < MATRIX_ROWS - 1 { intensity_map[col2][row2 + 1] = intensity_map[col2][row2 + 1].max(int2 / 2); }
+                    }
+                    
+                    // Base pair cross-links
+                    if i % 12 == 0 {
+                        for s in 0..8 {
+                            let st = s as f32 / 7.0;
+                            let lx = sx1 * (1.0 - st) + sx2 * st;
+                            let ly = sy1 * (1.0 - st) + sy2 * st;
+                            let lcol = (lx / cell_w) as usize;
+                            let lrow = (ly / cell_h) as usize;
+                            if lcol < MATRIX_COLS && lrow < MATRIX_ROWS {
+                                intensity_map[lcol][lrow] = intensity_map[lcol][lrow].max(80);
+                            }
+                        }
+                    }
+                }
+            },
+            crate::graphics::holomatrix::HoloScene::RotatingCube | crate::graphics::holomatrix::HoloScene::GridWithCube => {
+                let half = 0.5f32;
+                let vertices: [(f32, f32, f32); 8] = [
+                    (-half, -half, -half), (half, -half, -half),
+                    (half, half, -half), (-half, half, -half),
+                    (-half, -half, half), (half, -half, half),
+                    (half, half, half), (-half, half, half),
+                ];
+                let edges: [(usize, usize); 12] = [
+                    (0,1), (1,2), (2,3), (3,0),
+                    (4,5), (5,6), (6,7), (7,4),
+                    (0,4), (1,5), (2,6), (3,7),
+                ];
+                let rot_x = time * 0.7;
+                let rot_y = time * 0.5;
+                for (i1, i2) in edges.iter() {
+                    let (vx1, vy1, vz1) = vertices[*i1];
+                    let (vx2, vy2, vz2) = vertices[*i2];
+                    for s in 0..30 {
+                        let t = s as f32 / 29.0;
+                        let x = vx1 * (1.0 - t) + vx2 * t;
+                        let y_3d = vy1 * (1.0 - t) + vy2 * t;
+                        let z = vz1 * (1.0 - t) + vz2 * t;
+                        let cos_xr = crate::graphics::holomatrix::cos_approx_pub(rot_x);
+                        let sin_xr = crate::graphics::holomatrix::sin_approx_pub(rot_x);
+                        let ry = y_3d * cos_xr - z * sin_xr;
+                        let rz = y_3d * sin_xr + z * cos_xr;
+                        let cos_yr = crate::graphics::holomatrix::cos_approx_pub(rot_y);
+                        let sin_yr = crate::graphics::holomatrix::sin_approx_pub(rot_y);
+                        let rx = x * cos_yr + rz * sin_yr;
+                        let rz2 = -x * sin_yr + rz * cos_yr;
+                        let depth = 1.0 / (2.0 + rz2);
+                        let sx = cx + rx * scale * depth;
+                        let sy = cy + ry * scale * depth;
+                        let col = (sx / cell_w) as usize;
+                        let row = (sy / cell_h) as usize;
+                        if col < MATRIX_COLS && row < MATRIX_ROWS {
+                            let int = (100.0 + 100.0 * (1.0 - ((rz2 + 0.6) * 0.5).max(0.0).min(1.0))) as u8;
+                            intensity_map[col][row] = intensity_map[col][row].max(int);
+                        }
+                    }
+                }
+            },
+            _ => {
+                // Sphere for all other scenes
+                for i in 0..300 {
+                    let phi = (i as f32 / 300.0) * 6.28318;
+                    let theta = (i as f32 * 0.618033 * 6.28318) % 6.28318;
+                    let r = 0.55;
+                    let x = r * crate::graphics::holomatrix::sin_approx_pub(theta) * crate::graphics::holomatrix::cos_approx_pub(phi);
+                    let y_3d = r * crate::graphics::holomatrix::sin_approx_pub(theta) * crate::graphics::holomatrix::sin_approx_pub(phi);
+                    let z = r * crate::graphics::holomatrix::cos_approx_pub(theta);
+                    let cos_t = crate::graphics::holomatrix::cos_approx_pub(time * 0.5);
+                    let sin_t = crate::graphics::holomatrix::sin_approx_pub(time * 0.5);
+                    let rx = x * cos_t + z * sin_t;
+                    let rz = -x * sin_t + z * cos_t;
+                    let depth = 1.0 / (2.0 + rz);
+                    let sx = cx + rx * scale * depth;
+                    let sy = cy + y_3d * scale * depth;
+                    let col = (sx / cell_w) as usize;
+                    let row = (sy / cell_h) as usize;
+                    if col < MATRIX_COLS && row < MATRIX_ROWS {
+                        let int = (80.0 + 120.0 * (1.0 - ((rz + 0.6) * 0.5).max(0.0).min(1.0))) as u8;
+                        intensity_map[col][row] = intensity_map[col][row].max(int);
+                    }
+                }
+            },
+        }
+        
+        // ─────────────────────────────────────────────────────────────
+        // STEP 2: Render matrix rain with hologram intensity boost
+        // ─────────────────────────────────────────────────────────────
+        
+        // Clear background area to black
+        framebuffer::fill_rect(0, 0, width, height, 0xFF000000);
+        
         let col_width = 8u32;
         for col in 0..MATRIX_COLS.min(self.matrix_heads.len()) {
             let x = col as u32 * col_width;
-            if x >= self.width { continue; }
+            if x >= width { continue; }
             
             let head = self.matrix_heads[col];
             
@@ -3238,10 +3410,10 @@ struct AppConfig {
                 
                 let dist = row as i32 - head;
                 
-                let green_val = if dist < 0 {
+                let base_color = if dist < 0 {
                     continue;
                 } else if dist == 0 {
-                    255u32  // Bright white-green head
+                    255u32
                 } else if dist <= 12 {
                     (255 - dist as u32 * 8).min(255)
                 } else if dist <= 28 {
@@ -3252,25 +3424,33 @@ struct AppConfig {
                     continue;
                 };
                 
-                // Pure green channel color (head gets slight white tint)
-                let color = if dist == 0 {
-                    0xFF88FF88  // White-green head
+                // Get hologram intensity boost
+                let boost = intensity_map[col][row] as u32;
+                
+                // Combine: base matrix + hologram boost
+                let (r, g, b) = if boost > 0 {
+                    // Shape area: bright cyan-white glow
+                    let intensity = (base_color + boost * 2).min(255);
+                    let cyan = (boost as u32 * 3 / 2).min(255);
+                    (cyan / 3, intensity, cyan)
                 } else {
-                    0xFF000000 | (green_val << 8)
+                    // No shape: dim green rain (shape stands out)
+                    let dim = (base_color / 3).min(80);
+                    (0, dim, 0)
                 };
                 
-                // Get character from pre-generated grid
+                let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+                
                 let c = self.matrix_chars[col * MATRIX_ROWS + row] as char;
                 let glyph = crate::framebuffer::font::get_glyph(c);
                 
-                // Draw glyph pixels
                 for (gr, &bits) in glyph.iter().enumerate() {
                     let py = y + gr as u32;
                     if py >= height || bits == 0 { continue; }
                     for bit in 0..8u32 {
                         if bits & (0x80 >> bit) != 0 {
                             let px = x + bit;
-                            if px < self.width {
+                            if px < width {
                                 framebuffer::put_pixel(px, py, color);
                             }
                         }
