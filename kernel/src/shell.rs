@@ -2522,7 +2522,10 @@ fn cmd_showcase(args: &[&str]) {
     pause(1);
 
     crate::println_color!(COLOR_CYAN, "$ echo 'Hello TrustOS!' > /demo/hello.txt");
-    crate::ramfs::with_fs(|fs| { let _ = fs.write_file("/demo/hello.txt", b"Hello TrustOS!\nThis file was created live during the showcase.\n"); });
+    crate::ramfs::with_fs(|fs| {
+        let _ = fs.touch("/demo/hello.txt");
+        let _ = fs.write_file("/demo/hello.txt", b"Hello TrustOS!\nThis file was created live during the showcase.\n");
+    });
     crate::println_color!(COLOR_GREEN, "Written: /demo/hello.txt");
     pause(1);
 
@@ -2559,7 +2562,10 @@ fn main() {
     }
     println("Language features: functions, recursion, loops, types");
 }"#;
-    crate::ramfs::with_fs(|fs| { let _ = fs.write_file("/demo/showcase.tl", tl_code.as_bytes()); });
+    crate::ramfs::with_fs(|fs| {
+        let _ = fs.touch("/demo/showcase.tl");
+        let _ = fs.write_file("/demo/showcase.tl", tl_code.as_bytes());
+    });
 
     crate::println_color!(COLOR_CYAN, "$ cat /demo/showcase.tl");
     crate::println_color!(0xFFDDDDDD, "{}", tl_code);
