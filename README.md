@@ -1,4 +1,4 @@
-<![CDATA[<div align="center">
+<div align="center">
 
 # 🦀 TrustOS
 
@@ -429,4 +429,3 @@ MIT License — see [LICENSE](LICENSE) for details.
 [Report Bug](https://github.com/nathan237/TrustOS/issues) · [Request Feature](https://github.com/nathan237/TrustOS/issues) · [Watch Demo](https://youtu.be/RBJJi8jW1_g)
 
 </div>
-]]>
