@@ -99,6 +99,13 @@ fn mouse_write(cmd: u8) {
     ps2_read(); // Read ACK
 }
 
+/// Send data byte to mouse (via PS/2 controller) — for parameter bytes
+fn mouse_write_data(data: u8) {
+    ps2_command(0xD4); // Tell controller to forward next byte to mouse
+    ps2_write(data);
+    ps2_read(); // Read ACK
+}
+
 /// Initialize PS/2 mouse
 pub fn init() {
     // Enable auxiliary device (mouse)
@@ -118,31 +125,21 @@ pub fn init() {
     
     // Try to enable scroll wheel (IntelliMouse protocol)
     // Magic sequence: Set sample rate to 200, then 100, then 80
-    mouse_write(0xF3); ps2_write(200); // Set sample rate 200
-    mouse_write(0xF3); ps2_write(100); // Set sample rate 100
-    mouse_write(0xF3); ps2_write(80);  // Set sample rate 80
+    // Must use mouse_write_data for rate values (need 0xD4 prefix)
+    mouse_write(0xF3); mouse_write_data(200); // Set sample rate 200
+    mouse_write(0xF3); mouse_write_data(100); // Set sample rate 100
+    mouse_write(0xF3); mouse_write_data(80);  // Set sample rate 80
     
     // Get device ID to check if scroll wheel enabled
     mouse_write(0xF2); // Get device ID
     let device_id = ps2_read();
-    if device_id == 3 {
+    if device_id == 3 || device_id == 4 {
         HAS_SCROLL_WHEEL.store(true, Ordering::Relaxed);
-        crate::serial_println!("[MOUSE] IntelliMouse scroll wheel enabled");
+        crate::serial_println!("[MOUSE] IntelliMouse scroll wheel enabled (ID={})", device_id);
     }
     
     // Enable mouse
     mouse_write(0xF4);
-    
-    // Flush any stale bytes from the PS/2 buffer to prevent packet misalignment
-    let mut status_port = Port::<u8>::new(PS2_STATUS);
-    let mut data_port = Port::<u8>::new(PS2_DATA);
-    for _ in 0..16 {
-        if unsafe { status_port.read() } & 0x01 != 0 {
-            unsafe { data_port.read(); }
-        } else {
-            break;
-        }
-    }
     
     crate::serial_println!("[MOUSE] PS/2 mouse initialized (ID={})", device_id);
 }
@@ -202,20 +199,15 @@ pub fn handle_interrupt() {
     RIGHT_BUTTON.store(b0 & 0x02 != 0, Ordering::Relaxed);
     MIDDLE_BUTTON.store(b0 & 0x04 != 0, Ordering::Relaxed);
     
-    // Proper 9-bit PS/2 sign extension using byte 0's sign bits
-    let mut x_rel = b1 as i32;
-    let mut y_rel = b2 as i32;
-    if b0 & 0x10 != 0 { x_rel |= !0xFF_i32; } // X sign bit (bit 4 of byte 0)
-    if b0 & 0x20 != 0 { y_rel |= !0xFF_i32; } // Y sign bit (bit 5 of byte 0)
+    // Sign extension via i8 cast — works correctly with VirtualBox PS/2 emulation
+    let x_rel = b1 as i8 as i32;
+    let y_rel = b2 as i8 as i32;
     
-    // Handle overflow: clamp to max movement instead of discarding
+    // Handle overflow: skip movement update but keep button state
     let x_overflow = b0 & 0x40 != 0;
     let y_overflow = b0 & 0x80 != 0;
-    if x_overflow {
-        x_rel = if b0 & 0x10 != 0 { -255 } else { 255 };
-    }
-    if y_overflow {
-        y_rel = if b0 & 0x20 != 0 { -255 } else { 255 };
+    if x_overflow || y_overflow {
+        return;
     }
     
     let width = SCREEN_WIDTH.load(Ordering::Relaxed);
