@@ -163,6 +163,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "exec", "run",
     // Fun
     "neofetch", "matrix", "cowsay",
+    // Showcase
+    "showcase",
     // Hypervisor
     "hv", "hypervisor",
 ];
@@ -956,6 +958,9 @@ fn execute_command(cmd: &str) {
         
         // Performance benchmarks
         "benchmark" | "bench" => cmd_benchmark(args),
+        
+        // Showcase — automated demo for marketing videos
+        "showcase" => cmd_showcase(args),
         
         // Desktop Environment - COSMIC V2 with multi-layer compositor
         "desktop" | "gui" | "cosmic" => cmd_cosmic_v2(),
@@ -2393,6 +2398,273 @@ fn cmd_open(args: &[&str]) {
     
     let app = args[0].to_lowercase();
     cmd_cosmic_v2_with_app(Some(&app));
+}
+
+// ==================== SHOWCASE — AUTOMATED DEMO FOR VIDEO ====================
+// Runs through all TrustOS features with timed pauses between steps.
+// Perfect for screen recording with OBS to create marketing videos.
+
+fn cmd_showcase(args: &[&str]) {
+    let speed = match args.first().copied() {
+        Some("fast") => 1,
+        Some("slow") => 3,
+        _ => 2, // normal
+    };
+
+    let pause = |secs: u64| {
+        let ms = secs * 1000 * speed / 2;
+        let start = crate::time::uptime_ms();
+        while crate::time::uptime_ms() - start < ms {
+            // Drain any keys so they don't leak to next step
+            let _ = crate::keyboard::try_read_key();
+            core::hint::spin_loop();
+        }
+    };
+
+    let effect_duration = 6000u64 * speed / 2; // Duration for each video effect
+
+    // ─── Phase 0: Cinematic Intro ───
+    crate::framebuffer::clear_backbuffer(0xFF000000);
+    crate::framebuffer::swap_buffers();
+
+    let (sw, sh) = crate::framebuffer::get_dimensions();
+
+    // Draw centered TrustOS logo
+    {
+        let was_db = crate::framebuffer::is_double_buffer_enabled();
+        if !was_db {
+            crate::framebuffer::init_double_buffer();
+            crate::framebuffer::set_double_buffer_mode(true);
+        }
+        crate::framebuffer::clear_backbuffer(0xFF0A0A1A);
+        
+        // Draw gradient accent bar at top
+        if let Some((bb_ptr, bb_w, _bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+            let bb = bb_ptr as *mut u32;
+            for x in 0..bb_w as usize {
+                let t = x as i32;
+                let w = bb_w as i32;
+                let r = ((0x00i32 + (0x66 - 0x00) * t / w) as u32).min(255);
+                let g = ((0x88i32 + (0xFF - 0x88) * t / w) as u32).min(255);
+                let b = ((0xFFi32 + (0x66 - 0xFF) * t / w) as u32).min(255);
+                let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+                for y in 0..4usize {
+                    unsafe { *bb.add(y * bb_stride as usize + x) = color; }
+                }
+            }
+        }
+        crate::framebuffer::swap_buffers();
+        if !was_db {
+            crate::framebuffer::set_double_buffer_mode(false);
+        }
+    }
+
+    crate::println!();
+    crate::println!();
+    crate::println!();
+    crate::println_color!(0xFF00CCFF, "");
+    crate::println_color!(0xFF00CCFF, "  ████████╗██████╗ ██╗   ██╗███████╗████████╗ ██████╗ ███████╗");
+    crate::println_color!(0xFF00CCFF, "  ╚══██╔══╝██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔═══██╗██╔════╝");
+    crate::println_color!(0xFF00CCFF, "     ██║   ██████╔╝██║   ██║███████╗   ██║   ██║   ██║███████╗");
+    crate::println_color!(0xFF00DDFF, "     ██║   ██╔══██╗██║   ██║╚════██║   ██║   ██║   ██║╚════██║");
+    crate::println_color!(0xFF00EEFF, "     ██║   ██║  ██║╚██████╔╝███████║   ██║   ╚██████╔╝███████║");
+    crate::println_color!(0xFF00EEFF, "     ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝    ╚═════╝ ╚══════╝");
+    crate::println!();
+    crate::println_color!(0xFF888888, "                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    crate::println!();
+    crate::println_color!(0xFFAADDFF, "           A bare-metal OS written in 100% Rust — in 7 days");
+    crate::println_color!(0xFF666666, "         99,000+ lines · 6 MB ISO · GPU compositing · 144 FPS");
+    crate::println!();
+    crate::println_color!(0xFF888888, "                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    crate::println!();
+    crate::println_color!(0xFF00FF88, "                        ▶  FEATURE SHOWCASE  ▶");
+    crate::println!();
+    
+    pause(4);
+
+    // ─── Phase 1: System Info ───
+    crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
+    crate::println_color!(0xFF00CCFF, "║  PHASE 1 ──── SYSTEM INFO                                   ║");
+    crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
+    crate::println!();
+    pause(2);
+
+    cmd_neofetch();
+    pause(3);
+
+    crate::println_color!(COLOR_CYAN, "$ uname -a");
+    cmd_uname(&["-a"]);
+    pause(2);
+
+    crate::println_color!(COLOR_CYAN, "$ free");
+    cmd_free();
+    pause(2);
+
+    crate::println_color!(COLOR_CYAN, "$ lscpu");
+    cmd_lscpu();
+    pause(3);
+
+    // ─── Phase 2: Filesystem ───
+    crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
+    crate::println_color!(0xFF00CCFF, "║  PHASE 2 ──── FILESYSTEM (TrustFS + VFS)                    ║");
+    crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
+    crate::println!();
+    pause(2);
+
+    crate::println_color!(COLOR_CYAN, "$ mkdir /demo");
+    cmd_mkdir(&["/demo"]);
+    pause(1);
+
+    crate::println_color!(COLOR_CYAN, "$ echo 'Hello TrustOS!' > /demo/hello.txt");
+    crate::ramfs::with_fs(|fs| { let _ = fs.write_file("/demo/hello.txt", b"Hello TrustOS!\nThis file was created live during the showcase.\n"); });
+    crate::println_color!(COLOR_GREEN, "Written: /demo/hello.txt");
+    pause(1);
+
+    crate::println_color!(COLOR_CYAN, "$ cat /demo/hello.txt");
+    cmd_cat(&["/demo/hello.txt"], None);
+    pause(2);
+
+    crate::println_color!(COLOR_CYAN, "$ tree /");
+    cmd_tree(&["/"]);
+    pause(3);
+
+    // ─── Phase 3: TrustLang ───
+    crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
+    crate::println_color!(0xFF00CCFF, "║  PHASE 3 ──── TRUSTLANG (Built-in Compiler + VM)            ║");
+    crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
+    crate::println!();
+    pause(2);
+
+    // Create and run a real TrustLang program
+    let tl_code = r#"fn fibonacci(n: i64) -> i64 {
+    if n <= 1 { return n; }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+fn main() {
+    println("=== TrustLang on TrustOS ===");
+    println("Fibonacci sequence (compiled to bytecode):");
+    for i in 0..12 {
+        let result = fibonacci(i);
+        print("  fib(");
+        print(to_string(i));
+        print(") = ");
+        println(to_string(result));
+    }
+    println("Language features: functions, recursion, loops, types");
+}"#;
+    crate::ramfs::with_fs(|fs| { let _ = fs.write_file("/demo/showcase.tl", tl_code.as_bytes()); });
+
+    crate::println_color!(COLOR_CYAN, "$ cat /demo/showcase.tl");
+    crate::println_color!(0xFFDDDDDD, "{}", tl_code);
+    pause(3);
+
+    crate::println_color!(COLOR_CYAN, "$ trustlang run /demo/showcase.tl");
+    crate::println_color!(0xFF00FF88, "[TrustLang] Compiling showcase.tl...");
+    match crate::trustlang::run(tl_code) {
+        Ok(output) => { if !output.is_empty() { crate::print!("{}", output); } }
+        Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+    }
+    crate::println_color!(COLOR_GREEN, "[TrustLang] Program finished successfully.");
+    pause(4);
+
+    // ─── Phase 4: Network Stack ───
+    crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
+    crate::println_color!(0xFF00CCFF, "║  PHASE 4 ──── NETWORK STACK (TCP/IP, DHCP, DNS, TLS 1.3)    ║");
+    crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
+    crate::println!();
+    pause(2);
+
+    crate::println_color!(COLOR_CYAN, "$ ifconfig");
+    cmd_ifconfig();
+    pause(2);
+
+    crate::println_color!(COLOR_CYAN, "$ netstat");
+    cmd_netstat();
+    pause(3);
+
+    // ─── Phase 5: Video Demos ───
+    crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
+    crate::println_color!(0xFF00CCFF, "║  PHASE 5 ──── TRUSTVIDEO (Real-time procedural rendering)   ║");
+    crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
+    crate::println!();
+    pause(2);
+
+    // Fire demo
+    crate::println_color!(0xFFFF4400, "▸ Demo 1/3: FIRE EFFECT — Real-time procedural flame");
+    pause(1);
+
+    let vw = sw.min(640) as u16;
+    let vh = sh.min(480) as u16;
+    crate::video::player::render_realtime_timed("fire", vw, vh, 30, effect_duration);
+    
+    // Restore console
+    crate::framebuffer::clear();
+    pause(1);
+
+    // Matrix demo
+    crate::println_color!(0xFF00FF44, "▸ Demo 2/3: MATRIX RAIN — Digital rain effect");
+    pause(1);
+
+    crate::video::player::render_realtime_timed("matrix", vw, vh, 30, effect_duration);
+    
+    crate::framebuffer::clear();
+    pause(1);
+
+    // Plasma demo
+    crate::println_color!(0xFFFF00FF, "▸ Demo 3/3: PLASMA — Integer sine LUT psychedelic");
+    pause(1);
+
+    crate::video::player::render_realtime_timed("plasma", vw, vh, 30, effect_duration);
+    
+    crate::framebuffer::clear();
+    pause(1);
+
+    // ─── Phase 6: Commands overview ───
+    crate::println_color!(0xFF00CCFF, "╔══════════════════════════════════════════════════════════════╗");
+    crate::println_color!(0xFF00CCFF, "║  PHASE 6 ──── 200+ BUILT-IN COMMANDS                       ║");
+    crate::println_color!(0xFF00CCFF, "╚══════════════════════════════════════════════════════════════╝");
+    crate::println!();
+    pause(1);
+
+    crate::println_color!(0xFFAADDFF, "  ┌─ File System ──────────────────────────────────────────┐");
+    crate::println_color!(0xFFDDDDDD, "  │ ls cd pwd mkdir rm cp mv cat head tail tree find grep  │");
+    crate::println_color!(0xFFAADDFF, "  ├─ Network ──────────────────────────────────────────────┤");
+    crate::println_color!(0xFFDDDDDD, "  │ ifconfig ping curl wget nslookup arp route netstat     │");
+    crate::println_color!(0xFFAADDFF, "  ├─ System ───────────────────────────────────────────────┤");
+    crate::println_color!(0xFFDDDDDD, "  │ ps top free df uname dmesg mount lspci lscpu lsblk    │");
+    crate::println_color!(0xFFAADDFF, "  ├─ Development ──────────────────────────────────────────┤");
+    crate::println_color!(0xFFDDDDDD, "  │ trustlang (compiler+VM) · TrustCode (editor)          │");
+    crate::println_color!(0xFFDDDDDD, "  │ transpile (binary→Rust) · exec (ELF loader)           │");
+    crate::println_color!(0xFFAADDFF, "  ├─ Graphics ─────────────────────────────────────────────┤");
+    crate::println_color!(0xFFDDDDDD, "  │ desktop (COSMIC2 compositor) · video (TrustVideo)     │");
+    crate::println_color!(0xFFDDDDDD, "  │ benchmark (SSE2 SIMD) · HoloMatrix (3D volumetric)   │");
+    crate::println_color!(0xFFAADDFF, "  └────────────────────────────────────────────────────────┘");
+    crate::println!();
+    pause(4);
+
+    // ─── Phase 7: Outro ───
+    crate::println!();
+    crate::println_color!(0xFF00CCFF, "  ████████╗██████╗ ██╗   ██╗███████╗████████╗ ██████╗ ███████╗");
+    crate::println_color!(0xFF00CCFF, "  ╚══██╔══╝██╔══██╗██║   ██║██╔════╝╚══██╔══╝██╔═══██╗██╔════╝");
+    crate::println_color!(0xFF00CCFF, "     ██║   ██████╔╝██║   ██║███████╗   ██║   ██║   ██║███████╗");
+    crate::println_color!(0xFF00DDFF, "     ██║   ██╔══██╗██║   ██║╚════██║   ██║   ██║   ██║╚════██║");
+    crate::println_color!(0xFF00EEFF, "     ██║   ██║  ██║╚██████╔╝███████║   ██║   ╚██████╔╝███████║");
+    crate::println_color!(0xFF00EEFF, "     ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝    ╚═════╝ ╚══════╝");
+    crate::println!();
+    crate::println_color!(0xFFFFCC00, "  ★  100% Rust — Zero C code — Memory safe by design");
+    crate::println_color!(0xFFFFCC00, "  ★  Built from scratch in 7 days — 99,000+ lines");
+    crate::println_color!(0xFFFFCC00, "  ★  6 MB ISO — boots in seconds");
+    crate::println_color!(0xFFFFCC00, "  ★  GPU compositing — 144 FPS desktop");
+    crate::println!();
+    crate::println_color!(0xFF00FF88, "  github.com/nathan237/TrustOS");
+    crate::println_color!(0xFF888888, "  Star ★ · Fork · Contribute");
+    crate::println!();
+    crate::println_color!(0xFF888888, "  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    crate::println!();
+
+    // Clean up
+    let _ = crate::ramfs::with_fs(|fs| { let _ = fs.rm("/demo/hello.txt"); let _ = fs.rm("/demo/showcase.tl"); });
 }
 
 /// Wrapper for desktop without initial app

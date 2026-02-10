@@ -427,6 +427,87 @@ pub fn render_realtime(effect: &str, width: u16, height: u16, fps: u16) {
     crate::serial_println!("[video] Stopped after {} frames", frame);
 }
 
+/// Timed version of render_realtime — auto-stops after `duration_ms` milliseconds.
+/// Used by the showcase command for automated demo sequences.
+pub fn render_realtime_timed(effect: &str, width: u16, height: u16, fps: u16, duration_ms: u64) {
+    let sw = crate::framebuffer::width();
+    let sh = crate::framebuffer::height();
+    let rw = (width as u32).min(sw).min(200) as usize;
+    let rh = (height as u32).min(sh).min(150) as usize;
+    let ox = if sw > rw as u32 { (sw - rw as u32) / 2 } else { 0 } as usize;
+    let oy = if sh > rh as u32 { (sh - rh as u32) / 2 } else { 0 } as usize;
+
+    let rnpix = rw * rh;
+    let mut buf = vec![0u32; rnpix];
+    let mut frame: u32 = 0;
+    let mut seed: u32 = 42;
+
+    let mut heat = if effect == "fire" { vec![0u8; rnpix] } else { Vec::new() };
+
+    let col_w: usize = 8;
+    let ncols = rw / col_w + 1;
+    let mut drops = vec![0i32; ncols];
+    let mut speeds = vec![0u8; ncols];
+    if effect == "matrix" {
+        for i in 0..ncols {
+            seed = xorshift(seed);
+            drops[i] = -((seed % rh as u32) as i32);
+            seed = xorshift(seed);
+            speeds[i] = 1 + (seed % 4) as u8;
+        }
+    }
+
+    let was_db = crate::framebuffer::is_double_buffer_enabled();
+    if !was_db {
+        crate::framebuffer::init_double_buffer();
+        crate::framebuffer::set_double_buffer_mode(true);
+    }
+
+    crate::framebuffer::clear_backbuffer(0xFF000000);
+    crate::framebuffer::swap_buffers();
+
+    let start_time = crate::time::uptime_ms();
+
+    loop {
+        // Auto-stop after duration
+        if crate::time::uptime_ms() - start_time >= duration_ms { break; }
+
+        // Also allow manual exit with Q/ESC
+        if let Some(key) = crate::keyboard::try_read_key() {
+            if key == 0x1B || key == b'q' { break; }
+        }
+
+        match effect {
+            "plasma" => render_plasma_frame(&mut buf, rw, rh, frame),
+            "fire" => render_fire_frame(&mut buf, &mut heat, rw, rh, &mut seed),
+            "matrix" => render_matrix_frame(&mut buf, rw, rh, &mut drops, &mut speeds, &mut seed, col_w, ncols),
+            _ => break,
+        }
+
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+            let bb = bb_ptr as *mut u32;
+            let bb_s = bb_stride as usize;
+            for y in 0..rh {
+                let dy = oy + y;
+                if dy >= bb_h as usize { break; }
+                let src_row = &buf[y * rw..y * rw + rw];
+                unsafe {
+                    let dst = bb.add(dy * bb_s + ox);
+                    core::ptr::copy_nonoverlapping(src_row.as_ptr(), dst, rw);
+                }
+            }
+        }
+        crate::framebuffer::swap_buffers();
+        frame = frame.wrapping_add(1);
+    }
+
+    if !was_db {
+        crate::framebuffer::set_double_buffer_mode(false);
+    }
+
+    crate::serial_println!("[video] Timed demo '{}' stopped after {} frames ({} ms)", effect, frame, duration_ms);
+}
+
 fn render_plasma_frame(buf: &mut [u32], w: usize, h: usize, frame: u32) {
     // Fixed-point integer plasma (no floating point)
     // Uses 256-entry sine LUT, 8-bit fractional precision
