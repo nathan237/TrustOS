@@ -179,10 +179,26 @@ impl Rasterizer {
         }
     }
     
-    /// Clear the back buffer
+    /// Clear the back buffer (SSE2-optimized on x86_64)
     pub fn clear(&mut self, color: u32) {
-        for pixel in self.back_buffer.iter_mut() {
-            *pixel = color;
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            use core::arch::x86_64::*;
+            let fill = _mm_set1_epi32(color as i32);
+            let ptr = self.back_buffer.as_mut_ptr() as *mut __m128i;
+            let count = self.back_buffer.len() / 4;
+            for i in 0..count {
+                _mm_storeu_si128(ptr.add(i), fill);
+            }
+            for i in (count * 4)..self.back_buffer.len() {
+                self.back_buffer[i] = color;
+            }
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            for pixel in self.back_buffer.iter_mut() {
+                *pixel = color;
+            }
         }
         self.full_redraw = true;
     }
@@ -240,7 +256,7 @@ impl Rasterizer {
         (oa << 24) | (or << 16) | (og << 8) | ob
     }
     
-    /// Draw a filled rectangle with optional alpha
+    /// Draw a filled rectangle with optional alpha (SSE2-optimized for opaque)
     pub fn fill_rect(&mut self, x: i32, y: i32, w: u32, h: u32, color: u32) {
         let x0 = x.max(0) as u32;
         let y0 = y.max(0) as u32;
@@ -248,15 +264,45 @@ impl Rasterizer {
         let y1 = ((y + h as i32) as u32).min(self.height);
         
         let alpha = (color >> 24) & 0xFF;
+        let row_width = (x1 - x0) as usize;
         
-        for py in y0..y1 {
-            let row_start = (py * self.width) as usize;
-            for px in x0..x1 {
-                let idx = row_start + px as usize;
-                if alpha == 255 {
-                    self.back_buffer[idx] = color;
-                } else if alpha > 0 {
-                    self.back_buffer[idx] = Self::blend_pixel(self.back_buffer[idx], color);
+        if alpha == 255 && row_width >= 4 {
+            // Fast path: SSE2 fill for opaque rects
+            #[cfg(target_arch = "x86_64")]
+            unsafe {
+                use core::arch::x86_64::*;
+                let fill = _mm_set1_epi32(color as i32);
+                for py in y0..y1 {
+                    let row_start = (py * self.width + x0) as usize;
+                    let ptr = self.back_buffer.as_mut_ptr().add(row_start) as *mut __m128i;
+                    let chunks = row_width / 4;
+                    for i in 0..chunks {
+                        _mm_storeu_si128(ptr.add(i), fill);
+                    }
+                    for i in (chunks * 4)..row_width {
+                        self.back_buffer[row_start + i] = color;
+                    }
+                }
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
+                for py in y0..y1 {
+                    let row_start = (py * self.width + x0) as usize;
+                    for i in 0..row_width {
+                        self.back_buffer[row_start + i] = color;
+                    }
+                }
+            }
+        } else {
+            for py in y0..y1 {
+                let row_start = (py * self.width) as usize;
+                for px in x0..x1 {
+                    let idx = row_start + px as usize;
+                    if alpha == 255 {
+                        self.back_buffer[idx] = color;
+                    } else if alpha > 0 {
+                        self.back_buffer[idx] = Self::blend_pixel(self.back_buffer[idx], color);
+                    }
                 }
             }
         }

@@ -235,6 +235,7 @@ pub unsafe extern "C" fn kmain() -> ! {
         // Find a usable region for heap (skip first 1MB and kernel/modules)
         let mut usable_for_heap: Option<u64> = None;
         let mut kernel_end: u64 = 0;
+        let mut total_phys_memory: u64 = 0;
         
         // Log memory regions and find heap location
         for entry in mmap_response.entries() {
@@ -265,7 +266,13 @@ pub unsafe extern "C" fn kmain() -> ! {
                     kernel_end = end;
                 }
             }
+            // Sum all memory (usable + reclaimable)
+            total_phys_memory += entry.length;
         }
+
+        // Store total physical memory for later use
+        memory::set_total_physical_memory(total_phys_memory);
+        serial_println!("[MEM] Total physical memory: {} MB", total_phys_memory / 1024 / 1024);
 
         // Align up to 4 KiB
         let align_up = |addr: u64, align: u64| -> u64 {

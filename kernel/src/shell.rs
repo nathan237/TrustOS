@@ -2064,6 +2064,12 @@ fn cmd_halt() {
 
 fn cmd_neofetch() {
     let secs = crate::logger::get_ticks() / 100;
+    let (w, h) = crate::framebuffer::get_dimensions();
+    let total_mem_mb = crate::memory::total_physical_memory() / 1024 / 1024;
+    let mem_stats = crate::memory::stats();
+    let heap_used_mb = mem_stats.heap_used / 1024 / 1024;
+    let heap_total_mb = (mem_stats.heap_used + mem_stats.heap_free) / 1024 / 1024;
+    
     crate::println_color!(COLOR_BRIGHT_GREEN, r"       _____          ");
     crate::print_color!(COLOR_GREEN, r"      |  _  |         ");
     crate::print_color!(COLOR_CYAN, "root");
@@ -2073,13 +2079,28 @@ fn cmd_neofetch() {
     crate::println!("---------------");
     crate::print_color!(COLOR_GREEN, r"      |  _  |         ");
     crate::print_color!(COLOR_CYAN, "OS: ");
-    crate::println!("T-RustOs 0.1.0");
+    crate::println!("TrustOS v0.1.1");
     crate::print_color!(COLOR_DARK_GREEN, r"      | |_| |         ");
+    crate::print_color!(COLOR_CYAN, "Kernel: ");
+    crate::println!("{}", crate::signature::KERNEL_VERSION);
+    crate::print_color!(COLOR_DARK_GREEN, r"      |_____|         ");
     crate::print_color!(COLOR_CYAN, "Uptime: ");
     crate::println!("{} secs", secs);
-    crate::print_color!(COLOR_DARK_GREEN, r"      |_____|         ");
+    crate::print_color!(COLOR_BRIGHT_GREEN, r"                      ");
     crate::print_color!(COLOR_CYAN, "Shell: ");
     crate::println!("tsh");
+    crate::print_color!(COLOR_GREEN, r"                      ");
+    crate::print_color!(COLOR_CYAN, "Resolution: ");
+    crate::println!("{}x{}", w, h);
+    crate::print_color!(COLOR_GREEN, r"                      ");
+    crate::print_color!(COLOR_CYAN, "Memory: ");
+    crate::println!("{} MB total, {} / {} MB heap", total_mem_mb, heap_used_mb, heap_total_mb);
+    crate::print_color!(COLOR_GREEN, r"                      ");
+    crate::print_color!(COLOR_CYAN, "CPU: ");
+    crate::println!("{} cores", crate::cpu::core_count());
+    crate::print_color!(COLOR_GREEN, r"                      ");
+    crate::print_color!(COLOR_CYAN, "Creator: ");
+    crate::println!("Nated0ge (@nathan237)");
     crate::println!();
 }
 

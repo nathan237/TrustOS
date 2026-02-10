@@ -299,6 +299,11 @@ pub fn has_rdrand() -> bool {
     capabilities().map(|c| c.rdrand).unwrap_or(false)
 }
 
+/// Get the number of logical CPU cores detected
+pub fn core_count() -> u8 {
+    capabilities().map(|c| c.max_logical_cpus).unwrap_or(1)
+}
+
 /// Get hardware random number (RDRAND)
 pub fn rdrand() -> Option<u64> {
     if !has_rdrand() {

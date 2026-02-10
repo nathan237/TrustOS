@@ -14,8 +14,23 @@ pub use paging::{AddressSpace, PageFlags, validate_user_ptr, is_user_address, is
 static HEAP_START: AtomicUsize = AtomicUsize::new(0);
 /// HHDM offset (higher half direct map)
 static HHDM_OFFSET: AtomicU64 = AtomicU64::new(0xFFFF_8000_0000_0000);
-/// Kernel heap size (32 MB - enough for compositor, networking, and applications)
-pub const HEAP_SIZE: usize = 32 * 1024 * 1024;
+/// Kernel heap size — dynamically selected at boot based on available RAM.
+/// Default: 64 MB (supports high-res framebuffers and 3D rendering).
+/// With VirtualBox (1GB+ RAM), we can use 128 MB+ for better performance.
+pub const HEAP_SIZE: usize = 64 * 1024 * 1024;
+
+/// Total physical memory detected at boot (set by main.rs)
+static TOTAL_PHYS_MEMORY: AtomicU64 = AtomicU64::new(0);
+
+/// Store detected total physical memory
+pub fn set_total_physical_memory(bytes: u64) {
+    TOTAL_PHYS_MEMORY.store(bytes, Ordering::SeqCst);
+}
+
+/// Get total physical memory in bytes
+pub fn total_physical_memory() -> u64 {
+    TOTAL_PHYS_MEMORY.load(Ordering::Relaxed)
+}
 
 /// Initialize memory management with HHDM offset
 pub fn init_with_hhdm(hhdm_offset: u64, usable_base: u64) {

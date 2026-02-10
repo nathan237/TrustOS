@@ -121,6 +121,11 @@ pub struct ModelEditorState {
     
     // Frame counter for animation
     frame: u32,
+    // Cached trig values (recomputed once per frame for perf)
+    cached_cy: f32,
+    cached_sy: f32,
+    cached_cx: f32,
+    cached_sx: f32,
 }
 
 impl ModelEditorState {
@@ -151,6 +156,10 @@ impl ModelEditorState {
             model_name: String::from("untitled"),
             undo_stack: Vec::new(),
             frame: 0,
+            cached_cy: fast_cos(0.6),
+            cached_sy: fast_sin(0.6),
+            cached_cx: fast_cos(0.4),
+            cached_sx: fast_sin(0.4),
         }
     }
     
@@ -316,13 +325,13 @@ impl ModelEditorState {
             y: v.y - self.cam_target.y, 
             z: v.z - self.cam_target.z 
         };
-        // Rotate around Y then X (orbit camera)
-        let cy = fast_cos(self.cam_angle_y);
-        let sy = fast_sin(self.cam_angle_y);
+        // Rotate around Y then X (orbit camera) — using cached sin/cos
+        let cy = self.cached_cy;
+        let sy = self.cached_sy;
         let rx = V3 { x: v.x * cy + v.z * sy, y: v.y, z: -v.x * sy + v.z * cy };
         
-        let cx = fast_cos(self.cam_angle_x);
-        let sx = fast_sin(self.cam_angle_x);
+        let cx = self.cached_cx;
+        let sx = self.cached_sx;
         let ry = V3 { x: rx.x, y: rx.y * cx - rx.z * sx, z: rx.y * sx + rx.z * cx };
         
         // Translate along camera distance
@@ -691,6 +700,12 @@ impl ModelEditorState {
     
     pub fn render(&mut self, buf: &mut [u32], w: usize, h: usize) {
         self.frame += 1;
+        
+        // Cache trig values once per frame (avoids recomputing per vertex)
+        self.cached_cy = fast_cos(self.cam_angle_y);
+        self.cached_sy = fast_sin(self.cam_angle_y);
+        self.cached_cx = fast_cos(self.cam_angle_x);
+        self.cached_sx = fast_sin(self.cam_angle_x);
         
         let toolbar_h = 32;
         let status_h = 20;
