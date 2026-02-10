@@ -2653,14 +2653,14 @@ struct AppConfig {
                     dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second));
             },
             "uname" | "uname -a" => {
-                output.push(String::from("TrustOS 0.1.0 x86_64 Rust Kernel"));
-                output.push(format!("Heap: {} MB", crate::memory::HEAP_SIZE / 1024 / 1024));
+                output.push(String::from("TrustOS 0.1.1 x86_64 Rust Kernel"));
+                output.push(format!("Heap: {} MB", crate::memory::heap_size() / 1024 / 1024));
             },
             "whoami" => {
                 output.push(String::from("root"));
             },
             "free" | "mem" => {
-                let heap_mb = crate::memory::HEAP_SIZE / 1024 / 1024;
+                let heap_mb = crate::memory::heap_size() / 1024 / 1024;
                 output.push(String::from("Memory Usage:"));
                 output.push(format!("  Heap Size: {} MB", heap_mb));
                 output.push(String::from("  Kernel:   Active"));

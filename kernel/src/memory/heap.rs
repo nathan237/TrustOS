@@ -4,16 +4,15 @@
 //! Provides global allocator implementation.
 
 use linked_list_allocator::LockedHeap;
-use super::HEAP_SIZE;
 
 /// Global kernel heap allocator
 #[global_allocator]
 static ALLOCATOR: LockedHeap = LockedHeap::empty();
 
-/// Initialize kernel heap at specified address
-pub fn init_at(heap_start: usize) {
+/// Initialize kernel heap at specified address with given size
+pub fn init_at(heap_start: usize, heap_size: usize) {
     unsafe {
-        ALLOCATOR.lock().init(heap_start as *mut u8, HEAP_SIZE);
+        ALLOCATOR.lock().init(heap_start as *mut u8, heap_size);
     }
 }
 

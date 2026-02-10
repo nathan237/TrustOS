@@ -274,6 +274,11 @@ pub unsafe extern "C" fn kmain() -> ! {
         memory::set_total_physical_memory(total_phys_memory);
         serial_println!("[MEM] Total physical memory: {} MB", total_phys_memory / 1024 / 1024);
 
+        // Compute dynamic heap size: 25% of detected RAM, clamped [64 MB, 512 MB]
+        let dynamic_heap_size = memory::compute_heap_size(total_phys_memory);
+        serial_println!("[HEAP] Dynamic size: {} MB (25% of {} MB RAM)", 
+            dynamic_heap_size / 1024 / 1024, total_phys_memory / 1024 / 1024);
+
         // Align up to 4 KiB
         let align_up = |addr: u64, align: u64| -> u64 {
             if addr % align == 0 { addr } else { addr + (align - (addr % align)) }
@@ -291,7 +296,7 @@ pub unsafe extern "C" fn kmain() -> ! {
                 continue;
             }
             let heap_start = core::cmp::max(region_start, min_heap_base);
-            if region_end >= heap_start + memory::HEAP_SIZE as u64 {
+            if region_end >= heap_start + dynamic_heap_size as u64 {
                 usable_for_heap = Some(heap_start);
                 break;
             }
@@ -311,26 +316,26 @@ pub unsafe extern "C" fn kmain() -> ! {
                 }
             }
 
-            if best_len >= memory::HEAP_SIZE as u64 {
+            if best_len >= dynamic_heap_size as u64 {
                 let mut heap_start = align_up(best_base, 0x1000);
                 if heap_start < 0x100000 {
                     heap_start = align_up(0x100000, 0x1000);
                 }
-                if best_base.saturating_add(best_len) >= heap_start + memory::HEAP_SIZE as u64 {
+                if best_base.saturating_add(best_len) >= heap_start + dynamic_heap_size as u64 {
                     usable_for_heap = Some(heap_start);
                 }
             }
         }
         
-        // Initialize heap with HHDM
+        // Initialize heap with HHDM (dynamic size)
         if let Some(heap_phys) = usable_for_heap {
-            serial_println!("[HEAP] Using mmap region at phys {:#x}, size {} MB", heap_phys, memory::HEAP_SIZE / 1024 / 1024);
+            serial_println!("[HEAP] Using mmap region at phys {:#x}, size {} MB", heap_phys, dynamic_heap_size / 1024 / 1024);
             // NOTE: Do NOT use println! here - heap not yet initialized!
-            memory::init_with_hhdm(hhdm_offset, heap_phys);
+            memory::init_with_hhdm_dynamic(hhdm_offset, heap_phys, dynamic_heap_size);
             heap_initialized = true;
             serial_println!("[HEAP] Initialized: free={} KB", memory::heap::free() / 1024);
         } else {
-            serial_println!("[HEAP] ERROR: No usable region found for {} MB heap!", memory::HEAP_SIZE / 1024 / 1024);
+            serial_println!("[HEAP] ERROR: No usable region found for {} MB heap!", dynamic_heap_size / 1024 / 1024);
         }
     }
     

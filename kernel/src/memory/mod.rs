@@ -14,9 +14,21 @@ pub use paging::{AddressSpace, PageFlags, validate_user_ptr, is_user_address, is
 static HEAP_START: AtomicUsize = AtomicUsize::new(0);
 /// HHDM offset (higher half direct map)
 static HHDM_OFFSET: AtomicU64 = AtomicU64::new(0xFFFF_8000_0000_0000);
-/// Kernel heap size — dynamically selected at boot based on available RAM.
-/// Default: 64 MB (supports high-res framebuffers and 3D rendering).
-/// With VirtualBox (1GB+ RAM), we can use 128 MB+ for better performance.
+/// Minimum heap size (64 MB) — fallback value
+pub const HEAP_SIZE_MIN: usize = 64 * 1024 * 1024;
+/// Maximum heap size (512 MB) — cap to leave RAM for framebuffer, page tables, DMA
+pub const HEAP_SIZE_MAX: usize = 512 * 1024 * 1024;
+
+/// Actual heap size selected at boot (dynamic: 25% of detected RAM, clamped)
+static HEAP_SIZE_ACTUAL: AtomicUsize = AtomicUsize::new(64 * 1024 * 1024);
+
+/// Get the actual heap size (set dynamically at boot)
+pub fn heap_size() -> usize {
+    HEAP_SIZE_ACTUAL.load(Ordering::Relaxed)
+}
+
+/// Kept for backward compatibility — returns the dynamic heap size
+#[deprecated(note = "Use memory::heap_size() instead")]
 pub const HEAP_SIZE: usize = 64 * 1024 * 1024;
 
 /// Total physical memory detected at boot (set by main.rs)
@@ -32,10 +44,19 @@ pub fn total_physical_memory() -> u64 {
     TOTAL_PHYS_MEMORY.load(Ordering::Relaxed)
 }
 
-/// Initialize memory management with HHDM offset
-pub fn init_with_hhdm(hhdm_offset: u64, usable_base: u64) {
-    // Store HHDM offset for later use
+/// Compute dynamic heap size: 25% of total RAM, clamped to [64 MB, 512 MB]
+pub fn compute_heap_size(total_ram: u64) -> usize {
+    let quarter = (total_ram / 4) as usize;
+    quarter.clamp(HEAP_SIZE_MIN, HEAP_SIZE_MAX)
+}
+
+/// Initialize memory management with HHDM offset and dynamic heap size
+pub fn init_with_hhdm_dynamic(hhdm_offset: u64, usable_base: u64, heap_bytes: usize) {
+    // Store HHDM offset
     HHDM_OFFSET.store(hhdm_offset, Ordering::SeqCst);
+    
+    // Store actual heap size
+    HEAP_SIZE_ACTUAL.store(heap_bytes, Ordering::SeqCst);
     
     // Use the first usable memory region via HHDM
     let heap_phys = usable_base;
@@ -43,10 +64,15 @@ pub fn init_with_hhdm(hhdm_offset: u64, usable_base: u64) {
     
     HEAP_START.store(heap_virt as usize, Ordering::SeqCst);
     
-    // Initialize the heap allocator
-    heap::init_at(heap_virt as usize);
-    crate::log!("Heap initialized: {} KB at virt {:#x} (phys {:#x})", 
-        HEAP_SIZE / 1024, heap_virt, heap_phys);
+    // Initialize the heap allocator with dynamic size
+    heap::init_at(heap_virt as usize, heap_bytes);
+    crate::log!("Heap initialized: {} MB at virt {:#x} (phys {:#x})", 
+        heap_bytes / 1024 / 1024, heap_virt, heap_phys);
+}
+
+/// Initialize memory management with HHDM offset (legacy, uses HEAP_SIZE_MIN)
+pub fn init_with_hhdm(hhdm_offset: u64, usable_base: u64) {
+    init_with_hhdm_dynamic(hhdm_offset, usable_base, HEAP_SIZE_MIN);
 }
 
 /// Initialize memory management (fallback - uses fixed address)
@@ -55,8 +81,10 @@ pub fn init() {
     // This may fail if not mapped!
     let heap_addr = 0xFFFF_8000_0100_0000usize; // 1MB into HHDM
     HEAP_START.store(heap_addr, Ordering::SeqCst);
-    heap::init_at(heap_addr);
-    crate::log!("Heap initialized (fallback): {} KB at {:#x}", HEAP_SIZE / 1024, heap_addr);
+    let size = HEAP_SIZE_MIN;
+    HEAP_SIZE_ACTUAL.store(size, Ordering::SeqCst);
+    heap::init_at(heap_addr, size);
+    crate::log!("Heap initialized (fallback): {} MB at {:#x}", size / 1024 / 1024, heap_addr);
 }
 
 /// Get memory statistics

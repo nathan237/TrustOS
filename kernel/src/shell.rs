@@ -4528,9 +4528,10 @@ fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms: u64) {
                             },
                             "meminfo" => {
                                 let used = crate::memory::heap::used() / 1024;
-                                let total = crate::memory::HEAP_SIZE / 1024;
+                                let total = crate::memory::heap_size() / 1024;
+                                let total_ram_mb = crate::memory::total_physical_memory() / 1024 / 1024;
                                 shell_output.push(format!("Heap: {} / {} KB", used, total));
-                                shell_output.push(String::from("System: 512 MB total"));
+                                shell_output.push(format!("System: {} MB total", total_ram_mb));
                             },
                             "uptime" => {
                                 let secs = crate::cpu::tsc::read_tsc() / crate::cpu::tsc::frequency_hz();
@@ -5132,7 +5133,7 @@ fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms: u64) {
                             },
                             "free" => {
                                 let used = crate::memory::heap::used() / 1024;
-                                let total = crate::memory::HEAP_SIZE / 1024;
+                                let total = crate::memory::heap_size() / 1024;
                                 let free_kb = total - used;
                                 shell_output.push(String::from("              total     used     free"));
                                 shell_output.push(format!("Mem:     {:>10}  {:>7}  {:>7}", total, used, free_kb));
