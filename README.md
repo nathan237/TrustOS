@@ -13,6 +13,7 @@
 [![Version](https://img.shields.io/badge/version-0.1.1-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
+[![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
 [![Watch the demo](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
 
@@ -455,9 +456,22 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
+## 👤 Author
+
+**Nated0ge** — Sole creator & developer of TrustOS
+
+- GitHub: [@nathan237](https://github.com/nathan237)
+- Project: [TrustOS](https://github.com/nathan237/TrustOS)
+
+> Every line of TrustOS — 99,000+ lines of Rust — was designed, written, and tested by a single developer in 7 days.
+
+---
+
 <div align="center">
 
 **Trust** the code. **Rust** is the reason.
+
+Created with ❤️ by [Nated0ge](https://github.com/nathan237)
 
 99,000 lines · 7 days · Zero C · Fully auditable
 

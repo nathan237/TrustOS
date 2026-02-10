@@ -2,7 +2,7 @@
 name = "pixlens"
 version = "0.1.0"
 edition = "2021"
-authors = ["Nathan (nated0ge)"]
+authors = ["Nated0ge <nathan@trustos.dev>"]
 description = "Visual cryptanalysis tool - reveal hidden patterns through custom bitmap mappings"
 
 [workspace]

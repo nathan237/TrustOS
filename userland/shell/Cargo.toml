@@ -2,7 +2,7 @@
 name = "trustos_shell"
 version = "0.1.0"
 edition = "2021"
-authors = ["TRustOs Team"]
+authors = ["Nated0ge <nathan@trustos.dev>"]
 
 [dependencies]
 # Will add syscall wrapper and VGA text mode
