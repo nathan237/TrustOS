@@ -116,7 +116,7 @@ Write-Host "[VM] Configuring for max performance..." -ForegroundColor Yellow
     --vram $VRAM `
     --cpus $CPUs `
     --firmware efi64 `
-    --graphicscontroller vmsvga `
+    --graphicscontroller vboxsvga `
     --accelerate-3d off `
     --nested-hw-virt off `
     --x86-pae on `

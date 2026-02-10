@@ -389,12 +389,14 @@ pub unsafe extern "C" fn ap_entry(smp_info: &limine::smp::Cpu) -> ! {
         crate::serial_println!("[SMP] AP {} online (LAPIC ID: {})", processor_id, lapic_id);
     }
     
-    // AP work loop - check for work, spin briefly
+    // AP work loop - check for work, then yield CPU
     loop {
         check_and_execute_work(processor_id);
         
-        // Brief spin before checking again
-        for _ in 0..100 {
+        // Longer pause between work checks (~0.1ms)
+        // Reduces CPU waste and fixes display refresh on VirtualBox/Hyper-V
+        // (tight spin loops starve the hypervisor's display refresh thread)
+        for _ in 0..100_000 {
             core::hint::spin_loop();
         }
     }
