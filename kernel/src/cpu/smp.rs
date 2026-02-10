@@ -389,15 +389,19 @@ pub unsafe extern "C" fn ap_entry(smp_info: &limine::smp::Cpu) -> ! {
         crate::serial_println!("[SMP] AP {} online (LAPIC ID: {})", processor_id, lapic_id);
     }
     
-    // AP work loop - check for work, then yield CPU
+    // AP work loop - check for work, then HLT to yield vCPU
+    // HLT suspends the CPU until the next interrupt (timer/IPI),
+    // which lets VirtualBox/Hyper-V refresh the display properly.
+    // Without HLT, the AP spin loop consumes 100% of a vCPU and
+    // starves the hypervisor's display refresh thread.
     loop {
         check_and_execute_work(processor_id);
         
-        // Longer pause between work checks (~0.1ms)
-        // Reduces CPU waste and fixes display refresh on VirtualBox/Hyper-V
-        // (tight spin loops starve the hypervisor's display refresh thread)
-        for _ in 0..100_000 {
-            core::hint::spin_loop();
+        // HLT: yield CPU to hypervisor until next interrupt
+        // On bare metal: wakes on timer IRQ (~1ms with PIT/APIC timer)
+        // On VBox/QEMU: immediately yields the vCPU timeslice
+        unsafe {
+            core::arch::asm!("sti; hlt", options(nomem, nostack));
         }
     }
 }

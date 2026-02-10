@@ -976,14 +976,21 @@ fn execute_command(cmd: &str) {
         // Showcase — automated demo for marketing videos
         "showcase" => cmd_showcase(args),
         
-        // Desktop Environment - COSMIC V2 with multi-layer compositor
-        "desktop" | "gui" | "cosmic" => cmd_cosmic_v2(),
+        // Desktop Environment - windowed desktop with full app support
+        "desktop" | "gui" => launch_desktop_env(None),
+        
+        // COSMIC V2 compositor (alternative matrix-style desktop)
+        "cosmic" => cmd_cosmic_v2(),
         
         // Open app directly (launches desktop with app)
         "open" => cmd_open(args),
         
         // TrustEdit 3D model editor (launches desktop with TrustEdit)
-        "trustedit" | "edit3d" | "3dedit" => cmd_trustedit(),
+        "trustedit" | "edit3d" | "3dedit" => launch_desktop_env(Some(("TrustEdit 3D", crate::desktop::WindowType::ModelEditor, 100, 60, 700, 500))),
+        
+        // Launch desktop with a specific window type
+        "calculator" | "calc" => launch_desktop_env(Some(("Calculator", crate::desktop::WindowType::Calculator, 300, 200, 320, 420))),
+        "snake" => launch_desktop_env(Some(("Snake", crate::desktop::WindowType::Game, 200, 100, 400, 400))),
         
         // Kernel signature & proof of authorship
         "signature" | "sig" => cmd_signature(args),
@@ -2540,11 +2547,28 @@ fn cmd_open(args: &[&str]) {
     cmd_cosmic_v2_with_app(Some(&app));
 }
 
-/// Launch desktop directly with TrustEdit 3D model editor
-fn cmd_trustedit() {
-    crate::println_color!(COLOR_BRIGHT_GREEN, "Launching TrustEdit 3D...");
-    // Launch COSMIC V2 desktop with the editor pre-opened
-    cmd_cosmic_v2_with_app(Some("editor"));
+/// Launch the desktop.rs windowed desktop environment.
+/// Optionally pre-opens a window of the given type.
+fn launch_desktop_env(initial_window: Option<(&str, crate::desktop::WindowType, i32, i32, u32, u32)>) {
+    use crate::desktop;
+    let (width, height) = crate::framebuffer::get_dimensions();
+    if width == 0 || height == 0 {
+        crate::println_color!(COLOR_RED, "Error: Invalid framebuffer!");
+        return;
+    }
+    crate::mouse::set_screen_size(width, height);
+    
+    let mut d = desktop::DESKTOP.lock();
+    d.init(width, height);
+    
+    // Open the requested window if any
+    if let Some((title, wtype, x, y, w, h)) = initial_window {
+        d.create_window(title, x, y, w, h, wtype);
+    }
+    
+    drop(d);
+    crate::serial_println!("[Desktop] Entering desktop run loop");
+    desktop::run();
 }
 
 // ==================== SIGNATURE — KERNEL PROOF OF AUTHORSHIP ====================
