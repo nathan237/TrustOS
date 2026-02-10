@@ -772,14 +772,12 @@ pub struct Desktop {
     pub snake_states: BTreeMap<u32, SnakeState>,
     // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
     pub scale_factor: u32,
-    // Matrix rain state
+    // Matrix rain state (depth-parallax advancing effect)
     matrix_chars: Vec<u8>,
     matrix_heads: Vec<i32>,
     matrix_speeds: Vec<u32>,
+    matrix_seeds: Vec<u32>,
     matrix_initialized: bool,
-    // HoloMatrix 3D volumetric renderer
-    holomatrix: Option<crate::graphics::holomatrix::HoloMatrix>,
-    holo_time: f32,
 }
 
 /// Calculator state for interactive calculator windows
@@ -1080,9 +1078,8 @@ impl Desktop {
             matrix_chars: Vec::new(),
             matrix_heads: Vec::new(),
             matrix_speeds: Vec::new(),
+            matrix_seeds: Vec::new(),
             matrix_initialized: false,
-            holomatrix: None,
-            holo_time: 0.0,
         }
     }
     
@@ -1130,33 +1127,37 @@ impl Desktop {
         crate::serial_println!("[Desktop] init complete");
     }
     
-    /// Initialize matrix rain background data
+    /// Initialize matrix rain background data (depth-parallax advancing effect)
     fn init_matrix_rain(&mut self) {
-        const MATRIX_COLS: usize = 240;
-        const MATRIX_ROWS: usize = 68;
+        // 160 columns for depth-parallax advancing matrix rain
+        // Speeds 2-6: slow=far(dim), fast=near(bright) → illusion of advancing
+        const MATRIX_COLS: usize = 160;
+        const TRAIL_LEN: usize = 30;
+        const CHAR_H: usize = 16;
         const CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
         
-        self.matrix_chars = vec![0u8; MATRIX_COLS * MATRIX_ROWS];
+        // Pre-generate character set for trail rendering
+        self.matrix_chars = vec![0u8; MATRIX_COLS * TRAIL_LEN];
         self.matrix_heads = vec![0i32; MATRIX_COLS];
-        self.matrix_speeds = vec![1u32; MATRIX_COLS];
+        self.matrix_speeds = vec![2u32; MATRIX_COLS];
+        self.matrix_seeds = vec![0u32; MATRIX_COLS];
+        
+        let height = self.height.saturating_sub(TASKBAR_HEIGHT);
         
         for col in 0..MATRIX_COLS {
             let seed = (col as u32).wrapping_mul(2654435761) ^ 0xDEADBEEF;
-            for row in 0..MATRIX_ROWS {
-                let char_seed = seed.wrapping_mul(row as u32 + 1);
-                self.matrix_chars[col * MATRIX_ROWS + row] = CHARS[(char_seed as usize) % CHARS.len()];
+            // Pre-gen chars for this column's trail
+            for i in 0..TRAIL_LEN {
+                let char_seed = seed.wrapping_add((i as u32).wrapping_mul(7919));
+                self.matrix_chars[col * TRAIL_LEN + i] = CHARS[(char_seed as usize) % CHARS.len()];
             }
-            self.matrix_heads[col] = -((seed % (MATRIX_ROWS as u32 * 2)) as i32);
-            self.matrix_speeds[col] = 1 + (seed % 3);
+            // Start position (randomized, many start off-screen)
+            self.matrix_heads[col] = -((seed % (height / 2)) as i32);
+            // Speed 2-6 (determines depth: 2=far/dim, 6=near/bright)
+            self.matrix_speeds[col] = 2 + (seed % 5);
+            self.matrix_seeds[col] = seed;
         }
         self.matrix_initialized = true;
-        
-        // Initialize HoloMatrix for 3D holographic shapes 
-        // Grid dimensions match matrix rain (each cell = 8x16 pixels)
-        let holo_cols = (self.width as usize / 8).min(240);
-        let holo_rows = ((self.height - TASKBAR_HEIGHT) as usize / 16).min(68);
-        self.holomatrix = Some(crate::graphics::holomatrix::HoloMatrix::new(holo_cols, holo_rows, 32));
-        self.holo_time = 0.0;
     }
     
     /// Open TrustCode with a demo Rust file
@@ -1259,110 +1260,50 @@ struct AppConfig {
         }
     }
     
-    /// Initialize desktop icons
+    /// Initialize desktop icons (positioned for left dock sidebar)
     fn init_desktop_icons(&mut self) {
         use crate::icons::IconType;
         
-        let icon_spacing = 80;
-        let start_x = 20;
-        let start_y = 20;
+        // Dock layout: icon_size=36, gap=14, ix=12, start_y=12
+        let icon_total = 50u32; // icon_size(36) + gap(14)
+        let start_y = 12u32;
+        let ix = 12u32;
         
-        self.icons.push(DesktopIcon {
-            name: String::from("Terminal"),
-            icon_type: IconType::Terminal,
-            x: start_x,
-            y: start_y,
-            action: IconAction::OpenTerminal,
-        });
+        let dock_items: &[(&str, IconType, IconAction)] = &[
+            ("Terminal", IconType::Terminal, IconAction::OpenTerminal),
+            ("Files", IconType::Folder, IconAction::OpenFileManager),
+            ("Editor", IconType::Editor, IconAction::OpenEditor),
+            ("Calc", IconType::Calculator, IconAction::OpenCalculator),
+            ("Network", IconType::Network, IconAction::OpenNetwork),
+            ("Games", IconType::Game, IconAction::OpenGame),
+            ("Browser", IconType::Browser, IconAction::OpenBrowser),
+            ("TrustEd", IconType::ModelEditor, IconAction::OpenModelEditor),
+            ("Settings", IconType::Settings, IconAction::OpenSettings),
+            ("About", IconType::About, IconAction::OpenAbout),
+        ];
         
-        self.icons.push(DesktopIcon {
-            name: String::from("Files"),
-            icon_type: IconType::Folder,
-            x: start_x,
-            y: start_y + icon_spacing,
-            action: IconAction::OpenFileManager,
-        });
-        
-        self.icons.push(DesktopIcon {
-            name: String::from("Editor"),
-            icon_type: IconType::Editor,
-            x: start_x,
-            y: start_y + icon_spacing * 2,
-            action: IconAction::OpenEditor,
-        });
-        
-        self.icons.push(DesktopIcon {
-            name: String::from("Calculator"),
-            icon_type: IconType::Calculator,
-            x: start_x,
-            y: start_y + icon_spacing * 3,
-            action: IconAction::OpenCalculator,
-        });
-        
-        self.icons.push(DesktopIcon {
-            name: String::from("Network"),
-            icon_type: IconType::Network,
-            x: start_x,
-            y: start_y + icon_spacing * 4,
-            action: IconAction::OpenNetwork,
-        });
-        
-        self.icons.push(DesktopIcon {
-            name: String::from("Games"),
-            icon_type: IconType::Game,
-            x: start_x,
-            y: start_y + icon_spacing * 5,
-            action: IconAction::OpenGame,
-        });
-        
-        self.icons.push(DesktopIcon {
-            name: String::from("Settings"),
-            icon_type: IconType::Settings,
-            x: start_x,
-            y: start_y + icon_spacing * 6,
-            action: IconAction::OpenSettings,
-        });
-        
-        self.icons.push(DesktopIcon {
-            name: String::from("About"),
-            icon_type: IconType::About,
-            x: start_x,
-            y: start_y + icon_spacing * 7,
-            action: IconAction::OpenAbout,
-        });
-        
-        self.icons.push(DesktopIcon {
-            name: String::from("OpenGL"),
-            icon_type: IconType::OpenGL,
-            x: start_x + 80,
-            y: start_y,
-            action: IconAction::OpenGL3D,
-        });
-        
-        self.icons.push(DesktopIcon {
-            name: String::from("Browser"),
-            icon_type: IconType::Browser,
-            x: start_x + 80,
-            y: start_y + icon_spacing,
-            action: IconAction::OpenBrowser,
-        });
-
-        self.icons.push(DesktopIcon {
-            name: String::from("TrustEdit"),
-            icon_type: IconType::ModelEditor,
-            x: start_x + 80,
-            y: start_y + icon_spacing * 2,
-            action: IconAction::OpenModelEditor,
-        });
-
+        for (i, (name, icon_type, action)) in dock_items.iter().enumerate() {
+            self.icons.push(DesktopIcon {
+                name: String::from(*name),
+                icon_type: *icon_type,
+                x: ix,
+                y: start_y + i as u32 * icon_total,
+                action: *action,
+            });
+        }
     }
     
-    /// Check if click is on a desktop icon
+    /// Check if click is on a dock icon
     fn check_icon_click(&self, x: i32, y: i32) -> Option<IconAction> {
-        for icon in &self.icons {
-            let icon_x = icon.x as i32;
-            let icon_y = icon.y as i32;
-            if x >= icon_x && x < icon_x + 64 && y >= icon_y && y < icon_y + 72 {
+        // Dock hit area: full dock strip width
+        if x < 0 || x >= (DOCK_WIDTH + 10) as i32 { return None; }
+        
+        let icon_total = 50i32; // icon_size(36) + gap(14)
+        let start_y = 12i32;
+        
+        for (i, icon) in self.icons.iter().enumerate() {
+            let iy = start_y + i as i32 * icon_total;
+            if y >= iy - 3 && y < iy + 36 + 14 {
                 return Some(icon.action);
             }
         }
@@ -3010,7 +2951,6 @@ struct AppConfig {
         self.draw_background();
         self.draw_logo_watermark();
         self.draw_desktop_icons();
-        self.draw_taskbar();
         
         // Draw windows (these change, so always redraw)
         let has_visible_windows = self.windows.iter().any(|w| w.visible && !w.minimized);
@@ -3026,11 +2966,8 @@ struct AppConfig {
         // Third pass: render model editor windows (needs &mut for state)
         self.draw_model_editor_windows();
         
-        // Only redraw taskbar if there are windows (to show active indicators)
-        // Otherwise the cached taskbar is already in the background
-        if has_visible_windows || self.start_menu_open {
-            self.draw_taskbar();
-        }
+        // ALWAYS draw taskbar last (on top of everything, never covered by windows)
+        self.draw_taskbar();
         
         // Draw start menu if open
         if self.start_menu_open {
@@ -3210,242 +3147,96 @@ struct AppConfig {
     }
     
     fn draw_background(&mut self) {
-        const MATRIX_COLS: usize = 240;
-        const MATRIX_ROWS: usize = 68;
-        let height = self.height - TASKBAR_HEIGHT;
+        // ═══════════════════════════════════════════════════════════════
+        // ADVANCING MATRIX RAIN — Depth-parallax holographic effect
+        // Slow columns = FAR (dim, gray/blue tint)
+        // Fast columns = NEAR (bright, vivid green)
+        // Creates illusion of flying forward through the matrix
+        // ═══════════════════════════════════════════════════════════════
+        const MATRIX_COLS: usize = 160;
+        const TRAIL_LEN: usize = 30;
+        const CHAR_H: u32 = 16;
+        
+        let height = self.height.saturating_sub(TASKBAR_HEIGHT);
         let width = self.width;
         
-        // ═══════════════════════════════════════════════════════════════
-        // HOLOMATRIX BACKGROUND — 3D shapes emerge through matrix rain
-        // ═══════════════════════════════════════════════════════════════
+        // Clear background to pure black
+        framebuffer::fill_rect(0, 0, width, height, 0xFF000000);
         
         if !self.matrix_initialized {
-            framebuffer::fill_rect(0, 0, width, height, 0xFF000000);
             return;
         }
         
-        // Update matrix head positions
+        let col_width = width / MATRIX_COLS as u32;
+        
         for col in 0..MATRIX_COLS.min(self.matrix_heads.len()) {
-            self.matrix_heads[col] += self.matrix_speeds[col] as i32;
-            if self.matrix_heads[col] > (MATRIX_ROWS as i32 + 30) {
-                let seed = (col as u32).wrapping_mul(2654435761).wrapping_add(self.frame_count as u32);
-                self.matrix_heads[col] = -((seed % 30) as i32);
-                self.matrix_speeds[col] = 1 + (seed % 3);
+            let speed = self.matrix_speeds[col];
+            let seed = self.matrix_seeds[col];
+            let x = (col as u32 * col_width) + col_width / 2;
+            
+            // Update position
+            let new_y = self.matrix_heads[col] + speed as i32;
+            if new_y > height as i32 + (TRAIL_LEN as i32 * CHAR_H as i32) {
+                // Reset column: new seed, restart above screen
+                let new_seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+                self.matrix_seeds[col] = new_seed;
+                self.matrix_heads[col] = -((new_seed % (height / 2)) as i32);
+                // Re-generate chars for this column
+                let chars: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
+                for i in 0..TRAIL_LEN {
+                    let cs = new_seed.wrapping_add((i as u32).wrapping_mul(7919));
+                    self.matrix_chars[col * TRAIL_LEN + i] = chars[(cs as usize) % chars.len()];
+                }
+            } else {
+                self.matrix_heads[col] = new_y;
             }
-        }
-        
-        // ─────────────────────────────────────────────────────────────
-        // STEP 1: Build HoloMatrix intensity map (3D shape projection)
-        // ─────────────────────────────────────────────────────────────
-        self.holo_time += 0.016; // ~60fps frame time
-        let time = self.holo_time;
-        let holo_scene = crate::graphics::holomatrix::get_scene();
-        
-        // Intensity boost per character cell from 3D shape
-        let mut intensity_map = [[0u8; MATRIX_ROWS]; MATRIX_COLS];
-        
-        let cx = width as f32 / 2.0;
-        let cy = height as f32 / 2.0;
-        let scale = (height as f32 / 3.0).min(width as f32 / 4.0);
-        let cell_w = width as f32 / MATRIX_COLS as f32;
-        let cell_h = height as f32 / MATRIX_ROWS as f32;
-        
-        match holo_scene {
-            crate::graphics::holomatrix::HoloScene::DNA => {
-                // DNA Double Helix
-                let helix_len = 2.2;
-                let radius = 0.45;
-                let turns = 3.5;
-                
-                for i in 0..180 {
-                    let t = i as f32 / 180.0;
-                    let y = -helix_len / 2.0 + t * helix_len;
-                    let angle = t * turns * 6.28318 + time;
-                    
-                    let x1 = radius * crate::graphics::holomatrix::cos_approx_pub(angle);
-                    let z1 = radius * crate::graphics::holomatrix::sin_approx_pub(angle);
-                    let x2 = radius * crate::graphics::holomatrix::cos_approx_pub(angle + 3.14159);
-                    let z2 = radius * crate::graphics::holomatrix::sin_approx_pub(angle + 3.14159);
-                    
-                    let rot_y = time * 0.4;
-                    let cos_r = crate::graphics::holomatrix::cos_approx_pub(rot_y);
-                    let sin_r = crate::graphics::holomatrix::sin_approx_pub(rot_y);
-                    
-                    let rx1 = x1 * cos_r + z1 * sin_r;
-                    let rz1 = -x1 * sin_r + z1 * cos_r;
-                    let rx2 = x2 * cos_r + z2 * sin_r;
-                    let rz2 = -x2 * sin_r + z2 * cos_r;
-                    
-                    let depth1 = 1.0 / (2.0 + rz1);
-                    let sx1 = cx + rx1 * scale * depth1;
-                    let sy1 = cy + y * scale * depth1;
-                    let col1 = (sx1 / cell_w) as usize;
-                    let row1 = (sy1 / cell_h) as usize;
-                    
-                    let depth2 = 1.0 / (2.0 + rz2);
-                    let sx2 = cx + rx2 * scale * depth2;
-                    let sy2 = cy + y * scale * depth2;
-                    let col2 = (sx2 / cell_w) as usize;
-                    let row2 = (sy2 / cell_h) as usize;
-                    
-                    let int1 = (180.0 + 75.0 * (1.0 - ((rz1 + 0.5) * 0.5).max(0.0).min(1.0))) as u8;
-                    let int2 = (180.0 + 75.0 * (1.0 - ((rz2 + 0.5) * 0.5).max(0.0).min(1.0))) as u8;
-                    
-                    if col1 < MATRIX_COLS && row1 < MATRIX_ROWS {
-                        intensity_map[col1][row1] = intensity_map[col1][row1].max(int1);
-                        if col1 > 0 { intensity_map[col1 - 1][row1] = intensity_map[col1 - 1][row1].max(int1 * 2 / 3); }
-                        if col1 < MATRIX_COLS - 1 { intensity_map[col1 + 1][row1] = intensity_map[col1 + 1][row1].max(int1 * 2 / 3); }
-                        if row1 > 0 { intensity_map[col1][row1 - 1] = intensity_map[col1][row1 - 1].max(int1 / 2); }
-                        if row1 < MATRIX_ROWS - 1 { intensity_map[col1][row1 + 1] = intensity_map[col1][row1 + 1].max(int1 / 2); }
-                    }
-                    if col2 < MATRIX_COLS && row2 < MATRIX_ROWS {
-                        intensity_map[col2][row2] = intensity_map[col2][row2].max(int2);
-                        if col2 > 0 { intensity_map[col2 - 1][row2] = intensity_map[col2 - 1][row2].max(int2 * 2 / 3); }
-                        if col2 < MATRIX_COLS - 1 { intensity_map[col2 + 1][row2] = intensity_map[col2 + 1][row2].max(int2 * 2 / 3); }
-                        if row2 > 0 { intensity_map[col2][row2 - 1] = intensity_map[col2][row2 - 1].max(int2 / 2); }
-                        if row2 < MATRIX_ROWS - 1 { intensity_map[col2][row2 + 1] = intensity_map[col2][row2 + 1].max(int2 / 2); }
-                    }
-                    
-                    // Base pair cross-links
-                    if i % 12 == 0 {
-                        for s in 0..8 {
-                            let st = s as f32 / 7.0;
-                            let lx = sx1 * (1.0 - st) + sx2 * st;
-                            let ly = sy1 * (1.0 - st) + sy2 * st;
-                            let lcol = (lx / cell_w) as usize;
-                            let lrow = (ly / cell_h) as usize;
-                            if lcol < MATRIX_COLS && lrow < MATRIX_ROWS {
-                                intensity_map[lcol][lrow] = intensity_map[lcol][lrow].max(80);
-                            }
-                        }
-                    }
-                }
-            },
-            crate::graphics::holomatrix::HoloScene::RotatingCube | crate::graphics::holomatrix::HoloScene::GridWithCube => {
-                let half = 0.5f32;
-                let vertices: [(f32, f32, f32); 8] = [
-                    (-half, -half, -half), (half, -half, -half),
-                    (half, half, -half), (-half, half, -half),
-                    (-half, -half, half), (half, -half, half),
-                    (half, half, half), (-half, half, half),
-                ];
-                let edges: [(usize, usize); 12] = [
-                    (0,1), (1,2), (2,3), (3,0),
-                    (4,5), (5,6), (6,7), (7,4),
-                    (0,4), (1,5), (2,6), (3,7),
-                ];
-                let rot_x = time * 0.7;
-                let rot_y = time * 0.5;
-                for (i1, i2) in edges.iter() {
-                    let (vx1, vy1, vz1) = vertices[*i1];
-                    let (vx2, vy2, vz2) = vertices[*i2];
-                    for s in 0..30 {
-                        let t = s as f32 / 29.0;
-                        let x = vx1 * (1.0 - t) + vx2 * t;
-                        let y_3d = vy1 * (1.0 - t) + vy2 * t;
-                        let z = vz1 * (1.0 - t) + vz2 * t;
-                        let cos_xr = crate::graphics::holomatrix::cos_approx_pub(rot_x);
-                        let sin_xr = crate::graphics::holomatrix::sin_approx_pub(rot_x);
-                        let ry = y_3d * cos_xr - z * sin_xr;
-                        let rz = y_3d * sin_xr + z * cos_xr;
-                        let cos_yr = crate::graphics::holomatrix::cos_approx_pub(rot_y);
-                        let sin_yr = crate::graphics::holomatrix::sin_approx_pub(rot_y);
-                        let rx = x * cos_yr + rz * sin_yr;
-                        let rz2 = -x * sin_yr + rz * cos_yr;
-                        let depth = 1.0 / (2.0 + rz2);
-                        let sx = cx + rx * scale * depth;
-                        let sy = cy + ry * scale * depth;
-                        let col = (sx / cell_w) as usize;
-                        let row = (sy / cell_h) as usize;
-                        if col < MATRIX_COLS && row < MATRIX_ROWS {
-                            let int = (100.0 + 100.0 * (1.0 - ((rz2 + 0.6) * 0.5).max(0.0).min(1.0))) as u8;
-                            intensity_map[col][row] = intensity_map[col][row].max(int);
-                        }
-                    }
-                }
-            },
-            _ => {
-                // Sphere for all other scenes
-                for i in 0..300 {
-                    let phi = (i as f32 / 300.0) * 6.28318;
-                    let theta = (i as f32 * 0.618033 * 6.28318) % 6.28318;
-                    let r = 0.55;
-                    let x = r * crate::graphics::holomatrix::sin_approx_pub(theta) * crate::graphics::holomatrix::cos_approx_pub(phi);
-                    let y_3d = r * crate::graphics::holomatrix::sin_approx_pub(theta) * crate::graphics::holomatrix::sin_approx_pub(phi);
-                    let z = r * crate::graphics::holomatrix::cos_approx_pub(theta);
-                    let cos_t = crate::graphics::holomatrix::cos_approx_pub(time * 0.5);
-                    let sin_t = crate::graphics::holomatrix::sin_approx_pub(time * 0.5);
-                    let rx = x * cos_t + z * sin_t;
-                    let rz = -x * sin_t + z * cos_t;
-                    let depth = 1.0 / (2.0 + rz);
-                    let sx = cx + rx * scale * depth;
-                    let sy = cy + y_3d * scale * depth;
-                    let col = (sx / cell_w) as usize;
-                    let row = (sy / cell_h) as usize;
-                    if col < MATRIX_COLS && row < MATRIX_ROWS {
-                        let int = (80.0 + 120.0 * (1.0 - ((rz + 0.6) * 0.5).max(0.0).min(1.0))) as u8;
-                        intensity_map[col][row] = intensity_map[col][row].max(int);
-                    }
-                }
-            },
-        }
-        
-        // ─────────────────────────────────────────────────────────────
-        // STEP 2: Render matrix rain with hologram intensity boost
-        // ─────────────────────────────────────────────────────────────
-        
-        // Clear background area to black
-        framebuffer::fill_rect(0, 0, width, height, 0xFF000000);
-        
-        let col_width = 8u32;
-        for col in 0..MATRIX_COLS.min(self.matrix_heads.len()) {
-            let x = col as u32 * col_width;
-            if x >= width { continue; }
             
-            let head = self.matrix_heads[col];
+            let head_y = self.matrix_heads[col];
             
-            for row in 0..MATRIX_ROWS {
-                let y = row as u32 * 16;
-                if y >= height { continue; }
+            // ── DEPTH EFFECT based on speed ──
+            // Speed 2 (slow) = FAR  → 40% brightness, desaturated gray/blue
+            // Speed 6 (fast) = NEAR → 100% brightness, vivid pure green
+            let depth = (speed as f32 - 2.0) / 4.0; // 0.0=far, 1.0=near
+            let brightness_mult = 0.4 + depth * 0.6; // 40%→100%
+            let saturation = 0.3 + depth * 0.7; // 30%→100%
+            
+            // Draw falling trail
+            for i in 0..TRAIL_LEN {
+                let char_y = head_y - (i as i32 * CHAR_H as i32);
+                if char_y < 0 || char_y >= height as i32 { continue; }
                 
-                let dist = row as i32 - head;
+                // Base brightness: head=bright, then fade along trail
+                let base = if i == 0 { 255u8 }
+                    else if i == 1 { 220u8 }
+                    else { 180u8.saturating_sub((i as u8).saturating_mul(9)) };
+                if base < 20 { continue; }
                 
-                let base_color = if dist < 0 {
-                    continue;
-                } else if dist == 0 {
-                    255u32
-                } else if dist <= 12 {
-                    (255 - dist as u32 * 8).min(255)
-                } else if dist <= 28 {
-                    let factor = ((dist - 12) as u32).min(15) * 16;
-                    let fade = 255u32.saturating_sub(factor);
-                    (160 * fade) / 255
+                // Apply depth brightness multiplier
+                let brightness = ((base as f32) * brightness_mult) as u8;
+                
+                // Color with depth-based atmospheric perspective
+                // Far: gray/blue tint | Near: pure bright green
+                let (r, g, b) = if i == 0 {
+                    // Head character: white-ish glow
+                    let w = (180.0 * brightness_mult) as u8;
+                    (w, 255u8.min((brightness as u16 + 40) as u8), w)
                 } else {
-                    continue;
+                    // Trail: green with atmospheric perspective
+                    let gray_tint = ((20.0 * (1.0 - saturation)) as u8).min(60);
+                    let blue_tint = ((40.0 * (1.0 - saturation) + 10.0 * depth) as u8).min(80);
+                    (gray_tint, brightness, blue_tint)
                 };
                 
-                // Get hologram intensity boost
-                let boost = intensity_map[col][row] as u32;
+                let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
                 
-                // Combine: base matrix + hologram boost
-                let (r, g, b) = if boost > 0 {
-                    // Shape area: bright cyan-white glow
-                    let intensity = (base_color + boost * 2).min(255);
-                    let cyan = (boost as u32 * 3 / 2).min(255);
-                    (cyan / 3, intensity, cyan)
-                } else {
-                    // No shape: dim green rain (shape stands out)
-                    let dim = (base_color / 3).min(80);
-                    (0, dim, 0)
-                };
-                
-                let color = 0xFF000000 | (r << 16) | (g << 8) | b;
-                
-                let c = self.matrix_chars[col * MATRIX_ROWS + row] as char;
+                // Render character glyph
+                let char_seed = seed.wrapping_add((i as u32 * 7919) ^ (self.frame_count as u32 / 8));
+                let chars: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
+                let c = chars[(char_seed as usize) % chars.len()] as char;
                 let glyph = crate::framebuffer::font::get_glyph(c);
                 
                 for (gr, &bits) in glyph.iter().enumerate() {
-                    let py = y + gr as u32;
+                    let py = char_y as u32 + gr as u32;
                     if py >= height || bits == 0 { continue; }
                     for bit in 0..8u32 {
                         if bits & (0x80 >> bit) != 0 {
@@ -3633,57 +3424,126 @@ struct AppConfig {
     }
     
     fn draw_desktop_icons(&self) {
-        use crate::icons;
+        // ═══════════════════════════════════════════════════════════════
+        // LEFT DOCK SIDEBAR — COSMIC V2 style vertical app dock
+        // ═══════════════════════════════════════════════════════════════
+        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
         
-        // Draw dock-style icons on the left
-        for icon in self.icons.iter() {
-            let x = icon.x;
-            let y = icon.y;
+        // Semi-transparent dark dock background strip
+        framebuffer::fill_rect(0, 0, DOCK_WIDTH + 10, dock_h, 0xF0080808);
+        // Right edge border
+        framebuffer::fill_rect(DOCK_WIDTH + 9, 0, 1, dock_h, GREEN_GHOST);
+        
+        let icon_size = 36u32;
+        let gap = 14u32;
+        let start_y = 12u32;
+        
+        for (i, icon) in self.icons.iter().enumerate() {
+            let ix = 12u32;
+            let iy = start_y + (i as u32) * (icon_size + gap);
+            if iy + icon_size > dock_h { break; }
             
-            // Check if cursor is over this icon (48x64 hit area)
-            let is_hovered = self.cursor_x >= x as i32 && self.cursor_x < (x + 64) as i32
-                && self.cursor_y >= y as i32 && self.cursor_y < (y + 72) as i32;
+            // Hit test
+            let is_hovered = self.cursor_x >= 0 && self.cursor_x < (DOCK_WIDTH + 10) as i32
+                && self.cursor_y >= iy as i32 && self.cursor_y < (iy + icon_size + gap) as i32;
             
-            // Background container - rounded glass pill
+            let icon_color = if is_hovered { GREEN_PRIMARY } else { GREEN_SECONDARY };
+            let label_color = if is_hovered { 0xFFFFFFFF } else { 0xFF888888 };
+            
+            // Active highlight background
             if is_hovered {
-                // Halo/glow effect with rounded shape
-                self.draw_icon_glow(x, y, 64, 52);
-                // Glass-like rounded background
-                framebuffer::fill_rounded_rect(x + 6, y + 2, 52, 52, 12, 0xFF0D1310);
-                // Subtle bright border
-                framebuffer::stroke_rounded_rect(x + 6, y + 2, 52, 52, 12, GREEN_MUTED);
-                // Inner glass highlight (top half)
-                framebuffer::fill_rounded_rect(x + 8, y + 4, 48, 8, 6, 0x08FFFFFF);
+                framebuffer::fill_rect(ix - 4, iy - 3, icon_size + 8, icon_size + 18, 0xFF002800);
+                framebuffer::draw_rect(ix - 4, iy - 3, icon_size + 8, icon_size + 18, GREEN_PRIMARY);
             }
             
-            // Draw the actual pixel-art icon
-            let icon_color = if is_hovered { GREEN_PRIMARY } else { GREEN_SECONDARY };
-            let icon_bg = if is_hovered { 0xFF0D1310 } else { 0x00000000 };
-            icons::draw_icon(icon.icon_type, x + 16, y + 10, icon_color, icon_bg);
+            // Icon square background
+            framebuffer::fill_rect(ix, iy, icon_size, icon_size, 0xFF0A0A0A);
+            framebuffer::draw_rect(ix, iy, icon_size, icon_size, icon_color);
             
-            // Label below - smaller, muted
+            // Pixel-art icon inside square (matching COSMIC V2 style)
+            let cx = ix + icon_size / 2;
+            let cy = iy + icon_size / 2;
+            use crate::icons::IconType;
+            match icon.icon_type {
+                IconType::Terminal => {
+                    // Terminal: rect with >_ prompt
+                    framebuffer::draw_rect(cx - 14, cy - 10, 28, 20, icon_color);
+                    self.draw_text((cx - 8) as i32, (cy - 4) as i32, ">", icon_color);
+                    framebuffer::fill_rect(cx - 2, cy - 2, 10, 2, icon_color);
+                },
+                IconType::Folder => {
+                    // Files: folder shape
+                    framebuffer::fill_rect(cx - 12, cy - 2, 24, 14, icon_color);
+                    framebuffer::fill_rect(cx - 14, cy - 6, 10, 6, icon_color);
+                },
+                IconType::Editor => {
+                    // Editor: document with text lines
+                    framebuffer::fill_rect(cx - 10, cy - 12, 20, 24, icon_color);
+                    framebuffer::fill_rect(cx - 8, cy - 10, 16, 20, 0xFF0A0A0A);
+                    framebuffer::fill_rect(cx - 6, cy - 6, 12, 2, icon_color);
+                    framebuffer::fill_rect(cx - 6, cy - 2, 12, 2, icon_color);
+                    framebuffer::fill_rect(cx - 6, cy + 2, 8, 2, icon_color);
+                },
+                IconType::Calculator => {
+                    // Calculator: grid squares
+                    framebuffer::draw_rect(cx - 10, cy - 10, 20, 20, icon_color);
+                    framebuffer::fill_rect(cx - 8, cy - 8, 6, 4, icon_color);
+                    framebuffer::fill_rect(cx + 2, cy - 8, 6, 4, icon_color);
+                    framebuffer::fill_rect(cx - 8, cy + 2, 6, 4, icon_color);
+                    framebuffer::fill_rect(cx + 2, cy + 2, 6, 4, icon_color);
+                },
+                IconType::Network => {
+                    // Network: signal bars
+                    framebuffer::fill_rect(cx - 10, cy + 4, 4, 8, icon_color);
+                    framebuffer::fill_rect(cx - 4, cy - 0, 4, 12, icon_color);
+                    framebuffer::fill_rect(cx + 2, cy - 4, 4, 16, icon_color);
+                    framebuffer::fill_rect(cx + 8, cy - 8, 4, 20, icon_color);
+                },
+                IconType::Game => {
+                    // Game: play triangle
+                    for dy in 0..16u32 {
+                        let w = (dy.min(16 - dy) + 1) as u32;
+                        framebuffer::fill_rect(cx - 6, cy - 8 + dy, w, 1, icon_color);
+                    }
+                },
+                IconType::Settings => {
+                    // Settings: gear circle
+                    for dy in 0..12u32 {
+                        for dx in 0..12u32 {
+                            let ddx = dx as i32 - 6;
+                            let ddy = dy as i32 - 6;
+                            if ddx * ddx + ddy * ddy <= 36 && ddx * ddx + ddy * ddy >= 16 {
+                                framebuffer::put_pixel(cx - 6 + dx, cy - 6 + dy, icon_color);
+                            }
+                        }
+                    }
+                },
+                IconType::Browser => {
+                    // Browser: globe
+                    for dy in 0..20u32 {
+                        for dx in 0..20u32 {
+                            let ddx = dx as i32 - 10;
+                            let ddy = dy as i32 - 10;
+                            if ddx * ddx + ddy * ddy <= 100 && ddx * ddx + ddy * ddy >= 64 {
+                                framebuffer::put_pixel(cx - 10 + dx, cy - 10 + dy, icon_color);
+                            }
+                        }
+                    }
+                    framebuffer::fill_rect(cx - 10, cy - 1, 20, 2, icon_color);
+                    framebuffer::fill_rect(cx - 1, cy - 10, 2, 20, icon_color);
+                },
+                _ => {
+                    // Generic: bordered square
+                    framebuffer::draw_rect(cx - 10, cy - 10, 20, 20, icon_color);
+                    framebuffer::fill_rect(cx - 4, cy - 4, 8, 8, icon_color);
+                },
+            }
+            
+            // Label under icon
             let name = &icon.name;
-            let name_x = x + 32 - (name.len() as u32 * 4);
-            let label_color = if is_hovered { GREEN_SECONDARY } else { GREEN_TERTIARY };
-            self.draw_text(name_x as i32, (y + 56) as i32, name, label_color);
-        }
-    }
-    
-    /// Draw a subtle glow effect around an icon (rounded)
-    fn draw_icon_glow(&self, x: u32, y: u32, w: u32, h: u32) {
-        // Multiple layers of increasingly transparent green rounded rects
-        let layers: [(u32, u32); 3] = [
-            (0xFF001108, 6),
-            (0xFF001A0D, 4),
-            (0xFF002211, 2),
-        ];
-        
-        for (color, offset) in layers {
-            let ox = if x > offset { x - offset } else { 0 };
-            let oy = if y > offset { y - offset } else { 0 };
-            let gw = w + offset * 2;
-            let gh = h + offset * 2;
-            framebuffer::stroke_rounded_rect(ox + 6, oy + 2, gw.saturating_sub(12), gh.saturating_sub(4), 14, color);
+            let text_w = name.len() as u32 * 8;
+            let text_x = ix + (icon_size / 2).saturating_sub(text_w / 2);
+            self.draw_text(text_x as i32, (iy + icon_size + 2) as i32, name, label_color);
         }
     }
     
@@ -3691,15 +3551,15 @@ struct AppConfig {
         let y = self.height - TASKBAR_HEIGHT;
         
         // ═══════════════════════════════════════════════════════════════
-        // MATRIX HACKER STYLE TASKBAR — Green on black
+        // COSMIC V2 STYLE TASKBAR — Matching the reference image
         // ═══════════════════════════════════════════════════════════════
         
-        // Opaque near-black background
+        // Solid opaque background (must be clearly visible)
         framebuffer::fill_rect(0, y, self.width, TASKBAR_HEIGHT, 0xFF0A0A0A);
         
-        // Top border: dim green line
+        // Top border: 2px green line for clear separation
         framebuffer::draw_hline(0, y, self.width, GREEN_MUTED);
-        framebuffer::draw_hline(0, y + 1, self.width, 0xFF003322);
+        framebuffer::draw_hline(0, y + 1, self.width, GREEN_GHOST);
         
         // TrustOS button (left, with green border)
         let start_hover = self.cursor_x >= 4 && self.cursor_x < 108 && self.cursor_y >= y as i32;
