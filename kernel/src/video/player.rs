@@ -466,11 +466,15 @@ pub fn render_realtime_timed(effect: &str, width: u16, height: u16, fps: u16, du
     crate::framebuffer::clear_backbuffer(0xFF000000);
     crate::framebuffer::swap_buffers();
 
-    let start_time = crate::time::uptime_ms();
+    // Use TSC for timing — uptime_ms() doesn't advance during spin_loop()
+    let start_tsc = crate::cpu::tsc::read_tsc();
+    let freq = crate::cpu::tsc::frequency_hz();
+    let target_cycles = if freq > 0 { freq / 1000 * duration_ms } else { u64::MAX };
 
     loop {
-        // Auto-stop after duration
-        if crate::time::uptime_ms() - start_time >= duration_ms { break; }
+        // Auto-stop after duration (TSC-based)
+        let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
+        if elapsed >= target_cycles { break; }
 
         // Also allow manual exit with Q/ESC
         if let Some(key) = crate::keyboard::try_read_key() {

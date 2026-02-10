@@ -2411,11 +2411,17 @@ fn cmd_showcase(args: &[&str]) {
         _ => 2, // normal
     };
 
+    // Use TSC for timing — uptime_ms() doesn't advance during spin_loop()
     let pause = |secs: u64| {
         let ms = secs * 1000 * speed / 2;
-        let start = crate::time::uptime_ms();
-        while crate::time::uptime_ms() - start < ms {
-            // Drain any keys so they don't leak to next step
+        let start_tsc = crate::cpu::tsc::read_tsc();
+        let freq = crate::cpu::tsc::frequency_hz();
+        if freq == 0 { return; } // TSC not calibrated
+        let target_cycles = freq / 1000 * ms; // cycles for ms milliseconds
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
+            if elapsed >= target_cycles { break; }
+            // Drain keyboard so keys don't leak to next step
             let _ = crate::keyboard::try_read_key();
             core::hint::spin_loop();
         }
