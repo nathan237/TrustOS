@@ -440,7 +440,16 @@ pub unsafe extern "C" fn kmain() -> ! {
     // PAT: Enable Write-Combining (WC) — standard GPU driver optimization
     // All GPU drivers (Mesa, NVIDIA, AMD) use WC for VRAM writes:
     // batches individual stores into 64-byte burst transfers (10-20x faster)
-    memory::paging::setup_pat_write_combining();
+    // Skip on VirtualBox: VMSVGA dirty-tracking breaks with WC memory type,
+    // causing the display to freeze (writes are buffered and VBox stops detecting them)
+    let is_vbox = acpi::get_info()
+        .map(|info| info.oem_id.trim().eq_ignore_ascii_case("VBOX"))
+        .unwrap_or(false);
+    if is_vbox {
+        serial_println!("[PAT] Skipping Write-Combining on VirtualBox (VMSVGA compat)");
+    } else {
+        memory::paging::setup_pat_write_combining();
+    }
     
     // Phase 3.7: Userland support (SYSCALL/SYSRET)
     serial_println!("Initializing userland support...");
@@ -575,7 +584,8 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[PHASE] VirtIO GPU init done");
     
     // Remap framebuffer as Write-Combining for faster MMIO writes
-    {
+    // Skip on VirtualBox: VMSVGA dirty-tracking breaks with WC pages
+    if !is_vbox {
         let fb_addr = framebuffer::FB_ADDR.load(core::sync::atomic::Ordering::SeqCst);
         let fb_w = framebuffer::FB_WIDTH.load(core::sync::atomic::Ordering::SeqCst) as usize;
         let fb_h = framebuffer::FB_HEIGHT.load(core::sync::atomic::Ordering::SeqCst) as usize;
@@ -583,6 +593,8 @@ pub unsafe extern "C" fn kmain() -> ! {
             let fb_size = fb_w * fb_h * 4;
             let _ = memory::paging::remap_region_write_combining(fb_addr as u64, fb_size);
         }
+    } else {
+        serial_println!("[PAT] Skipping framebuffer WC remap on VirtualBox");
     }
     
     // Phase 12: Network (with universal driver system)
