@@ -2,50 +2,61 @@
 
 # 🦀 TrustOS
 
-**A complete bare-metal operating system written in 100% Rust — built in 7 days**
+### **Trust** the code. **Rust** is the reason.
+
+**A fully auditable, bare-metal operating system — 99,000 lines of pure Rust. Zero C. Zero secrets.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
-[![Rust](https://img.shields.io/badge/rust-nightly-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
+[![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
 [![Lines](https://img.shields.io/badge/code-99%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![ISO](https://img.shields.io/badge/ISO-6.25%20MB-purple?style=for-the-badge)]()
-[![Platform](https://img.shields.io/badge/x86__64-UEFI-lightgrey?style=for-the-badge)]()
+[![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
-
-**GPU Compositing · 144 FPS Desktop · Built-in Compiler · TLS 1.3 · Filesystem**
 
 [![Watch the demo](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
 
-[Features](#-features) · [Quick Start](#-quick-start) · [Screenshots](#-screenshots) · [Architecture](#-architecture) · [Contributing](#-contributing)
+[Why "Trust"?](#-why-trustos) · [Features](#-features) · [Quick Start](#-quick-start) · [Architecture](#-architecture) · [Contributing](#-contributing)
 
 ---
 
 </div>
 
-## 🎯 What is TrustOS?
+## 🔐 Why "TrustOS"?
 
-TrustOS is a **complete operating system** built from scratch in Rust — no C, no libc, no unsafe dependencies. It boots on real x86_64 hardware (UEFI) and includes everything from a GPU-accelerated desktop to a built-in programming language compiler.
+The name says it all: **Trust** + **Rust**.
+
+In a world where your operating system is a black box — millions of lines of legacy C/C++, binary blobs, proprietary drivers, telemetry you can't disable — **how do you know what your computer is actually doing?**
+
+TrustOS is the answer: **every single line is open, readable, and auditable.**
+
+- 🔍 **Fully auditable** — 99,000 lines of Rust, all on GitHub. No binary blobs. No hidden code.
+- 🦀 **Memory safe by design** — Rust's ownership model prevents entire categories of vulnerabilities (buffer overflows, use-after-free, data races).
+- 🧩 **Zero dependencies on C** — no libc, no glibc, no C runtime. Every driver, every protocol, every pixel is Rust.
+- 📖 **Readable** — one person wrote it in 7 days. If one person can build it, one person can understand it.
+
+> *"The only OS where you can trace every packet, every pixel, and every keystroke back to its source code."*
 
 ### Key Stats
 
 | Metric | Value |
 |--------|-------|
 | **Total code** | 99,000+ lines of Rust |
-| **Source files** | 207 `.rs` files |
+| **Source files** | 207+ `.rs` files |
 | **ISO size** | 6.25 MB |
-| **Kernel binary** | 2.34 MB |
-| **Boot time** | ~2 seconds |
+| **Boot time** | < 1 second |
 | **Desktop FPS** | 144 FPS (SSE2 SIMD) |
-| **RAM usage** | 256 MB |
+| **C code** | 0 lines |
 | **Development time** | 7 days |
 
-### Why TrustOS?
+### TrustOS vs The World
 
-| Traditional OS | TrustOS |
-|:---:|:---:|
-| C/C++ with memory bugs | **100% Rust** — memory safe by design |
-| Millions of lines, decades old | **99K lines**, clean and readable |
-| Complex toolchains | `cargo build` — that's it |
-| Separate userland tools | **Everything built-in** — shell, editor, compiler, browser |
+| | Traditional OS | TrustOS |
+|---|:---:|:---:|
+| **Language** | C/C++ with 40 years of memory bugs | 100% Rust — memory safe by design |
+| **Codebase** | Millions of lines, impossible to audit | 99K lines, one person can read it all |
+| **Binary blobs** | Everywhere | None. Zero. |
+| **Telemetry** | Opt-out (maybe) | Doesn't exist — verify it yourself |
+| **Build** | Complex cross-compilation toolchains | `cargo build` — that's it |
 
 ---
 
@@ -53,52 +64,72 @@ TrustOS is a **complete operating system** built from scratch in Rust — no C, 
 
 ### 🖥️ COSMIC2 Desktop Environment
 - **Multi-layer GPU compositor** with 8 independent rendering layers
-- **SSE2 SIMD** optimized — 144 FPS with zero flickering
-- **Dock, taskbar, window management**, start menu, settings panel
-- **HoloMatrix 3D** background: volumetric wireframe scenes (cube, torus, DNA helix...)
+- **SSE2 SIMD optimized** — 144 FPS with zero flickering
+- **Taskbar, dock, start menu**, window management, settings panel
+- **10 built-in desktop apps**: Terminal, Files, TrustCode, Calculator, Network, Games, Settings, About, TrustGL 3D, TrustBrowser
+- **HoloMatrix 3D backgrounds**: volumetric wireframe scenes (cube, torus, DNA helix, character...)
 - **Mouse + keyboard** driven with smooth cursor
 
-### 📝 TrustCode — Built-in Code Editor
+### 🌐 TrustBrowser — Built-in Web Browser
+- **HTML parser** — renders real web pages
+- **CSS engine** — styling and layout
+- **JavaScript engine** — basic script execution
+- **HTTPS support** — TLS 1.3, handshake written from scratch
+- Navigate to real websites from inside the OS
+
+### 📝 TrustCode — Code Editor
 - **Rust syntax highlighting** with 60+ keywords
 - **Line numbers**, cursor navigation, scrolling
 - **File save/load** from TrustFS
 - **Bracket matching** and auto-indentation
 
-### 🔤 TrustLang — Integrated Programming Language
+### 🔤 TrustLang — Programming Language & Compiler
 - **Rust-inspired syntax** with functions, recursion, loops, types
 - **Full compiler pipeline**: Lexer → Parser → Compiler → Bytecode VM
 - **Zero dependencies** — compiles and runs entirely in-kernel
 - Commands: `trustlang run`, `trustlang eval`, `trustlang check`
 
-### 📁 TrustFS — Persistent Filesystem
-- **Block-based storage** with indirect block support
-- **Write-Ahead Logging (WAL)** for crash safety
-- **Block cache** for performance
-- **VFS layer** unifying ramfs, procfs, devfs, and TrustFS
-
-### 🎬 TrustVideo — Real-time Video Codec
+### 🎬 TrustVideo — Real-time Video Engine
 - **Custom `.tv` format** with delta + RLE compression
 - **Procedural demo engine**: fire, matrix rain, plasma effects
 - **60-72 FPS** rendering with integer sine LUT (no floats)
 - **RAM backbuffer** + SSE2 swap for instant display
 
-### 🌐 Network Stack
-- **VirtIO-net** driver with full packet handling
-- **TCP/IP** stack from scratch (ARP, DHCP, DNS, TCP, UDP)
-- **TLS 1.3** with HTTPS client support
-- **Built-in commands**: `curl`, `wget`, `ping`, `nslookup`, `traceroute`, `netstat`
+### 🔷 Formula3D — Wireframe 3D Engine
+- **Real-time wireframe rendering** with perspective projection
+- **Multiple mesh types**: cube, torus, sphere, DNA helix, character model
+- **Per-edge coloring** with volumetric low-poly rendering
+- **Scanline effects**, gradient backgrounds, floor grids
 
-### 🐧 Linux Compatibility
+### 📁 TrustFS — Persistent Filesystem
+- **Block-based storage** with indirect block support
+- **Write-Ahead Logging (WAL)** for crash safety
+- **Block cache** for performance
+- **VFS layer** unifying ramfs, procfs, devfs, FAT32, and TrustFS
+
+### 🌐 Network Stack (from scratch)
+- **VirtIO-net** driver with full packet handling
+- **TCP/IP** stack: ARP, DHCP, DNS, TCP, UDP, ICMP
+- **TLS 1.3** — full handshake, X.509 certificate validation, crypto
+- **HTTP/HTTPS client** — `curl`, `wget`, `browse`
+- **Commands**: `ping`, `nslookup`, `traceroute`, `netstat`, `arp`, `route`, `ifconfig`
+
+### 🐧 Linux Compatibility Layer
 - **100+ syscalls** emulated (read, write, mmap, fork, exec...)
 - **ELF binary loader** — run Linux binaries directly
 - **Alpine Linux subsystem** — `apk` package manager support
-- **Binary-to-Rust transpiler** — analyze and convert Linux binaries
+- **Binary-to-Rust transpiler** — analyze and decompile Linux binaries
 
-### 🛡️ Security
+### 🛡️ Security & Auth
 - **Capability-based** security model
-- **User authentication** (login, su, passwd, adduser)
-- **File permissions** (chmod, chown)
+- **User authentication**: login, su, passwd, adduser
+- **File permissions**: chmod, chown
 - **Process isolation** with Ring 0/3 separation
+
+### ⚡ Hypervisor
+- **Intel VT-x (VMX)** and **AMD-V (SVM)** support
+- **Extended Page Tables (EPT)**, VMCS, VPID
+- **Guest VM isolation** for running Linux subsystem
 
 ### ⚡ Performance
 - **SSE2 SIMD** throughout: buffer fills, blits, compositing
@@ -236,7 +267,7 @@ cargo build --release -p trustos_kernel
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                     Applications                            │
-│  TrustCode · TrustLang · Browser · File Manager · Terminal  │
+│  TrustCode · TrustLang · TrustBrowser · Games · Terminal    │
 ├─────────────────────────────────────────────────────────────┤
 │              COSMIC2 Desktop Compositor                     │
 │     8-layer GPU compositing · SSE2 SIMD · 144 FPS          │
@@ -245,11 +276,12 @@ cargo build --release -p trustos_kernel
 │  ramfs   │ TCP/IP   │ Subsystem │ TrustGL  │  Codec +       │
 │  procfs  │ TLS 1.3  │ 100+     │ Raytrace │  Procedural    │
 │  devfs   │ DHCP/DNS │ syscalls  │ 3D Mesh  │  Renderer      │
-│  TrustFS │ VirtIO   │ ELF      │ HoloMat  │  Fire/Plasma   │
+│  TrustFS │ VirtIO   │ ELF      │ Formula  │  Fire/Plasma   │
+│  FAT32   │ HTTP/S   │ Alpine   │ HoloMat  │  Matrix Rain   │
 ├──────────┴──────────┴───────────┴──────────┴────────────────┤
 │                    TrustOS Kernel                           │
 │  Memory · Scheduler · IPC · Security · Drivers · Syscalls  │
-│  SSE2 SIMD · SMP Multi-core · Double-buffered FB           │
+│  SSE2 SIMD · SMP Multi-core · Hypervisor (VT-x/SVM)       │
 ├─────────────────────────────────────────────────────────────┤
 │              Hardware (x86_64 · UEFI · VirtIO)              │
 │              Limine Bootloader · MMIO · PCI                 │
@@ -260,15 +292,19 @@ cargo build --release -p trustos_kernel
 
 | Module | Lines | Description |
 |--------|-------|-------------|
-| `shell.rs` | ~13,500 | Command interpreter, 200+ commands |
+| `shell.rs` | ~14,000 | Command interpreter, 200+ commands, cinematic showcase |
+| `network/` | ~5,000 | Full TCP/IP stack with TLS 1.3, HTTPS |
+| `graphics/` | ~4,000 | HoloMatrix, raytracer, 3D mesh, OpenGL emu |
 | `compositor/` | ~3,000 | Multi-layer GPU compositor |
-| `network/` | ~5,000 | Full TCP/IP stack with TLS |
-| `video/` | ~1,500 | TrustVideo codec & player |
+| `browser/` | ~2,500 | HTML/CSS parser, JS engine, page renderer |
+| `linux/` | ~3,000 | Linux syscall emulation, ELF loader |
 | `trustlang/` | ~2,000 | Compiler + bytecode VM |
+| `formula3d.rs` | ~1,500 | Wireframe 3D engine with per-edge colors |
+| `video/` | ~1,500 | TrustVideo codec & player |
 | `framebuffer/` | ~1,500 | SSE2 SIMD rendering |
-| `graphics/` | ~4,000 | HoloMatrix, raytracer, 3D mesh |
-| `filesystem/` | ~2,000 | TrustFS with WAL |
-| `linux/` | ~3,000 | Linux syscall emulation |
+| `filesystem/` | ~2,000 | TrustFS with WAL, VFS, FAT32 |
+| `hypervisor/` | ~2,000 | VT-x/SVM, EPT, guest VM isolation |
+| `tls13/` | ~2,000 | TLS 1.3, crypto, X.509 certs |
 
 ---
 
@@ -284,12 +320,15 @@ showcase slow     # Extended demo (~3 minutes)
 ```
 
 The showcase runs through:
-1. **System info** — neofetch, uname, memory stats
-2. **Filesystem** — create files, directory tree
-3. **TrustLang** — compile & run a Fibonacci program live
-4. **Network** — interface config, connection status
-5. **Video effects** — fire, matrix rain, plasma (auto-timed)
-6. **Command overview** — categorized command summary
+1. **Cinematic intro** — 5 Matrix-style scenes with typed text & rain effects
+2. **System info** — neofetch, uname, memory stats
+3. **Filesystem** — create files, directory tree
+4. **TrustLang** — compile & run a Fibonacci program live
+5. **Network** — interface config, connection status
+6. **Video effects** — fire, matrix rain, plasma (full-screen, auto-timed)
+7. **Formula3D** — real-time wireframe 3D character with per-edge colors
+8. **COSMIC2 Desktop + TrustBrowser** — desktop auto-demo with web browsing
+9. **Command overview** — 200+ commands categorized
 
 > Film it with OBS or any screen recorder for instant marketing content!
 
@@ -326,15 +365,22 @@ git push origin feature/my-feature
 ```
 kernel/src/
 ├── main.rs              # Kernel entry point
-├── shell.rs             # Shell + 200+ commands
-├── compositor/          # COSMIC2 desktop
-├── network/             # TCP/IP, TLS, DHCP
+├── shell.rs             # Shell + 200+ commands + showcase
+├── desktop.rs           # COSMIC2 desktop manager
+├── formula3d.rs         # Wireframe 3D engine
+├── compositor/          # 8-layer GPU compositor
+├── browser/             # HTML/CSS/JS browser engine
+├── network/             # TCP/IP, DHCP, DNS
+├── tls13/               # TLS 1.3, crypto, X.509
 ├── video/               # TrustVideo codec
 ├── trustlang/           # Compiler + VM
-├── framebuffer/         # SSE2 rendering
+├── framebuffer/         # SSE2 SIMD rendering
 ├── graphics/            # 3D, raytracer, HoloMatrix
-├── filesystem/          # TrustFS persistence
-└── linux/               # Syscall emulation
+├── hypervisor/          # VT-x/SVM, EPT, guest VMs
+├── vfs/                 # TrustFS, FAT32, procfs, devfs
+├── linux_compat/        # 100+ Linux syscalls
+├── drivers/             # AHCI, USB, VirtIO, input
+└── security/            # Capability model, auth
 ```
 
 ---
@@ -343,14 +389,18 @@ kernel/src/
 
 | Feature | TrustOS | Linux 0.01 (1991) | MenuetOS | SerenityOS |
 |---------|---------|-------------------|----------|------------|
-| Language | Rust | C | ASM | C++ |
+| Language | **Rust** | C | ASM | C++ |
 | Lines of code | 99K | 10K | 40K | 800K+ |
-| ISO size | 6.25 MB | N/A | 1.44 MB | ~300 MB |
-| Dev time | 7 days | 6 months | Years | Years |
-| GUI | Yes (144 FPS) | No | Yes | Yes |
-| Built-in compiler | Yes (TrustLang) | No | No | No |
-| Network + TLS | Yes (TLS 1.3) | No | No | Yes |
-| Memory safe | Yes (Rust) | No | No | No |
+| ISO size | **6.25 MB** | N/A | 1.44 MB | ~300 MB |
+| Dev time | **7 days** | 6 months | Years | Years |
+| GUI Desktop | Yes (144 FPS) | No | Yes | Yes |
+| Web Browser | **Yes** (HTML/CSS/JS) | No | No | Yes |
+| Built-in compiler | **Yes** (TrustLang) | No | No | No |
+| 3D Engine | **Yes** (Formula3D) | No | No | No |
+| Network + TLS 1.3 | **Yes** | No | No | Yes |
+| Hypervisor | **Yes** (VT-x/SVM) | No | No | No |
+| Memory safe | **Yes** (Rust) | No | No | No |
+| Fully auditable | **Yes** | Partially | Yes | Partially |
 
 ---
 
@@ -370,11 +420,13 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-**Built with 🦀 Rust — 99,000 lines — 7 days — Zero C code**
+**Trust** the code. **Rust** is the reason.
 
-⭐ **Star this repo** if you find it impressive!
+99,000 lines · 7 days · Zero C · Fully auditable
 
-[Report Bug](https://github.com/nathan237/TrustOS/issues) · [Request Feature](https://github.com/nathan237/TrustOS/issues)
+⭐ **Star this repo** if you believe in transparent, auditable operating systems.
+
+[Report Bug](https://github.com/nathan237/TrustOS/issues) · [Request Feature](https://github.com/nathan237/TrustOS/issues) · [Watch Demo](https://youtu.be/RBJJi8jW1_g)
 
 </div>
 ]]>
