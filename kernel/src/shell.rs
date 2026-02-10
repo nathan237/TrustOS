@@ -2543,20 +2543,8 @@ fn cmd_open(args: &[&str]) {
 /// Launch desktop directly with TrustEdit 3D model editor
 fn cmd_trustedit() {
     crate::println_color!(COLOR_BRIGHT_GREEN, "Launching TrustEdit 3D...");
-    // Launch the desktop with the model editor icon action
-    use crate::desktop;
-    let (width, height) = crate::framebuffer::get_dimensions();
-    if width == 0 || height == 0 {
-        crate::println_color!(COLOR_RED, "Error: Invalid framebuffer!");
-        return;
-    }
-    crate::mouse::set_screen_size(width, height);
-    let mut d = desktop::DESKTOP.lock();
-    d.init(width, height);
-    // Open TrustEdit window
-    d.create_window("TrustEdit 3D", 100, 60, 700, 500, desktop::WindowType::ModelEditor);
-    drop(d);
-    desktop::run();
+    // Launch COSMIC V2 desktop with the editor pre-opened
+    cmd_cosmic_v2_with_app(Some("editor"));
 }
 
 // ==================== SIGNATURE — KERNEL PROOF OF AUTHORSHIP ====================
