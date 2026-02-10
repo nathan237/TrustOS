@@ -1,18 +1,18 @@
 //! PS/2 Mouse Driver
 //! 
 //! Handles mouse input for GUI interactions with scroll wheel support.
-//! OPTIMIZED: Uses atomic operations for hot path to reduce lock contention.
+//! OPTIMIZED: Fully lock-free interrupt handler using atomics only.
 
 use x86_64::instructions::port::Port;
 use spin::Mutex;
-use core::sync::atomic::{AtomicI32, AtomicBool, AtomicI8, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicI32, AtomicBool, AtomicI8, AtomicU8, AtomicU64, Ordering};
 
 /// PS/2 controller ports
 const PS2_DATA: u16 = 0x60;
 const PS2_STATUS: u16 = 0x64;
 const PS2_COMMAND: u16 = 0x64;
 
-// OPTIMIZED: Use atomics for frequently accessed state (no locks in hot path)
+// Fully atomic mouse state — no locks in interrupt handler
 static MOUSE_X: AtomicI32 = AtomicI32::new(640);
 static MOUSE_Y: AtomicI32 = AtomicI32::new(400);
 static LEFT_BUTTON: AtomicBool = AtomicBool::new(false);
@@ -20,7 +20,7 @@ static RIGHT_BUTTON: AtomicBool = AtomicBool::new(false);
 static MIDDLE_BUTTON: AtomicBool = AtomicBool::new(false);
 static SCROLL_DELTA: AtomicI8 = AtomicI8::new(0);
 
-/// Screen dimensions (rarely change, ok to use mutex)
+/// Screen dimensions
 static SCREEN_WIDTH: AtomicI32 = AtomicI32::new(1280);
 static SCREEN_HEIGHT: AtomicI32 = AtomicI32::new(800);
 
@@ -39,12 +39,15 @@ pub struct MouseState {
 static LAST_CLICK_TIME: AtomicU64 = AtomicU64::new(0);
 static CLICK_COUNT: Mutex<u8> = Mutex::new(0);
 
-/// Mouse has scroll wheel (IntelliMouse)
-static HAS_SCROLL_WHEEL: Mutex<bool> = Mutex::new(false);
+/// Mouse has scroll wheel — set once during init, read-only after (atomic, no lock)
+static HAS_SCROLL_WHEEL: AtomicBool = AtomicBool::new(false);
 
-/// Mouse packet buffer (4 bytes for scroll wheel mouse)
-static MOUSE_PACKET: Mutex<[u8; 4]> = Mutex::new([0; 4]);
-static PACKET_INDEX: Mutex<usize> = Mutex::new(0);
+/// Lock-free packet buffer using atomics — NO mutexes in interrupt path
+static PACKET_BYTE0: AtomicU8 = AtomicU8::new(0);
+static PACKET_BYTE1: AtomicU8 = AtomicU8::new(0);
+static PACKET_BYTE2: AtomicU8 = AtomicU8::new(0);
+static PACKET_BYTE3: AtomicU8 = AtomicU8::new(0);
+static PACKET_INDEX: AtomicU8 = AtomicU8::new(0);
 
 /// Wait for PS/2 controller to be ready for reading
 fn wait_read() {
@@ -123,12 +126,23 @@ pub fn init() {
     mouse_write(0xF2); // Get device ID
     let device_id = ps2_read();
     if device_id == 3 {
-        *HAS_SCROLL_WHEEL.lock() = true;
+        HAS_SCROLL_WHEEL.store(true, Ordering::Relaxed);
         crate::serial_println!("[MOUSE] IntelliMouse scroll wheel enabled");
     }
     
     // Enable mouse
     mouse_write(0xF4);
+    
+    // Flush any stale bytes from the PS/2 buffer to prevent packet misalignment
+    let mut status_port = Port::<u8>::new(PS2_STATUS);
+    let mut data_port = Port::<u8>::new(PS2_DATA);
+    for _ in 0..16 {
+        if unsafe { status_port.read() } & 0x01 != 0 {
+            unsafe { data_port.read(); }
+        } else {
+            break;
+        }
+    }
     
     crate::serial_println!("[MOUSE] PS/2 mouse initialized (ID={})", device_id);
 }
@@ -140,63 +154,90 @@ pub fn set_screen_size(width: u32, height: u32) {
 }
 
 /// Handle mouse interrupt (called from IRQ12 handler)
-/// OPTIMIZED: Uses atomics for position updates (lock-free in hot path)
+/// FULLY LOCK-FREE: No mutexes, only atomics — cannot deadlock
 pub fn handle_interrupt() {
     let mut data_port = Port::<u8>::new(PS2_DATA);
     let byte = unsafe { data_port.read() };
     
-    let mut packet = MOUSE_PACKET.lock();
-    let mut index = PACKET_INDEX.lock();
-    let has_scroll = *HAS_SCROLL_WHEEL.lock();
-    let packet_size = if has_scroll { 4 } else { 3 };
+    // All state is atomic — no locks needed
+    let has_scroll = HAS_SCROLL_WHEEL.load(Ordering::Relaxed);
+    let packet_size: u8 = if has_scroll { 4 } else { 3 };
+    let idx = PACKET_INDEX.load(Ordering::Relaxed);
     
-    // First byte must have bit 3 set (always 1)
-    if *index == 0 && byte & 0x08 == 0 {
+    // First byte must have bit 3 set (PS/2 protocol — always 1 in byte 0)
+    if idx == 0 && byte & 0x08 == 0 {
         return; // Out of sync, wait for valid first byte
     }
     
-    packet[*index] = byte;
-    *index += 1;
+    // Store byte in atomic packet buffer
+    match idx {
+        0 => PACKET_BYTE0.store(byte, Ordering::Relaxed),
+        1 => PACKET_BYTE1.store(byte, Ordering::Relaxed),
+        2 => PACKET_BYTE2.store(byte, Ordering::Relaxed),
+        3 => PACKET_BYTE3.store(byte, Ordering::Relaxed),
+        _ => {
+            // Should never happen — reset
+            PACKET_INDEX.store(0, Ordering::Relaxed);
+            return;
+        }
+    }
     
-    if *index >= packet_size {
-        *index = 0;
-        
-        // Parse packet
-        let buttons = packet[0];
-        let x_rel = packet[1] as i8 as i32;
-        let y_rel = packet[2] as i8 as i32;
-        let z_rel = if has_scroll { packet[3] as i8 } else { 0 };
-        
-        // Handle overflow
-        let x_overflow = buttons & 0x40 != 0;
-        let y_overflow = buttons & 0x80 != 0;
-        
-        // ALWAYS update buttons, even on overflow!
-        LEFT_BUTTON.store(buttons & 0x01 != 0, Ordering::Relaxed);
-        RIGHT_BUTTON.store(buttons & 0x02 != 0, Ordering::Relaxed);
-        MIDDLE_BUTTON.store(buttons & 0x04 != 0, Ordering::Relaxed);
-        
-        if !x_overflow && !y_overflow {
-            let width = SCREEN_WIDTH.load(Ordering::Relaxed);
-            let height = SCREEN_HEIGHT.load(Ordering::Relaxed);
-            
-            // OPTIMIZED: Use atomics for position (no mutex lock)
-            let old_x = MOUSE_X.load(Ordering::Relaxed);
-            let old_y = MOUSE_Y.load(Ordering::Relaxed);
-            
-            // Update position (Y is inverted in PS/2)
-            // Apply mouse acceleration for better feel
-            let accel = 1; // Acceleration factor
-            let new_x = (old_x + x_rel * accel).clamp(0, width - 1);
-            let new_y = (old_y - y_rel * accel).clamp(0, height - 1);
-            
-            MOUSE_X.store(new_x, Ordering::Relaxed);
-            MOUSE_Y.store(new_y, Ordering::Relaxed);
-            
-            // Update scroll wheel delta
-            if z_rel != 0 {
-                SCROLL_DELTA.store(z_rel, Ordering::Relaxed);
-            }
+    let next_idx = idx + 1;
+    if next_idx < packet_size {
+        PACKET_INDEX.store(next_idx, Ordering::Relaxed);
+        return;
+    }
+    
+    // Full packet received — reset index first
+    PACKET_INDEX.store(0, Ordering::Relaxed);
+    
+    // Read packet bytes
+    let b0 = PACKET_BYTE0.load(Ordering::Relaxed);
+    let b1 = PACKET_BYTE1.load(Ordering::Relaxed);
+    let b2 = PACKET_BYTE2.load(Ordering::Relaxed);
+    let b3 = if has_scroll { PACKET_BYTE3.load(Ordering::Relaxed) } else { 0 };
+    
+    // Update buttons (always, even on overflow)
+    LEFT_BUTTON.store(b0 & 0x01 != 0, Ordering::Relaxed);
+    RIGHT_BUTTON.store(b0 & 0x02 != 0, Ordering::Relaxed);
+    MIDDLE_BUTTON.store(b0 & 0x04 != 0, Ordering::Relaxed);
+    
+    // Proper 9-bit PS/2 sign extension using byte 0's sign bits
+    let mut x_rel = b1 as i32;
+    let mut y_rel = b2 as i32;
+    if b0 & 0x10 != 0 { x_rel |= !0xFF_i32; } // X sign bit (bit 4 of byte 0)
+    if b0 & 0x20 != 0 { y_rel |= !0xFF_i32; } // Y sign bit (bit 5 of byte 0)
+    
+    // Handle overflow: clamp to max movement instead of discarding
+    let x_overflow = b0 & 0x40 != 0;
+    let y_overflow = b0 & 0x80 != 0;
+    if x_overflow {
+        x_rel = if b0 & 0x10 != 0 { -255 } else { 255 };
+    }
+    if y_overflow {
+        y_rel = if b0 & 0x20 != 0 { -255 } else { 255 };
+    }
+    
+    let width = SCREEN_WIDTH.load(Ordering::Relaxed);
+    let height = SCREEN_HEIGHT.load(Ordering::Relaxed);
+    
+    let old_x = MOUSE_X.load(Ordering::Relaxed);
+    let old_y = MOUSE_Y.load(Ordering::Relaxed);
+    
+    // Update position (Y is inverted in PS/2)
+    let new_x = (old_x + x_rel).clamp(0, width - 1);
+    let new_y = (old_y - y_rel).clamp(0, height - 1);
+    
+    MOUSE_X.store(new_x, Ordering::Relaxed);
+    MOUSE_Y.store(new_y, Ordering::Relaxed);
+    
+    // Update scroll wheel delta (accumulate, don't overwrite)
+    if has_scroll {
+        let z_rel = b3 as i8;
+        if z_rel != 0 {
+            let _ = SCROLL_DELTA.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |old| {
+                Some(old.saturating_add(z_rel))
+            });
         }
     }
 }
@@ -264,7 +305,7 @@ pub fn is_right_pressed() -> bool {
 pub fn is_initialized() -> bool {
     // Mouse is considered initialized if we have scroll wheel support
     // or if basic initialization completed
-    *HAS_SCROLL_WHEEL.lock() || true  // Always true after init() is called
+    HAS_SCROLL_WHEEL.load(Ordering::Relaxed) || true  // Always true after init() is called
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
