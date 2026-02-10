@@ -461,6 +461,7 @@ pub enum IconAction {
     OpenEditor,
     OpenGL3D,
     OpenBrowser,
+    OpenModelEditor,
 }
 
 /// Window type for content
@@ -481,6 +482,7 @@ pub enum WindowType {
     Demo3D,  // New: 3D graphics demo
     Game,    // Snake game
     Browser, // Web browser
+    ModelEditor, // TrustEdit 3D model editor
 }
 
 /// Window structure
@@ -757,6 +759,8 @@ pub struct Desktop {
     pub browser_url_input: String,
     // Editor states (window_id -> EditorState)
     pub editor_states: BTreeMap<u32, EditorState>,
+    // Model editor states (window_id -> ModelEditorState)
+    pub model_editor_states: BTreeMap<u32, crate::model_editor::ModelEditorState>,
 }
 
 impl Desktop {
@@ -794,6 +798,7 @@ impl Desktop {
             browser: None,
             browser_url_input: String::new(),
             editor_states: BTreeMap::new(),
+            model_editor_states: BTreeMap::new(),
         }
     }
     
@@ -1020,6 +1025,14 @@ struct AppConfig {
             action: IconAction::OpenBrowser,
         });
 
+        self.icons.push(DesktopIcon {
+            name: String::from("TrustEdit"),
+            icon_type: IconType::ModelEditor,
+            x: start_x + 80,
+            y: start_y + icon_spacing * 2,
+            action: IconAction::OpenModelEditor,
+        });
+
     }
     
     /// Check if click is on a desktop icon
@@ -1188,6 +1201,10 @@ struct AppConfig {
                 }
                 self.browser_url_input = String::from("http://example.com");
             },
+            WindowType::ModelEditor => {
+                let state = crate::model_editor::ModelEditorState::new();
+                self.model_editor_states.insert(window.id, state);
+            },
             _ => {}
         }
         
@@ -1211,6 +1228,7 @@ struct AppConfig {
         self.windows.retain(|w| w.id != id);
         // Clean up editor state if it was a text editor
         self.editor_states.remove(&id);
+        self.model_editor_states.remove(&id);
     }
     
     /// Minimize/restore a window (with animation)
@@ -1239,6 +1257,7 @@ struct AppConfig {
         for id in to_remove {
             self.windows.retain(|w| w.id != id);
             self.editor_states.remove(&id);
+            self.model_editor_states.remove(&id);
         }
     }
     
@@ -1436,6 +1455,21 @@ struct AppConfig {
                         self.handle_browser_click(x, y, &self.windows[i].clone());
                     }
                     
+                    // Handle model editor clicks
+                    if self.windows[i].window_type == WindowType::ModelEditor {
+                        let win = &self.windows[i];
+                        let vx = x - win.x;
+                        let vy = y - win.y - TITLE_BAR_HEIGHT as i32;
+                        let vw = win.width as usize;
+                        let vh = win.height.saturating_sub(TITLE_BAR_HEIGHT) as usize;
+                        let win_id = win.id;
+                        if vy >= 0 {
+                            if let Some(state) = self.model_editor_states.get_mut(&win_id) {
+                                state.handle_click(vx, vy, vw, vh, true);
+                            }
+                        }
+                    }
+                    
                     self.focus_window(id);
                     return;
                 }
@@ -1457,6 +1491,16 @@ struct AppConfig {
             for w in &mut self.windows {
                 w.dragging = false;
                 w.resizing = ResizeEdge::None;
+            }
+            // Notify model editors about mouse release
+            let model_ids: Vec<u32> = self.windows.iter()
+                .filter(|w| w.window_type == WindowType::ModelEditor && w.focused)
+                .map(|w| w.id)
+                .collect();
+            for id in model_ids {
+                if let Some(state) = self.model_editor_states.get_mut(&id) {
+                    state.handle_click(0, 0, 0, 0, false);
+                }
             }
         }
     }
@@ -1679,6 +1723,9 @@ struct AppConfig {
             IconAction::OpenBrowser => {
                 self.create_window("TrustBrowser", 120 + offset, 60 + offset, 600, 450, WindowType::Browser);
             },
+            IconAction::OpenModelEditor => {
+                self.create_window("TrustEdit 3D", 100 + offset, 60 + offset, 700, 500, WindowType::ModelEditor);
+            },
 
         }
     }
@@ -1804,6 +1851,12 @@ struct AppConfig {
                     // Forward to TrustCode editor state
                     if let Some(editor) = self.editor_states.get_mut(&win_id) {
                         editor.handle_key(key);
+                    }
+                },
+                WindowType::ModelEditor => {
+                    // Forward to model editor state
+                    if let Some(state) = self.model_editor_states.get_mut(&win_id) {
+                        state.handle_key(key);
                     }
                 },
                 _ => {}
@@ -2374,10 +2427,32 @@ struct AppConfig {
                 }
             }
         }
+        
+        // Forward mouse move to focused model editor
+        let model_info: Option<(u32, i32, i32, u32, u32)> = self.windows.iter()
+            .find(|w| w.focused && !w.minimized && w.window_type == WindowType::ModelEditor)
+            .map(|w| (w.id, w.x, w.y, w.width, w.height));
+        if let Some((win_id, wx, wy, ww, wh)) = model_info {
+            let vx = x - wx;
+            let vy = y - wy - TITLE_BAR_HEIGHT as i32;
+            let vw = ww as usize;
+            let vh = wh.saturating_sub(TITLE_BAR_HEIGHT) as usize;
+            if let Some(state) = self.model_editor_states.get_mut(&win_id) {
+                state.handle_mouse_move(vx, vy, vw, vh);
+            }
+        }
     }
     
     /// Handle scroll wheel
     pub fn handle_scroll(&mut self, delta: i8) {
+        // Handle model editor scroll (zoom) separately
+        let model_info = self.windows.iter().rev().find(|w| w.focused && !w.minimized && w.window_type == WindowType::ModelEditor).map(|w| w.id);
+        if let Some(win_id) = model_info {
+            if let Some(state) = self.model_editor_states.get_mut(&win_id) {
+                state.handle_scroll(delta);
+            }
+            return;
+        }
         // Scroll focused window content if it's a scrollable type
         if let Some(window) = self.windows.iter_mut().rev().find(|w| w.focused && !w.minimized) {
             match window.window_type {
@@ -2466,6 +2541,9 @@ struct AppConfig {
         
         // Second pass: render editor content (needs &mut for blink counter)
         self.draw_editor_windows();
+        
+        // Third pass: render model editor windows (needs &mut for state)
+        self.draw_model_editor_windows();
         
         // Only redraw taskbar if there are windows (to show active indicators)
         // Otherwise the cached taskbar is already in the background
@@ -3310,6 +3388,7 @@ struct AppConfig {
             WindowType::Demo3D => "🎮",
             WindowType::Game => "🎯",
             WindowType::Browser => "🌍",
+            WindowType::ModelEditor => "✏",
         };
         
         // Icon (simple 2-char representation for now)
@@ -3436,6 +3515,11 @@ struct AppConfig {
             return;
         }
         
+        // ModelEditor is handled separately (needs &mut self)
+        if window.window_type == WindowType::ModelEditor {
+            return;
+        }
+        
         // Special rendering for 3D demo window
         if window.window_type == WindowType::Demo3D {
             self.draw_3d_demo(window);
@@ -3523,6 +3607,43 @@ struct AppConfig {
                         crate::framebuffer::draw_char_at(x as u32, y as u32, ch, color);
                     },
                 );
+            }
+        }
+    }
+    
+    /// Render all ModelEditor windows (separate pass because we need &mut for editor state)
+    fn draw_model_editor_windows(&mut self) {
+        // Collect model editor window info to avoid borrow issues
+        let editor_windows: Vec<(u32, i32, i32, u32, u32)> = self.windows.iter()
+            .filter(|w| w.window_type == WindowType::ModelEditor && w.visible && !w.minimized)
+            .map(|w| (w.id, w.x, w.y, w.width, w.height))
+            .collect();
+        
+        for (win_id, wx, wy, ww, wh) in editor_windows {
+            if let Some(state) = self.model_editor_states.get_mut(&win_id) {
+                let content_x = wx as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_w = ww;
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                
+                if content_w < 80 || content_h < 80 { continue; }
+                
+                // Render into a buffer then blit
+                let buf_w = content_w as usize;
+                let buf_h = content_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
+                
+                state.render(&mut buf, buf_w, buf_h);
+                
+                // Blit buffer to framebuffer
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
+                        let sy = content_y + py as u32;
+                        framebuffer::put_pixel(sx, sy, color);
+                    }
+                }
             }
         }
     }

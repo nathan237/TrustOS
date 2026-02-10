@@ -101,6 +101,7 @@ mod image;
 mod perf;
 mod hypervisor;
 mod rasterizer;
+mod model_editor;
 
 // Synchronization primitives (Redox-inspired)
 mod sync;

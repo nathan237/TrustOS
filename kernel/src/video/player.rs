@@ -391,6 +391,7 @@ pub fn render_realtime(effect: &str, width: u16, height: u16, fps: u16) {
             "plasma" => render_plasma_frame(&mut buf, rw, rh, frame),
             "fire" => render_fire_frame(&mut buf, &mut heat, rw, rh, &mut seed),
             "matrix" => render_matrix_frame(&mut buf, rw, rh, &mut drops, &mut speeds, &mut seed, col_w, ncols),
+            "shader" => render_shader_frame(&mut buf, rw, rh, frame),
             _ => break,
         }
 
@@ -484,6 +485,7 @@ pub fn render_realtime_timed(effect: &str, width: u16, height: u16, fps: u16, du
             "plasma" => render_plasma_frame(&mut buf, rw, rh, frame),
             "fire" => render_fire_frame(&mut buf, &mut heat, rw, rh, &mut seed),
             "matrix" => render_matrix_frame(&mut buf, rw, rh, &mut drops, &mut speeds, &mut seed, col_w, ncols),
+            "shader" => render_shader_frame(&mut buf, rw, rh, frame),
             _ => break,
         }
 
@@ -659,6 +661,138 @@ fn render_matrix_frame(buf: &mut [u32], w: usize, h: usize,
             drops[c] = -((*seed % (h as u32 / 2)) as i32);
             *seed = xorshift(*seed);
             speeds[c] = 1 + (*seed % 4) as u8;
+        }
+    }
+}
+
+// ── Fractal Shader Effect ──
+// Software implementation of a GLSL code-golf shader:
+// Iterative cosine deformation → fractal organic patterns with iridescent colors
+// Original: vec2 p=(FC.xy*2.-r)/r.y; ... tanh(exp(...)/o)
+
+/// Fast f32 exp approximation (IEEE 754 bit trick + refinement)
+#[inline(always)]
+fn fast_exp(x: f32) -> f32 {
+    // Clamp to avoid overflow/underflow
+    let x = if x > 10.0 { 10.0 } else if x < -10.0 { -10.0 } else { x };
+    // 2^(x / ln2) via IEEE 754 float bit manipulation
+    let a = (1 << 23) as f32 / core::f32::consts::LN_2;
+    let b = (1 << 23) as f32 * (127.0 - 0.04367744890362246);
+    let v = (a * x + b) as i32;
+    f32::from_bits(if v > 0 { v as u32 } else { 0 })
+}
+
+/// Fast tanh approximation: tanh(x) ≈ x / (1 + |x| + x²*0.28)
+#[inline(always)]
+fn fast_tanh(x: f32) -> f32 {
+    if x > 5.0 { return 1.0; }
+    if x < -5.0 { return -1.0; }
+    let x2 = x * x;
+    x / (1.0 + x.abs() + x2 * 0.28)
+}
+
+fn render_shader_frame(buf: &mut [u32], w: usize, h: usize, frame: u32) {
+    // Render at 1/4 resolution then upscale 4x — makes it feasible on bare-metal CPU
+    let scale = 4usize;
+    let sw = w / scale;
+    let sh = h / scale;
+
+    let t = frame as f32 * 0.03;
+    let ry = sh as f32;
+    let rx = sw as f32;
+
+    // Pre-compute sin/cos via LUT (256 entries, avoid per-pixel micromath)
+    static SINLUT: [f32; 256] = {
+        let mut lut = [0.0f32; 256];
+        let mut i = 0;
+        while i < 256 {
+            // sin(2*pi*i/256) using Taylor series at compile time
+            let angle = (i as f64) * 6.283185307179586 / 256.0;
+            // sin(x) ≈ x - x³/6 + x⁵/120 - x⁷/5040 + x⁹/362880
+            let a = angle % 6.283185307179586;
+            let x = if a > 3.14159265358979 { a - 6.283185307179586 } else { a };
+            let x2 = x * x;
+            let x3 = x2 * x;
+            let x5 = x3 * x2;
+            let x7 = x5 * x2;
+            let x9 = x7 * x2;
+            let s = x - x3 / 6.0 + x5 / 120.0 - x7 / 5040.0 + x9 / 362880.0;
+            lut[i] = s as f32;
+            i += 1;
+        }
+        lut
+    };
+    
+    #[inline(always)]
+    fn fsin(x: f32) -> f32 {
+        // Map x to 0..255 LUT index (one cycle = 2*pi)
+        let idx = ((x * (256.0 / 6.2831853)) as i32 & 255) as u8;
+        SINLUT[idx as usize]
+    }
+    
+    #[inline(always)]
+    fn fcos(x: f32) -> f32 {
+        let idx = (((x + 1.5707963) * (256.0 / 6.2831853)) as i32 & 255) as u8;
+        SINLUT[idx as usize]
+    }
+
+    for sy in 0..sh {
+        let p_y = (sy as f32 * 2.0 - ry) / ry;
+        // Pre-compute vertical exp values (same for whole row)
+        let e_py1 = fast_exp(p_y);
+        let e_pyn1 = fast_exp(-p_y);
+        let e_pyn2 = fast_exp(p_y * -2.0);
+
+        for sx in 0..sw {
+            let p_x = (sx as f32 * 2.0 - rx) / ry;
+
+            let dot_pp = p_x * p_x + p_y * p_y;
+            let l = (0.7 - dot_pp).abs();
+
+            let s = (1.0 - l) * 5.0; // /0.2 = *5
+            let mut vx = p_x * s;
+            let mut vy = p_y * s;
+
+            let mut o_r: f32 = 0.0;
+            let mut o_g: f32 = 0.0;
+            let mut o_b: f32 = 0.0;
+
+            // 6 iterations (down from 8 for speed, still looks great)
+            let mut i: f32 = 1.0;
+            while i <= 6.0 {
+                let inv_i = 1.0 / i;
+                vx += fcos(vy * i + t) * inv_i + 0.7;
+                vy += fcos(vx * i + i + t) * inv_i + 0.7;
+
+                let diff = (vx - vy).abs() * 0.2;
+                o_r += (fsin(vx) + 1.0) * diff;
+                o_g += (fsin(vy) + 1.0) * diff;
+                o_b += (fsin(vy) + 1.0) * diff;
+                i += 1.0;
+            }
+
+            let radial = fast_exp(-4.0 * l);
+            let fr = fast_tanh(e_py1 * radial / (o_r + 0.001));
+            let fg = fast_tanh(e_pyn1 * radial / (o_g + 0.001));
+            let fb = fast_tanh(e_pyn2 * radial / (o_b + 0.001));
+
+            let r = (fr.abs() * 255.0).min(255.0) as u32;
+            let g = (fg.abs() * 255.0).min(255.0) as u32;
+            let b = (fb.abs() * 255.0).min(255.0) as u32;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+
+            // Upscale: fill scale x scale block
+            for dy in 0..scale {
+                let py = sy * scale + dy;
+                if py >= h { break; }
+                let row_off = py * w + sx * scale;
+                for dx in 0..scale {
+                    let px = sx * scale + dx;
+                    if px < w {
+                        buf[row_off + dx] = color;
+                    }
+                }
+            }
         }
     }
 }

@@ -14261,11 +14261,11 @@ fn cmd_video(args: &[&str]) {
             let vh = sh.min(480) as u16;
 
             match effect {
-                "plasma" | "fire" | "matrix" => {
+                "plasma" | "fire" | "matrix" | "shader" => {
                     crate::video::player::render_realtime(effect, vw, vh, fps as u16);
                 }
                 _ => {
-                    crate::println!("Unknown effect: {}. Available: plasma, fire, matrix", effect);
+                    crate::println!("Unknown effect: {}. Available: plasma, fire, matrix, shader", effect);
                 }
             }
         }

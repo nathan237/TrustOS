@@ -287,6 +287,7 @@ pub enum IconType {
     Editor,
     OpenGL,
     Browser,
+    ModelEditor,
 }
 
 /// Draw an icon by type
@@ -303,6 +304,7 @@ pub fn draw_icon(icon_type: IconType, x: u32, y: u32, color: u32, bg: u32) {
         IconType::Editor => draw_editor_icon(x, y, color, bg),
         IconType::OpenGL => draw_opengl_icon(x, y, color, bg),
         IconType::Browser => draw_browser_icon(x, y, color, bg),
+        IconType::ModelEditor => draw_model_editor_icon(x, y, color, bg),
     }
 }
 
@@ -427,5 +429,56 @@ pub fn draw_browser_icon(x: u32, y: u32, color: u32, _bg: u32) {
     // Navigation bar at bottom (address bar)
     framebuffer::fill_rect(x + 2, y + 26, 28, 4, dark);
     framebuffer::fill_rect(x + 4, y + 27, 24, 2, 0xFF202020);
+}
+
+/// Draw a 32x32 3D model editor icon (wireframe with cursor cross)
+pub fn draw_model_editor_icon(x: u32, y: u32, color: u32, _bg: u32) {
+    let dark = darken(color, 0.5);
+    let light = lighten(color, 1.4);
+    let accent = 0xFF00FFAA; // green wireframe color
+    
+    let cx = x as i32 + 16;
+    let cy = y as i32 + 16;
+    
+    // Draw wireframe cube (simplified)
+    let put = |px: i32, py: i32, c: u32| {
+        if px >= 0 && py >= 0 {
+            framebuffer::put_pixel(px as u32, py as u32, c);
+        }
+    };
+    
+    // Front face
+    let s: i32 = 7;
+    for i in 0..=s {
+        put(cx - s + i - 2, cy - s + 2, accent);
+        put(cx + s - 2, cy - s + i + 2, accent);
+        put(cx + s - i - 2, cy + s + 2, accent);
+        put(cx - s - 2, cy + s - i + 2, accent);
+    }
+    
+    // Back face (offset)
+    let o: i32 = 5;
+    for i in 0..=s {
+        put(cx - s + i + o - 2, cy - s - o + 2, dark);
+        put(cx + s + o - 2, cy - s + i - o + 2, dark);
+    }
+    
+    // Connect corners
+    for i in 0..o {
+        put(cx - s + i - 2, cy - s - i + 2, light);
+        put(cx + s + i - 2, cy - s - i + 2, light);
+        put(cx + s + i - 2, cy + s - i + 2, light);
+    }
+    
+    // Crosshair cursor at bottom-right
+    for i in 0..5 {
+        put(cx + 8, cy + 6 + i, 0xFFFFFFFF);
+        put(cx + 6 + i, cy + 8, 0xFFFFFFFF);
+    }
+    
+    // Vertex dots
+    put(cx - s - 2, cy - s + 2, 0xFFFFFF00);
+    put(cx + s - 2, cy + s + 2, 0xFFFFFF00);
+    put(cx + s + o - 2, cy - s - o + 2, 0xFFFFFF00);
 }
 
