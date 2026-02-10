@@ -1021,98 +1021,282 @@ fn execute_command(cmd: &str) {
 // ==================== HELP COMMANDS ====================
 
 fn cmd_help(args: &[&str]) {
-    if args.is_empty() {
-        // OS Description
-        crate::println_color!(COLOR_BRIGHT_GREEN, "╔══════════════════════════════════════════════════════════════════╗");
-        crate::println_color!(COLOR_BRIGHT_GREEN, "║               TrustOS - Secure Experimental Kernel              ║");
-        crate::println_color!(COLOR_BRIGHT_GREEN, "╚══════════════════════════════════════════════════════════════════╝");
-        crate::println!();
-        crate::println_color!(COLOR_WHITE, "  A bare-metal x86_64 operating system written in Rust featuring:");
-        crate::println!();
-        crate::println_color!(COLOR_CYAN, "  Core Features:");
-        crate::println!("    • Full file system (RAMFS) with Unix-like commands");
-        crate::println!("    • User authentication & permission system (root, users)");
-        crate::println!("    • Network stack (TCP/IP, HTTP/HTTPS, DNS)");
-        crate::println!("    • ELF binary execution & Linux syscall compatibility");
-        crate::println!();
-        crate::println_color!(COLOR_CYAN, "  Advanced Capabilities:");
-        crate::println!("    • Binary-to-Rust transpiler (analyze Linux ELFs)");
-        crate::println!("    • Linux Subsystem (run Alpine Linux binaries)");
-        crate::println!("    • Graphical desktop compositor (GUI mode)");
-        crate::println!("    • AHCI disk driver with partition support");
-        crate::println!();
-        crate::println_color!(COLOR_YELLOW, "═══════════════════════════════════════════════════════════════════════");
-        crate::println!();
-        crate::println_color!(COLOR_BRIGHT_GREEN, "Commands by Category:");
-        crate::println!();
-        
-        crate::println_color!(COLOR_CYAN, "  📁 File System:");
-        crate::println!("     ls, cd, pwd, mkdir, rmdir, touch, rm, cp, mv, cat, head, tail");
-        crate::println!("     stat, tree, find, wc, grep, chmod, chown, ln");
-        crate::println!();
-        
-        crate::println_color!(COLOR_CYAN, "  👤 User Management:");
-        crate::println!("     login, logout, su, passwd, adduser, deluser, users, whoami, id");
-        crate::println!();
-        
-        crate::println_color!(COLOR_CYAN, "  ⚙️  System & Process:");
-        crate::println!("     clear, time, date, hostname, env, history, uname, free, df");
-        crate::println!("     ps, tasks, threads, top, kill, dmesg, sysctl");
-        crate::println!();
-        
-        crate::println_color!(COLOR_CYAN, "  🔧 Hardware:");
-        crate::println!("     lspci, lshw, lscpu, lsmem, lsusb, disk, dd, ahci, fdisk, lsblk");
-        crate::println!();
-        
-        crate::println_color!(COLOR_CYAN, "  🌐 Network:");
-        crate::println!("     ifconfig, ping, curl, wget, nslookup, arp, route, netstat");
-        crate::println!("     traceroute, browse (web browser)");
-        crate::println!();
-        
-        crate::println_color!(COLOR_CYAN, "  🐧 Linux Subsystem:");
-        crate::println!("     linux shell    - Interactive Linux shell");
-        crate::println!("     linux          - Linux subsystem");
-        crate::println!("     alpine         - Alpine Linux utilities");
-        crate::println!();
-        
-        crate::println_color!(COLOR_CYAN, "  🖥️  Desktop:");
-        crate::println!("     desktop, gui   - Launch COSMIC Desktop (multi-layer, no flicker)");
-        crate::println!("     open <app>     - Open desktop with app (browser, files, editor...)");
-        crate::println!("     trustedit      - Launch TrustEdit 3D model editor");
-        crate::println!("     signature      - Kernel signature & proof of authorship");
-        crate::println!("     security       - Security status, capabilities & isolation");
-        crate::println!();
-        
-        crate::println_color!(COLOR_CYAN, "  🔍 Utilities:");
-        crate::println!("     echo, grep, sort, cat, hexdump, strings");
-        crate::println!();
-        
-        crate::println_color!(COLOR_CYAN, "  �️  Developer Tools:");
-        crate::println!("     perf / perfstat - CPU, IRQ, scheduling, memory stats");
-        crate::println!("     memdbg / heapdbg- Allocation tracking, peak usage, fragmentation");
-        crate::println!("     dmesg [-n N]    - Kernel ring buffer (last N messages)");
-        crate::println!("     irqstat / irqs  - Per-CPU interrupt breakdown");
-        crate::println!("     regs / cpuregs  - CPU register dump (CR0/CR3/CR4/EFER decoded)");
-        crate::println!("     peek <addr> [n] - Hex dump memory at address");
-        crate::println!("     poke <addr> <v> - Write byte to memory address");
-        crate::println!("     devpanel        - Toggle real-time FPS/heap/IRQ overlay (F12)");
-        crate::println!("     timecmd <cmd>   - Run command and show elapsed time");
-        crate::println!();
-        
-        crate::println_color!(COLOR_CYAN, "  �💀 System Control:");
-        crate::println!("     exit, reboot, shutdown");
-        crate::println!();
-        
-        crate::println_color!(COLOR_YELLOW, "Tips:");
-        crate::println!("  • Type 'help <command>' or 'man <command>' for detailed help");
-        crate::println!("  • Use ↑/↓ arrows for command history (when prompt is empty)");
-        crate::println!("  • Use Tab for command auto-completion");
-        crate::println!("  • Use PageUp/PageDown to scroll terminal output");
-    } else {
+    if !args.is_empty() {
         cmd_man(args);
+        return;
     }
+    
+    crate::println_color!(COLOR_BRIGHT_GREEN, "======================================================================");
+    crate::println_color!(COLOR_BRIGHT_GREEN, "          TrustOS -- Secure Bare-Metal Operating System");
+    crate::println_color!(COLOR_BRIGHT_GREEN, "       x86_64 kernel written in Rust -- no libc, no std");
+    crate::println_color!(COLOR_BRIGHT_GREEN, "======================================================================");
+    crate::println!();
+    crate::println_color!(COLOR_WHITE, "  Features: RAMFS file system, TCP/IP networking, ELF loader,");
+    crate::println_color!(COLOR_WHITE, "  Linux syscall compat, GUI desktop compositor, SMP multicore.");
+    crate::println!();
+    crate::println_color!(COLOR_YELLOW, "  Type 'help <command>' or 'man <command>' for detailed usage.");
+    crate::println_color!(COLOR_YELLOW, "  Tab = auto-complete | Up/Down = history | PageUp/Down = scroll");
+    crate::println!();
+    
+    // FILE SYSTEM
+    crate::println_color!(COLOR_CYAN, "  FILE SYSTEM");
+    crate::println!("    ls [path]           List directory contents (-l long, -a hidden)");
+    crate::println!("    cd <path>           Change working directory");
+    crate::println!("    pwd                 Print current working directory");
+    crate::println!("    mkdir <dir>         Create directory (-p recursive)");
+    crate::println!("    rmdir <dir>         Remove empty directory");
+    crate::println!("    touch <file>        Create empty file or update timestamp");
+    crate::println!("    rm <file>           Remove file or directory (-r recursive)");
+    crate::println!("    cp <src> <dst>      Copy file or directory");
+    crate::println!("    mv <src> <dst>      Move or rename file");
+    crate::println!("    cat <file>          Display file contents (supports > redirect)");
+    crate::println!("    head <file>         Show first N lines (-n N)");
+    crate::println!("    tail <file>         Show last N lines (-n N)");
+    crate::println!("    wc <file>           Count lines, words, bytes");
+    crate::println!("    stat <file>         Display file metadata (size, type, perms)");
+    crate::println!("    tree [path]         Display directory tree structure");
+    crate::println!("    find <path> <name>  Search for files by name pattern");
+    crate::println!("    ln -s <tgt> <link>  Create symbolic link");
+    crate::println!("    readlink <link>     Display link target");
+    crate::println!("    basename <path>     Strip directory from path");
+    crate::println!("    dirname <path>      Strip filename from path");
+    crate::println!("    realpath <path>     Resolve to absolute path");
+    crate::println!("    file <path>         Identify file type (ELF, text, etc.)");
+    crate::println!("    chmod <mode> <f>    Change file permissions (octal)");
+    crate::println!("    chown <u>[:<g>] <f> Change file ownership");
+    crate::println!();
+    
+    // TEXT PROCESSING
+    crate::println_color!(COLOR_CYAN, "  TEXT PROCESSING");
+    crate::println!("    echo <text>         Print text (supports > redirect)");
+    crate::println!("    grep <pat> <file>   Search for pattern (-i case insensitive)");
+    crate::println!("    sort <file>         Sort lines (-r reverse, -n numeric)");
+    crate::println!("    uniq <file>         Remove duplicate adjacent lines (-c count)");
+    crate::println!("    cut -d<d> -f<n>     Cut columns by delimiter");
+    crate::println!("    tr <a> <b>          Translate characters (a->b)");
+    crate::println!("    tee <file>          Write stdin to file + stdout");
+    crate::println!("    rev <text>          Reverse string");
+    crate::println!("    diff <a> <b>        Compare two files line by line");
+    crate::println!("    cmp <a> <b>         Compare two files byte by byte");
+    crate::println!("    patch <file>        Apply diff patch");
+    crate::println!("    strings <file>      Extract printable strings from binary");
+    crate::println!("    od <file>           Octal dump of file");
+    crate::println!("    hexdump <file>      Hex dump of file contents");
+    crate::println!("    base64 <file>       Encode/decode base64 (-d decode)");
+    crate::println!("    md5sum <file>       Compute MD5 hash");
+    crate::println!("    sha256sum <file>    Compute SHA-256 hash");
+    crate::println!();
+    
+    // SYSTEM & PROCESS
+    crate::println_color!(COLOR_CYAN, "  SYSTEM & PROCESS");
+    crate::println!("    clear               Clear terminal screen");
+    crate::println!("    time / uptime       Show system uptime");
+    crate::println!("    date                Display current date and time");
+    crate::println!("    whoami              Print current username");
+    crate::println!("    hostname            Display system hostname");
+    crate::println!("    id                  Print user/group IDs");
+    crate::println!("    uname [-a]          System information (kernel, arch)");
+    crate::println!("    env / printenv      Display environment variables");
+    crate::println!("    export K=V          Set environment variable");
+    crate::println!("    unset <var>         Remove environment variable");
+    crate::println!("    set                 Show all shell variables");
+    crate::println!("    alias <n>=<cmd>     Create command alias");
+    crate::println!("    unalias <name>      Remove command alias");
+    crate::println!("    source <file>       Execute commands from script file");
+    crate::println!("    history             Show command history");
+    crate::println!("    ps                  List running processes");
+    crate::println!("    top / htop          Real-time process monitor");
+    crate::println!("    kill <pid>          Send signal to process");
+    crate::println!("    killall <name>      Kill processes by name");
+    crate::println!("    nice <n> <cmd>      Run command with priority");
+    crate::println!("    nohup <cmd>         Run command immune to hangups");
+    crate::println!("    bg / fg             Background/foreground job control");
+    crate::println!("    tasks / jobs        List active kernel tasks");
+    crate::println!("    threads             Show kernel thread info");
+    crate::println!("    free                Display memory usage statistics");
+    crate::println!("    df                  Show disk space usage");
+    crate::println!("    vmstat              Virtual memory statistics");
+    crate::println!("    iostat              I/O statistics by device");
+    crate::println!("    lsof [pid]          List open files per process");
+    crate::println!("    strace <cmd>        Trace system calls of command");
+    crate::println!("    sleep <secs>        Pause execution for N seconds");
+    crate::println!("    watch <cmd>         Execute command repeatedly");
+    crate::println!("    timeout <s> <cmd>   Run command with time limit");
+    crate::println!();
+    
+    // USER MANAGEMENT
+    crate::println_color!(COLOR_CYAN, "  USER MANAGEMENT");
+    crate::println!("    login               Switch to another user account");
+    crate::println!("    su <user>           Substitute user identity");
+    crate::println!("    passwd [user]       Change user password");
+    crate::println!("    adduser <name>      Create new user account");
+    crate::println!("    deluser <name>      Delete user account");
+    crate::println!("    users               List all user accounts");
+    crate::println!();
+    
+    // HARDWARE & DEVICES
+    crate::println_color!(COLOR_CYAN, "  HARDWARE & DEVICES");
+    crate::println!("    lspci [-v]          List PCI devices (vendor/class)");
+    crate::println!("    lshw / hwinfo       Full hardware inventory");
+    crate::println!("    lscpu               CPU model, cores, features, frequency");
+    crate::println!("    lsmem               Memory layout and total RAM");
+    crate::println!("    lsusb               List USB controllers & devices");
+    crate::println!("    dmidecode           BIOS/SMBIOS firmware tables");
+    crate::println!("    hdparm <dev>        Disk drive parameters");
+    crate::println!("    smpstatus           SMP multicore status (per-CPU state)");
+    crate::println!("    smp <cmd>           SMP control (start/stop cores)");
+    crate::println!("    modprobe <mod>      Load kernel module");
+    crate::println!("    lsmod               List loaded kernel modules");
+    crate::println!("    insmod / rmmod      Insert or remove module");
+    crate::println!();
+    
+    // DISK & STORAGE
+    crate::println_color!(COLOR_CYAN, "  DISK & STORAGE");
+    crate::println!("    disk                Show detected disk drives");
+    crate::println!("    dd if=<> of=<>      Block-level copy (raw disk I/O)");
+    crate::println!("    ahci <cmd>          AHCI controller commands");
+    crate::println!("    fdisk <dev>         Partition table editor");
+    crate::println!("    lsblk               List block devices");
+    crate::println!("    blkid               Show block device UUIDs");
+    crate::println!("    mkfs <type> <dev>   Format partition (fat32, ext2)");
+    crate::println!("    fsck <dev>          File system consistency check");
+    crate::println!("    mount <dev> <dir>   Mount file system");
+    crate::println!("    umount <dir>        Unmount file system");
+    crate::println!("    sync                Flush all pending writes to disk");
+    crate::println!("    persist <cmd>       Manage persistent storage");
+    crate::println!();
+    
+    // NETWORK
+    crate::println_color!(COLOR_CYAN, "  NETWORK");
+    crate::println!("    ifconfig / ip       Show network interface status");
+    crate::println!("    ipconfig [cmd]      Configure IP settings");
+    crate::println!("    ping <host>         ICMP echo to test connectivity");
+    crate::println!("    curl <url>          HTTP/HTTPS client (GET, POST)");
+    crate::println!("    wget <url>          Download file from URL");
+    crate::println!("    download <url>      Download and save file");
+    crate::println!("    nslookup <host>     DNS lookup (A, AAAA records)");
+    crate::println!("    arp [-a]            Show ARP table (IP->MAC mappings)");
+    crate::println!("    route               Display routing table");
+    crate::println!("    traceroute <host>   Trace packet path to destination");
+    crate::println!("    netstat             Show active connections & listeners");
+    crate::println!("    browse <url>        Text-mode web browser");
+    crate::println!("    tcpsyn <host:port>  Raw TCP SYN connection test");
+    crate::println!("    httpget <url>       Raw HTTP GET request");
+    crate::println!();
+    
+    // LINUX SUBSYSTEM
+    crate::println_color!(COLOR_CYAN, "  LINUX SUBSYSTEM");
+    crate::println!("    linux               Launch Linux compatibility shell");
+    crate::println!("    linux status        Show Linux subsystem status");
+    crate::println!("    linux install       Install Linux binaries from rootfs");
+    crate::println!("    linux start         Start Linux init process");
+    crate::println!("    linux exec <bin>    Execute ELF binary directly");
+    crate::println!("    alpine <cmd>        Alpine Linux package manager");
+    crate::println!("    distro list         List available distributions");
+    crate::println!("    distro install <id> Download & install distribution");
+    crate::println!("    distro run <id>     Launch installed distribution");
+    crate::println!("    exec <file>         Execute binary (ELF or script)");
+    crate::println!("    elfinfo <file>      Display ELF binary header info");
+    crate::println!();
+    
+    // GRAPHICS & DESKTOP
+    crate::println_color!(COLOR_CYAN, "  GRAPHICS & DESKTOP");
+    crate::println!("    desktop / gui       Launch windowed desktop environment");
+    crate::println!("    cosmic              Launch COSMIC V2 compositor");
+    crate::println!("    open <app>          Open desktop with specific app");
+    crate::println!("    trustedit           3D model editor (wireframe viewer)");
+    crate::println!("    calculator / calc   Launch calculator app");
+    crate::println!("    snake               Launch Snake game");
+    crate::println!("    glmode [on|off]     Toggle OpenGL compositing mode");
+    crate::println!("    theme <name>        Switch color theme (matrix, nord, etc.)");
+    crate::println!("    anim <cmd>          Configure UI animations");
+    crate::println!("    holo / holomatrix   Holographic matrix visualizer");
+    crate::println!("    imgview <file>      Display image file (PPM, BMP)");
+    crate::println!("    imgdemo             Run image rendering demo");
+    crate::println!("    wayland [cmd]       Wayland compositor control");
+    crate::println!("    gterm               Launch graphical terminal");
+    crate::println!("    fontsmooth [0-3]    Set font anti-aliasing level");
+    crate::println!();
+    
+    // PROGRAMMING & TOOLS
+    crate::println_color!(COLOR_CYAN, "  PROGRAMMING & TOOLS");
+    crate::println!("    trustlang / tl      TrustLang programming language REPL");
+    crate::println!("    transpile <file>    Binary-to-Rust transpiler (ELF analysis)");
+    crate::println!("    video / tv          TrustVideo codec player (record/play)");
+    crate::println!("    bc                  Calculator / math expression evaluator");
+    crate::println!("    cal                 Display calendar");
+    crate::println!("    factor <n>          Prime factorization of integer");
+    crate::println!("    seq <a> [b] <c>     Print numeric sequence");
+    crate::println!("    yes [text]          Repeat text infinitely");
+    crate::println!("    xargs <cmd>         Build command from stdin");
+    crate::println!("    printf <fmt> <args> Formatted text output");
+    crate::println!("    expr <expr>         Evaluate arithmetic expression");
+    crate::println!("    read <var>          Read user input into variable");
+    crate::println!();
+    
+    // ARCHIVING & COMPRESSION
+    crate::println_color!(COLOR_CYAN, "  ARCHIVING & COMPRESSION");
+    crate::println!("    tar <opts> <file>   Archive/extract tar files");
+    crate::println!("    gzip / gunzip       Compress/decompress gzip files");
+    crate::println!("    zip / unzip         Compress/extract zip archives");
+    crate::println!();
+    
+    // DEVELOPER & DEBUG
+    crate::println_color!(COLOR_CYAN, "  DEVELOPER & DEBUG");
+    crate::println!("    dmesg [-n N]        Kernel ring buffer (last N messages)");
+    crate::println!("    memdbg / heapdbg    Heap allocation stats & fragmentation");
+    crate::println!("    perf / perfstat     CPU, IRQ, scheduler, memory profiling");
+    crate::println!("    irqstat / irqs      Per-CPU interrupt counters");
+    crate::println!("    regs / cpuregs      CPU register dump (CR0/CR3/CR4/EFER)");
+    crate::println!("    peek <addr> [n]     Hex dump memory region");
+    crate::println!("    poke <addr> <val>   Write byte to memory address");
+    crate::println!("    devpanel            Toggle real-time FPS/heap/IRQ overlay");
+    crate::println!("    timecmd <cmd>       Run command & measure elapsed time");
+    crate::println!("    benchmark [test]    Run performance benchmarks");
+    crate::println!("    keytest             Interactive keyboard scancode tester");
+    crate::println!("    test                Run internal kernel test suite");
+    crate::println!("    panic               Trigger kernel panic (debug only)");
+    crate::println!();
+    
+    // SERVICES & SCHEDULING
+    crate::println_color!(COLOR_CYAN, "  SERVICES & SCHEDULING");
+    crate::println!("    service <name> <op> Manage system services (start/stop)");
+    crate::println!("    systemctl <cmd>     Systemd-style service control");
+    crate::println!("    crontab [-e|-l]     Schedule recurring jobs");
+    crate::println!("    at <time> <cmd>     Schedule one-time command execution");
+    crate::println!("    sysctl <key>[=val]  View/modify kernel parameters");
+    crate::println!();
+    
+    // SECURITY & IDENTITY
+    crate::println_color!(COLOR_CYAN, "  SECURITY & IDENTITY");
+    crate::println!("    security / sec      Security subsystem status & caps");
+    crate::println!("    signature / sig     Kernel signature & proof of authorship");
+    crate::println!("    hv / hypervisor     Hypervisor management commands");
+    crate::println!();
+    
+    // SYSTEM CONTROL
+    crate::println_color!(COLOR_CYAN, "  SYSTEM CONTROL");
+    crate::println!("    exit / logout       Exit current session");
+    crate::println!("    reboot              Restart the system");
+    crate::println!("    shutdown / halt     Power off the system");
+    crate::println!("    reset               Reset terminal state");
+    crate::println!("    tty                 Print terminal device name");
+    crate::println!("    stty <opts>         Configure terminal settings");
+    crate::println!("    loadkeys <map>      Load keyboard layout");
+    crate::println!("    setfont <font>      Change console font");
+    crate::println!();
+    
+    // EASTER EGGS
+    crate::println_color!(COLOR_CYAN, "  EASTER EGGS");
+    crate::println!("    neofetch            System info with ASCII art logo");
+    crate::println!("    matrix              Fullscreen Matrix rain animation");
+    crate::println!("    cowsay <text>       ASCII cow says your message");
+    crate::println!("    showcase [N]        Automated demo (marketing video)");
+    crate::println!();
+    
+    crate::println_color!(COLOR_BRIGHT_GREEN, "  Total: ~170 commands | Type 'man <cmd>' for detailed usage");
+    crate::println!();
 }
-
 fn cmd_man(args: &[&str]) {
     if args.is_empty() {
         crate::println!("Usage: man <command>");

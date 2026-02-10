@@ -1298,12 +1298,16 @@ struct AppConfig {
         // Dock hit area: full dock strip width
         if x < 0 || x >= (DOCK_WIDTH + 10) as i32 { return None; }
         
-        let icon_total = 50i32; // icon_size(36) + gap(14)
-        let start_y = 12i32;
+        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let n_icons = self.icons.len().max(1) as u32;
+        let padding = 12u32;
+        let available = dock_h.saturating_sub(padding * 2);
+        let icon_total = (available / n_icons) as i32;
+        let start_y = (padding + (available - icon_total as u32 * n_icons) / 2) as i32;
         
         for (i, icon) in self.icons.iter().enumerate() {
             let iy = start_y + i as i32 * icon_total;
-            if y >= iy - 3 && y < iy + 36 + 14 {
+            if y >= iy - 3 && y < iy + icon_total as i32 {
                 return Some(icon.action);
             }
         }
@@ -2007,42 +2011,43 @@ struct AppConfig {
     /// Handle desktop icon action
     fn handle_icon_action(&mut self, action: IconAction) {
         let offset = (self.windows.len() as i32 * 25) % 200;
-        match action {
+        let id = match action {
             IconAction::OpenTerminal => {
-                self.create_window("Terminal", 150 + offset, 100 + offset, 500, 350, WindowType::Terminal);
+                self.create_window("Terminal", 150 + offset, 100 + offset, 500, 350, WindowType::Terminal)
             },
             IconAction::OpenFileManager => {
-                self.create_window("Files", 180 + offset, 120 + offset, 400, 350, WindowType::FileManager);
+                self.create_window("Files", 180 + offset, 120 + offset, 400, 350, WindowType::FileManager)
             },
             IconAction::OpenCalculator => {
-                self.create_window("Calculator", 450 + offset, 150 + offset, 200, 220, WindowType::Calculator);
+                self.create_window("Calculator", 450 + offset, 150 + offset, 200, 220, WindowType::Calculator)
             },
             IconAction::OpenNetwork => {
-                self.create_window("Network", 200 + offset, 140 + offset, 320, 200, WindowType::NetworkInfo);
+                self.create_window("Network", 200 + offset, 140 + offset, 320, 200, WindowType::NetworkInfo)
             },
             IconAction::OpenSettings => {
-                self.create_window("Settings", 300 + offset, 160 + offset, 350, 250, WindowType::Settings);
+                self.create_window("Settings", 300 + offset, 160 + offset, 350, 250, WindowType::Settings)
             },
             IconAction::OpenAbout => {
-                self.create_window("About TrustOS", 350 + offset, 180 + offset, 350, 200, WindowType::About);
+                self.create_window("About TrustOS", 350 + offset, 180 + offset, 350, 200, WindowType::About)
             },
             IconAction::OpenGame => {
-                self.create_window("Snake Game", 250 + offset, 120 + offset, 320, 320, WindowType::Game);
+                self.create_window("Snake Game", 250 + offset, 120 + offset, 320, 320, WindowType::Game)
             },
             IconAction::OpenEditor => {
-                self.create_window("TrustCode", 150 + offset, 80 + offset, 700, 500, WindowType::TextEditor);
+                self.create_window("TrustCode", 150 + offset, 80 + offset, 700, 500, WindowType::TextEditor)
             },
             IconAction::OpenGL3D => {
-                self.create_window("TrustGL 3D Demo", 150 + offset, 80 + offset, 400, 350, WindowType::Demo3D);
+                self.create_window("TrustGL 3D Demo", 150 + offset, 80 + offset, 400, 350, WindowType::Demo3D)
             },
             IconAction::OpenBrowser => {
-                self.create_window("TrustBrowser", 120 + offset, 60 + offset, 600, 450, WindowType::Browser);
+                self.create_window("TrustBrowser", 120 + offset, 60 + offset, 600, 450, WindowType::Browser)
             },
             IconAction::OpenModelEditor => {
-                self.create_window("TrustEdit 3D", 100 + offset, 60 + offset, 700, 500, WindowType::ModelEditor);
+                self.create_window("TrustEdit 3D", 100 + offset, 60 + offset, 700, 500, WindowType::ModelEditor)
             },
-
-        }
+        };
+        // Auto-focus newly created window
+        self.focus_window(id);
     }
     
     fn handle_taskbar_click(&mut self, x: i32, _y: i32) {
@@ -2511,6 +2516,44 @@ struct AppConfig {
         if key == 0x08 { // Backspace
             if !self.input_buffer.is_empty() {
                 self.input_buffer.pop();
+                // Update terminal display after backspace
+                if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                    if let Some(last) = window.content.last_mut() {
+                        *last = format!("root@trustos:~$ {}_", self.input_buffer);
+                    }
+                }
+            }
+        } else if key == 0x09 { // Tab — autosuggestion
+            let partial = self.input_buffer.clone();
+            if !partial.is_empty() {
+                let commands = [
+                    "help", "ls", "cd", "pwd", "mkdir", "rmdir", "touch", "rm", "cp", "mv",
+                    "cat", "echo", "clear", "time", "date", "whoami", "hostname", "uname",
+                    "free", "df", "ps", "top", "kill", "ifconfig", "ping", "curl",
+                    "desktop", "cosmic", "trustedit", "calculator", "snake", "browser",
+                    "neofetch", "tree", "find", "grep", "sort", "head", "tail",
+                    "lspci", "lshw", "lscpu", "lsmem", "dmesg", "benchmark",
+                    "history", "env", "login", "logout", "reboot", "shutdown",
+                    "holo", "matrix", "theme", "perf", "memdbg", "hexdump",
+                    "signature", "security", "showcase",
+                ];
+                let matches: Vec<&&str> = commands.iter().filter(|c| c.starts_with(&partial)).collect();
+                if matches.len() == 1 {
+                    self.input_buffer = String::from(*matches[0]);
+                    if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                        if let Some(last) = window.content.last_mut() {
+                            *last = format!("root@trustos:~$ {}_", self.input_buffer);
+                        }
+                    }
+                } else if matches.len() > 1 {
+                    // Show all matching commands
+                    let match_str: String = matches.iter().map(|m| **m).collect::<Vec<&str>>().join("  ");
+                    if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                        window.content.push(match_str);
+                        window.content.push(format!("root@trustos:~$ {}_", self.input_buffer));
+                        while window.content.len() > 18 { window.content.remove(0); }
+                    }
+                }
             }
         } else if key == 0x0D || key == 0x0A { // Enter
             let cmd = self.input_buffer.clone();
@@ -2910,11 +2953,14 @@ struct AppConfig {
         // Update animations each frame
         self.update_animations();
         
-        // Tick snake games
+        // Tick snake games — only when window is focused and visible
         let snake_ids: Vec<u32> = self.snake_states.keys().copied().collect();
         for id in snake_ids {
-            if let Some(snake) = self.snake_states.get_mut(&id) {
-                snake.tick();
+            let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
+            if is_active {
+                if let Some(snake) = self.snake_states.get_mut(&id) {
+                    snake.tick();
+                }
             }
         }
         
@@ -3148,17 +3194,21 @@ struct AppConfig {
     
     fn draw_background(&mut self) {
         // ═══════════════════════════════════════════════════════════════
-        // ADVANCING MATRIX RAIN — Depth-parallax holographic effect
+        // ADVANCING MATRIX RAIN + WIREFRAME 3D — Holographic effect
         // Slow columns = FAR (dim, gray/blue tint)
         // Fast columns = NEAR (bright, vivid green)
-        // Creates illusion of flying forward through the matrix
+        // Wireframe cube + grid floor emerge through the rain
         // ═══════════════════════════════════════════════════════════════
         const MATRIX_COLS: usize = 160;
         const TRAIL_LEN: usize = 30;
         const CHAR_H: u32 = 16;
+        const CELL_W: usize = 8;
+        const CELL_H: usize = 16;
         
         let height = self.height.saturating_sub(TASKBAR_HEIGHT);
         let width = self.width;
+        let grid_cols = (width as usize / CELL_W).min(240);
+        let grid_rows = (height as usize / CELL_H).min(68);
         
         // Clear background to pure black
         framebuffer::fill_rect(0, 0, width, height, 0xFF000000);
@@ -3167,6 +3217,105 @@ struct AppConfig {
             return;
         }
         
+        // ── STEP 1: Build wireframe intensity map ──
+        // Rotating cube + perspective grid floor
+        let mut wireframe = [[0u8; 68]; 240];
+        let time = self.frame_count as f32 * 0.02;
+        let cx = grid_cols as f32 / 2.0;
+        let cy = grid_rows as f32 / 2.0;
+        let scale_f = (grid_rows as f32 / 2.5).min(grid_cols as f32 / 3.5);
+        
+        // Rotating wireframe cube (12 edges, 30 interpolation points each)
+        let half = 0.5f32;
+        let vertices: [(f32, f32, f32); 8] = [
+            (-half, -half, -half), (half, -half, -half),
+            (half, half, -half), (-half, half, -half),
+            (-half, -half, half), (half, -half, half),
+            (half, half, half), (-half, half, half),
+        ];
+        let edges: [(usize, usize); 12] = [
+            (0,1), (1,2), (2,3), (3,0),
+            (4,5), (5,6), (6,7), (7,4),
+            (0,4), (1,5), (2,6), (3,7),
+        ];
+        let rot_x = time * 0.7;
+        let rot_y = time * 0.5;
+        let cos_xr = crate::graphics::holomatrix::cos_approx_pub(rot_x);
+        let sin_xr = crate::graphics::holomatrix::sin_approx_pub(rot_x);
+        let cos_yr = crate::graphics::holomatrix::cos_approx_pub(rot_y);
+        let sin_yr = crate::graphics::holomatrix::sin_approx_pub(rot_y);
+        
+        for (i1, i2) in edges.iter() {
+            let (vx1, vy1, vz1) = vertices[*i1];
+            let (vx2, vy2, vz2) = vertices[*i2];
+            for s in 0..30 {
+                let t = s as f32 / 29.0;
+                let x = vx1 * (1.0 - t) + vx2 * t;
+                let y_3d = vy1 * (1.0 - t) + vy2 * t;
+                let z = vz1 * (1.0 - t) + vz2 * t;
+                // Rotate X then Y
+                let ry = y_3d * cos_xr - z * sin_xr;
+                let rz = y_3d * sin_xr + z * cos_xr;
+                let rx = x * cos_yr + rz * sin_yr;
+                let rz2 = -x * sin_yr + rz * cos_yr;
+                let depth = 1.0 / (2.0 + rz2);
+                let sx = cx + rx * scale_f * depth;
+                let sy = cy + ry * scale_f * depth;
+                let col = sx as usize;
+                let row = sy as usize;
+                if col < grid_cols && row < grid_rows {
+                    let int = (120.0 + 80.0 * (1.0 - ((rz2 + 0.6) * 0.5).max(0.0).min(1.0))) as u8;
+                    wireframe[col][row] = wireframe[col][row].max(int);
+                    // Thicker lines: spread to adjacent cells
+                    if col > 0 { wireframe[col-1][row] = wireframe[col-1][row].max(int / 2); }
+                    if col < grid_cols-1 { wireframe[col+1][row] = wireframe[col+1][row].max(int / 2); }
+                }
+            }
+        }
+        
+        // Perspective grid floor (8x8 cells)
+        let grid_y_level = 0.4f32; // Below center
+        let grid_size = 1.5f32;
+        let g_half = grid_size / 2.0;
+        let cells = 8i32;
+        let cell_size = grid_size / cells as f32;
+        for i in 0..=cells {
+            let pos = -g_half + i as f32 * cell_size;
+            // Horizontal lines (along X)
+            for s in 0..40 {
+                let t = s as f32 / 39.0;
+                let x = -g_half + t * grid_size;
+                let z = pos;
+                let rx = x * cos_yr + z * sin_yr;
+                let rz = -x * sin_yr + z * cos_yr;
+                let depth = 1.0 / (2.0 + rz);
+                let sx = cx + rx * scale_f * depth;
+                let sy = cy + grid_y_level * scale_f * depth;
+                let col = sx as usize;
+                let row = sy as usize;
+                if col < grid_cols && row < grid_rows {
+                    wireframe[col][row] = wireframe[col][row].max(50);
+                }
+            }
+            // Vertical lines (along Z)
+            for s in 0..40 {
+                let t = s as f32 / 39.0;
+                let x = pos;
+                let z = -g_half + t * grid_size;
+                let rx = x * cos_yr + z * sin_yr;
+                let rz = -x * sin_yr + z * cos_yr;
+                let depth = 1.0 / (2.0 + rz);
+                let sx = cx + rx * scale_f * depth;
+                let sy = cy + grid_y_level * scale_f * depth;
+                let col = sx as usize;
+                let row = sy as usize;
+                if col < grid_cols && row < grid_rows {
+                    wireframe[col][row] = wireframe[col][row].max(50);
+                }
+            }
+        }
+        
+        // ── STEP 2: Render matrix rain with wireframe overlay ──
         let col_width = width / MATRIX_COLS as u32;
         
         for col in 0..MATRIX_COLS.min(self.matrix_heads.len()) {
@@ -3177,11 +3326,9 @@ struct AppConfig {
             // Update position
             let new_y = self.matrix_heads[col] + speed as i32;
             if new_y > height as i32 + (TRAIL_LEN as i32 * CHAR_H as i32) {
-                // Reset column: new seed, restart above screen
                 let new_seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
                 self.matrix_seeds[col] = new_seed;
                 self.matrix_heads[col] = -((new_seed % (height / 2)) as i32);
-                // Re-generate chars for this column
                 let chars: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
                 for i in 0..TRAIL_LEN {
                     let cs = new_seed.wrapping_add((i as u32).wrapping_mul(7919));
@@ -3192,44 +3339,44 @@ struct AppConfig {
             }
             
             let head_y = self.matrix_heads[col];
+            let depth_factor = (speed as f32 - 2.0) / 4.0;
+            let brightness_mult = 0.4 + depth_factor * 0.6;
+            let saturation = 0.3 + depth_factor * 0.7;
             
-            // ── DEPTH EFFECT based on speed ──
-            // Speed 2 (slow) = FAR  → 40% brightness, desaturated gray/blue
-            // Speed 6 (fast) = NEAR → 100% brightness, vivid pure green
-            let depth = (speed as f32 - 2.0) / 4.0; // 0.0=far, 1.0=near
-            let brightness_mult = 0.4 + depth * 0.6; // 40%→100%
-            let saturation = 0.3 + depth * 0.7; // 30%→100%
-            
-            // Draw falling trail
             for i in 0..TRAIL_LEN {
                 let char_y = head_y - (i as i32 * CHAR_H as i32);
                 if char_y < 0 || char_y >= height as i32 { continue; }
                 
-                // Base brightness: head=bright, then fade along trail
                 let base = if i == 0 { 255u8 }
                     else if i == 1 { 220u8 }
                     else { 180u8.saturating_sub((i as u8).saturating_mul(9)) };
                 if base < 20 { continue; }
                 
-                // Apply depth brightness multiplier
                 let brightness = ((base as f32) * brightness_mult) as u8;
                 
-                // Color with depth-based atmospheric perspective
-                // Far: gray/blue tint | Near: pure bright green
-                let (r, g, b) = if i == 0 {
-                    // Head character: white-ish glow
+                // Check wireframe intensity at this cell
+                let wf_col = (x as usize) / CELL_W;
+                let wf_row = (char_y as usize) / CELL_H;
+                let wf_boost = if wf_col < grid_cols && wf_row < grid_rows {
+                    wireframe[wf_col][wf_row] as u32
+                } else { 0 };
+                
+                let (r, g, b) = if wf_boost > 0 {
+                    // Wireframe area: bright cyan-green glow
+                    let intensity = (brightness as u32 + wf_boost).min(255) as u8;
+                    let cyan = (wf_boost * 3 / 2).min(200) as u8;
+                    (cyan / 3, intensity, cyan)
+                } else if i == 0 {
                     let w = (180.0 * brightness_mult) as u8;
                     (w, 255u8.min((brightness as u16 + 40) as u8), w)
                 } else {
-                    // Trail: green with atmospheric perspective
                     let gray_tint = ((20.0 * (1.0 - saturation)) as u8).min(60);
-                    let blue_tint = ((40.0 * (1.0 - saturation) + 10.0 * depth) as u8).min(80);
+                    let blue_tint = ((40.0 * (1.0 - saturation) + 10.0 * depth_factor) as u8).min(80);
                     (gray_tint, brightness, blue_tint)
                 };
                 
                 let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
                 
-                // Render character glyph
                 let char_seed = seed.wrapping_add((i as u32 * 7919) ^ (self.frame_count as u32 / 8));
                 let chars: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
                 let c = chars[(char_seed as usize) % chars.len()] as char;
@@ -3246,6 +3393,35 @@ struct AppConfig {
                             }
                         }
                     }
+                }
+            }
+        }
+        
+        // ── STEP 3: Draw wireframe edges directly (bright green lines) ──
+        // Draw cube edges as solid green lines on top of matrix rain
+        for (i1, i2) in edges.iter() {
+            let (vx1, vy1, vz1) = vertices[*i1];
+            let (vx2, vy2, vz2) = vertices[*i2];
+            for s in 0..60 {
+                let t = s as f32 / 59.0;
+                let x_3d = vx1 * (1.0 - t) + vx2 * t;
+                let y_3d = vy1 * (1.0 - t) + vy2 * t;
+                let z_3d = vz1 * (1.0 - t) + vz2 * t;
+                let ry = y_3d * cos_xr - z_3d * sin_xr;
+                let rz = y_3d * sin_xr + z_3d * cos_xr;
+                let rx = x_3d * cos_yr + rz * sin_yr;
+                let rz2 = -x_3d * sin_yr + rz * cos_yr;
+                let depth = 1.0 / (2.0 + rz2);
+                let sx = (cx + rx * scale_f * depth) * (CELL_W as f32);
+                let sy = (cy + ry * scale_f * depth) * (CELL_H as f32);
+                let px = sx as u32;
+                let py = sy as u32;
+                if px < width && py < height {
+                    let d_int = ((1.0 - ((rz2 + 0.5) * 0.4).max(0.0).min(1.0)) * 255.0) as u32;
+                    let edge_color = 0xFF000000 | (d_int.min(60) << 16) | (d_int.min(255) << 8) | (d_int.min(100));
+                    framebuffer::put_pixel(px, py, edge_color);
+                    if px + 1 < width { framebuffer::put_pixel(px + 1, py, edge_color); }
+                    if py + 1 < height { framebuffer::put_pixel(px, py + 1, edge_color); }
                 }
             }
         }
@@ -3355,77 +3531,170 @@ struct AppConfig {
         }
     }
     
-    /// Draw TrustOS logo watermark - Windows 11 style
+    /// Draw TrustOS logo watermark — shield + padlock + circuit key
+    /// Based on logo image: black/green shield, yellow-green padlock,
+    /// circuit-board key extending downward with branch nodes, "TrustOS" text
     fn draw_logo_watermark(&self) {
         let center_x = self.width / 2;
-        let center_y = (self.height - TASKBAR_HEIGHT) / 2;
+        let center_y = (self.height - TASKBAR_HEIGHT) / 2 - 30;
         
-        // Very subtle color - barely visible
-        let logo_color = 0xFF0A0E0B;
-        let logo_outline = 0xFF0C100D;
+        // Colors matching the logo image
+        let green_bright = 0xFF50E050u32;  // Bright green
+        let green_dark = 0xFF1A6B1Au32;    // Dark green for shield right half
+        let black_fill = 0xFF080808u32;     // Near-black for shield left half
+        let yellow_green = 0xFFC0E020u32;  // Yellow-green for padlock
+        let circuit_green = 0xFF40C040u32; // Circuit line green
+        let node_color = 0xFF60E060u32;     // Branch node dots
+        let text_gray = 0xFF999999u32;      // "Trust" in gray
+        let text_green = 0xFF40CC40u32;     // "OS" in green
+        let outline_green = 0xFF30A030u32; // Shield outline
         
-        // Shield shape
-        let shield_w = 60u32;
-        let shield_h = 75u32;
+        // ── Shield shape: 80x100, split diagonally (left=black, right=green) ──
+        let shield_w = 80u32;
+        let shield_h = 100u32;
         let sx = center_x - shield_w / 2;
-        let sy = center_y - shield_h / 2 - 10;
+        let sy = center_y - shield_h / 2;
         
-        // Draw shield with gradient
         for y in 0..shield_h {
             let ratio = y as f32 / shield_h as f32;
-            let width_factor = if ratio < 0.4 {
+            let width_factor = if ratio < 0.45 {
                 1.0
             } else {
-                let t = (ratio - 0.4) / 0.6;
-                1.0 - t * t // Smoother curve
+                let t = (ratio - 0.45) / 0.55;
+                (1.0 - t * t).max(0.0)
             };
             let w = (shield_w as f32 * width_factor).max(2.0) as u32;
-            let x_offset = (shield_w - w) / 2;
+            let x_off = (shield_w - w) / 2;
             
-            // Fill with slight gradient
-            let brightness = ((1.0 - ratio * 0.3) * 12.0) as u32;
-            let fill = 0xFF000000 | (brightness << 16) | ((brightness + 2) << 8) | brightness;
-            framebuffer::draw_hline(sx + x_offset, sy + y, w, fill);
+            for dx in 0..w {
+                let px = sx + x_off + dx;
+                let py = sy + y;
+                // Diagonal split: left of center = black, right = dark green
+                let local_x = x_off + dx;
+                let diagonal = (local_x as f32 / shield_w as f32) + (ratio * 0.2);
+                let fill = if diagonal < 0.5 { black_fill } else { green_dark };
+                framebuffer::put_pixel(px, py, fill);
+            }
+            
+            // Shield outline (both edges)
+            if w > 2 {
+                framebuffer::put_pixel(sx + x_off, sy + y, outline_green);
+                framebuffer::put_pixel(sx + x_off + w - 1, sy + y, outline_green);
+            }
+        }
+        // Top edge
+        framebuffer::draw_hline(sx, sy, shield_w, outline_green);
+        
+        // ── Padlock centered in upper shield ──
+        let lock_cx = center_x;
+        let lock_cy = sy + 30;
+        // Shackle (rounded arch)
+        for dy in 0..14u32 {
+            for dx in 0..20u32 {
+                let ddx = dx as i32 - 10;
+                let ddy = dy as i32;
+                let r_outer = 10i32;
+                let r_inner = 6i32;
+                if ddy <= r_outer && (ddx * ddx + (ddy - r_outer) * (ddy - r_outer)) <= r_outer * r_outer
+                   && (ddx * ddx + (ddy - r_outer) * (ddy - r_outer)) >= r_inner * r_inner {
+                    framebuffer::put_pixel(lock_cx - 10 + dx, lock_cy - 14 + dy, yellow_green);
+                }
+            }
+        }
+        // Lock body (rectangle)
+        framebuffer::fill_rect(lock_cx - 12, lock_cy, 24, 18, yellow_green);
+        // Keyhole in lock body
+        for dy in 0..6u32 {
+            for dx in 0..6u32 {
+                let ddx = dx as i32 - 3;
+                let ddy = dy as i32 - 3;
+                if ddx * ddx + ddy * ddy <= 9 {
+                    framebuffer::put_pixel(lock_cx - 3 + dx, lock_cy + 4 + dy, black_fill);
+                }
+            }
+        }
+        // Keyhole slot
+        framebuffer::fill_rect(lock_cx - 1, lock_cy + 9, 3, 5, black_fill);
+        
+        // ── Circuit-board key extending downward from lock ──
+        let key_start_y = lock_cy + 18;
+        let key_end_y = sy + shield_h + 50;
+        
+        // Main vertical stem
+        for ky in key_start_y..key_end_y {
+            framebuffer::put_pixel(lock_cx - 1, ky, circuit_green);
+            framebuffer::put_pixel(lock_cx, ky, circuit_green);
+            framebuffer::put_pixel(lock_cx + 1, ky, circuit_green);
         }
         
-        // Outline
-        for y in 0..shield_h {
-            let ratio = y as f32 / shield_h as f32;
-            let t = if ratio < 0.4 { 0.0 } else { (ratio - 0.4) / 0.6 };
-            let width_factor = if ratio < 0.4 { 1.0 } else { 1.0 - square(t) };
-            let w = (shield_w as f32 * width_factor).max(2.0) as u32;
-            let x_offset = (shield_w - w) / 2;
-            framebuffer::put_pixel(sx + x_offset, sy + y, logo_outline);
-            if w > 1 {
-                framebuffer::put_pixel(sx + x_offset + w - 1, sy + y, logo_outline);
+        // Branch connections at regular intervals
+        let branches: &[(u32, i32, u32)] = &[
+            (key_start_y + 8, -20, 6),   // Left branch
+            (key_start_y + 8, 18, 6),    // Right branch
+            (key_start_y + 22, -25, 5),  // Left branch 2
+            (key_start_y + 22, 22, 5),   // Right branch 2
+            (key_start_y + 36, -15, 4),  // Left branch 3
+            (key_start_y + 36, 15, 4),   // Right branch 3
+        ];
+        
+        for &(by, bx_off, node_r) in branches {
+            if by >= self.height.saturating_sub(TASKBAR_HEIGHT) { continue; }
+            // Draw branch line
+            let sign: i32 = if bx_off < 0 { -1 } else { 1 };
+            let abs_off = if bx_off < 0 { -bx_off } else { bx_off };
+            for dx in 0..abs_off {
+                let px = (lock_cx as i32 + sign * dx) as u32;
+                if px < self.width {
+                    framebuffer::put_pixel(px, by, circuit_green);
+                    framebuffer::put_pixel(px, by + 1, circuit_green);
+                }
+            }
+            // Node dot at end of branch
+            let node_x = (lock_cx as i32 + bx_off) as u32;
+            for ndy in 0..node_r {
+                for ndx in 0..node_r {
+                    let ddx = ndx as i32 - node_r as i32 / 2;
+                    let ddy = ndy as i32 - node_r as i32 / 2;
+                    if ddx * ddx + ddy * ddy <= (node_r as i32 / 2) * (node_r as i32 / 2) {
+                        let px = node_x + ndx;
+                        let py = by + ndy;
+                        if px < self.width && py < self.height.saturating_sub(TASKBAR_HEIGHT) {
+                            framebuffer::put_pixel(px, py, node_color);
+                        }
+                    }
+                }
             }
         }
         
-        // Lock icon inside shield
-        let lock_x = center_x - 8;
-        let lock_y = sy + 20;
-        // Lock body
-        framebuffer::fill_rect(lock_x, lock_y + 8, 16, 12, logo_outline);
-        // Lock shackle (arc)
-        framebuffer::draw_rect(lock_x + 3, lock_y, 10, 10, logo_outline);
-        framebuffer::fill_rect(lock_x + 5, lock_y + 2, 6, 6, logo_color);
+        // Bottom terminator node (larger)
+        if key_end_y + 4 < self.height.saturating_sub(TASKBAR_HEIGHT) {
+            for dy in 0..8u32 {
+                for dx in 0..8u32 {
+                    let ddx = dx as i32 - 4;
+                    let ddy = dy as i32 - 4;
+                    if ddx * ddx + ddy * ddy <= 16 {
+                        framebuffer::put_pixel(lock_cx - 4 + dx, key_end_y + dy, node_color);
+                    }
+                }
+            }
+        }
         
-        // "TrustOS" text - subtle
-        let text = "TrustOS";
-        let text_x = (center_x - text.len() as u32 * 4) as i32;
-        let text_y = (sy + shield_h + 12) as i32;
-        self.draw_text(text_x, text_y, text, logo_outline);
-        
-        // Version even more subtle
-        let version = "v0.1.0";
-        let ver_x = (center_x - version.len() as u32 * 4) as i32;
-        let ver_y = text_y + 14;
-        self.draw_text(ver_x, ver_y, version, 0xFF080A09);
+        // ── "TrustOS" text below circuit key ──
+        let text_y_pos = (key_end_y + 16) as i32;
+        if (text_y_pos + 16) < self.height.saturating_sub(TASKBAR_HEIGHT) as i32 {
+            // "Trust" in gray
+            let trust_x = (center_x as i32) - 28;
+            self.draw_text(trust_x, text_y_pos, "Trust", text_gray);
+            // "OS" in green, right after
+            let os_x = trust_x + 40;
+            self.draw_text(os_x, text_y_pos, "OS", text_green);
+        }
     }
     
     fn draw_desktop_icons(&self) {
         // ═══════════════════════════════════════════════════════════════
         // LEFT DOCK SIDEBAR — COSMIC V2 style vertical app dock
+        // Icons dynamically fill the full sidebar height
         // ═══════════════════════════════════════════════════════════════
         let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
         
@@ -3435,17 +3704,21 @@ struct AppConfig {
         framebuffer::fill_rect(DOCK_WIDTH + 9, 0, 1, dock_h, GREEN_GHOST);
         
         let icon_size = 36u32;
-        let gap = 14u32;
-        let start_y = 12u32;
+        let n_icons = self.icons.len().max(1) as u32;
+        let padding = 12u32;
+        // Each icon cell: icon + label space. Compute total available and distribute evenly
+        let available = dock_h.saturating_sub(padding * 2);
+        let icon_total = available / n_icons; // dynamic spacing per icon
+        let start_y = padding + (available - icon_total * n_icons) / 2; // center vertically
         
         for (i, icon) in self.icons.iter().enumerate() {
             let ix = 12u32;
-            let iy = start_y + (i as u32) * (icon_size + gap);
+            let iy = start_y + (i as u32) * icon_total;
             if iy + icon_size > dock_h { break; }
             
             // Hit test
             let is_hovered = self.cursor_x >= 0 && self.cursor_x < (DOCK_WIDTH + 10) as i32
-                && self.cursor_y >= iy as i32 && self.cursor_y < (iy + icon_size + gap) as i32;
+                && self.cursor_y >= iy as i32 && self.cursor_y < (iy + icon_total) as i32;
             
             let icon_color = if is_hovered { GREEN_PRIMARY } else { GREEN_SECONDARY };
             let label_color = if is_hovered { 0xFFFFFFFF } else { 0xFF888888 };
