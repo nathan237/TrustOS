@@ -3927,12 +3927,14 @@ struct AppConfig {
         // REFINED TRANSLUCENT TASKBAR — Frosted glass with smooth text
         // ═══════════════════════════════════════════════════════════════
         
-        // Translucent dark glass background (alpha blend over wallpaper/desktop)
-        framebuffer::fill_rect_alpha(0, y, self.width, TASKBAR_HEIGHT, 0x080C0A, 200);
+        // Translucent dark glass background (opaque base + subtle green tint)
+        // Use opaque fill first, then translucent green overlay for glass effect
+        framebuffer::fill_rect(0, y, self.width, TASKBAR_HEIGHT, 0xFF080C0A);
+        framebuffer::fill_rect_alpha(0, y, self.width, TASKBAR_HEIGHT, 0x00AA44, 15);
         
         // Top border: soft gradient line (2px, fading green)
-        framebuffer::fill_rect_alpha(0, y, self.width, 1, 0x00CC66, 80);
-        framebuffer::fill_rect_alpha(0, y + 1, self.width, 1, 0x00AA44, 40);
+        framebuffer::fill_rect(0, y, self.width, 1, 0xFF0D3D1A);
+        framebuffer::fill_rect_alpha(0, y + 1, self.width, 1, 0x00AA44, 25);
         
         // ── TrustOS button (left) ──
         let start_hover = self.cursor_x >= 4 && self.cursor_x < 112 && self.cursor_y >= y as i32;
