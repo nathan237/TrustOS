@@ -128,6 +128,10 @@ pub struct Mesh {
     pub edges: alloc::vec::Vec<(usize, usize)>,
     /// Optional per-edge color (ARGB). If set, overrides wire_color for each edge.
     pub edge_colors: Option<alloc::vec::Vec<u32>>,
+    /// Triangle faces: (v0, v1, v2) indices into vertices. Used for filled rendering.
+    pub faces: Option<alloc::vec::Vec<(usize, usize, usize)>>,
+    /// Optional per-face color (ARGB). If set, overrides base color for each face.
+    pub face_colors: Option<alloc::vec::Vec<u32>>,
 }
 
 pub fn mesh_cube() -> Mesh {
@@ -142,7 +146,21 @@ pub fn mesh_cube() -> Mesh {
         (4,5),(5,6),(6,7),(7,4), // back
         (0,4),(1,5),(2,6),(3,7), // sides
     ];
-    Mesh { vertices: v, edges: e, edge_colors: None }
+    let f = alloc::vec![
+        // Front
+        (0, 1, 2), (0, 2, 3),
+        // Back
+        (5, 4, 7), (5, 7, 6),
+        // Top
+        (3, 2, 6), (3, 6, 7),
+        // Bottom
+        (4, 5, 1), (4, 1, 0),
+        // Right
+        (1, 5, 6), (1, 6, 2),
+        // Left
+        (4, 0, 3), (4, 3, 7),
+    ];
+    Mesh { vertices: v, edges: e, edge_colors: None, faces: Some(f), face_colors: None }
 }
 
 pub fn mesh_pyramid() -> Mesh {
@@ -155,7 +173,13 @@ pub fn mesh_pyramid() -> Mesh {
         (0,1),(1,2),(2,3),(3,0), // base
         (0,4),(1,4),(2,4),(3,4), // sides to apex
     ];
-    Mesh { vertices: v, edges: e, edge_colors: None }
+    let f = alloc::vec![
+        // Base
+        (0, 1, 2), (0, 2, 3),
+        // Sides to apex
+        (0, 1, 4), (1, 2, 4), (2, 3, 4), (3, 0, 4),
+    ];
+    Mesh { vertices: v, edges: e, edge_colors: None, faces: Some(f), face_colors: None }
 }
 
 pub fn mesh_diamond() -> Mesh {
@@ -170,7 +194,13 @@ pub fn mesh_diamond() -> Mesh {
         (0,1),(0,2),(0,3),(0,4), // top edges
         (5,1),(5,2),(5,3),(5,4), // bottom edges
     ];
-    Mesh { vertices: v, edges: e, edge_colors: None }
+    let f = alloc::vec![
+        // Top faces
+        (0, 1, 2), (0, 2, 3), (0, 3, 4), (0, 4, 1),
+        // Bottom faces
+        (5, 2, 1), (5, 3, 2), (5, 4, 3), (5, 1, 4),
+    ];
+    Mesh { vertices: v, edges: e, edge_colors: None, faces: Some(f), face_colors: None }
 }
 
 pub fn mesh_torus(major_r: f32, minor_r: f32, major_seg: usize, minor_seg: usize) -> Mesh {
@@ -197,7 +227,7 @@ pub fn mesh_torus(major_r: f32, minor_r: f32, major_seg: usize, minor_seg: usize
             edges.push((idx, next_i));
         }
     }
-    Mesh { vertices: verts, edges, edge_colors: None }
+    Mesh { vertices: verts, edges, edge_colors: None, faces: None, face_colors: None }
 }
 
 pub fn mesh_icosphere(radius: f32) -> Mesh {
@@ -226,7 +256,7 @@ pub fn mesh_icosphere(radius: f32) -> Mesh {
         (8,9),
         (10,11),
     ];
-    Mesh { vertices: v, edges: e, edge_colors: None }
+    Mesh { vertices: v, edges: e, edge_colors: None, faces: None, face_colors: None }
 }
 
 pub fn mesh_grid(half: f32, divisions: usize) -> Mesh {
@@ -245,7 +275,7 @@ pub fn mesh_grid(half: f32, divisions: usize) -> Mesh {
             if i + 1 < n { edges.push((idx, idx + n)); }
         }
     }
-    Mesh { vertices: verts, edges, edge_colors: None }
+    Mesh { vertices: verts, edges, edge_colors: None, faces: None, face_colors: None }
 }
 
 /// Simplified Penger (blocky penguin meme character) — hand-crafted low-poly wireframe
@@ -416,7 +446,7 @@ pub fn mesh_penger() -> Mesh {
     edges.push((crown + 4, head_top + 3)); // back-left area
     edges.push((crown + 6, head_top));     // front-left
 
-    Mesh { vertices: verts, edges, edge_colors: None }
+    Mesh { vertices: verts, edges, edge_colors: None, faces: None, face_colors: None }
 }
 
 /// 3D block text "TRUSTOS" — wireframe letters with depth extrusion
@@ -492,7 +522,7 @@ pub fn mesh_trustos_text() -> Mesh {
     add_polyline(&mut verts, &mut edges,
         &[(lw, top), (0.0, top), (0.0, mid), (lw, mid), (lw, bot), (0.0, bot)], ox, depth);
 
-    Mesh { vertices: verts, edges, edge_colors: None }
+    Mesh { vertices: verts, edges, edge_colors: None, faces: None, face_colors: None }
 }
 
 /// Low-poly volumetric humanoid — inspired by paper-craft / mannequin style
@@ -698,7 +728,7 @@ pub fn mesh_character() -> Mesh {
     edges.push((rsh, rft + 4)); colors.push(col_limb);
     edges.push((rsh + 1, rft + 5)); colors.push(col_limb);
 
-    Mesh { vertices: verts, edges, edge_colors: Some(colors) }
+    Mesh { vertices: verts, edges, edge_colors: Some(colors), faces: None, face_colors: None }
 }
 
 pub fn mesh_helix(radius: f32, height: f32, turns: f32, seg: usize) -> Mesh {
@@ -724,7 +754,203 @@ pub fn mesh_helix(radius: f32, height: f32, turns: f32, seg: usize) -> Mesh {
     for i in (0..seg).step_by(seg / 8) {
         edges.push((i, i + half));
     }
-    Mesh { vertices: verts, edges, edge_colors: None }
+    Mesh { vertices: verts, edges, edge_colors: None, faces: None, face_colors: None }
+}
+
+// ─── Filled 3D Rendering ─────────────────────────────────────────────────
+
+/// Cross product of two V3 vectors
+#[inline(always)]
+fn cross(a: V3, b: V3) -> V3 {
+    V3 {
+        x: a.y * b.z - a.z * b.y,
+        y: a.z * b.x - a.x * b.z,
+        z: a.x * b.y - a.y * b.x,
+    }
+}
+
+/// Dot product of two V3 vectors
+#[inline(always)]
+fn dot(a: V3, b: V3) -> f32 {
+    a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+/// Subtract two V3 vectors
+#[inline(always)]
+fn sub(a: V3, b: V3) -> V3 {
+    V3 { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z }
+}
+
+/// Normalize a V3 vector
+#[inline(always)]
+fn normalize(v: V3) -> V3 {
+    let len = fast_sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+    if len < 0.0001 { return V3 { x: 0.0, y: 0.0, z: 1.0 }; }
+    let inv = 1.0 / len;
+    V3 { x: v.x * inv, y: v.y * inv, z: v.z * inv }
+}
+
+/// Scanline triangle rasterizer with flat shading
+/// Fills a 2D triangle defined by 3 screen-space points (x,y) with a solid color.
+/// Uses the standard top-down scanline approach: sort by Y, split at mid vertex.
+#[inline(never)]
+fn fill_triangle(buf: &mut [u32], w: usize, h: usize,
+                 mut x0: i32, mut y0: i32,
+                 mut x1: i32, mut y1: i32,
+                 mut x2: i32, mut y2: i32,
+                 color: u32) {
+    // Sort vertices by Y (y0 <= y1 <= y2)
+    if y0 > y1 { core::mem::swap(&mut x0, &mut x1); core::mem::swap(&mut y0, &mut y1); }
+    if y1 > y2 { core::mem::swap(&mut x1, &mut x2); core::mem::swap(&mut y1, &mut y2); }
+    if y0 > y1 { core::mem::swap(&mut x0, &mut x1); core::mem::swap(&mut y0, &mut y1); }
+
+    let total_h = y2 - y0;
+    if total_h == 0 { return; }
+
+    // Clamp to screen
+    let y_start = y0.max(0);
+    let y_end = y2.min(h as i32 - 1);
+
+    for y in y_start..=y_end {
+        let second_half = y >= y1;
+        let seg_h = if second_half { y2 - y1 } else { y1 - y0 };
+
+        // Interpolate X along the two active edges
+        let t_total = (y - y0) as f32 / total_h as f32;
+        let xa = x0 as f32 + (x2 - x0) as f32 * t_total; // long edge
+
+        let xb = if seg_h == 0 {
+            xa // degenerate
+        } else if second_half {
+            let t_seg = (y - y1) as f32 / seg_h as f32;
+            x1 as f32 + (x2 - x1) as f32 * t_seg
+        } else {
+            let t_seg = (y - y0) as f32 / seg_h as f32;
+            x0 as f32 + (x1 - x0) as f32 * t_seg
+        };
+
+        let mut left = xa as i32;
+        let mut right = xb as i32;
+        if left > right { core::mem::swap(&mut left, &mut right); }
+
+        // Clamp X to screen
+        left = left.max(0);
+        right = right.min(w as i32 - 1);
+
+        let row = y as usize * w;
+        for x in left..=right {
+            let idx = row + x as usize;
+            if idx < buf.len() {
+                buf[idx] = color;
+            }
+        }
+    }
+}
+
+/// Render a mesh with filled triangles, flat shading, backface culling, and painter's sort.
+/// `light_dir` should be normalized. `base_color` is the object's base ARGB color.
+/// `ambient` is the minimum brightness (0.0-1.0).
+pub fn render_filled_mesh(buf: &mut [u32], w: usize, h: usize,
+                          mesh: &Mesh, angle_y: f32, angle_x: f32, dz: f32,
+                          base_color: u32, light_dir: V3, ambient: f32) {
+    let faces = match &mesh.faces {
+        Some(f) => f,
+        None => return,
+    };
+
+    // Pre-transform all vertices
+    let mut transformed = alloc::vec::Vec::with_capacity(mesh.vertices.len());
+    let mut screen_pts = alloc::vec::Vec::with_capacity(mesh.vertices.len());
+    for v in &mesh.vertices {
+        let rotated = rotate_x(rotate_y(*v, angle_y), angle_x);
+        let translated = translate_z(rotated, dz);
+        let scr = to_screen(project(translated), w, h);
+        transformed.push(translated);
+        screen_pts.push(scr);
+    }
+
+    // Build face data: (face_index, avg_z) for painter's sort
+    // Also compute normal for backface culling and shading
+    struct FaceData {
+        idx: usize,
+        avg_z: f32,
+        brightness: f32,
+    }
+    let mut visible_faces = alloc::vec::Vec::with_capacity(faces.len());
+
+    for (i, &(a, b, c)) in faces.iter().enumerate() {
+        if a >= transformed.len() || b >= transformed.len() || c >= transformed.len() { continue; }
+
+        let va = transformed[a];
+        let vb = transformed[b];
+        let vc = transformed[c];
+
+        // Face normal (in camera space — after rotation, before projection)
+        let edge1 = sub(vb, va);
+        let edge2 = sub(vc, va);
+        let normal = normalize(cross(edge1, edge2));
+
+        // Backface culling: if normal points away from camera (z > 0), skip
+        // Camera looks down -Z in our coordinate system after translation
+        // So face is visible if normal.z < 0 (pointing toward camera)
+        if normal.z > 0.0 { continue; }
+
+        // Flat shading: dot(normal, light_dir)
+        let ndotl = dot(normal, light_dir);
+        let brightness = ambient + (1.0 - ambient) * ndotl.max(0.0);
+
+        let avg_z = (va.z + vb.z + vc.z) / 3.0;
+        visible_faces.push(FaceData { idx: i, avg_z, brightness });
+    }
+
+    // Painter's sort: far faces first (higher z = further away)
+    // Simple insertion sort (good for small N, no alloc needed)
+    for i in 1..visible_faces.len() {
+        let mut j = i;
+        while j > 0 && visible_faces[j].avg_z > visible_faces[j - 1].avg_z {
+            visible_faces.swap(j, j - 1);
+            j -= 1;
+        }
+    }
+
+    // Render sorted faces
+    let base_r = (base_color >> 16) & 0xFF;
+    let base_g = (base_color >> 8) & 0xFF;
+    let base_b = base_color & 0xFF;
+
+    for face in &visible_faces {
+        let (a, b, c) = faces[face.idx];
+        let (sx0, sy0) = screen_pts[a];
+        let (sx1, sy1) = screen_pts[b];
+        let (sx2, sy2) = screen_pts[c];
+
+        // Per-face color if available
+        let (fr, fg, fb) = match &mesh.face_colors {
+            Some(fc) if face.idx < fc.len() => {
+                ((fc[face.idx] >> 16) & 0xFF,
+                 (fc[face.idx] >> 8) & 0xFF,
+                 fc[face.idx] & 0xFF)
+            }
+            _ => (base_r, base_g, base_b),
+        };
+
+        let r = ((fr as f32 * face.brightness) as u32).min(255);
+        let g = ((fg as f32 * face.brightness) as u32).min(255);
+        let b = ((fb as f32 * face.brightness) as u32).min(255);
+        let shaded = 0xFF000000 | (r << 16) | (g << 8) | b;
+
+        fill_triangle(buf, w, h, sx0, sy0, sx1, sy1, sx2, sy2, shaded);
+    }
+
+    // Wireframe overlay (edges drawn on top for definition)
+    for &(a, b) in &mesh.edges {
+        if a >= screen_pts.len() || b >= screen_pts.len() { continue; }
+        let (x0, y0) = screen_pts[a];
+        let (x1, y1) = screen_pts[b];
+        // Dark edge outline
+        let edge_color = 0xFF000000 | ((base_r / 3) << 16) | ((base_g / 3) << 8) | (base_b / 3);
+        draw_line(buf, w, h, x0, y0, x1, y1, edge_color);
+    }
 }
 
 // ─── Drawing ─────────────────────────────────────────────────────────────

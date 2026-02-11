@@ -977,6 +977,7 @@ fn execute_command(cmd: &str) {
         // Showcase — automated demo for marketing videos
         "showcase" => cmd_showcase(args),
         "showcase3d" | "demo3d" => cmd_showcase3d(),
+        "filled3d" => cmd_filled3d(),
         
         // Desktop Environment - windowed desktop with full app support
         "desktop" | "gui" => launch_desktop_env(None),
@@ -4239,6 +4240,214 @@ pub fn cmd_showcase3d() {
     }
     crate::framebuffer::clear();
     crate::serial_println!("[SHOWCASE3D] Showcase complete");
+}
+
+/// Test command: filled 3D rendering with flat shading
+/// Renders rotating cube, pyramid, and diamond with solid filled faces
+pub fn cmd_filled3d() {
+    use crate::formula3d::V3;
+
+    let (sw, sh) = crate::framebuffer::get_dimensions();
+    let w = sw as usize;
+    let h = sh as usize;
+    if w == 0 || h == 0 { return; }
+
+    let was_db = crate::framebuffer::is_double_buffer_enabled();
+    if !was_db {
+        crate::framebuffer::init_double_buffer();
+        crate::framebuffer::set_double_buffer_mode(true);
+    }
+
+    let mut buf = alloc::vec![0xFF000000u32; w * h];
+
+    let draw_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+        let glyph = crate::framebuffer::font::get_glyph(c);
+        for (row, &bits) in glyph.iter().enumerate() {
+            for bit in 0..8u32 {
+                if bits & (0x80 >> bit) != 0 {
+                    for sy in 0..scale {
+                        for sx in 0..scale {
+                            let px = cx + bit as usize * scale + sx;
+                            let py = cy + row * scale + sy;
+                            if px < w && py < h {
+                                buf[py * w + px] = color;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    let blit = |buf: &[u32], w: usize, h: usize| {
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+            let bb = bb_ptr as *mut u32;
+            let bb_s = bb_stride as usize;
+            for y in 0..h.min(bb_h as usize) {
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        buf[y * w..].as_ptr(),
+                        bb.add(y * bb_s),
+                        w,
+                    );
+                }
+            }
+        }
+        crate::framebuffer::swap_buffers();
+    };
+
+    let ticks_now = || crate::logger::get_ticks();
+
+    crate::serial_println!("[FILLED3D] Starting filled 3D test ({}x{})", w, h);
+
+    // Light direction (top-left-front)
+    let light = crate::formula3d::V3 { x: -0.4, y: 0.6, z: -0.7 };
+    // Normalize manually
+    let len = crate::formula3d::fast_sqrt(light.x * light.x + light.y * light.y + light.z * light.z);
+    let light = V3 { x: light.x / len, y: light.y / len, z: light.z / len };
+
+    // Build meshes with faces
+    let cube = crate::formula3d::mesh_cube();
+    let pyramid = crate::formula3d::mesh_pyramid();
+    let diamond = crate::formula3d::mesh_diamond();
+
+    let mut angle_y: f32 = 0.0;
+    let mut frame = 0u32;
+    let start = ticks_now();
+    let mut fps_start = start;
+    let mut fps_frames = 0u32;
+    let mut cur_fps = 0u32;
+
+    loop {
+        let elapsed = ticks_now().saturating_sub(start);
+        if elapsed >= 3000 { break; } // 30 seconds
+        if let Some(k) = crate::keyboard::try_read_key() {
+            if k == 27 { break; }
+        }
+
+        // Clear to dark blue-grey
+        for p in buf.iter_mut() { *p = 0xFF0C1018; }
+
+        angle_y += 0.025;
+        let angle_x = 0.35 + crate::formula3d::fast_sin(frame as f32 * 0.008) * 0.2;
+
+        // Draw 3 objects with different offsets
+        // Left: pyramid (offset view by adjusting a virtual camera offset via vertices)
+        // We render each at dz=2.5 but shift the angle to spread them visually
+        // For a proper side-by-side we'd need per-object translation.
+        // Simple approach: render 3 separate viewports (left/center/right thirds)
+
+        let third = w / 3;
+
+        // Left third: Pyramid
+        {
+            let mut sub_buf = alloc::vec![0xFF0C1018u32; third * h];
+            crate::formula3d::render_filled_mesh(&mut sub_buf, third, h,
+                &pyramid, angle_y * 0.8, angle_x + 0.15, 2.2,
+                0xFFFF8844, light, 0.12);
+            // Copy sub_buf into main buf
+            for y in 0..h {
+                for x in 0..third {
+                    let src_idx = y * third + x;
+                    let dst_idx = y * w + x;
+                    if src_idx < sub_buf.len() && dst_idx < buf.len() {
+                        buf[dst_idx] = sub_buf[src_idx];
+                    }
+                }
+            }
+        }
+
+        // Center third: Cube
+        {
+            let mut sub_buf = alloc::vec![0xFF0C1018u32; third * h];
+            crate::formula3d::render_filled_mesh(&mut sub_buf, third, h,
+                &cube, angle_y, angle_x, 2.2,
+                0xFF4488FF, light, 0.12);
+            for y in 0..h {
+                for x in 0..third {
+                    let src_idx = y * third + x;
+                    let dst_idx = y * w + third + x;
+                    if src_idx < sub_buf.len() && dst_idx < buf.len() {
+                        buf[dst_idx] = sub_buf[src_idx];
+                    }
+                }
+            }
+        }
+
+        // Right third: Diamond
+        {
+            let mut sub_buf = alloc::vec![0xFF0C1018u32; third * h];
+            crate::formula3d::render_filled_mesh(&mut sub_buf, third, h,
+                &diamond, angle_y * 1.3, angle_x - 0.1, 2.2,
+                0xFFFF44CC, light, 0.12);
+            for y in 0..h {
+                for x in 0..third {
+                    let src_idx = y * third + x;
+                    let dst_idx = y * w + 2 * third + x;
+                    if src_idx < sub_buf.len() && dst_idx < buf.len() {
+                        buf[dst_idx] = sub_buf[src_idx];
+                    }
+                }
+            }
+        }
+
+        // FPS counter
+        fps_frames += 1;
+        let fps_elapsed = ticks_now().saturating_sub(fps_start);
+        if fps_elapsed >= 100 {
+            cur_fps = fps_frames;
+            fps_frames = 0;
+            fps_start = ticks_now();
+        }
+
+        // Stats bar
+        let bar_h = 22usize;
+        let bar_y = h.saturating_sub(bar_h);
+        for y in bar_y..h {
+            for x in 0..w {
+                let idx = y * w + x;
+                if idx < buf.len() { buf[idx] = 0xFF000000; }
+            }
+        }
+        let stats = alloc::format!("Filled 3D | {} FPS | Flat Shading + Backface Cull + Painter Sort | ESC=exit", cur_fps);
+        for (i, ch) in stats.chars().enumerate() {
+            let cx = 8 + i * 8;
+            if cx + 8 > w { break; }
+            draw_char(&mut buf, w, h, cx, bar_y + 4, ch, 0xFF00FF88, 1);
+        }
+
+        // Title on first frames
+        if frame < 200 {
+            let alpha = if frame < 30 { frame * 255 / 30 } else if frame > 170 { (200 - frame) * 255 / 30 } else { 255 };
+            let a = (alpha.min(255)) as u32;
+            let c = 0xFF000000 | (a << 16) | (a << 8) | a;
+            let title = "FILLED 3D TEST";
+            let tw = title.len() * 8 * 3;
+            let tx = if tw < w { (w - tw) / 2 } else { 0 };
+            for (i, ch) in title.chars().enumerate() {
+                draw_char(&mut buf, w, h, tx + i * 24, 30, ch, c, 3);
+            }
+            let sub = "Scanline Rasterizer + Flat Shading";
+            let stw = sub.len() * 8 * 2;
+            let stx = if stw < w { (w - stw) / 2 } else { 0 };
+            let sc = 0xFF000000 | ((a * 180 / 255) << 8);
+            for (i, ch) in sub.chars().enumerate() {
+                draw_char(&mut buf, w, h, stx + i * 16, 80, ch, sc, 2);
+            }
+        }
+
+        blit(&buf, w, h);
+        frame += 1;
+    }
+
+    // Restore
+    for p in buf.iter_mut() { *p = 0xFF000000; }
+    blit(&buf, w, h);
+    if !was_db {
+        crate::framebuffer::set_double_buffer_mode(false);
+    }
+    crate::framebuffer::clear();
+    crate::serial_println!("[FILLED3D] Test complete, {} frames", frame);
 }
 
 /// Wrapper for desktop without initial app

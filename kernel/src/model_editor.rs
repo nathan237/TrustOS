@@ -313,6 +313,8 @@ impl ModelEditorState {
             vertices: self.vertices.clone(),
             edges: self.edges.clone(),
             edge_colors: None,
+            faces: None,
+            face_colors: None,
         }
     }
     
