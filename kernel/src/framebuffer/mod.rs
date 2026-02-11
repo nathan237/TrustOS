@@ -663,6 +663,59 @@ pub fn draw_hline(x: u32, y: u32, len: u32, color: u32) {
     fill_rect(x, y, len, 1, color);
 }
 
+/// Draw filled rectangle with alpha blending (0=transparent, 255=opaque)
+/// Reads existing pixels and blends the given color on top.
+pub fn fill_rect_alpha(x: u32, y: u32, w: u32, h: u32, color: u32, alpha: u32) {
+    let width = FB_WIDTH.load(Ordering::SeqCst) as u32;
+    let height = FB_HEIGHT.load(Ordering::SeqCst) as u32;
+    
+    let x1 = x.min(width);
+    let y1 = y.min(height);
+    let x2 = (x + w).min(width);
+    let y2 = (y + h).min(height);
+    if x2 <= x1 || y2 <= y1 { return; }
+    
+    let alpha = alpha.min(255);
+    let inv = 255 - alpha;
+    let sr = (color >> 16) & 0xFF;
+    let sg = (color >> 8) & 0xFF;
+    let sb = color & 0xFF;
+    
+    if USE_BACKBUFFER.load(Ordering::SeqCst) {
+        if let Some(ref mut buf) = *BACKBUFFER.lock() {
+            for py in y1..y2 {
+                let row = py as usize * width as usize;
+                for px in x1..x2 {
+                    let idx = row + px as usize;
+                    if idx < buf.len() {
+                        let existing = buf[idx];
+                        let dr = (existing >> 16) & 0xFF;
+                        let dg = (existing >> 8) & 0xFF;
+                        let db = existing & 0xFF;
+                        let r = (sr * alpha + dr * inv) / 255;
+                        let g = (sg * alpha + dg * inv) / 255;
+                        let b = (sb * alpha + db * inv) / 255;
+                        buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                    }
+                }
+            }
+        }
+    } else {
+        for py in y1..y2 {
+            for px in x1..x2 {
+                let existing = get_pixel(px, py);
+                let dr = (existing >> 16) & 0xFF;
+                let dg = (existing >> 8) & 0xFF;
+                let db = existing & 0xFF;
+                let r = (sr * alpha + dr * inv) / 255;
+                let g = (sg * alpha + dg * inv) / 255;
+                let b = (sb * alpha + db * inv) / 255;
+                put_pixel(px, py, 0xFF000000 | (r << 16) | (g << 8) | b);
+            }
+        }
+    }
+}
+
 /// Draw vertical line (optimized)
 pub fn draw_vline(x: u32, y: u32, len: u32, color: u32) {
     fill_rect(x, y, 1, len, color);

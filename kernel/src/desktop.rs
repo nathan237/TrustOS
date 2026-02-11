@@ -2076,7 +2076,8 @@ struct AppConfig {
     }
     
     fn handle_taskbar_click(&mut self, x: i32, _y: i32) {
-        if x >= 4 && x < 108 {
+        // TrustOS button (left side, matches draw_taskbar)
+        if x >= 4 && x < 112 {
             self.start_menu_open = !self.start_menu_open;
             return;
         }
@@ -2089,14 +2090,27 @@ struct AppConfig {
             return;
         }
         
-        let mut btn_x = 56;
-        for w in &self.windows {
-            if x >= btn_x && x < btn_x + 120 {
-                let id = w.id;
-                self.focus_window(id);
-                return;
+        // Window buttons — must match the centered layout in draw_taskbar
+        let total_btns = self.windows.len();
+        if total_btns > 0 {
+            let btn_w = 84u32;
+            let btn_gap = 6u32;
+            let total_w = total_btns as u32 * (btn_w + btn_gap) - btn_gap;
+            let start_x = (self.width.saturating_sub(total_w)) / 2;
+            
+            for (i, w) in self.windows.iter().enumerate() {
+                let btn_x = start_x + i as u32 * (btn_w + btn_gap);
+                if x >= btn_x as i32 && x < (btn_x + btn_w) as i32 {
+                    let id = w.id;
+                    // Click on focused window → minimize; click on other → focus/unminimize
+                    if w.focused && !w.minimized {
+                        self.minimize_window(id);
+                    } else {
+                        self.focus_window(id);
+                    }
+                    return;
+                }
             }
-            btn_x += 124;
         }
     }
     
@@ -3895,59 +3909,64 @@ struct AppConfig {
         let y = self.height - TASKBAR_HEIGHT;
         
         // ═══════════════════════════════════════════════════════════════
-        // COSMIC V2 STYLE TASKBAR — Matching the reference image
+        // REFINED TRANSLUCENT TASKBAR — Frosted glass with smooth text
         // ═══════════════════════════════════════════════════════════════
         
-        // Solid opaque background (must be clearly visible)
-        framebuffer::fill_rect(0, y, self.width, TASKBAR_HEIGHT, 0xFF0A0A0A);
+        // Translucent dark glass background (alpha blend over wallpaper/desktop)
+        framebuffer::fill_rect_alpha(0, y, self.width, TASKBAR_HEIGHT, 0x080C0A, 200);
         
-        // Top border: 2px green line for clear separation
-        framebuffer::draw_hline(0, y, self.width, GREEN_MUTED);
-        framebuffer::draw_hline(0, y + 1, self.width, GREEN_GHOST);
+        // Top border: soft gradient line (2px, fading green)
+        framebuffer::fill_rect_alpha(0, y, self.width, 1, 0x00CC66, 80);
+        framebuffer::fill_rect_alpha(0, y + 1, self.width, 1, 0x00AA44, 40);
         
-        // TrustOS button (left, with green border)
-        let start_hover = self.cursor_x >= 4 && self.cursor_x < 108 && self.cursor_y >= y as i32;
-        let start_bg = if start_hover || self.start_menu_open { 0xFF002200 } else { 0xFF0A0A0A };
-        framebuffer::fill_rect(4, y + 6, 100, 28, start_bg);
-        framebuffer::draw_rect(4, y + 6, 100, 28, if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_MUTED });
-        self.draw_text(18, (y + 12) as i32, "TrustOS", if start_hover { GREEN_PRIMARY } else { GREEN_SECONDARY });
+        // ── TrustOS button (left) ──
+        let start_hover = self.cursor_x >= 4 && self.cursor_x < 112 && self.cursor_y >= y as i32;
+        if start_hover || self.start_menu_open {
+            framebuffer::fill_rect_alpha(4, y + 5, 104, 30, 0x00CC66, 50);
+        }
+        // Rounded-feel border (subtle glow)
+        let border_color = if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_GHOST };
+        framebuffer::draw_rect(4, y + 5, 104, 30, border_color);
+        let txt_color = if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_SECONDARY };
+        self.draw_text_smooth(16, (y + 11) as i32, "TrustOS", txt_color);
         
-        // Window buttons (centered in taskbar)
+        // ── Window buttons (centered) ──
         let total_btns = self.windows.len();
-        let btn_w = 80u32;
-        let btn_gap = 4u32;
-        let total_w = total_btns as u32 * (btn_w + btn_gap);
-        let start_x = if total_btns > 0 { (self.width - total_w) / 2 } else { self.width / 2 };
+        let btn_w = 84u32;
+        let btn_gap = 6u32;
+        let total_w = if total_btns > 0 { total_btns as u32 * (btn_w + btn_gap) - btn_gap } else { 0 };
+        let start_x = (self.width.saturating_sub(total_w)) / 2;
         
         for (i, w) in self.windows.iter().enumerate() {
             let btn_x = start_x + i as u32 * (btn_w + btn_gap);
-            let btn_y = y + 6;
+            let btn_y = y + 5;
             
             let is_hover = self.cursor_x >= btn_x as i32 && self.cursor_x < (btn_x + btn_w) as i32
                 && self.cursor_y >= y as i32;
             
-            // Button background
-            let bg = if w.focused { 
-                0xFF002200
-            } else if is_hover { 
-                0xFF001500
-            } else { 
-                0xFF0A0A0A
-            };
-            framebuffer::fill_rect(btn_x, btn_y, btn_w, 28, bg);
-            framebuffer::draw_rect(btn_x, btn_y, btn_w, 28, if w.focused { GREEN_PRIMARY } else { GREEN_SUBTLE });
+            // Button background — translucent glass
+            if w.focused {
+                framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, 30, 0x00AA44, 70);
+            } else if is_hover {
+                framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, 30, 0x008833, 45);
+            }
+            // Border
+            let bdr = if w.focused { GREEN_PRIMARY } else if is_hover { GREEN_MUTED } else { GREEN_GHOST };
+            framebuffer::draw_rect(btn_x, btn_y, btn_w, 30, bdr);
             
-            // Window title (truncated)
+            // Window title (truncated, anti-aliased)
             let title_max = 8;
             let title: String = w.title.chars().take(title_max).collect();
             let text_color = if w.focused { GREEN_PRIMARY } else { GREEN_TERTIARY };
-            self.draw_text((btn_x + 8) as i32, (btn_y + 8) as i32, &title, text_color);
+            self.draw_text_smooth((btn_x + 8) as i32, (btn_y + 9) as i32, &title, text_color);
             
-            // Active indicator (green line at bottom)
+            // Active indicator (green glow line at bottom)
             if w.focused {
                 let indicator_w = 60u32.min(btn_w - 10);
                 let indicator_x = btn_x + (btn_w - indicator_w) / 2;
                 framebuffer::fill_rect(indicator_x, y + TASKBAR_HEIGHT - 4, indicator_w, 3, GREEN_PRIMARY);
+                // Soft glow under indicator
+                framebuffer::fill_rect_alpha(indicator_x.saturating_sub(2), y + TASKBAR_HEIGHT - 6, indicator_w + 4, 2, GREEN_PRIMARY, 60);
             } else if !w.minimized {
                 // Small green dot for open windows
                 let dot_x = btn_x + btn_w / 2 - 2;
@@ -3955,19 +3974,20 @@ struct AppConfig {
             }
         }
         
-        // System tray (right side)
-        // FPS counter
+        // ── System tray (right side) ──
+        // FPS counter (dimmed)
         let fps_str = format!("{}fps", (60u64).min(self.frame_count.max(1)));
-        self.draw_text((self.width - 200) as i32, (y + 14) as i32, &fps_str, GREEN_SUBTLE);
+        self.draw_text_smooth((self.width - 200) as i32, (y + 14) as i32, &fps_str, GREEN_GHOST);
         
-        // Clock (HH:MM:SS format)
+        // Clock (anti-aliased, bright)
         let time = self.get_time_string();
-        self.draw_text((self.width - 130) as i32, (y + 14) as i32, &time, GREEN_PRIMARY);
+        self.draw_text_smooth((self.width - 130) as i32, (y + 14) as i32, &time, GREEN_PRIMARY);
 
-        // Status circles (green + amber)
+        // Status circles with soft glow
         let cx = self.width - 30;
         let cy = y + TASKBAR_HEIGHT / 2;
-        // Green circle
+        // Green circle + glow
+        framebuffer::fill_rect_alpha(cx.saturating_sub(16), cy.saturating_sub(6), 12, 12, GREEN_PRIMARY, 30);
         for dy in 0..6u32 {
             for dx in 0..6u32 {
                 if (dx as i32 - 3) * (dx as i32 - 3) + (dy as i32 - 3) * (dy as i32 - 3) <= 9 {
@@ -3975,7 +3995,8 @@ struct AppConfig {
                 }
             }
         }
-        // Amber circle
+        // Amber circle + glow
+        framebuffer::fill_rect_alpha(cx.saturating_sub(4), cy.saturating_sub(6), 12, 12, ACCENT_AMBER, 30);
         for dy in 0..6u32 {
             for dx in 0..6u32 {
                 if (dx as i32 - 3) * (dx as i32 - 3) + (dy as i32 - 3) * (dy as i32 - 3) <= 9 {
@@ -4008,19 +4029,19 @@ struct AppConfig {
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
         // ═══════════════════════════════════════════════════════════════
-        // MATRIX HACKER STYLE START MENU — Terminal popup
+        // MATRIX HACKER STYLE START MENU — Frosted glass popup
         // ═══════════════════════════════════════════════════════════════
         
-        // Semi-transparent near-black background
-        framebuffer::fill_rect(menu_x as u32, menu_y as u32, menu_w, menu_h, 0xFF080808);
+        // Frosted dark glass background
+        framebuffer::fill_rect_alpha(menu_x as u32, menu_y as u32, menu_w, menu_h, 0x060A08, 210);
         
         // Double green border
         framebuffer::draw_rect(menu_x as u32, menu_y as u32, menu_w, menu_h, GREEN_PRIMARY);
         framebuffer::draw_rect((menu_x + 1) as u32, (menu_y + 1) as u32, menu_w - 2, menu_h - 2, GREEN_SUBTLE);
         
-        // Title bar: dark green, "TrustOS Menu"
-        framebuffer::fill_rect((menu_x + 2) as u32, (menu_y + 2) as u32, menu_w - 4, 24, 0xFF001500);
-        self.draw_text(menu_x + 10, menu_y + 6, "TrustOS Menu", GREEN_PRIMARY);
+        // Title bar: translucent dark green
+        framebuffer::fill_rect_alpha((menu_x + 2) as u32, (menu_y + 2) as u32, menu_w - 4, 24, 0x002200, 180);
+        self.draw_text_smooth(menu_x + 10, menu_y + 6, "TrustOS Menu", GREEN_PRIMARY);
         
         // Separator
         framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 26) as u32, menu_w - 4, GREEN_MUTED);
@@ -4052,8 +4073,8 @@ struct AppConfig {
                 && self.cursor_y < item_y + item_h as i32;
             
             if is_hovered {
-                // Green highlight background
-                framebuffer::fill_rect((menu_x + 3) as u32, item_y as u32, menu_w - 6, item_h, 0xFF002200);
+                // Translucent green highlight background
+                framebuffer::fill_rect_alpha((menu_x + 3) as u32, item_y as u32, menu_w - 6, item_h, 0x00AA44, 50);
                 // Left accent bar
                 framebuffer::fill_rect((menu_x + 3) as u32, (item_y + 4) as u32, 2, item_h - 8, 
                     if *is_special { ACCENT_RED } else { GREEN_PRIMARY });
@@ -4065,7 +4086,7 @@ struct AppConfig {
             } else {
                 if *is_special { 0xFF994444 } else { GREEN_TERTIARY }
             };
-            self.draw_text(menu_x + 14, item_y + 8, icon, icon_color);
+            self.draw_text_smooth(menu_x + 14, item_y + 8, icon, icon_color);
             
             // Label
             let label_color = if is_hovered {
@@ -4073,7 +4094,7 @@ struct AppConfig {
             } else {
                 if *is_special { 0xFFAA4444 } else { GREEN_SECONDARY }
             };
-            self.draw_text(menu_x + 40, item_y + 8, label, label_color);
+            self.draw_text_smooth(menu_x + 40, item_y + 8, label, label_color);
         }
         
         // Bottom: version info
@@ -4103,10 +4124,13 @@ struct AppConfig {
                 if window.focused { GREEN_MUTED } else { GREEN_GHOST });
         }
         
-        // Title bar: dark green tinted
+        // Title bar: frosted glass effect
         let titlebar_h = TITLE_BAR_HEIGHT;
-        let title_bg = if window.focused { 0xFF0A1A0A } else { 0xFF080C08 };
-        framebuffer::fill_rect((x + 2) as u32, (y + 2) as u32, w - 4, titlebar_h - 2, title_bg);
+        if window.focused {
+            framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w - 4, titlebar_h - 2, 0x0A1A0A, 220);
+        } else {
+            framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w - 4, titlebar_h - 2, 0x080C08, 200);
+        }
         
         // Title bar bottom separator
         framebuffer::draw_hline((x + 2) as u32, (y + titlebar_h as i32) as u32, w - 4, 
@@ -4124,11 +4148,11 @@ struct AppConfig {
             _ => "::",
         };
         let icon_color = if window.focused { GREEN_PRIMARY } else { GREEN_TERTIARY };
-        self.draw_text(x + 10, y + 7, icon_str, icon_color);
+        self.draw_text_smooth(x + 10, y + 7, icon_str, icon_color);
         
         // Title text
         let text_color = if window.focused { TEXT_PRIMARY } else { TEXT_SECONDARY };
-        self.draw_text(x + 32, y + 7, &window.title, text_color);
+        self.draw_text_smooth(x + 32, y + 7, &window.title, text_color);
         
         // ═══════════════════════════════════════════════════════════════
         // Control Buttons (macOS-style colored circles)
@@ -5102,6 +5126,81 @@ struct AppConfig {
         // Use scaled character rendering
         crate::graphics::scaling::draw_scaled_char(x, y, c, color);
     }
+    
+    /// Draw text with sub-pixel anti-aliasing — reads current pixels to blend edges
+    fn draw_text_smooth(&self, x: i32, y: i32, text: &str, color: u32) {
+        let cw = crate::graphics::scaling::char_width() as i32;
+        let factor = crate::graphics::scaling::get_scale_factor();
+        let ch = 16u32 * factor;
+        let fw = 8u32 * factor;
+        let fb_w = self.width;
+        let fb_h = self.height;
+        
+        let fg_r = ((color >> 16) & 0xFF) as u32;
+        let fg_g = ((color >> 8) & 0xFF) as u32;
+        let fg_b = (color & 0xFF) as u32;
+        
+        for (i, c) in text.chars().enumerate() {
+            let cx = x + (i as i32 * cw);
+            if cx < 0 || cx >= fb_w as i32 || y < 0 || y >= fb_h as i32 { continue; }
+            
+            let glyph = framebuffer::font::get_glyph(c);
+            
+            for row in 0..16u32 {
+                let bits = glyph[row as usize];
+                if bits == 0 { continue; }
+                let prev = if row > 0 { glyph[row as usize - 1] } else { 0u8 };
+                let next = if row < 15 { glyph[row as usize + 1] } else { 0u8 };
+                
+                for col in 0..8u32 {
+                    let mask = 0x80u8 >> col;
+                    let is_set = bits & mask != 0;
+                    
+                    if is_set {
+                        // Draw foreground block
+                        for sy in 0..factor {
+                            for sx in 0..factor {
+                                let px = cx as u32 + col * factor + sx;
+                                let py = y as u32 + row * factor + sy;
+                                if px < fb_w && py < fb_h {
+                                    framebuffer::put_pixel(px, py, color);
+                                }
+                            }
+                        }
+                    } else {
+                        // Check neighbors for AA edge
+                        let left  = col > 0 && (bits & (mask << 1)) != 0;
+                        let right = col < 7 && (bits & (mask >> 1)) != 0;
+                        let top   = prev & mask != 0;
+                        let bot   = next & mask != 0;
+                        let adj = (left as u8) + (right as u8) + (top as u8) + (bot as u8);
+                        
+                        if adj > 0 {
+                            // Edge pixel: blend at 30-60% depending on adjacency
+                            let alpha = if adj >= 2 { 150u32 } else { 75u32 };
+                            let inv = 255 - alpha;
+                            for sy in 0..factor {
+                                for sx in 0..factor {
+                                    let px = cx as u32 + col * factor + sx;
+                                    let py = y as u32 + row * factor + sy;
+                                    if px < fb_w && py < fb_h {
+                                        let bg = framebuffer::get_pixel(px, py);
+                                        let br = (bg >> 16) & 0xFF;
+                                        let bg_g = (bg >> 8) & 0xFF;
+                                        let bb = bg & 0xFF;
+                                        let r = (fg_r * alpha + br * inv) / 255;
+                                        let g = (fg_g * alpha + bg_g * inv) / 255;
+                                        let b = (fg_b * alpha + bb * inv) / 255;
+                                        framebuffer::put_pixel(px, py, 0xFF000000 | (r << 16) | (g << 8) | b);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// Get simple glyph for character (8x16 bitmap)
@@ -5278,9 +5377,10 @@ pub fn run() {
             // Check modifier state from interrupt handler (tracks raw scancodes)
             let alt = crate::keyboard::is_key_pressed(0x38);
             let _ctrl = crate::keyboard::is_key_pressed(0x1D);
+            let win = crate::keyboard::is_key_pressed(0x5B);
             
-            // Alt+Tab (Tab = ASCII 9) → window switcher
-            if alt && key == 9 {
+            // Alt+Tab or Win+Tab (Tab = ASCII 9) → window switcher
+            if (alt || win) && key == 9 {
                 if !engine::is_alt_tab_active() {
                     engine::start_alt_tab();
                 } else {
@@ -5293,12 +5393,39 @@ pub fn run() {
             handle_keyboard(key);
         }
         
-        // Handle Alt release to finish Alt+Tab
+        // Handle Alt/Win release to finish Alt+Tab / Win+Tab
         if engine::is_alt_tab_active() {
-            // Check if Alt is still held - if released, select the window
-            if !crate::keyboard::is_key_pressed(0x38) {
+            // Check if both Alt and Win are released → select the window
+            let alt_held = crate::keyboard::is_key_pressed(0x38);
+            let win_held = crate::keyboard::is_key_pressed(0x5B);
+            if !alt_held && !win_held {
                 let selected = engine::finish_alt_tab();
                 DESKTOP.lock().focus_window_by_index(selected as usize);
+            }
+        }
+        
+        // Win key alone (press & release) → toggle start menu
+        {
+            static mut LAST_WIN: bool = false;
+            static mut WIN_USED_COMBO: bool = false;
+            let win_now = crate::keyboard::is_key_pressed(0x5B);
+            unsafe {
+                if win_now && !LAST_WIN {
+                    // Win just pressed — reset combo flag
+                    WIN_USED_COMBO = false;
+                }
+                if win_now {
+                    // If Tab is pressed while Win held, mark as combo
+                    if engine::is_alt_tab_active() {
+                        WIN_USED_COMBO = true;
+                    }
+                }
+                if !win_now && LAST_WIN && !WIN_USED_COMBO {
+                    // Win released, was not part of a combo → toggle start menu
+                    let mut d = DESKTOP.lock();
+                    d.start_menu_open = !d.start_menu_open;
+                }
+                LAST_WIN = win_now;
             }
         }
         
