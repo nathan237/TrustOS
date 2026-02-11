@@ -1102,6 +1102,21 @@ impl Desktop {
     /// Initialize desktop with double buffering
     pub fn init(&mut self, width: u32, height: u32) {
         crate::serial_println!("[Desktop] init start: {}x{}", width, height);
+        
+        // Clear all previous state (avoids duplication on re-entry)
+        self.windows.clear();
+        self.icons.clear();
+        self.input_buffer.clear();
+        self.start_menu_open = false;
+        self.editor_states.clear();
+        self.model_editor_states.clear();
+        self.calculator_states.clear();
+        self.snake_states.clear();
+        self.browser = None;
+        self.browser_url_input.clear();
+        self.terminal_suggestion_count = 0;
+        self.frame_count = 0;
+        
         self.width = width;
         self.height = height;
         self.cursor_x = (width / 2) as i32;
