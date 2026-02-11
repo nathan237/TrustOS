@@ -61,14 +61,13 @@ Write-Host "`nCreating VM '$VMName'..." -ForegroundColor Yellow
 
 # Configure VM with UEFI enabled
 Write-Host "Configuring VM (UEFI mode)..." -ForegroundColor Yellow
-& $VBoxManage modifyvm $VMName --memory 512 --vram 128 --cpus 2
+& $VBoxManage modifyvm $VMName --memory 1024 --vram 128 --cpus 2
 & $VBoxManage modifyvm $VMName --firmware efi64
 & $VBoxManage modifyvm $VMName --graphicscontroller vboxsvga
 & $VBoxManage modifyvm $VMName --boot1 dvd --boot2 disk --boot3 none --boot4 none
 
-# Configure network with Intel e1000 (Host-Only mode for direct host access)
-& $VBoxManage modifyvm $VMName --nic1 hostonly --nictype1 82540EM --cableconnected1 on
-& $VBoxManage modifyvm $VMName --hostonlyadapter1 "VirtualBox Host-Only Ethernet Adapter"
+# Configure network with Intel e1000 (NAT mode for DHCP + internet)
+& $VBoxManage modifyvm $VMName --nic1 nat --nictype1 82540EM --cableconnected1 on
 
 # Add storage controllers
 & $VBoxManage storagectl $VMName --name "SATA" --add sata --controller IntelAhci --portcount 2
@@ -98,7 +97,7 @@ if (Test-Path $ISOPath) {
 Write-Host "`n=== VM Ready ===" -ForegroundColor Green
 Write-Host "Name: $VMName" -ForegroundColor Cyan
 Write-Host "Firmware: UEFI" -ForegroundColor Cyan
-Write-Host "RAM: 512 MB" -ForegroundColor Cyan
+Write-Host "RAM: 1024 MB" -ForegroundColor Cyan
 Write-Host "Graphics: VMSVGA 128MB" -ForegroundColor Cyan
 Write-Host "Serial: serial.log" -ForegroundColor Cyan
 

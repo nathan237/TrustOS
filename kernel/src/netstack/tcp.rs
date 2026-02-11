@@ -31,7 +31,7 @@ struct ConnectionId {
     dst_port: u16,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct TcpConnection {
     state: TcpState,
     seq: u32, // next seq to send
@@ -41,6 +41,10 @@ struct TcpConnection {
     // Delayed ACK: count packets since last ACK
     pending_acks: u8,
     last_ack_time: u64,
+    // Retransmission: store last sent segment for retransmit on timeout
+    last_sent_seq: u32,
+    last_sent_time: u64,
+    retransmit_count: u8,
 }
 
 static CONNECTIONS: Mutex<BTreeMap<ConnectionId, TcpConnection>> = Mutex::new(BTreeMap::new());
@@ -54,6 +58,11 @@ const DELAYED_ACK_MS: u64 = 20;
 
 /// TCP Window size (larger = faster downloads)
 const TCP_WINDOW_SIZE: u16 = 65535;
+
+/// Retransmission timeout in ms
+const RETRANSMIT_TIMEOUT_MS: u64 = 1000;
+/// Maximum retransmission attempts
+const MAX_RETRANSMITS: u8 = 3;
 
 fn ip_to_u32(ip: [u8; 4]) -> u32 {
     ((ip[0] as u32) << 24) | ((ip[1] as u32) << 16) | ((ip[2] as u32) << 8) | (ip[3] as u32)
@@ -122,6 +131,15 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
         Some(c) => c,
         None => return,
     };
+
+    // Handle RST - immediately close connection
+    if (flags & flags::RST) != 0 {
+        crate::serial_println!("[TCP] RST received, closing connection on port {}", dst_port);
+        conn.state = TcpState::Closed;
+        conn.fin_received = true;
+        conn.fin_sent = true;
+        return;
+    }
 
     if conn.fin_received && conn.fin_sent {
         return;
@@ -245,6 +263,9 @@ pub fn send_syn(dest_ip: [u8; 4], dest_port: u16) -> Result<u16, &'static str> {
         fin_sent: false,
         pending_acks: 0,
         last_ack_time: crate::logger::get_ticks(),
+        last_sent_seq: seq,
+        last_sent_time: crate::logger::get_ticks(),
+        retransmit_count: 0,
     });
 
     crate::serial_println!(
@@ -452,7 +473,7 @@ pub fn fin_received(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> bool {
         .unwrap_or(true)
 }
 
-/// Wait for a SYN-ACK (connection established)
+/// Wait for a SYN-ACK (connection established) with SYN retransmission
 pub fn wait_for_established(dest_ip: [u8; 4], dest_port: u16, src_port: u16, timeout_ms: u32) -> bool {
     let src_ip = get_source_ip();
     let conn_id = ConnectionId {
@@ -463,7 +484,10 @@ pub fn wait_for_established(dest_ip: [u8; 4], dest_port: u16, src_port: u16, tim
     };
 
     let start = crate::logger::get_ticks();
+    let mut last_syn_time = start;
+    let mut syn_retries: u8 = 0;
     let mut spins: u32 = 0;
+    
     loop {
         crate::netstack::poll();
 
@@ -471,9 +495,45 @@ pub fn wait_for_established(dest_ip: [u8; 4], dest_port: u16, src_port: u16, tim
             if conn.state == TcpState::Established {
                 return true;
             }
+            // Connection was RST'd
+            if conn.state == TcpState::Closed {
+                return false;
+            }
         }
 
-        if crate::logger::get_ticks().saturating_sub(start) > timeout_ms as u64 {
+        let now = crate::logger::get_ticks();
+        
+        // Retransmit SYN if no SYN-ACK received within timeout
+        if now.saturating_sub(last_syn_time) > RETRANSMIT_TIMEOUT_MS && syn_retries < MAX_RETRANSMITS {
+            syn_retries += 1;
+            last_syn_time = now;
+            crate::serial_println!("[TCP] SYN retransmit #{} for port {}", syn_retries, dest_port);
+            
+            // Rebuild and resend SYN
+            let seq = {
+                let conns = CONNECTIONS.lock();
+                conns.get(&conn_id).map(|c| c.last_sent_seq).unwrap_or(0)
+            };
+            
+            let mut segment = Vec::with_capacity(20);
+            segment.extend_from_slice(&src_port.to_be_bytes());
+            segment.extend_from_slice(&dest_port.to_be_bytes());
+            segment.extend_from_slice(&seq.to_be_bytes());
+            segment.extend_from_slice(&0u32.to_be_bytes());
+            segment.push(0x50);
+            segment.push(flags::SYN);
+            segment.extend_from_slice(&TCP_WINDOW_SIZE.to_be_bytes());
+            segment.extend_from_slice(&0u16.to_be_bytes());
+            segment.extend_from_slice(&0u16.to_be_bytes());
+            
+            let csum = tcp_checksum(src_ip, dest_ip, &segment);
+            segment[16] = (csum >> 8) as u8;
+            segment[17] = (csum & 0xFF) as u8;
+            
+            let _ = crate::netstack::ip::send_packet(dest_ip, 6, &segment);
+        }
+
+        if now.saturating_sub(start) > timeout_ms as u64 {
             return false;
         }
         spins = spins.wrapping_add(1);

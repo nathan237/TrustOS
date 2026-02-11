@@ -38,8 +38,8 @@ fn skip_name(data: &[u8], mut idx: usize) -> Option<usize> {
 }
 
 pub fn resolve(name: &str) -> Option<[u8; 4]> {
-    // QEMU user mode DNS is at 10.0.2.3
-    let dns_server = [10, 0, 2, 3];
+    // Use DHCP-provided DNS, or platform-detected default
+    let dns_server = crate::network::get_dns_server();
     let src_port = crate::netstack::udp::alloc_ephemeral_port();
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
 

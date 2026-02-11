@@ -127,6 +127,38 @@ static INITIALIZED: AtomicBool = AtomicBool::new(false);
 /// Detected NIC info
 static NIC_INFO: Mutex<Option<NicInfo>> = Mutex::new(None);
 
+/// Global DNS server (updated by DHCP, fallback to platform default)
+static DNS_SERVER: Mutex<[u8; 4]> = Mutex::new([8, 8, 8, 8]);
+
+/// Detected platform type
+static PLATFORM: Mutex<Platform> = Mutex::new(Platform::Unknown);
+
+/// Platform/hypervisor detection
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Platform {
+    Unknown,
+    Qemu,         // QEMU with user-mode networking
+    QemuKvm,      // QEMU+KVM
+    VirtualBox,   // Oracle VirtualBox
+    VMware,       // VMware Workstation/ESXi
+    HyperV,       // Microsoft Hyper-V
+    BareMetal,    // Real hardware
+}
+
+impl core::fmt::Display for Platform {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Platform::Unknown => write!(f, "Unknown"),
+            Platform::Qemu => write!(f, "QEMU (TCG)"),
+            Platform::QemuKvm => write!(f, "QEMU/KVM"),
+            Platform::VirtualBox => write!(f, "VirtualBox"),
+            Platform::VMware => write!(f, "VMware"),
+            Platform::HyperV => write!(f, "Hyper-V"),
+            Platform::BareMetal => write!(f, "Bare Metal"),
+        }
+    }
+}
+
 /// NIC hardware info
 #[derive(Debug, Clone)]
 pub struct NicInfo {
@@ -173,9 +205,115 @@ fn identify_driver(vendor_id: u16, device_id: u16) -> &'static str {
     }
 }
 
+/// Detect the platform/hypervisor using CPUID, ACPI, and PCI hints
+pub fn detect_platform() -> Platform {
+    // Method 1: CPUID leaf 0x40000000 (hypervisor brand string)
+    // rbx is reserved by LLVM — save/restore via stack, capture via rsi
+    let (hv_max, sig_bytes) = unsafe {
+        let a: u32;
+        let b: u32;
+        let c: u32;
+        let d: u32;
+        // rbx is reserved by LLVM — save/restore via stack, capture via r8d
+        // DO NOT use options(nostack) because we push/pop rbx
+        core::arch::asm!(
+            "push rbx",
+            "mov eax, 0x40000000",
+            "cpuid",
+            "mov r8d, ebx",
+            "pop rbx",
+            out("eax") a,
+            out("r8d") b,
+            out("ecx") c,
+            out("edx") d,
+        );
+        let mut sig = [0u8; 12];
+        sig[0..4].copy_from_slice(&b.to_le_bytes());
+        sig[4..8].copy_from_slice(&c.to_le_bytes());
+        sig[8..12].copy_from_slice(&d.to_le_bytes());
+        (a, sig)
+    };
+    if hv_max >= 0x40000000 {
+        
+        if let Ok(s) = core::str::from_utf8(&sig_bytes) {
+            crate::serial_println!("[NET] Hypervisor CPUID: '{}'", s);
+            if s.contains("KVMKVMKVM") {
+                return Platform::QemuKvm;
+            } else if s.contains("VBoxVBoxVBox") {
+                return Platform::VirtualBox;
+            } else if s.contains("VMwareVMware") {
+                return Platform::VMware;
+            } else if s.contains("Microsoft Hv") {
+                return Platform::HyperV;
+            } else if s.contains("TCGTCGTCGTCG") {
+                return Platform::Qemu;
+            }
+        }
+    }
+    
+    // Method 2: ACPI OEM ID
+    if let Some(info) = crate::acpi::get_info() {
+        let oem = info.oem_id.trim();
+        if oem.eq_ignore_ascii_case("VBOX") {
+            return Platform::VirtualBox;
+        } else if oem.eq_ignore_ascii_case("BOCHS") || oem.eq_ignore_ascii_case("BXPC") {
+            return Platform::Qemu;
+        }
+    }
+    
+    // Method 3: PCI device hints
+    let pci_devs = crate::pci::get_devices();
+    for dev in &pci_devs {
+        match dev.vendor_id {
+            0x80EE => return Platform::VirtualBox, // VirtualBox vendor
+            0x15AD => return Platform::VMware,     // VMware vendor
+            0x1234 => return Platform::Qemu,       // QEMU stdvga
+            0x1AF4 => {
+                // Red Hat VirtIO → usually QEMU
+                // Check if KVM is also present (already checked CPUID above)
+                return Platform::Qemu;
+            }
+            _ => {}
+        }
+    }
+    
+    // No hypervisor detected → bare metal
+    Platform::BareMetal
+}
+
+/// Get the detected platform
+pub fn get_platform() -> Platform {
+    *PLATFORM.lock()
+}
+
+/// Get the current DNS server
+pub fn get_dns_server() -> [u8; 4] {
+    *DNS_SERVER.lock()
+}
+
+/// Set the DNS server (called by DHCP on ACK)
+pub fn set_dns_server(dns: [u8; 4]) {
+    *DNS_SERVER.lock() = dns;
+    crate::log!("[NET] DNS server: {}.{}.{}.{}", dns[0], dns[1], dns[2], dns[3]);
+}
+
 /// Initialize network driver
 pub fn init() {
-    // Use PCI module to find network devices
+    // Step 1: Detect platform
+    let platform = detect_platform();
+    *PLATFORM.lock() = platform;
+    crate::log!("[NET] Platform detected: {}", platform);
+    
+    // Step 2: Set platform-appropriate DNS default
+    let default_dns = match platform {
+        Platform::Qemu | Platform::QemuKvm => [10, 0, 2, 3],     // QEMU user-mode DNS forwarder
+        Platform::VirtualBox => [10, 0, 2, 3],                    // VBox NAT DNS forwarder
+        _ => [8, 8, 8, 8],                                       // Google DNS fallback
+    };
+    *DNS_SERVER.lock() = default_dns;
+    crate::serial_println!("[NET] Default DNS: {}.{}.{}.{}", default_dns[0], default_dns[1], default_dns[2], default_dns[3]);
+    
+    // Step 3: Find network devices via PCI
     let network_devices = crate::pci::find_by_class(crate::pci::class::NETWORK);
     
     if network_devices.is_empty() {
@@ -197,7 +335,7 @@ pub fn init() {
         irq: dev.interrupt_line,
     };
     
-    crate::log!("[NET] Found: {:04X}:{:04X} {} [{}] BAR0={:#X} IRQ={}",
+    crate::log!("[NET] NIC: {:04X}:{:04X} {} [{}] BAR0={:#X} IRQ={}",
         dev.vendor_id, dev.device_id, 
         driver, dev.vendor_name(),
         nic_info.bar0, nic_info.irq);
@@ -213,38 +351,37 @@ pub fn init() {
         if let Some(real_mac) = crate::virtio_net::get_mac() {
             MacAddress::new(real_mac)
         } else {
-            // Generate MAC if not available
-            let ticks = crate::logger::get_ticks();
-            MacAddress::new([
-                0x52, 0x54, 0x00,  // QEMU OUI prefix
-                ((ticks >> 8) & 0xFF) as u8,
-                ((ticks >> 16) & 0xFF) as u8,
-                (ticks & 0xFF) as u8,
-            ])
+            generate_mac()
         }
     } else {
-        // Generate MAC (driver not yet initialized at this point)
-        let ticks = crate::logger::get_ticks();
-        MacAddress::new([
-            0x52, 0x54, 0x00,  // QEMU OUI prefix
-            ((ticks >> 8) & 0xFF) as u8,
-            ((ticks >> 16) & 0xFF) as u8,
-            (ticks & 0xFF) as u8,
-        ])
+        generate_mac()
     };
     
+    // Step 4: No hardcoded IP — start empty, DHCP will configure
+    // (use 0.0.0.0 until DHCP provides a real address)
     let interface = NetworkInterface {
         mac,
-        ip: Some(Ipv4Address::new(192, 168, 56, 100)),  // VirtualBox Host-Only default
-        subnet: Some(Ipv4Address::new(255, 255, 255, 0)),
-        gateway: Some(Ipv4Address::new(192, 168, 56, 1)), // VirtualBox Host-Only gateway (host)
+        ip: None,
+        subnet: None,
+        gateway: None,
         state: NetworkState::Up,
     };
     
     *INTERFACE.lock() = Some(interface);
     INITIALIZED.store(true, Ordering::SeqCst);
     
-    crate::log!("[NET] Interface up: MAC={}", mac);
+    crate::log!("[NET] Interface up: MAC={} (awaiting DHCP)", mac);
+}
+
+/// Generate a random-ish MAC address
+fn generate_mac() -> MacAddress {
+    let ticks = crate::logger::get_ticks();
+    MacAddress::new([
+        0x52, 0x54, 0x00,  // QEMU OUI prefix (locally administered)
+        ((ticks >> 8) & 0xFF) as u8,
+        ((ticks >> 16) & 0xFF) as u8,
+        (ticks & 0xFF) as u8,
+    ])
 }
 
 /// Check if network is available

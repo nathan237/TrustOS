@@ -259,8 +259,8 @@ pub fn record_click() {
     LAST_CLICK_TIME.store(now, Ordering::Relaxed);
     
     let mut count = CLICK_COUNT.lock();
-    // Double-click if within ~500ms (assuming ~100 ticks/sec)
-    if now - last < 50 {
+    // Double-click if within ~300ms (assuming ~100 ticks/sec → 30 ticks)
+    if now - last < 30 {
         *count = 2;
     } else {
         *count = 1;

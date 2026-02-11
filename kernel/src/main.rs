@@ -36,6 +36,7 @@ mod apps;
 mod graphics;
 mod icons;
 mod browser;
+mod game3d; // 3D raycasting FPS game engine
 mod cosmic; // COSMIC-style UI framework (libcosmic-inspired)
 mod compositor; // Multi-layer compositor for flicker-free rendering
 mod holovolume; // Volumetric ASCII raymarcher - 3D holographic desktop
@@ -603,6 +604,10 @@ pub unsafe extern "C" fn kmain() -> ! {
     if ENABLE_NETWORK {
         network::init();
         if network::is_available() {
+            // Display detected platform
+            let platform = network::get_platform();
+            framebuffer::print_boot_status(&alloc::format!("Platform: {}", platform), BootStatus::Info);
+            
             // Auto-probe and load network drivers
             let devs = pci::find_by_class(pci::class::NETWORK);
             if !devs.is_empty() {

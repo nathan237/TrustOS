@@ -467,6 +467,7 @@ pub enum IconAction {
     OpenGL3D,
     OpenBrowser,
     OpenModelEditor,
+    OpenGame3D,
 }
 
 /// Window type for content
@@ -488,6 +489,7 @@ pub enum WindowType {
     Game,    // Snake game
     Browser, // Web browser
     ModelEditor, // TrustEdit 3D model editor
+    Game3D,  // 3D FPS raycasting game
 }
 
 /// Window structure
@@ -775,6 +777,8 @@ pub struct Desktop {
     // Browser state
     pub browser: Option<crate::browser::Browser>,
     pub browser_url_input: String,
+    pub browser_url_cursor: usize,
+    pub browser_loading: bool,
     // Editor states (window_id -> EditorState)
     pub editor_states: BTreeMap<u32, EditorState>,
     // Model editor states (window_id -> ModelEditorState)
@@ -783,6 +787,8 @@ pub struct Desktop {
     pub calculator_states: BTreeMap<u32, CalculatorState>,
     // Snake game states (window_id -> SnakeState)
     pub snake_states: BTreeMap<u32, SnakeState>,
+    // 3D Game states (window_id -> Game3DState)
+    pub game3d_states: BTreeMap<u32, crate::game3d::Game3DState>,
     // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
     pub scale_factor: u32,
     // Matrix rain state (depth-parallax advancing effect)
@@ -1085,10 +1091,13 @@ impl Desktop {
             compositor_theme: CompositorTheme::Modern,
             browser: None,
             browser_url_input: String::new(),
+            browser_url_cursor: 0,
+            browser_loading: false,
             editor_states: BTreeMap::new(),
             model_editor_states: BTreeMap::new(),
             calculator_states: BTreeMap::new(),
             snake_states: BTreeMap::new(),
+            game3d_states: BTreeMap::new(),
             scale_factor: 1,
             matrix_chars: Vec::new(),
             matrix_heads: Vec::new(),
@@ -1101,21 +1110,46 @@ impl Desktop {
     
     /// Initialize desktop with double buffering
     pub fn init(&mut self, width: u32, height: u32) {
-        crate::serial_println!("[Desktop] init start: {}x{}", width, height);
+        crate::serial_println!("[Desktop] init start: {}x{} (clearing {} windows, {} icons)", 
+            width, height, self.windows.len(), self.icons.len());
         
-        // Clear all previous state (avoids duplication on re-entry)
+        // ===== FULL STATE RESET (prevents duplication on re-entry) =====
+        // Data collections
         self.windows.clear();
         self.icons.clear();
-        self.input_buffer.clear();
-        self.start_menu_open = false;
         self.editor_states.clear();
         self.model_editor_states.clear();
         self.calculator_states.clear();
         self.snake_states.clear();
+        self.game3d_states.clear();
+        // Browser
         self.browser = None;
         self.browser_url_input.clear();
-        self.terminal_suggestion_count = 0;
+        self.browser_url_cursor = 0;
+        self.browser_loading = false;
+        // Input / UI state
+        self.input_buffer.clear();
+        self.start_menu_open = false;
+        self.cursor_blink = false;
+        self.context_menu.visible = false;
+        self.context_menu.items.clear();
+        self.context_menu.selected_index = 0;
+        self.context_menu.target_icon = None;
+        self.context_menu.target_file = None;
+        // Counters / tracking
         self.frame_count = 0;
+        self.terminal_suggestion_count = 0;
+        self.last_window_count = 0;
+        self.last_start_menu_open = false;
+        self.last_context_menu_visible = false;
+        self.last_rtc_frame = 0;
+        self.cached_time_str.clear();
+        self.cached_date_str.clear();
+        // Reset window ID counter so IDs don't grow unbounded
+        *NEXT_WINDOW_ID.lock() = 1;
+        
+        crate::serial_println!("[Desktop] state cleared, windows={} icons={}", 
+            self.windows.len(), self.icons.len());
         
         self.width = width;
         self.height = height;
@@ -1488,6 +1522,7 @@ struct AppConfig {
                     self.browser = Some(crate::browser::Browser::new(width, height));
                 }
                 self.browser_url_input = String::from("http://example.com");
+                    self.browser_url_cursor = self.browser_url_input.len();
             },
             WindowType::ModelEditor => {
                 let state = crate::model_editor::ModelEditorState::new();
@@ -1495,6 +1530,9 @@ struct AppConfig {
             },
             WindowType::Game => {
                 self.snake_states.insert(window.id, SnakeState::new());
+            },
+            WindowType::Game3D => {
+                self.game3d_states.insert(window.id, crate::game3d::Game3DState::new());
             },
             _ => {}
         }
@@ -1522,6 +1560,7 @@ struct AppConfig {
         self.model_editor_states.remove(&id);
         self.calculator_states.remove(&id);
         self.snake_states.remove(&id);
+        self.game3d_states.remove(&id);
     }
     
     /// Minimize/restore a window (with animation)
@@ -1551,6 +1590,7 @@ struct AppConfig {
             self.windows.retain(|w| w.id != id);
             self.editor_states.remove(&id);
             self.model_editor_states.remove(&id);
+            self.game3d_states.remove(&id);
         }
     }
     
@@ -1720,9 +1760,11 @@ struct AppConfig {
                         return;
                     }
                     
-                    // Check for resize edge
+                    // Check for resize edge — only side/bottom edges
+                    // Top border is treated as drag area for easier window moving
                     let resize_edge = self.windows[i].on_resize_edge(x, y);
-                    if resize_edge != ResizeEdge::None {
+                    let is_top_border = matches!(resize_edge, ResizeEdge::Top | ResizeEdge::TopLeft | ResizeEdge::TopRight);
+                    if resize_edge != ResizeEdge::None && !is_top_border {
                         self.windows[i].resizing = resize_edge;
                         self.windows[i].drag_offset_x = x;
                         self.windows[i].drag_offset_y = y;
@@ -1730,8 +1772,9 @@ struct AppConfig {
                         return;
                     }
                     
-                    if self.windows[i].in_title_bar(x, y) {
-                        // Double-click to maximize
+                    // Title bar OR top border → drag to move (double-click to maximize)
+                    if self.windows[i].in_title_bar(x, y) || is_top_border {
+                        // Double-click to toggle maximize
                         if crate::mouse::is_double_click() {
                             crate::mouse::reset_click_count();
                             let (sw, sh) = (self.width, self.height);
@@ -2085,6 +2128,9 @@ struct AppConfig {
             IconAction::OpenModelEditor => {
                 self.create_window("TrustEdit 3D", 100 + offset, 60 + offset, 700, 500, WindowType::ModelEditor)
             },
+            IconAction::OpenGame3D => {
+                self.create_window("TrustDoom 3D", 80 + offset, 50 + offset, 640, 480, WindowType::Game3D)
+            },
         };
         // Auto-focus newly created window
         self.focus_window(id);
@@ -2147,7 +2193,7 @@ struct AppConfig {
     fn check_start_menu_click(&self, x: i32, y: i32) -> Option<u8> {
         // Same dimensions as draw_start_menu()
         let menu_w = 280u32;
-        let menu_h = 440u32;
+        let menu_h = 472u32;
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
@@ -2156,17 +2202,17 @@ struct AppConfig {
             return None;
         }
         
-        // 12 list items at menu_y + 30 + (i * 32), each 30px tall
+        // 13 list items at menu_y + 30 + (i * 32), each 30px tall
         // Matches draw_start_menu items array:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Settings, 9=Exit Desktop, 10=Shutdown, 11=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=TrustDoom3D, 9=Settings, 10=Exit Desktop, 11=Shutdown, 12=Reboot
         let items_start_y = menu_y + 30;
         let item_spacing = 32;
         let item_h = 30;
         
         if y >= items_start_y {
             let idx = ((y - items_start_y) / item_spacing) as u8;
-            if idx < 12 {
+            if idx < 13 {
                 // Verify within item height (not in gap)
                 let item_top = items_start_y + (idx as i32 * item_spacing);
                 if y < item_top + item_h {
@@ -2181,7 +2227,7 @@ struct AppConfig {
     fn handle_menu_action(&mut self, action: u8) {
         // Matches draw_start_menu items array order:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Settings, 9=Exit Desktop, 10=Shutdown, 11=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=TrustDoom3D, 9=Settings, 10=Exit Desktop, 11=Shutdown, 12=Reboot
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
@@ -2209,19 +2255,22 @@ struct AppConfig {
             7 => { // Snake
                 self.create_window("Snake Game", 250, 120, 340, 360, WindowType::Game);
             },
-            8 => { // Settings
+            8 => { // TrustDoom 3D
+                self.create_window("TrustDoom 3D", 80, 50, 640, 480, WindowType::Game3D);
+            },
+            9 => { // Settings
                 self.open_settings_panel();
             },
-            9 => { // Exit Desktop
+            10 => { // Exit Desktop
                 crate::serial_println!("[GUI] Exit Desktop from start menu");
                 EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
             },
-            10 => { // Shutdown
+            11 => { // Shutdown
                 crate::println!("\n\n=== SYSTEM SHUTDOWN ===");
                 crate::println!("Goodbye!");
                 loop { x86_64::instructions::hlt(); }
             },
-            11 => { // Reboot
+            12 => { // Reboot
                 crate::serial_println!("[SYSTEM] Reboot requested");
                 // Triple fault reboot
                 unsafe {
@@ -2288,36 +2337,145 @@ struct AppConfig {
                         snake.handle_key(key);
                     }
                 },
+                WindowType::Game3D => {
+                    if let Some(game) = self.game3d_states.get_mut(&win_id) {
+                        game.handle_key(key);
+                    }
+                },
                 WindowType::Browser => {
-                    // Handle keyboard input in browser URL bar
+                    use crate::keyboard::{KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END, KEY_DELETE, KEY_PGUP, KEY_PGDOWN};
+                    let ctrl = crate::keyboard::is_key_pressed(0x1D);
+                    
+                    // Don't process keys while loading (except Escape to cancel)
+                    if self.browser_loading && key != 0x1B {
+                        // Skip input during navigation
+                    } else {
                     match key {
-                        0x08 => { // Backspace
-                            self.browser_url_input.pop();
-                        },
-                        0x0D | 0x0A => { // Enter - navigate
-                            let url = self.browser_url_input.clone();
-                            if let Some(ref mut browser) = self.browser {
-                                // Navigate and handle errors gracefully
-                                match browser.navigate(&url) {
-                                    Ok(()) => {
-                                        crate::serial_println!("[DESKTOP] Browser navigated OK");
-                                    }
-                                    Err(e) => {
-                                        crate::serial_println!("[DESKTOP] Browser navigate error: {}", e);
-                                        // Error page is already set by navigate()
-                                    }
+                        0x08 => { // Backspace - delete char before cursor
+                            if self.browser_url_cursor > 0 {
+                                self.browser_url_cursor -= 1;
+                                if self.browser_url_cursor < self.browser_url_input.len() {
+                                    self.browser_url_input.remove(self.browser_url_cursor);
                                 }
                             }
                         },
-                        0x1B => { // Escape - clear URL
-                            self.browser_url_input.clear();
+                        0x0D | 0x0A => { // Enter - navigate
+                            if !self.browser_url_input.is_empty() && !self.browser_loading {
+                                self.browser_loading = true;
+                                let url = self.browser_url_input.clone();
+                                if let Some(ref mut browser) = self.browser {
+                                    match browser.navigate(&url) {
+                                        Ok(()) => {
+                                            crate::serial_println!("[DESKTOP] Browser navigated OK");
+                                            // Update URL bar with final URL (after redirects)
+                                            self.browser_url_input = browser.current_url.clone();
+                                            self.browser_url_cursor = self.browser_url_input.len();
+                                        }
+                                        Err(e) => {
+                                            crate::serial_println!("[DESKTOP] Browser navigate error: {}", e);
+                                        }
+                                    }
+                                }
+                                self.browser_loading = false;
+                            }
                         },
-                        32..=126 => { // Printable ASCII
-                            if self.browser_url_input.len() < 256 {
-                                self.browser_url_input.push(key as char);
+                        0x1B => { // Escape - cancel loading or clear URL
+                            if self.browser_loading {
+                                self.browser_loading = false;
+                            } else {
+                                self.browser_url_input.clear();
+                                self.browser_url_cursor = 0;
+                            }
+                        },
+                        _ if key == KEY_LEFT => {
+                            if ctrl {
+                                // Ctrl+Left: jump to previous word boundary
+                                while self.browser_url_cursor > 0 {
+                                    self.browser_url_cursor -= 1;
+                                    if self.browser_url_cursor > 0 {
+                                        let c = self.browser_url_input.as_bytes()[self.browser_url_cursor - 1];
+                                        if c == b' ' || c == b'/' || c == b'.' || c == b':' {
+                                            break;
+                                        }
+                                    }
+                                }
+                            } else if self.browser_url_cursor > 0 {
+                                self.browser_url_cursor -= 1;
+                            }
+                        },
+                        _ if key == KEY_RIGHT => {
+                            if ctrl {
+                                // Ctrl+Right: jump to next word boundary
+                                let len = self.browser_url_input.len();
+                                while self.browser_url_cursor < len {
+                                    self.browser_url_cursor += 1;
+                                    if self.browser_url_cursor < len {
+                                        let c = self.browser_url_input.as_bytes()[self.browser_url_cursor];
+                                        if c == b' ' || c == b'/' || c == b'.' || c == b':' {
+                                            break;
+                                        }
+                                    }
+                                }
+                            } else if self.browser_url_cursor < self.browser_url_input.len() {
+                                self.browser_url_cursor += 1;
+                            }
+                        },
+                        _ if key == KEY_HOME => {
+                            self.browser_url_cursor = 0;
+                        },
+                        _ if key == KEY_END => {
+                            self.browser_url_cursor = self.browser_url_input.len();
+                        },
+                        _ if key == KEY_DELETE => {
+                            if self.browser_url_cursor < self.browser_url_input.len() {
+                                self.browser_url_input.remove(self.browser_url_cursor);
+                            }
+                        },
+                        _ if key == KEY_PGUP => {
+                            // Page Up - scroll browser content up
+                            if let Some(ref mut browser) = self.browser {
+                                browser.scroll(-200);
+                            }
+                        },
+                        _ if key == KEY_PGDOWN => {
+                            // Page Down - scroll browser content down
+                            if let Some(ref mut browser) = self.browser {
+                                browser.scroll(200);
+                            }
+                        },
+                        _ if ctrl && (key == b'l' || key == b'L') => {
+                            // Ctrl+L: select all URL text
+                            self.browser_url_cursor = self.browser_url_input.len();
+                        },
+                        _ if ctrl && (key == b'r' || key == b'R') => {
+                            // Ctrl+R or F5: refresh
+                            if let Some(ref mut browser) = self.browser {
+                                let _ = browser.refresh();
+                            }
+                        },
+                        _ if ctrl && (key == b'a' || key == b'A') => {
+                            // Ctrl+A: select all (move cursor to end)
+                            self.browser_url_cursor = self.browser_url_input.len();
+                        },
+                        _ if key == b'\t' => {
+                            // Tab: auto-complete common domains
+                            if !self.browser_url_input.contains("://") && !self.browser_url_input.is_empty() {
+                                self.browser_url_input = alloc::format!("http://{}", self.browser_url_input);
+                                self.browser_url_cursor = self.browser_url_input.len();
+                            }
+                        },
+                        32..=126 => { // Printable ASCII - insert at cursor
+                            if self.browser_url_input.len() < 512 {
+                                if self.browser_url_cursor >= self.browser_url_input.len() {
+                                    self.browser_url_input.push(key as char);
+                                } else {
+                                    self.browser_url_input.insert(self.browser_url_cursor, key as char);
+                                }
+                                self.browser_url_cursor += 1;
                             }
                         },
                         _ => {}
+                    }
                     }
                 },
                 _ => {}
@@ -3077,6 +3235,17 @@ struct AppConfig {
             }
         }
         
+        // Tick 3D game — only when window is focused and visible
+        let game3d_ids: Vec<u32> = self.game3d_states.keys().copied().collect();
+        for id in game3d_ids {
+            let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
+            if is_active {
+                if let Some(game) = self.game3d_states.get_mut(&id) {
+                    game.tick();
+                }
+            }
+        }
+        
         // Toggle cursor blink every ~45 frames (slower for readability)
         if self.frame_count % 45 == 0 {
             self.cursor_blink = !self.cursor_blink;
@@ -3123,6 +3292,9 @@ struct AppConfig {
         
         // Third pass: render model editor windows (needs &mut for state)
         self.draw_model_editor_windows();
+        
+        // Fourth pass: render 3D game windows (needs &mut for state)
+        self.draw_game3d_windows();
         
         // ALWAYS draw taskbar last (on top of everything, never covered by windows)
         self.draw_taskbar();
@@ -4041,7 +4213,7 @@ struct AppConfig {
     
     fn draw_start_menu(&self) {
         let menu_w = 280u32;
-        let menu_h = 440u32;
+        let menu_h = 472u32;
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
@@ -4064,7 +4236,7 @@ struct AppConfig {
         framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 26) as u32, menu_w - 4, GREEN_MUTED);
         
         // Menu items
-        let items: [(&str, &str, bool); 12] = [
+        let items: [(&str, &str, bool); 13] = [
             (">_", "Terminal", false),
             ("[]", "Files", false),
             ("##", "Calculator", false),
@@ -4073,6 +4245,7 @@ struct AppConfig {
             ("/\\", "TrustEdit 3D", false),
             ("WW", "Browser", false),
             ("Sk", "Snake", false),
+            ("3D", "TrustDoom 3D", false),
             ("@)", "Settings", false),
             ("<-", "Exit Desktop", true),
             ("!!", "Shutdown", true),
@@ -4285,6 +4458,11 @@ struct AppConfig {
             return;
         }
         
+        // Game3D is handled separately (needs &mut self)
+        if window.window_type == WindowType::Game3D {
+            return;
+        }
+        
         // Calculator is handled separately
         if window.window_type == WindowType::Calculator {
             self.draw_calculator(window);
@@ -4400,6 +4578,41 @@ struct AppConfig {
                 if content_w < 80 || content_h < 80 { continue; }
                 
                 // Render into a buffer then blit
+                let buf_w = content_w as usize;
+                let buf_h = content_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
+                
+                state.render(&mut buf, buf_w, buf_h);
+                
+                // Blit buffer to framebuffer
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
+                        let sy = content_y + py as u32;
+                        framebuffer::put_pixel(sx, sy, color);
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Render all 3D Game windows (separate pass because we need &mut for game state)
+    fn draw_game3d_windows(&mut self) {
+        let game_windows: Vec<(u32, i32, i32, u32, u32)> = self.windows.iter()
+            .filter(|w| w.window_type == WindowType::Game3D && w.visible && !w.minimized)
+            .map(|w| (w.id, w.x, w.y, w.width, w.height))
+            .collect();
+        
+        for (win_id, wx, wy, ww, wh) in game_windows {
+            if let Some(state) = self.game3d_states.get_mut(&win_id) {
+                let content_x = wx as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_w = ww;
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                
+                if content_w < 80 || content_h < 60 { continue; }
+                
                 let buf_w = content_w as usize;
                 let buf_h = content_h as usize;
                 let mut buf = alloc::vec![0u32; buf_w * buf_h];
@@ -4853,7 +5066,24 @@ struct AppConfig {
             &self.browser_url_input
         };
         let text_color = if self.browser_url_input.is_empty() { 0xFF666666 } else { 0xFFFFFFFF };
-        self.draw_text(url_bar_x as i32 + 8, btn_y as i32 + 4, url_text, text_color);
+        
+        // Draw loading indicator
+        if self.browser_loading {
+            self.draw_text(url_bar_x as i32 + 8, btn_y as i32 + 4, "Loading...", 0xFF00CC66);
+        } else {
+            self.draw_text(url_bar_x as i32 + 8, btn_y as i32 + 4, url_text, text_color);
+        }
+        
+        // Draw blinking cursor in URL bar
+        if !self.browser_loading && !self.browser_url_input.is_empty() || self.browser_url_input.is_empty() {
+            let ticks = crate::logger::get_ticks();
+            if (ticks / 500) % 2 == 0 { // Blink every 500ms
+                let cursor_x = url_bar_x as i32 + 8 + (self.browser_url_cursor as i32) * 7;
+                if cursor_x < (url_bar_x + url_bar_w - 4) as i32 {
+                    framebuffer::fill_rect(cursor_x as u32, btn_y + 3, 2, btn_size - 6, 0xFF00CC66);
+                }
+            }
+        }
         
         // Content area
         let content_y = browser_y + toolbar_height + 2;
@@ -4917,6 +5147,13 @@ struct AppConfig {
             alloc::string::String::from("Ready")
         };
         self.draw_text(browser_x as i32 + 8, status_y as i32 + 2, &status_text, 0xFF999999);
+        
+        // Shortcuts hint on right side of status bar
+        let hint = "PgUp/Dn:Scroll  Ctrl+R:Refresh  Tab:http://  Esc:Clear";
+        let hint_x = (browser_x + browser_w) as i32 - (hint.len() as i32 * 7) - 8;
+        if hint_x > browser_x as i32 + 150 {
+            self.draw_text(hint_x, status_y as i32 + 2, hint, 0xFF666666);
+        }
     }
     
     /// Draw raw HTML source code view
@@ -5384,17 +5621,25 @@ pub fn run() {
         // The interrupt handler converts scancodes→ASCII and strips releases.
         // Use keyboard::is_key_pressed(scancode) to check modifier/key state.
         while let Some(key) = crate::keyboard::read_char() {
-            // ESC (ASCII 27) → exit desktop
-            if key == 27 {
-                crate::serial_println!("[GUI] ESC pressed, exiting desktop");
-                EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
-                continue;
-            }
-            
             // Check modifier state from interrupt handler (tracks raw scancodes)
             let alt = crate::keyboard::is_key_pressed(0x38);
             let _ctrl = crate::keyboard::is_key_pressed(0x1D);
             let win = crate::keyboard::is_key_pressed(0x5B);
+            
+            // ESC (ASCII 27) → close focused window, or exit desktop if none
+            if key == 27 {
+                let mut d = DESKTOP.lock();
+                let has_focused = d.windows.iter().any(|w| w.focused && !w.minimized);
+                if has_focused {
+                    d.close_focused_window();
+                    crate::serial_println!("[GUI] ESC: closed focused window");
+                } else {
+                    crate::serial_println!("[GUI] ESC: no window open, exiting desktop");
+                    EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
+                }
+                drop(d);
+                continue;
+            }
             
             // Alt+Tab or Win+Tab (Tab = ASCII 9) → window switcher
             if (alt || win) && key == 9 {
@@ -5405,6 +5650,30 @@ pub fn run() {
                 }
                 continue;
             }
+            
+            // Win+Left Arrow → snap window to left half
+            if win && key == crate::keyboard::KEY_LEFT {
+                DESKTOP.lock().snap_focused_window(SnapDir::Left);
+                continue;
+            }
+            // Win+Right Arrow → snap window to right half
+            if win && key == crate::keyboard::KEY_RIGHT {
+                DESKTOP.lock().snap_focused_window(SnapDir::Right);
+                continue;
+            }
+            // Win+Up Arrow → maximize focused window
+            if win && key == crate::keyboard::KEY_UP {
+                DESKTOP.lock().toggle_maximize_focused();
+                continue;
+            }
+            // Win+Down Arrow → minimize focused window
+            if win && key == crate::keyboard::KEY_DOWN {
+                DESKTOP.lock().minimize_focused_window();
+                continue;
+            }
+            
+            // Alt+F4 → close focused window  (F4 key sends no ASCII via read_char,
+            // so this is handled in the scancode check below)
             
             // Pass key to focused window
             handle_keyboard(key);

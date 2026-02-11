@@ -78,6 +78,15 @@ impl From<TlsError> for HttpsError {
 
 /// Perform an HTTPS GET request
 pub fn get(url: &str) -> Result<HttpsResponse, HttpsError> {
+    get_inner(url, 0)
+}
+
+/// Internal get with redirect depth tracking
+fn get_inner(url: &str, depth: u32) -> Result<HttpsResponse, HttpsError> {
+    if depth > 5 {
+        return Err(HttpsError::InvalidResponse);
+    }
+    
     // Parse URL
     let (host, path, port) = parse_https_url(url)?;
     
@@ -199,7 +208,84 @@ pub fn get(url: &str) -> Result<HttpsResponse, HttpsError> {
     let _ = tcp::send_fin(ip, port, src_port);
     
     // Parse HTTP response
-    parse_http_response(&response_data)
+    let response = parse_http_response(&response_data)?;
+    
+    // Handle redirects (301, 302, 307, 308)
+    if response.status_code >= 300 && response.status_code < 400 {
+        // Find Location header
+        for (name, value) in &response.headers {
+            if name.to_lowercase() == "location" {
+                let redirect_url = if value.starts_with("http://") || value.starts_with("https://") {
+                    value.clone()
+                } else if value.starts_with("/") {
+                    alloc::format!("https://{}:{}{}", host, port, value)
+                } else {
+                    let base_dir = match path.rfind('/') {
+                        Some(i) => &path[..=i],
+                        None => "/",
+                    };
+                    alloc::format!("https://{}:{}{}{}", host, port, base_dir, value)
+                };
+                crate::serial_println!("[HTTPS] Redirect {} -> {}", response.status_code, redirect_url);
+                // If redirect goes to HTTP, use HTTP client
+                if redirect_url.starts_with("http://") {
+                    return crate::netstack::http::get(&redirect_url)
+                        .map(|r| HttpsResponse {
+                            status_code: r.status_code,
+                            headers: r.headers,
+                            body: r.body,
+                        })
+                        .map_err(|_| HttpsError::ConnectionFailed);
+                }
+                return get_inner(&redirect_url, depth + 1);
+            }
+        }
+    }
+    
+    Ok(response)
+}
+
+/// Decode chunked transfer encoding
+fn decode_chunked(data: &[u8]) -> Vec<u8> {
+    let mut result = Vec::new();
+    let mut pos = 0;
+    
+    while pos < data.len() {
+        // Find end of chunk size line
+        let mut line_end = pos;
+        while line_end + 1 < data.len() {
+            if data[line_end] == b'\r' && data[line_end + 1] == b'\n' {
+                break;
+            }
+            line_end += 1;
+        }
+        
+        if line_end + 1 >= data.len() {
+            break;
+        }
+        
+        // Parse hex chunk size
+        let size_str = core::str::from_utf8(&data[pos..line_end]).unwrap_or("0");
+        let size_str = size_str.split(';').next().unwrap_or("0").trim();
+        let chunk_size = usize::from_str_radix(size_str, 16).unwrap_or(0);
+        
+        if chunk_size == 0 {
+            break;
+        }
+        
+        let chunk_start = line_end + 2;
+        let chunk_end = chunk_start + chunk_size;
+        
+        if chunk_end > data.len() {
+            result.extend_from_slice(&data[chunk_start..]);
+            break;
+        }
+        
+        result.extend_from_slice(&data[chunk_start..chunk_end]);
+        pos = chunk_end + 2;
+    }
+    
+    result
 }
 
 /// Parse HTTPS URL
@@ -322,12 +408,23 @@ fn parse_http_response(data: &[u8]) -> Result<HttpsResponse, HttpsError> {
         }
     }
     
-    // Extract body
+    // Extract body - decode chunked if needed
     let body_start = headers_end + 4;
-    let body = if body_start < data.len() {
-        data[body_start..].to_vec()
+    let raw_body = if body_start < data.len() {
+        &data[body_start..]
     } else {
-        Vec::new()
+        &[] as &[u8]
+    };
+    
+    // Check for chunked transfer encoding
+    let is_chunked = headers_str.to_lowercase().contains("transfer-encoding") 
+        && headers_str.to_lowercase().contains("chunked");
+    
+    let body = if is_chunked {
+        crate::serial_println!("[HTTPS] Decoding chunked transfer encoding ({} raw bytes)", raw_body.len());
+        decode_chunked(raw_body)
+    } else {
+        raw_body.to_vec()
     };
     
     Ok(HttpsResponse {

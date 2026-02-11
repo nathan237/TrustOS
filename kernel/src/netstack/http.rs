@@ -69,6 +69,15 @@ fn parse_url(url: &str) -> Result<(&str, u16, &str), &'static str> {
 
 /// Perform HTTP request
 fn request(method: &str, url: &str, content_type: Option<&str>, body: Option<&[u8]>) -> Result<HttpResponse, &'static str> {
+    request_inner(method, url, content_type, body, 0)
+}
+
+/// Internal request with redirect depth tracking
+fn request_inner(method: &str, url: &str, content_type: Option<&str>, body: Option<&[u8]>, depth: u32) -> Result<HttpResponse, &'static str> {
+    if depth > 5 {
+        return Err("Too many redirects");
+    }
+    
     let (host, port, path) = parse_url(url)?;
     
     // Resolve hostname to IP
@@ -128,8 +137,8 @@ fn request(method: &str, url: &str, content_type: Option<&str>, body: Option<&[u
             break;
         }
         
-        // Timeout after 10 seconds
-        if crate::logger::get_ticks().saturating_sub(start) > 10000 {
+        // Timeout after 5 seconds
+        if crate::logger::get_ticks().saturating_sub(start) > 5000 {
             break;
         }
         
@@ -140,7 +149,36 @@ fn request(method: &str, url: &str, content_type: Option<&str>, body: Option<&[u
     let _ = crate::netstack::tcp::send_fin(ip, port, src_port);
     
     // Parse response
-    parse_response(&response_data)
+    let response = parse_response(&response_data)?;
+    
+    // Handle redirects (301, 302, 307, 308)
+    if response.status_code >= 300 && response.status_code < 400 {
+        if let Some(location) = response.header("Location") {
+            // If redirect goes to HTTPS, return the 3xx response as-is
+            // The browser will handle the protocol switch
+            if location.starts_with("https://") {
+                crate::serial_println!("[HTTP] Redirect to HTTPS: {} -> {}", response.status_code, location);
+                return Ok(response);
+            }
+            
+            let redirect_url = if location.starts_with("http://") {
+                String::from(location)
+            } else if location.starts_with("/") {
+                format!("http://{}:{}{}", host, port, location)
+            } else {
+                // Relative URL
+                let base_dir = match path.rfind('/') {
+                    Some(i) => &path[..=i],
+                    None => "/",
+                };
+                format!("http://{}:{}{}{}", host, port, base_dir, location)
+            };
+            crate::serial_println!("[HTTP] Redirect {} -> {}", response.status_code, redirect_url);
+            return request_inner(method, &redirect_url, content_type, body, depth + 1);
+        }
+    }
+    
+    Ok(response)
 }
 
 /// Check if response contains end marker (for chunked or content-length based)
@@ -156,6 +194,18 @@ fn contains_end_marker(data: &[u8]) -> bool {
     if let Some(cl) = find_content_length(data, header_end) {
         let body_len = data.len() - header_end;
         return body_len >= cl;
+    }
+    
+    // Check for chunked transfer encoding
+    if is_chunked(data, header_end) {
+        // Look for final chunk: 0\r\n\r\n
+        let body = &data[header_end..];
+        for i in 0..body.len().saturating_sub(4) {
+            if body[i] == b'0' && body[i+1] == b'\r' && body[i+2] == b'\n' && body[i+3] == b'\r' && body.len() > i + 4 && body[i+4] == b'\n' {
+                return true;
+            }
+        }
+        return false;
     }
     
     // For Connection: close, we wait for FIN
@@ -181,6 +231,63 @@ fn find_content_length(data: &[u8], header_end: usize) -> Option<usize> {
         }
     }
     None
+}
+
+/// Decode chunked transfer encoding
+fn decode_chunked(data: &[u8]) -> Vec<u8> {
+    let mut result = Vec::new();
+    let mut pos = 0;
+    
+    while pos < data.len() {
+        // Find end of chunk size line
+        let mut line_end = pos;
+        while line_end + 1 < data.len() {
+            if data[line_end] == b'\r' && data[line_end + 1] == b'\n' {
+                break;
+            }
+            line_end += 1;
+        }
+        
+        if line_end + 1 >= data.len() {
+            break;
+        }
+        
+        // Parse hex chunk size (ignore extensions after ';')
+        let size_str = core::str::from_utf8(&data[pos..line_end]).unwrap_or("0");
+        let size_str = size_str.split(';').next().unwrap_or("0").trim();
+        let chunk_size = usize::from_str_radix(size_str, 16).unwrap_or(0);
+        
+        if chunk_size == 0 {
+            break; // Final chunk
+        }
+        
+        let chunk_start = line_end + 2; // Skip \r\n after size
+        let chunk_end = chunk_start + chunk_size;
+        
+        if chunk_end > data.len() {
+            // Incomplete chunk, take what we have
+            result.extend_from_slice(&data[chunk_start..]);
+            break;
+        }
+        
+        result.extend_from_slice(&data[chunk_start..chunk_end]);
+        pos = chunk_end + 2; // Skip \r\n after chunk data
+    }
+    
+    result
+}
+
+/// Check if Transfer-Encoding is chunked
+fn is_chunked(data: &[u8], header_end: usize) -> bool {
+    if let Ok(headers) = core::str::from_utf8(&data[..header_end]) {
+        for line in headers.lines() {
+            let lower = to_lower(line);
+            if lower.starts_with("transfer-encoding:") && lower.contains("chunked") {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Parse HTTP response
@@ -214,8 +321,14 @@ fn parse_response(data: &[u8]) -> Result<HttpResponse, &'static str> {
         }
     }
     
-    // Body
-    let body = data[header_end..].to_vec();
+    // Body - decode chunked if needed
+    let raw_body = &data[header_end..];
+    let body = if is_chunked(data, header_end) {
+        crate::serial_println!("[HTTP] Decoding chunked transfer encoding ({} raw bytes)", raw_body.len());
+        decode_chunked(raw_body)
+    } else {
+        raw_body.to_vec()
+    };
     
     Ok(HttpResponse {
         status_code,

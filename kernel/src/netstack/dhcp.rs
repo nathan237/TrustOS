@@ -264,9 +264,14 @@ pub fn handle_packet(data: &[u8]) {
             let mask = crate::network::Ipv4Address::new(subnet[0], subnet[1], subnet[2], subnet[3]);
             let gwaddr = crate::network::Ipv4Address::new(gw[0], gw[1], gw[2], gw[3]);
             crate::network::set_ipv4_config(ip, mask, Some(gwaddr));
+            // Update global DNS server from DHCP
+            crate::network::set_dns_server(dns);
             drop(c);
             BOUND.store(true, Ordering::SeqCst);
-            crate::log!("[DHCP] Configured: IP={}.{}.{}.{} GW={}.{}.{}.{}", yiaddr[0], yiaddr[1], yiaddr[2], yiaddr[3], gw[0], gw[1], gw[2], gw[3]);
+            crate::log!("[DHCP] Configured: IP={}.{}.{}.{} GW={}.{}.{}.{} DNS={}.{}.{}.{}", 
+                yiaddr[0], yiaddr[1], yiaddr[2], yiaddr[3], 
+                gw[0], gw[1], gw[2], gw[3],
+                dns[0], dns[1], dns[2], dns[3]);
         }
         msg_type::NAK => {
             crate::log_warn!("[DHCP] NAK, restarting");

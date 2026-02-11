@@ -7,47 +7,47 @@ Memory map entries: 34
   0x0000000000 - 0x0000001000 (        4096 bytes) USABLE
   0x0000001000 - 0x0000002000 (        4096 bytes) BOOTLOADER
   0x0000002000 - 0x00000a0000 (      647168 bytes) USABLE
-  0x0000100000 - 0x0018cfd000 (   415223808 bytes) USABLE
-  0x0018cfd000 - 0x0018fc5000 (     2916352 bytes) KERNEL
-  0x0018fc5000 - 0x00192ec000 (     3305472 bytes) BOOTLOADER
-  0x00192ec000 - 0x001bc10000 (    43139072 bytes) USABLE
-  0x001bc10000 - 0x001bc2d000 (      118784 bytes) BOOTLOADER
-  0x001bc2d000 - 0x001d314000 (    24014848 bytes) USABLE
-  0x001d314000 - 0x001d319000 (       20480 bytes) RESERVED
-  0x001d319000 - 0x001d32d000 (       81920 bytes) USABLE
-  0x001d32d000 - 0x001d3a8000 (      503808 bytes) BOOTLOADER
-  0x001d3a8000 - 0x001d3c9000 (      135168 bytes) USABLE
-  0x001d3c9000 - 0x001d3e5000 (      114688 bytes) BOOTLOADER
-  0x001d3e5000 - 0x001d3f0000 (       45056 bytes) RESERVED
-  0x001d3f0000 - 0x001daa2000 (     7020544 bytes) USABLE
-  0x001daa2000 - 0x001dbb6000 (     1130496 bytes) RESERVED
-  0x001dbb6000 - 0x001e6ed000 (    11759616 bytes) USABLE
-  0x001e6ed000 - 0x001e7ed000 (     1048576 bytes) RESERVED
-  0x001e7ed000 - 0x001e8ed000 (     1048576 bytes) RESERVED
-  0x001e8ed000 - 0x001e96d000 (      524288 bytes) RESERVED
-  0x001e96d000 - 0x001e97f000 (       73728 bytes) ACPI_RECLAIM
-  0x001e97f000 - 0x001e9ff000 (      524288 bytes) ACPI_NVS
-  0x001e9ff000 - 0x001f000000 (     6295552 bytes) USABLE
-  0x001f000000 - 0x001f0d0000 (      851968 bytes) BOOTLOADER
-  0x001f0d0000 - 0x001f12d000 (      380928 bytes) USABLE
-  0x001f12d000 - 0x001f131000 (       16384 bytes) RESERVED
-  0x001f131000 - 0x001f133000 (        8192 bytes) ACPI_NVS
-  0x001f133000 - 0x001f16e000 (      241664 bytes) USABLE
-  0x001f16e000 - 0x001ffee000 (    15204352 bytes) RESERVED
-  0x001ffee000 - 0x001ffef000 (        4096 bytes) RESERVED
-  0x001ffef000 - 0x001fff0000 (        4096 bytes) RESERVED
+  0x0000100000 - 0x0038cc5000 (   951865344 bytes) USABLE
+  0x0038cc5000 - 0x0038fa7000 (     3022848 bytes) KERNEL
+  0x0038fa7000 - 0x00392ec000 (     3428352 bytes) BOOTLOADER
+  0x00392ec000 - 0x003bc10000 (    43139072 bytes) USABLE
+  0x003bc10000 - 0x003bc54000 (      278528 bytes) BOOTLOADER
+  0x003bc54000 - 0x003d33b000 (    24014848 bytes) USABLE
+  0x003d33b000 - 0x003d340000 (       20480 bytes) RESERVED
+  0x003d340000 - 0x003d354000 (       81920 bytes) USABLE
+  0x003d354000 - 0x003d391000 (      249856 bytes) BOOTLOADER
+  0x003d391000 - 0x003d392000 (        4096 bytes) USABLE
+  0x003d392000 - 0x003d3c5000 (      208896 bytes) BOOTLOADER
+  0x003d3c5000 - 0x003d3d0000 (       45056 bytes) RESERVED
+  0x003d3d0000 - 0x003daa2000 (     7151616 bytes) USABLE
+  0x003daa2000 - 0x003dbb6000 (     1130496 bytes) RESERVED
+  0x003dbb6000 - 0x003e6ed000 (    11759616 bytes) USABLE
+  0x003e6ed000 - 0x003e7ed000 (     1048576 bytes) RESERVED
+  0x003e7ed000 - 0x003e8ed000 (     1048576 bytes) RESERVED
+  0x003e8ed000 - 0x003e96d000 (      524288 bytes) RESERVED
+  0x003e96d000 - 0x003e97f000 (       73728 bytes) ACPI_RECLAIM
+  0x003e97f000 - 0x003e9ff000 (      524288 bytes) ACPI_NVS
+  0x003e9ff000 - 0x003f000000 (     6295552 bytes) USABLE
+  0x003f000000 - 0x003f0d0000 (      851968 bytes) BOOTLOADER
+  0x003f0d0000 - 0x003f12d000 (      380928 bytes) USABLE
+  0x003f12d000 - 0x003f131000 (       16384 bytes) RESERVED
+  0x003f131000 - 0x003f133000 (        8192 bytes) ACPI_NVS
+  0x003f133000 - 0x003f16e000 (      241664 bytes) USABLE
+  0x003f16e000 - 0x003ffee000 (    15204352 bytes) RESERVED
+  0x003ffee000 - 0x003ffef000 (        4096 bytes) RESERVED
+  0x003ffef000 - 0x003fff0000 (        4096 bytes) RESERVED
   0x0080000000 - 0x00807e9000 (     8294400 bytes) FRAMEBUFFER
   0x00ffc00000 - 0x0100000000 (     4194304 bytes) RESERVED
-[MEM] Total physical memory: 523 MB
-[HEAP] Dynamic size: 130 MB (25% of 523 MB RAM)
-[HEAP] Using mmap region at phys 0x100000, size 130 MB
-[         0][CPU0][INFO ] Heap initialized: 130 MB at virt 0xffff800000100000 (phys 0x100000)
-[HEAP] Initialized: free=134008 KB
+[MEM] Total physical memory: 1035 MB
+[HEAP] Dynamic size: 258 MB (25% of 1035 MB RAM)
+[HEAP] Using mmap region at phys 0x100000, size 258 MB
+[         0][CPU0][INFO ] Heap initialized: 258 MB at virt 0xffff800000100000 (phys 0x100000)
+[HEAP] Initialized: free=265080 KB
 [FB] Initializing scrollback buffer...
 [FB] Scrollback buffer initialized (1000 lines max)
-[INTEGRITY] .text   : 2335461 bytes, SHA-256: 8a4f854289b46e0d...121933e4
-[INTEGRITY] .rodata : 319168 bytes, SHA-256: 9d0a4b4d23e0d0ec...726b142c
-[INTEGRITY] kernel digest: 3004a2ad363907db...be9978cc
+[INTEGRITY] .text   : 2434949 bytes, SHA-256: 45d4641155c892a0...83df7696
+[INTEGRITY] .rodata : 325088 bytes, SHA-256: 1c11337093ce6e37...07026984
+[INTEGRITY] kernel digest: 0d73024cf594a0f4...a26c8db1
 ╔══════════════════════════════════════════════════════════════╗
 ║                      T R U S T - O S                         ║
 ║                 FAST • SECURE • RELIABLE                     ║
@@ -64,36 +64,36 @@ Initializing early interrupts...
 Detecting CPU capabilities...
 [CPU] AMD Ryzen 7 5800X 8-Core Processor
 [CPU] Vendor: Amd, Family: 25, Model: 33
-[CPU] TSC: true (invariant: true, freq: 41 MHz)
+[CPU] TSC: true (invariant: true, freq: 29 MHz)
 [CPU] SIMD: SSE=true SSE2=true SSE4.2=true AVX=true AVX2=true
 [CPU] Crypto: AES-NI=true PCLMULQDQ=true SHA=true RDRAND=true
 [CPU] Security: SMEP=false SMAP=false NX=true
 [CPU] Virt: VMX=false SVM=false
 [SIMD] SSE/SSE2 enabled
-[TSC] Initialized: 41394920 Hz (0 GHz)
+[TSC] Initialized: 29877880 Hz (0 GHz)
 [OK] CPU capabilities detected
 Parsing ACPI tables...
-[DEBUG] RSDP pointer from Limine: 0x1e97e014
-[ACPI] RSDP phys=0x1e97e014, mapping...
-[MMIO] Mapping 0x1e97e014 -> 0xffff80001e97e014 (2 pages)
-[ACPI] RSDP mapped at virt=0xffff80001e97e014
+[DEBUG] RSDP pointer from Limine: 0x3e97e014
+[ACPI] RSDP phys=0x3e97e014, mapping...
+[MMIO] Mapping 0x3e97e014 -> 0xffff80003e97e014 (2 pages)
+[ACPI] RSDP mapped at virt=0xffff80003e97e014
 [ACPI] About to read RSDP...
 [ACPI] First byte: 0x52
 [ACPI] Sig OK: true
 [ACPI] Revision: 2, OEM: VBOX
-[ACPI] Using XSDT at 0x1e97d0e8
-[MMIO] Mapping 0x1e97d0e8 -> 0xffff80001e97d0e8 (2 pages)
+[ACPI] Using XSDT at 0x3e97d0e8
+[MMIO] Mapping 0x3e97d0e8 -> 0xffff80003e97d0e8 (2 pages)
 [ACPI] Found 4 tables
-[MMIO] Mapping 0x1e979000 -> 0xffff80001e979000 (1 pages)
-[ACPI] Table: FACP at 0x1e979000, len=244
+[MMIO] Mapping 0x3e979000 -> 0xffff80003e979000 (1 pages)
+[ACPI] Table: FACP at 0x3e979000, len=244
 [ACPI] FADT: PM1a=0xb000, century=0
-[MMIO] Mapping 0x1e978000 -> 0xffff80001e978000 (1 pages)
-[ACPI] Table: APIC at 0x1e978000, len=92
+[MMIO] Mapping 0x3e978000 -> 0xffff80003e978000 (1 pages)
+[ACPI] Table: APIC at 0x3e978000, len=92
 [ACPI] MADT: 2 CPUs, 1 I/O APICs
-[MMIO] Mapping 0x1e977000 -> 0xffff80001e977000 (1 pages)
-[ACPI] Table: SSDT at 0x1e977000, len=69
-[MMIO] Mapping 0x1e976000 -> 0xffff80001e976000 (1 pages)
-[ACPI] Table: BGRT at 0x1e976000, len=56
+[MMIO] Mapping 0x3e977000 -> 0xffff80003e977000 (1 pages)
+[ACPI] Table: SSDT at 0x3e977000, len=69
+[MMIO] Mapping 0x3e976000 -> 0xffff80003e976000 (1 pages)
+[ACPI] Table: BGRT at 0x3e976000, len=56
 [OK] ACPI: 2 CPUs, 1 I/O APICs
 Initializing SMP...
 [SMP] BSP initialized (APIC ID: 0)
@@ -104,11 +104,11 @@ Initializing SMP...
 [SMP] AP 1 online (LAPIC ID: 1)
 [OK] SMP: 2 cores active
 Initializing paging subsystem...
-[         0][CPU0][DEBUG] Paging initialized, kernel CR3: 0x1d3ce000
+[         0][CPU0][DEBUG] Paging initialized, kernel CR3: 0x3d3ae000
 [OK] Paging initialized (NX enabled)
 [PAT] Skipping Write-Combining on VirtualBox (VMSVGA compat)
 Initializing userland support...
-[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff802c6200
+[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff802c82f8
 [         0][CPU0][INFO ] [USERLAND] SYSCALL/SYSRET configured (STAR, LSTAR, SFMASK)
 [OK] Userland support ready
 Initializing thread subsystem...
@@ -119,7 +119,7 @@ Initializing security subsystem...
 Keyboard driver ready
 [OK] Keyboard ready
 [RTC] init start
-[RTC] Initialized: 2026-02-10 21:20:44
+[RTC] Initialized: 2026-02-11 13:03:03
 [OK] RTC initialized
 [RTC] init done
 [KB-IRQ] scancode=0x47
@@ -181,9 +181,12 @@ Keyboard driver ready
 [PAT] Skipping framebuffer WC remap on VirtualBox
 [PHASE] Network init start
 [..] Network subsystem...
-[         0][CPU0][INFO ] [NET] Found: 8086:100E e1000 [Intel] BAR0=0x88600000 IRQ=11
+[         0][CPU0][INFO ] [NET] Platform detected: VirtualBox
+[NET] Default DNS: 10.0.2.3
+[         0][CPU0][INFO ] [NET] NIC: 8086:100E e1000 [Intel] BAR0=0x88600000 IRQ=11
 [         0][CPU0][DEBUG] [PCI] Bus mastering enabled for 00:03.0
-[         0][CPU0][INFO ] [NET] Interface up: MAC=52:54:00:00:00:00
+[         0][CPU0][INFO ] [NET] Interface up: MAC=52:54:00:00:00:00 (awaiting DHCP)
+[..] Platform: VirtualBox
 [         0][CPU0][INFO ] [E1000] Probing 8086:100E
 [E1000] BAR0=0x88600000, calling map_mmio...
 [MMIO] Mapping 0x88600000 -> 0xffff800088600000 (32 pages)
@@ -194,8 +197,8 @@ Keyboard driver ready
 [         0][CPU0][DEBUG] [E1000] Initializing RX ring (32 descriptors)
 [         0][CPU0][DEBUG] [E1000] Initializing TX ring (8 descriptors)
 [         0][CPU0][WARN ] [E1000] Link not detected - continuing anyway (VirtualBox NAT mode)
-[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:16:42:7B
-[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:16:42:7B
+[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:D4:30:7E
+[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:D4:30:7E
 [OK] Network driver: e1000
 [OK] Network ready
 [         0][CPU0][INFO ] [DHCP] Client started
@@ -242,7 +245,7 @@ Mounted filesystems:
   /dev -> devfs
 
 Processes: 1
-Heap used: 3299 KB
+Heap used: 3300 KB
 
 [OK] Init process started (PID 1)
 [PHASE] Init process done
@@ -285,8 +288,8 @@ Starting shell...
 
   T-RustOs v0.1.0 - Type 'help' for commands
 
-[21:20:46] trustos:/$ █ [KB-READ] popped 244 (0xF4)
-  █   █   [KB-IRQ] scancode=0x20
+[13:03:05] trustos:/$ █ [KB-READ] popped 244 (0xF4)
+  █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █ [KB-IRQ] scancode=0x20
 [KB-BUF] push ascii=100 (0x64) char='d'
 [KB-READ] popped 100 (0x64)
   d   dir   del   date   df   deluser   desktop   distro   disk█ [KB-IRQ] scancode=0x12
@@ -305,170 +308,75 @@ Starting shell...
 [KB-IRQ] scancode=0x14
 [KB-BUF] push ascii=116 (0x74) char='t'
 [KB-READ] popped 116 (0x74)
-                                          t   desktop█ [KB-IRQ] scancode=0x94
-[KB-IRQ] scancode=0x18
+                                          t   desktop█ [KB-IRQ] scancode=0x18
 [KB-BUF] push ascii=111 (0x6F) char='o'
 [KB-READ] popped 111 (0x6F)
-                                          o   desktop█ [KB-IRQ] scancode=0x19
-[KB-BUF] push ascii=112 (0x70) char='p'
-[KB-READ] popped 112 (0x70)
-                                          p█ [KB-IRQ] scancode=0x98
-[KB-IRQ] scancode=0x99
-[KB-IRQ] scancode=0x1C
-[KB-BUF] push ascii=10 (0x0A) char='
-'
-[KB-READ] popped 10 (0x0A)
-  
- [Desktop] init start: 1920x1080
-[Scaling] Auto-detected 1x scale for 1920x1080 framebuffer
-[Scaling] Scale factor set to 1x
-[Desktop] UI scale factor: 1x
-[Desktop] init_double_buffer...
-[FB] Double buffer allocated: 1920x1080 (8100 KB)
-[Desktop] init_background_cache...
-[KB-IRQ] scancode=0x9C
-[FB] Background cache allocated: 8100 KB
-[Desktop] init_compositor...
-[Desktop] init_desktop_icons...
-[Desktop] init complete
-[Desktop] Entering desktop run loop
-[GUI] Frame timing init: TSC 41 MHz
-[GUI] Starting desktop environment...
-[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start
-[GUI] Target: 60 FPS with HLT-based frame limiting
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-READ] popped 27 (0x1B)
-[GUI] ESC pressed, exiting desktop
-[GUI] Desktop exit requested, returning to shell
-[GUI] Desktop exiting, cleaning up...
-[GUI] Desktop exited cleanly
-[Desktop] Returned to shell
-
-Returned to TrustOS shell. Type 'help' for commands.
-[21:21:51] trustos:/$ █ [KB-IRQ] scancode=0x81
-  █ [KB-IRQ] scancode=0x38
-[KB-IRQ] scancode=0x0F
-[KB-BUF] push ascii=9 (0x09) char='	'
-[KB-READ] popped 9 (0x09)
-  █ [KB-IRQ] scancode=0x8F
-[KB-IRQ] scancode=0xB8
-  █   [KB-IRQ] scancode=0x1C
-[KB-BUF] push ascii=10 (0x0A) char='
-'
-[KB-READ] popped 10 (0x0A)
-  
- [21:21:59] trustos:/$ █ [KB-IRQ] scancode=0x9C
-[KB-IRQ] scancode=0x20
-[KB-BUF] push ascii=100 (0x64) char='d'
-[KB-READ] popped 100 (0x64)
-  d   dir   del   date   df   deluser   desktop   distro   disk█ [KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-                                                                                                                                                                                                                                                                                                                                  e   del   deluser   desktop█ [KB-IRQ] scancode=0xA0
-[KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x1F
-[KB-BUF] push ascii=115 (0x73) char='s'
-[KB-READ] popped 115 (0x73)
-                                                                                                                          s   desktop█ [KB-IRQ] scancode=0x9F
-[KB-IRQ] scancode=0x25
-[KB-BUF] push ascii=107 (0x6B) char='k'
-[KB-READ] popped 107 (0x6B)
-                                          k   desktop█ [KB-IRQ] scancode=0xA5
-[KB-IRQ] scancode=0x14
-[KB-BUF] push ascii=116 (0x74) char='t'
-[KB-READ] popped 116 (0x74)
-                                          t   desktop█ [KB-IRQ] scancode=0x94
-[KB-IRQ] scancode=0x18
-[KB-BUF] push ascii=111 (0x6F) char='o'
-[KB-READ] popped 111 (0x6F)
-                                          o   desktop█ [KB-IRQ] scancode=0x19
-[KB-BUF] push ascii=112 (0x70) char='p'
-[KB-READ] popped 112 (0x70)
-                                          p█ [KB-IRQ] scancode=0x98
-[KB-IRQ] scancode=0x99
-[KB-IRQ] scancode=0x1C
-[KB-BUF] push ascii=10 (0x0A) char='
-'
-[KB-READ] popped 10 (0x0A)
-  
- [Desktop] init start: 1920x1080
-[Scaling] Auto-detected 1x scale for 1920x1080 framebuffer
-[Scaling] Scale factor set to 1x
-[Desktop] UI scale factor: 1x
-[Desktop] init_double_buffer...
-[FB] Double buffer allocated: 1920x1080 (8100 KB)
-[Desktop] init_background_cache...
-[FB] Background cache allocated: 8100 KB
-[Desktop] init_compositor...
-[Desktop] init_desktop_icons...
-[Desktop] init complete
-[Desktop] Entering desktop run loop
-[GUI] Frame timing init: TSC 41 MHz
-[GUI] Starting desktop environment...
-[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start
-[GUI] Target: 60 FPS with HLT-based frame limiting
-[KB-IRQ] scancode=0x9C
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-READ] popped 27 (0x1B)
-[GUI] ESC pressed, exiting desktop
-[GUI] Desktop exit requested, returning to shell
-[GUI] Desktop exiting, cleaning up...
-[GUI] Desktop exited cleanly
-[Desktop] Returned to shell
-
-Returned to TrustOS shell. Type 'help' for commands.
-[21:22:08] trustos:/$ █ [KB-IRQ] scancode=0x81
-  █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   [KB-IRQ] scancode=0x20
-[KB-BUF] push ascii=100 (0x64) char='d'
-[KB-READ] popped 100 (0x64)
-  d   dir   del   date   df   deluser   desktop   distro   disk█ [KB-IRQ] scancode=0xA0
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-                                                                                                                                                                                                                                                                                                                                  e   del   deluser   desktop█ [KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x1F
-[KB-BUF] push ascii=115 (0x73) char='s'
-[KB-READ] popped 115 (0x73)
-                                                                                                                          s   desktop█ [KB-IRQ] scancode=0x9F
-[KB-IRQ] scancode=0x25
-[KB-BUF] push ascii=107 (0x6B) char='k'
-[KB-READ] popped 107 (0x6B)
-                                          k   desktop█ [KB-IRQ] scancode=0xA5
-[KB-IRQ] scancode=0x14
-[KB-BUF] push ascii=116 (0x74) char='t'
-[KB-READ] popped 116 (0x74)
-                                          t   desktop█ [KB-IRQ] scancode=0x94
-[KB-IRQ] scancode=0x18
-[KB-BUF] push ascii=111 (0x6F) char='o'
-[KB-READ] popped 111 (0x6F)
-                                          o   desktop█ [KB-IRQ] scancode=0x98
+                                          o   desktop█ [KB-IRQ] scancode=0x94
 [KB-IRQ] scancode=0x19
 [KB-BUF] push ascii=112 (0x70) char='p'
 [KB-READ] popped 112 (0x70)
-                                          p█ [KB-IRQ] scancode=0x99
+                                          p█ [KB-IRQ] scancode=0x98
+[KB-IRQ] scancode=0x99
 [KB-IRQ] scancode=0x1C
 [KB-BUF] push ascii=10 (0x0A) char='
 '
 [KB-READ] popped 10 (0x0A)
   
- [Desktop] init start: 1920x1080
+ [Desktop] init start: 1920x1080 (clearing 0 windows, 0 icons)
+[Desktop] state cleared, windows=0 icons=0
 [Scaling] Auto-detected 1x scale for 1920x1080 framebuffer
 [Scaling] Scale factor set to 1x
 [Desktop] UI scale factor: 1x
 [Desktop] init_double_buffer...
 [FB] Double buffer allocated: 1920x1080 (8100 KB)
 [Desktop] init_background_cache...
+[KB-IRQ] scancode=0x9C
 [FB] Background cache allocated: 8100 KB
 [Desktop] init_compositor...
 [Desktop] init_desktop_icons...
 [Desktop] init complete
 [Desktop] Entering desktop run loop
-[GUI] Frame timing init: TSC 41 MHz
+[GUI] Frame timing init: TSC 29 MHz
 [GUI] Starting desktop environment...
 [GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start
 [GUI] Target: 60 FPS with HLT-based frame limiting
+[KB-IRQ] scancode=0x23
+[KB-BUF] push ascii=104 (0x68) char='h'
+[KB-READ] popped 104 (0x68)
+[KB-IRQ] scancode=0xA3
+[KB-IRQ] scancode=0x12
+[KB-BUF] push ascii=101 (0x65) char='e'
+[KB-READ] popped 101 (0x65)
+[KB-IRQ] scancode=0x92
+[KB-IRQ] scancode=0x25
+[KB-BUF] push ascii=107 (0x6B) char='k'
+[KB-READ] popped 107 (0x6B)
+[KB-IRQ] scancode=0x18
+[KB-BUF] push ascii=111 (0x6F) char='o'
+[KB-READ] popped 111 (0x6F)
+[KB-IRQ] scancode=0xA5
+[KB-IRQ] scancode=0x98
+[KB-IRQ] scancode=0x0E
+[KB-BUF] push ascii=8 (0x08) char=' '
+[KB-READ] popped 8 (0x08)
+[KB-IRQ] scancode=0x8E
+[KB-IRQ] scancode=0x0E
+[KB-BUF] push ascii=8 (0x08) char=' '
+[KB-READ] popped 8 (0x08)
+[KB-IRQ] scancode=0x8E
+[KB-IRQ] scancode=0x26
+[KB-BUF] push ascii=108 (0x6C) char='l'
+[KB-READ] popped 108 (0x6C)
+[KB-IRQ] scancode=0x19
+[KB-BUF] push ascii=112 (0x70) char='p'
+[KB-READ] popped 112 (0x70)
+[KB-IRQ] scancode=0xA6
+[KB-IRQ] scancode=0x99
+[KB-IRQ] scancode=0x1C
+[KB-BUF] push ascii=10 (0x0A) char='
+'
+[KB-READ] popped 10 (0x0A)
+[TERM] Executing command: 'help' len=4
 [KB-IRQ] scancode=0x9C
 [KB-IRQ] scancode=0x01
 [KB-BUF] push ascii=27 (0x1B) char=''
@@ -480,9 +388,5 @@ Returned to TrustOS shell. Type 'help' for commands.
 [Desktop] Returned to shell
 
 Returned to TrustOS shell. Type 'help' for commands.
-[21:28:33] trustos:/$ █ [KB-IRQ] scancode=0x81
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-READ] popped 27 (0x1B)
-  █ [KB-IRQ] scancode=0x81
-  █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   
+[13:06:38] trustos:/$ █ [KB-IRQ] scancode=0x81
+  █   █   █ 

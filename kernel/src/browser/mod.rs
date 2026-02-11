@@ -127,31 +127,49 @@ impl Browser {
         
         crate::serial_println!("[BROWSER] Navigating to: {}", full_url);
         
-        // Fetch the page
-        let response = match crate::netstack::http::get(&full_url) {
-            Ok(r) => r,
-            Err(e) => {
-                crate::serial_println!("[BROWSER] Network error: {}", e);
-                self.status = BrowserStatus::Error(alloc::format!("Network error: {}", e));
-                // Show error page instead of crashing
-                self.raw_html = alloc::format!(
-                    "<html><body><h1>Error</h1><p>Could not load {}</p><p>{}</p></body></html>",
-                    full_url, e
-                );
-                self.document = Some(parse_html(&self.raw_html));
-                self.current_url = full_url;
-                self.scroll_y = 0;
-                return Err(e);
+        // Fetch the page - use HTTPS or HTTP based on URL scheme
+        let (status_code, headers, body) = if full_url.starts_with("https://") {
+            // HTTPS request
+            match crate::netstack::https::get(&full_url) {
+                Ok(r) => (r.status_code, r.headers, r.body),
+                Err(e) => {
+                    crate::serial_println!("[BROWSER] HTTPS error: {}", e);
+                    self.status = BrowserStatus::Error(alloc::format!("HTTPS error: {}", e));
+                    self.raw_html = alloc::format!(
+                        "<html><body><h1>HTTPS Error</h1><p>Could not load {}</p><p>{}</p></body></html>",
+                        full_url, e
+                    );
+                    self.document = Some(parse_html(&self.raw_html));
+                    self.current_url = full_url;
+                    self.scroll_y = 0;
+                    return Err("HTTPS error");
+                }
+            }
+        } else {
+            // HTTP request
+            match crate::netstack::http::get(&full_url) {
+                Ok(r) => (r.status_code, r.headers, r.body),
+                Err(e) => {
+                    crate::serial_println!("[BROWSER] Network error: {}", e);
+                    self.status = BrowserStatus::Error(alloc::format!("Network error: {}", e));
+                    self.raw_html = alloc::format!(
+                        "<html><body><h1>Error</h1><p>Could not load {}</p><p>{}</p></body></html>",
+                        full_url, e
+                    );
+                    self.document = Some(parse_html(&self.raw_html));
+                    self.current_url = full_url;
+                    self.scroll_y = 0;
+                    return Err(e);
+                }
             }
         };
         
-        if response.status_code >= 400 {
-            let msg = alloc::format!("HTTP {}", response.status_code);
+        if status_code >= 400 {
+            let msg = alloc::format!("HTTP {}", status_code);
             self.status = BrowserStatus::Error(msg.clone());
-            // Show error page
             self.raw_html = alloc::format!(
                 "<html><body><h1>HTTP Error {}</h1><p>The server returned an error for {}</p></body></html>",
-                response.status_code, full_url
+                status_code, full_url
             );
             self.document = Some(parse_html(&self.raw_html));
             self.current_url = full_url;
@@ -160,14 +178,19 @@ impl Browser {
         }
         
         // Handle redirects (with depth limit)
-        if response.status_code >= 300 && response.status_code < 400 {
-            if let Some(location) = response.header("Location") {
-                return self.navigate_inner(location, depth + 1);
+        if status_code >= 300 && status_code < 400 {
+            // Find Location header
+            let location = headers.iter()
+                .find(|(k, _)| k.to_lowercase() == "location")
+                .map(|(_, v)| v.clone());
+            if let Some(loc) = location {
+                crate::serial_println!("[BROWSER] Redirect {} -> {}", status_code, loc);
+                return self.navigate_inner(&loc, depth + 1);
             }
         }
         
         // Store raw HTML
-        let html = response.body_str().unwrap_or("");
+        let html = core::str::from_utf8(&body).unwrap_or("");
         self.raw_html = html.to_string();
         
         // Parse HTML
