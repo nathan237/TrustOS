@@ -3848,7 +3848,7 @@ pub fn cmd_showcase3d() {
     let ticks_now = || crate::logger::get_ticks();
 
     // Draw stats bar at bottom (with real hardware info)
-    let draw_stats = |buf: &mut [u32], w: usize, h: usize, scene_name: &str, scene_num: usize, fps: u32, elapsed_s: u32, total_s: u32| {
+    let draw_stats = |buf: &mut [u32], w: usize, h: usize, scene_name: &str, scene_num: usize, fps: u32, elapsed_s: u32, total_s: u32, quality: usize| {
         let bar_h = 28usize;
         let bar_y = h - bar_h;
         for y in bar_y..h {
@@ -3859,17 +3859,25 @@ pub fn cmd_showcase3d() {
         for x in 0..w {
             buf[bar_y * w + x] = 0xFF00AA44;
         }
+        // Gather RAM stats
+        let mem = crate::memory::stats();
+        let heap_used_kb = mem.heap_used / 1024;
+        let heap_total_kb = (mem.heap_used + mem.heap_free) / 1024;
+        let heap_pct = if heap_total_kb > 0 { heap_used_kb * 100 / heap_total_kb } else { 0 };
+        // Frame time approximation from FPS
+        let frame_ms = if fps > 0 { 1000 / fps } else { 999 };
+        let quality_str = match quality { 1 => "Full", 2 => "High", 3 => "Med", _ => "Low" };
         let mut stats_str = alloc::string::String::new();
         use core::fmt::Write;
-        let _ = write!(stats_str, " Scene {}/12: {} | {} FPS | {}s/{}s | {}x{} | TrustOS 3D Engine",
-            scene_num, scene_name, fps, elapsed_s, total_s, w, h);
+        let _ = write!(stats_str, " {}/12 {} | {} FPS {}ms | RAM {}KB/{}KB ({}%) | CPU 100% | {} | {}x{}",
+            scene_num, scene_name, fps, frame_ms, heap_used_kb, heap_total_kb, heap_pct, quality_str, w, h);
         draw_text(buf, w, h, 8, bar_y + 8, &stats_str, 0xFF00FF66, 1);
     };
 
     let scene_ticks = 500u64;  // 5 seconds per scene (100 ticks/sec)
     let title_ticks = 200u64;  // 2 seconds title overlay
 
-    // Render a pixel-shader scene (tick-based timing)
+    // Render a pixel-shader scene (tick-based timing, adaptive quality)
     let render_shader_scene = |buf: &mut [u32], w: usize, h: usize,
                                 shader_fn: fn(PixelInput) -> PixelOutput,
                                 title: &str, subtitle: &str, scene_num: usize,
@@ -3879,7 +3887,7 @@ pub fn cmd_showcase3d() {
         let mut fps_start = start;
         let mut fps_frames = 0u32;
         let mut cur_fps = 0u32;
-        let step = if w > 640 { 4usize } else { 2 };
+        let mut step = 2usize; // Start at 2×2 (good quality)
 
         loop {
             let elapsed = ticks_now().saturating_sub(start);
@@ -3888,25 +3896,32 @@ pub fn cmd_showcase3d() {
                 if k == 27 { return; } // ESC = ASCII 27
             }
 
+            // Adaptive quality: adjust step based on actual FPS
+            if cur_fps > 0 && frame > 5 {
+                if cur_fps >= 24 && step > 1 {
+                    step = 1; // Full resolution — GPU fast enough
+                } else if cur_fps >= 12 && step > 2 {
+                    step = 2; // High quality
+                } else if cur_fps < 6 && step < 3 {
+                    step = 3; // Reduce quality to keep it smooth
+                }
+            }
+
             let time = elapsed as f32 / 100.0; // seconds as float
 
+            // Render shader with current step (step×step blocks)
             for y in (0..h).step_by(step) {
                 for x in (0..w).step_by(step) {
                     let input = PixelInput { x: x as u32, y: y as u32, width: w as u32, height: h as u32, time, frame };
                     let out = shader_fn(input);
                     let color = out.to_u32();
-                    buf[y * w + x] = color;
-                    if step >= 2 {
-                        if x + 1 < w { buf[y * w + x + 1] = color; }
-                        if y + 1 < h { buf[(y + 1) * w + x] = color; }
-                        if x + 1 < w && y + 1 < h { buf[(y + 1) * w + x + 1] = color; }
-                    }
-                    if step >= 4 {
-                        for dy in 0..step.min(4) {
-                            for dx in 0..step.min(4) {
-                                if y + dy < h && x + dx < w {
-                                    buf[(y + dy) * w + x + dx] = color;
-                                }
+                    // Fill the step×step block
+                    for dy in 0..step {
+                        for dx in 0..step {
+                            let px = x + dx;
+                            let py = y + dy;
+                            if px < w && py < h {
+                                buf[py * w + px] = color;
                             }
                         }
                     }
@@ -3939,7 +3954,7 @@ pub fn cmd_showcase3d() {
 
             let elapsed_s = (elapsed / 100) as u32;
             let total_s = (dur_ticks / 100) as u32;
-            draw_stats(buf, w, h, title, scene_num, cur_fps, elapsed_s, total_s);
+            draw_stats(buf, w, h, title, scene_num, cur_fps, elapsed_s, total_s, step);
             blit(buf, w, h);
             frame += 1;
         }
@@ -3995,7 +4010,7 @@ pub fn cmd_showcase3d() {
 
             let elapsed_s = (elapsed / 100) as u32;
             let total_s = (dur_ticks / 100) as u32;
-            draw_stats(buf, w, h, title, scene_num, cur_fps, elapsed_s, total_s);
+            draw_stats(buf, w, h, title, scene_num, cur_fps, elapsed_s, total_s, 1);
             blit(buf, w, h);
             frame += 1;
         }
