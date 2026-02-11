@@ -270,10 +270,11 @@ pub fn handle_scancode(scancode: u8) {
     crate::serial_println!("[KB-IRQ] scancode=0x{:02X}", scancode);
     
     // Ignore invalid/spurious scancodes and PS/2 controller responses
-    // 0xFA = ACK, 0xFE = Resend, 0xFC = Error, 0xAA = BAT OK, 0xEE = Echo
-    // These can leak from mouse init or controller self-test on VirtualBox
+    // 0xFA = ACK, 0xFE = Resend, 0xFC = Error, 0xEE = Echo
+    // NOTE: 0xAA (BAT OK) is NOT filtered because it's also Left Shift release
+    // (scancode 0x2A | 0x80 = 0xAA). Filtering it caused Shift to get "stuck".
     if scancode == 0x00 || scancode == 0xFF || scancode == 0xFA 
-        || scancode == 0xFE || scancode == 0xFC || scancode == 0xAA 
+        || scancode == 0xFE || scancode == 0xFC
         || scancode == 0xEE {
         return;
     }

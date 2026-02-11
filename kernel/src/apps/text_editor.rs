@@ -154,6 +154,10 @@ impl EditorState {
             }
             
             let result = crate::ramfs::with_fs(|fs| {
+                // Create the file if it doesn't exist yet
+                if fs.read_file(&full_path).is_err() {
+                    let _ = fs.touch(&full_path);
+                }
                 fs.write_file(&full_path, text.as_bytes())
             });
             

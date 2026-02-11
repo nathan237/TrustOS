@@ -23,7 +23,17 @@
 
 </div>
 
-## 🔐 Why "TrustOS"?
+## � Recent Modifications
+
+| Date | Changes |
+|------|----------|
+| **2026-02-11 18:00** | Terminal: timestamp cyan, `neofetch` command with ASCII art, `user`/`id`/`hostname`/`history` commands, colorized outputs (date/uname/free/net/ps/df/mkdir/touch/rm), `del`/`top`/`lsblk`/`ipconfig`/`version`/`time` aliases |
+| **2026-02-11 16:30** | Terminal: help arguments in cyan (`\x01B`), commands green, descriptions white |
+| **2026-02-11 15:00** | Keyboard: fixed Shift stuck bug (`0xAA` scancode filter removal), terminal scrollbar, color marker system (`\x01` prefix), categorized help, prompt with timestamp + red root + cwd, `cd`/`pwd`/`ls` use actual cwd |
+
+---
+
+## �🔐 Why "TrustOS"?
 
 The name says it all: **Trust** + **Rust**.
 
@@ -459,7 +469,29 @@ kernel/src/
 
 ---
 
-## � Changelog
+## 📋 Changelog
+
+### v0.1.4 — February 2026
+- **Terminal neofetch** — ASCII art TrustOS banner with OS/Kernel/Arch/Uptime/Memory/Shell/Display info
+- **Terminal command aliases** — `user`/`users`/`id`, `hostname`, `history`, `del`, `top`, `lsblk`, `ipconfig`, `version`, `time`
+- **Colorized terminal outputs** — date, uname, free, net, ps, df, mkdir/touch/rm all use color markers
+- **Timestamp cyan** — Terminal prompt timestamps now in cyan instead of gold
+- **Help arguments cyan** — Terminal help shows arguments in cyan for better readability
+
+### v0.1.3 — February 2026
+- **Keyboard Shift fix** — Fixed permanent Shift stuck caused by `0xAA` scancode filter
+- **Terminal color system** — `\x01` prefix color markers parsed at render time (R/G/B/W/Y/M/H)
+- **Terminal scrollbar** — Track + thumb, auto-scroll to bottom, unlimited history
+- **Categorized help** — File System, System, Network, Graphics & Demos, Shell sections
+- **Working cwd** — `cd`/`pwd`/`ls` now use actual current directory from ramfs
+- **Colored prompt** — Timestamp + red root + cyan cwd path
+
+### v0.1.2 — February 2026
+- **Desktop shortcuts** — ESC close, Alt+Tab switch, Win+Arrows snap windows
+- **Network auto-detection** — CPUID/ACPI/PCI platform detection, DHCP DNS
+- **Browser improvements** — CSS/forms/HTTPS, chunked transfer, HTTP redirects
+- **TrustDoom3D** — 3D FPS game integrated into desktop
+- **TrustCode editor fixes** — Save with touch(), default file path
 
 ### v0.1.1 — June 2025
 - **TrustEdit 3D Model Editor** — New wireframe 3D editor with 5 tools, 8 presets, save/load `.t3d`, undo system

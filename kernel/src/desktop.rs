@@ -1383,9 +1383,10 @@ struct AppConfig {
         // Initialize content based on type
         match wtype {
             WindowType::Terminal => {
-                window.content.push(String::from("TrustOS Terminal v1.0"));
+                window.content.push(String::from("\x01HTrustOS Terminal v1.0"));
+                window.content.push(String::from("\x01MType \x01Ghelp\x01M for available commands."));
                 window.content.push(String::from(""));
-                window.content.push(String::from("root@trustos:~$ _"));
+                window.content.push(Self::make_prompt("_"));
             },
             WindowType::SystemInfo => {
                 window.content.push(String::from("=== System Information ==="));
@@ -1438,9 +1439,16 @@ struct AppConfig {
             },
             WindowType::TextEditor => {
                 // Editor state is managed in editor_states BTreeMap
-                // Initialize with a new empty editor
+                // Initialize with a new empty editor, assign a default file path
                 let mut editor = EditorState::new();
-                editor.language = crate::apps::text_editor::Language::Plain;
+                let file_num = self.editor_states.len() + 1;
+                let default_name = if file_num == 1 {
+                    String::from("untitled.rs")
+                } else {
+                    alloc::format!("untitled_{}.rs", file_num)
+                };
+                editor.file_path = Some(default_name);
+                editor.language = crate::apps::text_editor::Language::Rust;
                 self.editor_states.insert(window.id, editor);
             },
             WindowType::NetworkInfo => {
@@ -2729,18 +2737,26 @@ struct AppConfig {
         if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
             // Show up to 6 suggestions on one line
             let display: Vec<&str> = matches.iter().copied().take(6).collect();
-            let line = format!("  > {}", display.join("  "));
+            let line = format!("  \x01M> {}", display.join("  "));
             window.content.push(line);
             self.terminal_suggestion_count = 1;
             // If many matches, show count on a second line
             if matches.len() > 6 {
-                window.content.push(format!("    ... +{} more", matches.len() - 6));
+                window.content.push(format!("    \x01M... +{} more", matches.len() - 6));
                 self.terminal_suggestion_count = 2;
             }
-            while window.content.len() > 20 {
-                window.content.remove(0);
-            }
         }
+    }
+    
+    /// Build a colored prompt string with timestamp
+    fn make_prompt(suffix: &str) -> String {
+        let dt = crate::rtc::read_rtc();
+        let cwd = crate::ramfs::with_fs(|fs| {
+            let p = fs.pwd();
+            String::from(p)
+        });
+        let display_cwd = if cwd == "/" { String::from("~") } else { cwd };
+        format!("\x01B[{:02}:{:02}:{:02}] \x01Rroot\x01M@trustos\x01M:\x01B{}\x01M$ \x01G{}", dt.hour, dt.minute, dt.second, display_cwd, suffix)
     }
     
     /// Handle terminal keyboard input
@@ -2751,10 +2767,9 @@ struct AppConfig {
         if key == 0x08 { // Backspace
             if !self.input_buffer.is_empty() {
                 self.input_buffer.pop();
-                // Update terminal display after backspace
                 if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                     if let Some(last) = window.content.last_mut() {
-                        *last = format!("root@trustos:~$ {}_", self.input_buffer);
+                        *last = Self::make_prompt(&format!("{}_", self.input_buffer));
                     }
                 }
             }
@@ -2768,16 +2783,14 @@ struct AppConfig {
                     self.input_buffer = String::from(matches[0]);
                     if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                         if let Some(last) = window.content.last_mut() {
-                            *last = format!("root@trustos:~$ {}_", self.input_buffer);
+                            *last = Self::make_prompt(&format!("{}_", self.input_buffer));
                         }
                     }
                 } else if matches.len() > 1 {
-                    // Show all matching commands
                     let match_str: String = matches.join("  ");
                     if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                         window.content.push(match_str);
-                        window.content.push(format!("root@trustos:~$ {}_", self.input_buffer));
-                        while window.content.len() > 18 { window.content.remove(0); }
+                        window.content.push(Self::make_prompt(&format!("{}_", self.input_buffer)));
                     }
                 }
             }
@@ -2785,37 +2798,46 @@ struct AppConfig {
             let cmd = self.input_buffer.clone();
             self.input_buffer.clear();
             
-            // Execute command first (before borrowing windows)
             let output = Self::execute_command_static(&cmd);
             
-            // Add command to terminal output
             if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
-                // Remove cursor line
-                if window.content.last().map(|s| s.ends_with("$ _")).unwrap_or(false) {
-                    window.content.pop();
-                }
-                window.content.push(format!("root@trustos:~$ {}", cmd));
-                
-                for line in output {
-                    window.content.push(line);
-                }
-                
-                // Add new prompt
-                window.content.push(String::from("root@trustos:~$ _"));
-                
-                // Scroll if needed (keep last 20 lines visible)
-                while window.content.len() > 18 {
-                    window.content.remove(0);
+                // Handle "clear" specially — wipe all content
+                if cmd.trim() == "clear" {
+                    window.content.clear();
+                    window.content.push(Self::make_prompt("_"));
+                    window.scroll_offset = 0;
+                } else {
+                    // Remove cursor line
+                    if window.content.last().map(|s| s.contains("$ ")).unwrap_or(false) {
+                        window.content.pop();
+                    }
+                    // Show executed command with prompt
+                    window.content.push(Self::make_prompt(&cmd));
+                    
+                    for line in output {
+                        window.content.push(line);
+                    }
+                    
+                    // Add new prompt
+                    window.content.push(Self::make_prompt("_"));
+                    
+                    // Auto-scroll to bottom
+                    let line_height = 16usize;
+                    let content_area_h = window.height as usize - TITLE_BAR_HEIGHT as usize - 16;
+                    let visible_lines = content_area_h / line_height;
+                    if window.content.len() > visible_lines {
+                        window.scroll_offset = window.content.len() - visible_lines;
+                    } else {
+                        window.scroll_offset = 0;
+                    }
                 }
             }
         } else if key >= 0x20 && key < 0x7F {
             self.input_buffer.push(key as char);
             
-            // Update terminal display
             if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
-                // Update prompt line with current input
                 if let Some(last) = window.content.last_mut() {
-                    *last = format!("root@trustos:~$ {}_", self.input_buffer);
+                    *last = Self::make_prompt(&format!("{}_", self.input_buffer));
                 }
             }
         }
@@ -2838,27 +2860,48 @@ struct AppConfig {
         
         match cmd {
             "help" => {
-                output.push(String::from("TrustOS GUI Terminal - Commands:"));
-                output.push(String::from("  help      - Show this help"));
-                output.push(String::from("  ls [dir]  - List directory contents"));
-                output.push(String::from("  cd <dir>  - Change directory"));
-                output.push(String::from("  pwd       - Print working directory"));
-                output.push(String::from("  cat <file>- Show file contents"));
-                output.push(String::from("  mkdir     - Create directory"));
-                output.push(String::from("  touch     - Create file"));
-                output.push(String::from("  rm        - Remove file"));
-                output.push(String::from("  date      - Show current date/time"));
-                output.push(String::from("  uname     - System information"));
-                output.push(String::from("  free      - Memory usage"));
-                output.push(String::from("  net       - Network status"));
-                output.push(String::from("  ps        - List processes"));
-                output.push(String::from("  uptime    - System uptime"));
-                output.push(String::from("  matrix3d  - 3D Matrix tunnel (ESC=exit)"));
-                output.push(String::from("  shader    - Graphics demos"));
-                output.push(String::from("  showcase3d- 3D cinematic demo"));
-                output.push(String::from("  filled3d  - Filled 3D test (flat shading)"));
-                output.push(String::from("  clear     - Clear terminal"));
-                output.push(String::from("  exit      - Close terminal"));
+                output.push(String::from("\x01HTrustOS Terminal \x01M- Available Commands"));
+                output.push(String::from(""));
+                // File System
+                output.push(String::from("\x01Y[File System]"));
+                output.push(String::from("  \x01Gls \x01B[dir]      \x01WList directory contents"));
+                output.push(String::from("  \x01Gcd \x01B<dir>      \x01WChange directory"));
+                output.push(String::from("  \x01Gpwd            \x01WPrint working directory"));
+                output.push(String::from("  \x01Gcat \x01B<file>    \x01WShow file contents"));
+                output.push(String::from("  \x01Gmkdir \x01B<name>  \x01WCreate directory"));
+                output.push(String::from("  \x01Gtouch \x01B<name>  \x01WCreate empty file"));
+                output.push(String::from("  \x01Grm \x01B<file>     \x01WRemove file"));
+                output.push(String::from(""));
+                // System Info
+                output.push(String::from("\x01Y[System]"));
+                output.push(String::from("  \x01Gdate           \x01WCurrent date and time"));
+                output.push(String::from("  \x01Guname          \x01WSystem information"));
+                output.push(String::from("  \x01Gfree           \x01WMemory usage"));
+                output.push(String::from("  \x01Gps             \x01WList processes"));
+                output.push(String::from("  \x01Guptime         \x01WSystem uptime"));
+                output.push(String::from("  \x01Gdf             \x01WDisk usage"));
+                output.push(String::from("  \x01Gwhoami         \x01WCurrent user"));
+                output.push(String::from("  \x01Ghostname       \x01WSystem hostname"));
+                output.push(String::from("  \x01Gneofetch       \x01WSystem info banner"));
+                output.push(String::from(""));
+                // Network
+                output.push(String::from("\x01Y[Network]"));
+                output.push(String::from("  \x01Gnet            \x01WNetwork interface status"));
+                output.push(String::from("  \x01Gifconfig       \x01WNetwork configuration"));
+                output.push(String::from(""));
+                // Graphics & Demos
+                output.push(String::from("\x01Y[Graphics & Demos]"));
+                output.push(String::from("  \x01Gshader \x01B<name>  \x01WRun GPU shader demo"));
+                output.push(String::from("  \x01Gmatrix3d       \x01W3D Matrix tunnel"));
+                output.push(String::from("  \x01Gshowcase3d     \x01W3D cinematic demo"));
+                output.push(String::from("  \x01Gfilled3d       \x01WFilled 3D test"));
+                output.push(String::from(""));
+                // Shell
+                output.push(String::from("\x01Y[Shell]"));
+                output.push(String::from("  \x01Ghelp           \x01WShow this help"));
+                output.push(String::from("  \x01Gecho \x01B<text>   \x01WPrint text"));
+                output.push(String::from("  \x01Gclear          \x01WClear terminal"));
+                output.push(String::from("  \x01Gexit           \x01WClose terminal"));
             },
             // Direct shortcut for 3D Matrix tunnel
             "matrix3d" | "tunnel" | "holomatrix" | "3d" => {
@@ -2895,66 +2938,109 @@ struct AppConfig {
                 }
                 output.push(format!("Tunnel ended ({} frames)", frames));
             },
-            "ls" | "ls /" => {
-                output.push(String::from("Directory: /"));
-                if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(Some("/"))) {
-                    for (name, ftype, size) in entries.iter().take(15) {
-                        let icon = if *ftype == crate::ramfs::FileType::Directory { "📁" } else { "📄" };
-                        output.push(format!("  {} {} ({} bytes)", icon, name, size));
+            "ls" => {
+                let cwd = crate::ramfs::with_fs(|fs| String::from(fs.pwd()));
+                output.push(format!("\x01MDirectory: \x01B{}", cwd));
+                if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(None)) {
+                    for (name, ftype, size) in entries.iter().take(20) {
+                        let icon = if *ftype == crate::ramfs::FileType::Directory { "\x01B" } else { "\x01M" };
+                        let type_str = if *ftype == crate::ramfs::FileType::Directory { "/" } else { "" };
+                        output.push(format!("  {}{}{}  \x01M{} bytes", icon, name, type_str, size));
                     }
                     if entries.is_empty() {
-                        output.push(String::from("  (empty directory)"));
+                        output.push(String::from("\x01M  (empty directory)"));
+                    }
+                }
+            },
+            "ls /" => {
+                output.push(String::from("\x01MDirectory: \x01B/"));
+                if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(Some("/"))) {
+                    for (name, ftype, size) in entries.iter().take(20) {
+                        let icon = if *ftype == crate::ramfs::FileType::Directory { "\x01B" } else { "\x01M" };
+                        let type_str = if *ftype == crate::ramfs::FileType::Directory { "/" } else { "" };
+                        output.push(format!("  {}{}{}  \x01M{} bytes", icon, name, type_str, size));
+                    }
+                    if entries.is_empty() {
+                        output.push(String::from("\x01M  (empty directory)"));
                     }
                 }
             },
             _ if cmd.starts_with("ls ") => {
                 let path = &cmd[3..];
-                output.push(format!("Directory: {}", path));
+                output.push(format!("\x01MDirectory: \x01B{}", path));
                 if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(Some(path))) {
-                    for (name, ftype, size) in entries.iter().take(15) {
-                        let icon = if *ftype == crate::ramfs::FileType::Directory { "📁" } else { "📄" };
-                        output.push(format!("  {} {} ({} bytes)", icon, name, size));
+                    for (name, ftype, size) in entries.iter().take(20) {
+                        let icon = if *ftype == crate::ramfs::FileType::Directory { "\x01B" } else { "\x01M" };
+                        let type_str = if *ftype == crate::ramfs::FileType::Directory { "/" } else { "" };
+                        output.push(format!("  {}{}{}  \x01M{} bytes", icon, name, type_str, size));
+                    }
+                    if entries.is_empty() {
+                        output.push(String::from("\x01M  (empty directory)"));
                     }
                 } else {
-                    output.push(format!("  Error: cannot access '{}'", path));
+                    output.push(format!("\x01Rls: cannot access '{}': No such file or directory", path));
                 }
             },
             "pwd" => {
-                output.push(String::from("/"));
+                let cwd = crate::ramfs::with_fs(|fs| String::from(fs.pwd()));
+                output.push(format!("\x01B{}", cwd));
             },
             "clear" => {
                 // Will be handled specially
             },
-            "date" => {
+            "date" | "time" => {
                 let dt = crate::rtc::read_rtc();
-                output.push(format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", 
+                output.push(format!("\x01B{:04}-{:02}-{:02} \x01W{:02}:{:02}:{:02}", 
                     dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second));
             },
-            "uname" | "uname -a" => {
-                output.push(String::from("TrustOS 0.1.1 x86_64 Rust Kernel"));
-                output.push(format!("Heap: {} MB", crate::memory::heap_size() / 1024 / 1024));
+            "uname" | "uname -a" | "version" => {
+                output.push(String::from("\x01GTrustOS \x01W0.1.1 \x01Bx86_64 \x01MRust Kernel"));
+                output.push(format!("\x01MHeap: \x01W{} MB", crate::memory::heap_size() / 1024 / 1024));
             },
-            "whoami" => {
-                output.push(String::from("root"));
+            "neofetch" => {
+                output.push(String::from("\x01G  _____               _    ___  ___"));
+                output.push(String::from("\x01G |_   _| __ _   _ ___| |_ / _ \\/ __|"));
+                output.push(String::from("\x01G   | || '__| | | / __| __| | | \\__ \\"));
+                output.push(String::from("\x01G   | || |  | |_| \\__ \\ |_| |_| |__) |"));
+                output.push(String::from("\x01G   |_||_|   \\__,_|___/\\__|\\___/|___/"));
+                output.push(String::from(""));
+                output.push(String::from("\x01BOS\x01M:      \x01WTrustOS 0.1.1"));
+                output.push(String::from("\x01BKernel\x01M:  \x01Wtrustos_kernel"));
+                output.push(String::from("\x01BArch\x01M:    \x01Wx86_64"));
+                output.push(format!("\x01BUptime\x01M:  \x01W{}m {}s", crate::logger::get_ticks() / 100 / 60, (crate::logger::get_ticks() / 100) % 60));
+                output.push(format!("\x01BMemory\x01M:  \x01W{} MB", crate::memory::heap_size() / 1024 / 1024));
+                output.push(format!("\x01BShell\x01M:   \x01Wtrustsh"));
+                output.push(format!("\x01BDisplay\x01M: \x01W{}x{}", crate::framebuffer::width(), crate::framebuffer::height()));
+            },
+            "whoami" | "user" | "users" | "id" => {
+                output.push(String::from("\x01Groot"));
+            },
+            "hostname" => {
+                output.push(String::from("\x01Gtrustos"));
+            },
+            "history" => {
+                output.push(String::from("\x01M  1  help"));
+                output.push(String::from("\x01M  2  ls"));
+                output.push(String::from("\x01M  (history not persisted)"));
             },
             "free" | "mem" => {
                 let heap_mb = crate::memory::heap_size() / 1024 / 1024;
-                output.push(String::from("Memory Usage:"));
-                output.push(format!("  Heap Size: {} MB", heap_mb));
-                output.push(String::from("  Kernel:   Active"));
+                output.push(String::from("\x01YMemory Usage:"));
+                output.push(format!("  \x01BHeap Size: \x01W{} MB", heap_mb));
+                output.push(String::from("  \x01BKernel:   \x01GActive"));
             },
-            "net" | "ifconfig" | "ip" => {
-                output.push(String::from("Network Status:"));
+            "net" | "ifconfig" | "ip" | "ipconfig" => {
+                output.push(String::from("\x01YNetwork Status:"));
                 if crate::network::is_available() {
                     if let Some((mac, ip, _state)) = crate::network::get_interface() {
-                        output.push(format!("  MAC: {}", mac));
+                        output.push(format!("  \x01BMAC: \x01W{}", mac));
                         if let Some(ip) = ip {
-                            output.push(format!("  IP:  {}", ip));
+                            output.push(format!("  \x01BIP:  \x01W{}", ip));
                         }
-                        output.push(String::from("  Status: Connected"));
+                        output.push(String::from("  \x01BStatus: \x01GConnected"));
                     }
                 } else {
-                    output.push(String::from("  Status: No network"));
+                    output.push(String::from("  \x01BStatus: \x01RNo network"));
                 }
             },
             _ if cmd.starts_with("cat ") => {
@@ -2974,32 +3060,39 @@ struct AppConfig {
             _ if cmd.starts_with("echo ") => {
                 output.push(String::from(&cmd[5..]));
             },
+            "cd" => {
+                // cd alone = go to root
+                let _ = crate::ramfs::with_fs(|fs| fs.cd("/"));
+            },
             _ if cmd.starts_with("cd ") => {
-                let path = &cmd[3..];
+                let path = &cmd[3..].trim();
                 match crate::ramfs::with_fs(|fs| fs.cd(path)) {
-                    Ok(()) => output.push(format!("Changed to: {}", path)),
-                    Err(e) => output.push(format!("cd: {}: {}", path, e.as_str())),
+                    Ok(()) => {
+                        let cwd = crate::ramfs::with_fs(|fs| String::from(fs.pwd()));
+                        output.push(format!("\x01B{}", cwd));
+                    },
+                    Err(e) => output.push(format!("\x01Rcd: {}: {}", path, e.as_str())),
                 }
             },
             _ if cmd.starts_with("mkdir ") => {
-                let path = &cmd[6..];
+                let path = cmd[6..].trim();
                 match crate::ramfs::with_fs(|fs| fs.mkdir(path)) {
-                    Ok(()) => output.push(format!("Created directory: {}", path)),
-                    Err(e) => output.push(format!("mkdir: {}: {}", path, e.as_str())),
+                    Ok(()) => output.push(format!("\x01Gmkdir: \x01Wcreated '\x01B{}\x01W'", path)),
+                    Err(e) => output.push(format!("\x01Rmkdir: {}: {}", path, e.as_str())),
                 }
             },
             _ if cmd.starts_with("touch ") => {
-                let path = &cmd[6..];
+                let path = cmd[6..].trim();
                 match crate::ramfs::with_fs(|fs| fs.touch(path)) {
-                    Ok(()) => output.push(format!("Created file: {}", path)),
-                    Err(e) => output.push(format!("touch: {}: {}", path, e.as_str())),
+                    Ok(()) => output.push(format!("\x01Gtouch: \x01Wcreated '\x01B{}\x01W'", path)),
+                    Err(e) => output.push(format!("\x01Rtouch: {}: {}", path, e.as_str())),
                 }
             },
-            _ if cmd.starts_with("rm ") => {
-                let path = &cmd[3..];
+            _ if cmd.starts_with("rm ") || cmd.starts_with("del ") => {
+                let path = if cmd.starts_with("rm ") { cmd[3..].trim() } else { cmd[4..].trim() };
                 match crate::ramfs::with_fs(|fs| fs.rm(path)) {
-                    Ok(()) => output.push(format!("Removed: {}", path)),
-                    Err(e) => output.push(format!("rm: {}: {}", path, e.as_str())),
+                    Ok(()) => output.push(format!("\x01Grm: \x01Wremoved '\x01B{}\x01W'", path)),
+                    Err(e) => output.push(format!("\x01Rrm: {}: {}", path, e.as_str())),
                 }
             },
             "shader" | "vgpu" => {
@@ -3062,20 +3155,21 @@ struct AppConfig {
                     output.push(String::from("Available: plasma, fire, mandelbrot, matrix, tunnel, parallax, gradient"));
                 }
             },
-            "ps" | "procs" => {
-                output.push(String::from("PID  STATE    NAME"));
-                output.push(String::from("  1  Running  init"));
-                output.push(String::from("  2  Running  desktop"));
+            "ps" | "procs" | "top" => {
+                output.push(String::from("\x01BPID  \x01BSTATE    \x01BNAME"));
+                output.push(String::from("  \x01W1  \x01GRunning  \x01Winit"));
+                output.push(String::from("  \x01W2  \x01GRunning  \x01Wdesktop"));
+                output.push(String::from("  \x01W3  \x01GRunning  \x01Wterminal"));
             },
             "uptime" => {
                 let ticks = crate::logger::get_ticks();
                 let secs = ticks / 100;
                 let mins = secs / 60;
-                output.push(format!("Uptime: {}m {}s", mins, secs % 60));
+                output.push(format!("\x01BUptime: \x01W{}m {}s", mins, secs % 60));
             },
-            "df" => {
-                output.push(String::from("Filesystem      Size  Used  Avail Use%"));
-                output.push(String::from("ramfs           32M   1M    31M   3%"));
+            "df" | "lsblk" => {
+                output.push(String::from("\x01BFilesystem      Size  Used  Avail Use%"));
+                output.push(String::from("\x01Wramfs           32M   1M    31M   3%"));
             },
             "showcase3d" | "demo3d" => {
                 output.push(String::from("\u{2713} Showcase 3D Cinematic - ESC to skip scenes"));
@@ -3090,11 +3184,11 @@ struct AppConfig {
                 return Vec::new();
             },
             "exit" | "quit" => {
-                output.push(String::from("Use the X button to close the terminal"));
+                output.push(String::from("\x01MUse the X button to close the terminal"));
             },
             _ => {
-                output.push(format!("Command not found: {}", cmd));
-                output.push(String::from("Type 'help' for available commands"));
+                output.push(format!("\x01Rbash: \x01Wcommand not found: \x01G{}", cmd));
+                output.push(String::from("\x01MType '\x01Ghelp\x01M' for available commands"));
             },
         }
         
@@ -4484,6 +4578,91 @@ struct AppConfig {
         // Special rendering for Browser
         if window.window_type == WindowType::Browser {
             self.draw_browser(window);
+            return;
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // TERMINAL — special rendering with colored text + scrollbar
+        // ═══════════════════════════════════════════════════════════════
+        if window.window_type == WindowType::Terminal {
+            let line_height = 16i32;
+            let content_area_h = (window.height as i32 - TITLE_BAR_HEIGHT as i32 - 16) as usize;
+            let visible_lines = content_area_h / line_height as usize;
+            let total_lines = window.content.len();
+            
+            // Determine scroll range
+            let scroll = window.scroll_offset;
+            let start = scroll;
+            let end = (start + visible_lines).min(total_lines);
+            
+            for idx in start..end {
+                let line = &window.content[idx];
+                let line_y = content_y + ((idx - start) as i32 * line_height);
+                if line_y >= window.y + window.height as i32 - 8 {
+                    break;
+                }
+                
+                // Parse color markers: \x01R = red, \x01G = green, \x01B = blue/cyan,
+                // \x01W = white, \x01Y = yellow, \x01M = muted, \x01D = dim, \x01N = normal green
+                // \x01H = header bright, \x01A = amber
+                if line.contains('\x01') {
+                    let mut cx = content_x;
+                    let mut current_color = COLOR_GREEN;
+                    let mut chars = line.chars().peekable();
+                    while let Some(ch) = chars.next() {
+                        if ch == '\x01' {
+                            if let Some(&code) = chars.peek() {
+                                chars.next();
+                                current_color = match code {
+                                    'R' => ACCENT_RED,           // Red (root, errors)
+                                    'G' => GREEN_PRIMARY,        // Bright green  
+                                    'B' => ACCENT_BLUE,          // Cyan/blue
+                                    'W' => TEXT_PRIMARY,          // White
+                                    'Y' => ACCENT_AMBER,         // Yellow/amber
+                                    'M' => GREEN_MUTED,          // Muted green
+                                    'D' => GREEN_GHOST,          // Dim
+                                    'N' => COLOR_GREEN,          // Normal green
+                                    'H' => 0xFF00FFAA,           // Header bright
+                                    'A' => GREEN_TERTIARY,       // Accent tertiary
+                                    'S' => GREEN_SUBTLE,         // Subtle
+                                    _ => current_color,
+                                };
+                            }
+                        } else {
+                            crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, current_color);
+                            cx += 8;
+                        }
+                    }
+                } else {
+                    // Plain green text (legacy)
+                    self.draw_text(content_x, line_y, line, COLOR_GREEN);
+                }
+            }
+            
+            // ── Scrollbar ──
+            let scrollbar_w = 6u32;
+            let scrollbar_x = (window.x + window.width as i32 - scrollbar_w as i32 - 3) as u32;
+            let track_y = (window.y + TITLE_BAR_HEIGHT as i32 + 2) as u32;
+            let track_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 4);
+            
+            if total_lines > visible_lines {
+                // Draw track
+                framebuffer::fill_rect(scrollbar_x, track_y, scrollbar_w, track_h, 0xFF0A1A0F);
+                
+                // Draw thumb
+                let thumb_h = ((visible_lines as u32 * track_h) / total_lines as u32).max(16);
+                let max_scroll = total_lines.saturating_sub(visible_lines);
+                let thumb_y = if max_scroll > 0 {
+                    track_y + ((scroll as u32 * (track_h - thumb_h)) / max_scroll as u32)
+                } else {
+                    track_y
+                };
+                
+                framebuffer::fill_rect(scrollbar_x, thumb_y, scrollbar_w, thumb_h, GREEN_MUTED);
+                // Thumb border highlight
+                framebuffer::fill_rect(scrollbar_x, thumb_y, 1, thumb_h, GREEN_SUBTLE);
+            }
+            
             return;
         }
         
