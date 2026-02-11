@@ -3878,7 +3878,7 @@ pub fn cmd_showcase3d() {
         let mut fps_frames = 0u32;
         let mut cur_fps = 0u32;
         let mut cur_frame_ms = 0u32;
-        let step = if w > 960 { 2usize } else { 1 };
+        let step = if w > 960 { 4usize } else { 2 };
 
         loop {
             let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start);
@@ -4019,7 +4019,7 @@ pub fn cmd_showcase3d() {
 
     crate::serial_println!("[SHOWCASE3D] Starting 3D cinematic showcase ({}x{})", w, h);
 
-    let scene_ms = 5000u64; // 5 seconds per scene
+    let scene_ms = 15000u64; // 15 seconds per scene
     let fade_ms = 400u64;
 
     // ═════════════════════════════════════════════════════════════════

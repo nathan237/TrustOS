@@ -1127,9 +1127,6 @@ impl Desktop {
         crate::serial_println!("[Desktop] init_desktop_icons...");
         self.init_desktop_icons();
         
-        // Auto-open TrustCode editor with a sample Rust file for demo
-        self.open_trustcode_demo();
-        
         // Mark that we need to render background on first frame
         self.background_cached = false;
         self.needs_full_redraw = true;
@@ -1669,6 +1666,11 @@ struct AppConfig {
                     self.handle_menu_action(action);
                     return;
                 }
+                // Click outside menu (but not on taskbar TrustOS button) → close menu
+                if y < (self.height - TASKBAR_HEIGHT) as i32 || x >= 108 {
+                    self.start_menu_open = false;
+                    return;
+                }
             }
             
             // Check taskbar first
@@ -2071,7 +2073,7 @@ struct AppConfig {
     }
     
     fn handle_taskbar_click(&mut self, x: i32, _y: i32) {
-        if x < 48 {
+        if x >= 4 && x < 108 {
             self.start_menu_open = !self.start_menu_open;
             return;
         }
