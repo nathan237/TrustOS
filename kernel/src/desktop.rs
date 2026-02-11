@@ -17,6 +17,10 @@ use spin::Mutex;
 use crate::framebuffer::{self, COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN, COLOR_WHITE, COLOR_BLACK};
 use crate::graphics::desktop_gfx;
 use crate::apps::text_editor::{EditorState, render_editor};
+use core::sync::atomic::{AtomicBool, Ordering};
+
+/// Module-level flag to signal desktop exit (accessible from run() and handle_menu_action)
+static EXIT_DESKTOP_FLAG: AtomicBool = AtomicBool::new(false);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🧮 MATH UTILITIES for no_std environment
@@ -2109,7 +2113,7 @@ struct AppConfig {
     fn check_start_menu_click(&self, x: i32, y: i32) -> Option<u8> {
         // Same dimensions as draw_start_menu()
         let menu_w = 280u32;
-        let menu_h = 400u32;
+        let menu_h = 440u32;
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
@@ -2118,17 +2122,17 @@ struct AppConfig {
             return None;
         }
         
-        // 11 list items at menu_y + 30 + (i * 32), each 30px tall
+        // 12 list items at menu_y + 30 + (i * 32), each 30px tall
         // Matches draw_start_menu items array:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Settings, 9=Shutdown, 10=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Settings, 9=Exit Desktop, 10=Shutdown, 11=Reboot
         let items_start_y = menu_y + 30;
         let item_spacing = 32;
         let item_h = 30;
         
         if y >= items_start_y {
             let idx = ((y - items_start_y) / item_spacing) as u8;
-            if idx < 11 {
+            if idx < 12 {
                 // Verify within item height (not in gap)
                 let item_top = items_start_y + (idx as i32 * item_spacing);
                 if y < item_top + item_h {
@@ -2143,7 +2147,7 @@ struct AppConfig {
     fn handle_menu_action(&mut self, action: u8) {
         // Matches draw_start_menu items array order:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Settings, 9=Shutdown, 10=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Settings, 9=Exit Desktop, 10=Shutdown, 11=Reboot
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
@@ -2174,12 +2178,16 @@ struct AppConfig {
             8 => { // Settings
                 self.open_settings_panel();
             },
-            9 => { // Shutdown
+            9 => { // Exit Desktop
+                crate::serial_println!("[GUI] Exit Desktop from start menu");
+                EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
+            },
+            10 => { // Shutdown
                 crate::println!("\n\n=== SYSTEM SHUTDOWN ===");
                 crate::println!("Goodbye!");
                 loop { x86_64::instructions::hlt(); }
             },
-            10 => { // Reboot
+            11 => { // Reboot
                 crate::serial_println!("[SYSTEM] Reboot requested");
                 // Triple fault reboot
                 unsafe {
@@ -2616,6 +2624,7 @@ struct AppConfig {
                 output.push(String::from("  uptime    - System uptime"));
                 output.push(String::from("  matrix3d  - 3D Matrix tunnel (ESC=exit)"));
                 output.push(String::from("  shader    - Graphics demos"));
+                output.push(String::from("  showcase3d- 3D cinematic demo"));
                 output.push(String::from("  clear     - Clear terminal"));
                 output.push(String::from("  exit      - Close terminal"));
             },
@@ -2835,6 +2844,12 @@ struct AppConfig {
             "df" => {
                 output.push(String::from("Filesystem      Size  Used  Avail Use%"));
                 output.push(String::from("ramfs           32M   1M    31M   3%"));
+            },
+            "showcase3d" | "demo3d" => {
+                output.push(String::from("\u{2713} Showcase 3D Cinematic - ESC to skip scenes"));
+                drop(output);
+                crate::shell::cmd_showcase3d();
+                return Vec::new();
             },
             "exit" | "quit" => {
                 output.push(String::from("Use the X button to close the terminal"));
@@ -3937,7 +3952,7 @@ struct AppConfig {
     
     fn draw_start_menu(&self) {
         let menu_w = 280u32;
-        let menu_h = 400u32;
+        let menu_h = 440u32;
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
@@ -3960,7 +3975,7 @@ struct AppConfig {
         framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 26) as u32, menu_w - 4, GREEN_MUTED);
         
         // Menu items
-        let items: [(&str, &str, bool); 11] = [
+        let items: [(&str, &str, bool); 12] = [
             (">_", "Terminal", false),
             ("[]", "Files", false),
             ("##", "Calculator", false),
@@ -3970,6 +3985,7 @@ struct AppConfig {
             ("WW", "Browser", false),
             ("Sk", "Snake", false),
             ("@)", "Settings", false),
+            ("<-", "Exit Desktop", true),
             ("!!", "Shutdown", true),
             (">>", "Reboot", true),
         ];
@@ -5169,8 +5185,9 @@ pub fn handle_scroll(delta: i8) {
 }
 
 /// Run GUI loop with double-buffered rendering and vsync-like timing
-pub fn run() -> ! {
+pub fn run() {
     use crate::gui::engine::{self, HotkeyAction};
+    EXIT_DESKTOP_FLAG.store(false, Ordering::SeqCst);
     
     // Initialize GUI timing
     engine::init_timing();
@@ -5180,6 +5197,11 @@ pub fn run() -> ! {
     crate::serial_println!("[GUI] Target: 60 FPS with HLT-based frame limiting");
     
     loop {
+        // Check exit flag
+        if EXIT_DESKTOP_FLAG.load(Ordering::SeqCst) {
+            crate::serial_println!("[GUI] Desktop exit requested, returning to shell");
+            break;
+        }
         let frame_start = engine::now_us();
         
         // ═══════════════════════════════════════════════════════════════
@@ -5210,6 +5232,12 @@ pub fn run() -> ! {
             
             // Check hotkeys on key press
             if !is_release {
+                // ESC key (scancode 0x01) → exit desktop
+                if raw_code == 0x01 {
+                    crate::serial_println!("[GUI] ESC pressed, exiting desktop");
+                    EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
+                    continue;
+                }
                 match engine::check_hotkey(raw_code) {
                     HotkeyAction::CloseWindow => {
                         // Alt+F4: Close focused window

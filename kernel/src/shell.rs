@@ -2756,6 +2756,12 @@ fn launch_desktop_env(initial_window: Option<(&str, crate::desktop::WindowType, 
     drop(d);
     crate::serial_println!("[Desktop] Entering desktop run loop");
     desktop::run();
+    // Desktop exited — restore shell
+    crate::serial_println!("[Desktop] Returned to shell");
+    // Clear screen
+    let (w, h) = crate::framebuffer::get_dimensions();
+    crate::framebuffer::fill_rect(0, 0, w, h, 0xFF000000);
+    crate::println_color!(COLOR_GREEN, "\nReturned to TrustOS shell. Type 'help' for commands.");
 }
 
 // ==================== SIGNATURE — KERNEL PROOF OF AUTHORSHIP ====================
@@ -3768,7 +3774,7 @@ fn main() {
 // 12 fullscreen scenes, 5 seconds each, hardware stats overlay
 // ═══════════════════════════════════════════════════════════════════════════════
 
-fn cmd_showcase3d() {
+pub fn cmd_showcase3d() {
     use crate::gpu_emu::{PixelInput, PixelOutput};
 
     let (sw, sh) = crate::framebuffer::get_dimensions();
