@@ -170,6 +170,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // Showcase
     "showcase",
     "showcase3d",
+    "filled3d",
     // Hypervisor
     "hv", "hypervisor",
 ];

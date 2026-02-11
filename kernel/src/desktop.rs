@@ -2526,20 +2526,11 @@ struct AppConfig {
         } else if key == 0x09 { // Tab — autosuggestion
             let partial = self.input_buffer.clone();
             if !partial.is_empty() {
-                let commands = [
-                    "help", "ls", "cd", "pwd", "mkdir", "rmdir", "touch", "rm", "cp", "mv",
-                    "cat", "echo", "clear", "time", "date", "whoami", "hostname", "uname",
-                    "free", "df", "ps", "top", "kill", "ifconfig", "ping", "curl",
-                    "desktop", "cosmic", "trustedit", "calculator", "snake", "browser",
-                    "neofetch", "tree", "find", "grep", "sort", "head", "tail",
-                    "lspci", "lshw", "lscpu", "lsmem", "dmesg", "benchmark",
-                    "history", "env", "login", "logout", "reboot", "shutdown",
-                    "holo", "matrix", "theme", "perf", "memdbg", "hexdump",
-                    "signature", "security", "showcase",
-                ];
-                let matches: Vec<&&str> = commands.iter().filter(|c| c.starts_with(&partial)).collect();
+                let commands = crate::shell::SHELL_COMMANDS;
+                let partial_str = partial.as_str();
+                let matches: Vec<&str> = commands.iter().copied().filter(|c| c.starts_with(partial_str)).collect();
                 if matches.len() == 1 {
-                    self.input_buffer = String::from(*matches[0]);
+                    self.input_buffer = String::from(matches[0]);
                     if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                         if let Some(last) = window.content.last_mut() {
                             *last = format!("root@trustos:~$ {}_", self.input_buffer);
@@ -2547,7 +2538,7 @@ struct AppConfig {
                     }
                 } else if matches.len() > 1 {
                     // Show all matching commands
-                    let match_str: String = matches.iter().map(|m| **m).collect::<Vec<&str>>().join("  ");
+                    let match_str: String = matches.join("  ");
                     if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                         window.content.push(match_str);
                         window.content.push(format!("root@trustos:~$ {}_", self.input_buffer));
@@ -2627,6 +2618,7 @@ struct AppConfig {
                 output.push(String::from("  matrix3d  - 3D Matrix tunnel (ESC=exit)"));
                 output.push(String::from("  shader    - Graphics demos"));
                 output.push(String::from("  showcase3d- 3D cinematic demo"));
+                output.push(String::from("  filled3d  - Filled 3D test (flat shading)"));
                 output.push(String::from("  clear     - Clear terminal"));
                 output.push(String::from("  exit      - Close terminal"));
             },
@@ -2851,6 +2843,12 @@ struct AppConfig {
                 output.push(String::from("\u{2713} Showcase 3D Cinematic - ESC to skip scenes"));
                 drop(output);
                 crate::shell::cmd_showcase3d();
+                return Vec::new();
+            },
+            "filled3d" => {
+                output.push(String::from("\u{2713} Filled 3D Test - ESC to exit"));
+                drop(output);
+                crate::shell::cmd_filled3d();
                 return Vec::new();
             },
             "exit" | "quit" => {
