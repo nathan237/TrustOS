@@ -791,6 +791,8 @@ pub struct Desktop {
     matrix_speeds: Vec<u32>,
     matrix_seeds: Vec<u32>,
     matrix_initialized: bool,
+    // Terminal auto-suggestions: how many suggestion lines added after prompt
+    terminal_suggestion_count: usize,
 }
 
 /// Calculator state for interactive calculator windows
@@ -1093,6 +1095,7 @@ impl Desktop {
             matrix_speeds: Vec::new(),
             matrix_seeds: Vec::new(),
             matrix_initialized: false,
+            terminal_suggestion_count: 0,
         }
     }
     
@@ -2511,8 +2514,53 @@ struct AppConfig {
         }
     }
     
+    /// Remove any existing auto-suggestion lines from the terminal window
+    fn clear_terminal_suggestions(&mut self) {
+        if self.terminal_suggestion_count > 0 {
+            if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                for _ in 0..self.terminal_suggestion_count {
+                    window.content.pop();
+                }
+            }
+            self.terminal_suggestion_count = 0;
+        }
+    }
+    
+    /// Show auto-suggestions below the prompt based on current input
+    fn show_terminal_suggestions(&mut self) {
+        if self.input_buffer.is_empty() {
+            return;
+        }
+        let partial = self.input_buffer.as_str();
+        let commands = crate::shell::SHELL_COMMANDS;
+        let matches: Vec<&str> = commands.iter().copied()
+            .filter(|c| c.starts_with(partial) && *c != partial)
+            .collect();
+        if matches.is_empty() {
+            return;
+        }
+        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+            // Show up to 6 suggestions on one line
+            let display: Vec<&str> = matches.iter().copied().take(6).collect();
+            let line = format!("  > {}", display.join("  "));
+            window.content.push(line);
+            self.terminal_suggestion_count = 1;
+            // If many matches, show count on a second line
+            if matches.len() > 6 {
+                window.content.push(format!("    ... +{} more", matches.len() - 6));
+                self.terminal_suggestion_count = 2;
+            }
+            while window.content.len() > 20 {
+                window.content.remove(0);
+            }
+        }
+    }
+    
     /// Handle terminal keyboard input
     fn handle_terminal_key(&mut self, key: u8) {
+        // Clear old suggestion lines so content.last() is the prompt again
+        self.clear_terminal_suggestions();
+        
         if key == 0x08 { // Backspace
             if !self.input_buffer.is_empty() {
                 self.input_buffer.pop();
@@ -2584,6 +2632,9 @@ struct AppConfig {
                 }
             }
         }
+        
+        // Show auto-suggestions below prompt (except after Enter — buffer is empty)
+        self.show_terminal_suggestions();
     }
     
     /// Execute terminal command (static to avoid borrow issues)
