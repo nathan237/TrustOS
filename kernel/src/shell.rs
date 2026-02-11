@@ -4072,63 +4072,68 @@ pub fn cmd_showcase3d() {
     }
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 1 — Cosmic Deform
+    // SCENE 1 — Rotating Cube
     // ═════════════════════════════════════════════════════════════════
-    crate::serial_println!("[SHOWCASE3D] Scene 1: Cosmic Deform");
-    render_shader_scene(&mut buf, w, h,
-        crate::gpu_emu::shader_cosmic_deform,
-        "Cosmic Vortex", "GLSL fractal deformation - 6 iterations", 1,
+    crate::serial_println!("[SHOWCASE3D] Scene 1: Cube");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Cube,
+        0xFF00FF66,
+        "Wireframe Cube", "8 vertices - 12 edges - perspective projection", 1,
         scene_ticks);
     fade_out(&mut buf, w, h, fade_ticks);
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 2 — Matrix Rain 3D
+    // SCENE 2 — Diamond
     // ═════════════════════════════════════════════════════════════════
-    crate::serial_println!("[SHOWCASE3D] Scene 2: Matrix 3D");
-    render_shader_scene(&mut buf, w, h,
-        crate::gpu_emu::shader_matrix_rain_3d,
-        "Matrix Flythrough", "32-column radial depth projection", 2,
+    crate::serial_println!("[SHOWCASE3D] Scene 2: Diamond");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Diamond,
+        0xFFFF44FF,
+        "Diamond", "Octahedron geometry - depth colored edges", 2,
         scene_ticks);
     fade_out(&mut buf, w, h, fade_ticks);
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 3 — Holomatrix Tunnel
+    // SCENE 3 — Torus
     // ═════════════════════════════════════════════════════════════════
-    crate::serial_println!("[SHOWCASE3D] Scene 3: Holomatrix Tunnel");
-    render_shader_scene(&mut buf, w, h,
-        crate::gpu_emu::shader_holomatrix_tunnel,
-        "Holo Tunnel", "Polar-to-depth perspective with glyphs", 3,
+    crate::serial_println!("[SHOWCASE3D] Scene 3: Torus");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Torus,
+        0xFFFF8844,
+        "Torus", "Donut wireframe - parametric surface mesh", 3,
         scene_ticks);
     fade_out(&mut buf, w, h, fade_ticks);
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 4 — SDF Ray-Marched Shapes
+    // SCENE 4 — Pyramid
     // ═════════════════════════════════════════════════════════════════
-    crate::serial_println!("[SHOWCASE3D] Scene 4: SDF Shapes");
-    render_shader_scene(&mut buf, w, h,
-        crate::gpu_emu::shader_matrix_shapes,
-        "Ray Marching", "SDF cube + sphere - 24 step ray march", 4,
+    crate::serial_println!("[SHOWCASE3D] Scene 4: Pyramid");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Pyramid,
+        0xFFFFCC00,
+        "Pyramid", "5 vertices - 8 edges - ancient geometry", 4,
         scene_ticks);
     fade_out(&mut buf, w, h, fade_ticks);
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 5 — Plasma Genesis
+    // SCENE 5 — HoloMatrix Rain 3D
     // ═════════════════════════════════════════════════════════════════
-    crate::serial_println!("[SHOWCASE3D] Scene 5: Plasma");
-    render_shader_scene(&mut buf, w, h,
-        crate::gpu_emu::shader_plasma,
-        "Plasma Genesis", "4 superimposed sine wave interference", 5,
+    crate::serial_println!("[SHOWCASE3D] Scene 5: HoloMatrix");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::HoloMatrix,
+        0xFF00FF44,
+        "HoloMatrix", "3D matrix rain with perspective depth", 5,
         scene_ticks);
     fade_out(&mut buf, w, h, fade_ticks);
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 6 — Wireframe Multi-Shape Orbit
+    // SCENE 6 — Multi-Shape Orbit
     // ═════════════════════════════════════════════════════════════════
     crate::serial_println!("[SHOWCASE3D] Scene 6: Multi-Shape");
     render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Multi,
         0xFF00FFAA,
-        "Multi Shape", "4 wireframe objects - depth colored", 6,
+        "Multi Shape", "4 wireframe objects orbiting - depth colored", 6,
         scene_ticks);
     fade_out(&mut buf, w, h, fade_ticks);
 
@@ -4144,50 +4149,53 @@ pub fn cmd_showcase3d() {
     fade_out(&mut buf, w, h, fade_ticks);
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 8 — Parallax Matrix Depth
+    // SCENE 8 — Grid
     // ═════════════════════════════════════════════════════════════════
-    crate::serial_println!("[SHOWCASE3D] Scene 8: Parallax");
-    render_shader_scene(&mut buf, w, h,
-        crate::gpu_emu::shader_holomatrix_parallax,
-        "Parallax Depth", "4 layers of matrix rain with depth", 8,
+    crate::serial_println!("[SHOWCASE3D] Scene 8: Grid");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Grid,
+        0xFF4488FF,
+        "Infinite Grid", "Wireframe ground plane with perspective", 8,
         scene_ticks);
     fade_out(&mut buf, w, h, fade_ticks);
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 9 — Inferno Fire
+    // SCENE 9 — Penger
     // ═════════════════════════════════════════════════════════════════
-    crate::serial_println!("[SHOWCASE3D] Scene 9: Fire");
-    render_shader_scene(&mut buf, w, h,
-        crate::gpu_emu::shader_fire,
-        "Inferno", "Procedural flame with 3-layer noise", 9,
+    crate::serial_println!("[SHOWCASE3D] Scene 9: Penger");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::Penger,
+        0xFFFFFF00,
+        "Penger", "The legendary wireframe penguin", 9,
         scene_ticks);
     fade_out(&mut buf, w, h, fade_ticks);
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 10 — Animated Mandelbrot
+    // SCENE 10 — TrustOS Logo
     // ═════════════════════════════════════════════════════════════════
-    crate::serial_println!("[SHOWCASE3D] Scene 10: Mandelbrot");
-    render_shader_scene(&mut buf, w, h,
-        crate::gpu_emu::shader_mandelbrot,
-        "Mandelbrot", "64-iteration fractal with animated zoom", 10,
+    crate::serial_println!("[SHOWCASE3D] Scene 10: TrustOS Logo");
+    render_formula_scene(&mut buf, w, h,
+        crate::formula3d::FormulaScene::TrustOs,
+        0xFF00FF88,
+        "TrustOS Logo", "3D wireframe logo with glow vertices", 10,
         scene_ticks);
     fade_out(&mut buf, w, h, fade_ticks);
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 11 — Icosphere Wireframe
+    // SCENE 11 — Icosphere
     // ═════════════════════════════════════════════════════════════════
     crate::serial_println!("[SHOWCASE3D] Scene 11: Icosphere");
     render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Icosphere,
         0xFF66CCFF,
-        "Icosphere", "Geodesic sphere with depth shading", 11,
+        "Icosphere", "Geodesic sphere - subdivided icosahedron", 11,
         scene_ticks);
     fade_out(&mut buf, w, h, fade_ticks);
 
     // ═════════════════════════════════════════════════════════════════
-    // SCENE 12 — TrustOS 3D Logo + Character
+    // SCENE 12 — Character
     // ═════════════════════════════════════════════════════════════════
-    crate::serial_println!("[SHOWCASE3D] Scene 12: TrustOS Logo");
+    crate::serial_println!("[SHOWCASE3D] Scene 12: Character");
     render_formula_scene(&mut buf, w, h,
         crate::formula3d::FormulaScene::Character,
         0xFF00FF88,
@@ -4214,7 +4222,7 @@ pub fn cmd_showcase3d() {
             let c = 0xFF000000 | (alpha << 16) | (alpha << 8) | alpha;
             let gc = 0xFF000000 | ((alpha * 200 / 255) << 8);
             draw_text_centered(&mut buf, w, h, h / 3 - 30, "TrustOS 3D Engine", c, 5);
-            draw_text_centered(&mut buf, w, h, h / 3 + 60, "12 scenes - Pure software rendering", gc, 2);
+            draw_text_centered(&mut buf, w, h, h / 3 + 60, "12 wireframe scenes - Pure software rendering", gc, 2);
             draw_text_centered(&mut buf, w, h, h / 3 + 100, "No GPU hardware - All CPU computed", gc, 2);
             draw_text_centered(&mut buf, w, h, h / 3 + 160, "Written in Rust by Nated0ge", 0xFF000000 | ((alpha * 140 / 255) << 16) | ((alpha * 180 / 255) << 8) | (alpha * 255 / 255), 3);
             draw_text_centered(&mut buf, w, h, h / 3 + 220, "github.com/nathan237/TrustOS", 0xFF000000 | ((alpha * 100 / 255) << 16) | ((alpha * 100 / 255) << 8) | ((alpha * 100 / 255)), 2);
