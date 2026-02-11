@@ -752,7 +752,7 @@ fn tunnel_grid_lines(wall_x: f32, z: f32, t: f32) -> f32 {
 }
 
 /// Fast atan2 approximation for angle calculation
-#[inline]
+#[inline(always)]
 fn fast_atan2(y: f32, x: f32) -> f32 {
     let abs_x = fast_abs(x);
     let abs_y = fast_abs(y);
@@ -885,21 +885,25 @@ fn parallax_layer(x: u32, y: u32, t: f32, h: u32, speed: f32, brightness: f32,
 #[inline]
 fn fast_sqrt(x: f32) -> f32 {
     if x <= 0.0 { return 0.0; }
-    let mut guess = x * 0.5;
-    for _ in 0..5 {
-        guess = (guess + x / guess) * 0.5;
-    }
-    guess
+    // Quake-style fast inverse sqrt then multiply
+    let xhalf = 0.5 * x;
+    let i = unsafe { core::mem::transmute::<f32, u32>(x) };
+    let i = 0x5f375a86u32.wrapping_sub(i >> 1);
+    let y = unsafe { core::mem::transmute::<u32, f32>(i) };
+    // 2 Newton-Raphson iterations for 1/sqrt(x)
+    let y = y * (1.5 - xhalf * y * y);
+    let y = y * (1.5 - xhalf * y * y);
+    x * y // x * (1/sqrt(x)) = sqrt(x)
 }
 
 /// Fast absolute value
-#[inline]
+#[inline(always)]
 fn fast_abs(x: f32) -> f32 {
     if x < 0.0 { -x } else { x }
 }
 
 /// Fast fractional part
-#[inline]
+#[inline(always)]
 fn fast_fract(x: f32) -> f32 {
     x - (x as i32) as f32
 }
@@ -1014,6 +1018,7 @@ pub fn shader_matrix_shapes(input: PixelInput) -> PixelOutput {
 }
 
 /// SDF scene - all shapes combined (simplified for performance)
+#[inline(always)]
 fn sdf_scene(x: f32, y: f32, z: f32, t: f32) -> (f32, u8) {
     // Single rotating cube at center
     let cube_z = 2.0 + fast_sin(t * 0.5) * 0.3;
@@ -1038,13 +1043,13 @@ fn sdf_scene(x: f32, y: f32, z: f32, t: f32) -> (f32, u8) {
 }
 
 /// SDF Sphere
-#[inline]
+#[inline(always)]
 fn sdf_sphere(x: f32, y: f32, z: f32, r: f32) -> f32 {
     fast_sqrt(x * x + y * y + z * z) - r
 }
 
 /// SDF Cube (box)
-#[inline]
+#[inline(always)]
 fn sdf_cube(x: f32, y: f32, z: f32, s: f32) -> f32 {
     let dx = fast_abs(x) - s;
     let dy = fast_abs(y) - s;
@@ -1060,14 +1065,14 @@ fn sdf_cube(x: f32, y: f32, z: f32, s: f32) -> f32 {
 }
 
 /// SDF Torus
-#[inline]
+#[inline(always)]
 fn sdf_torus(x: f32, y: f32, z: f32, r_major: f32, r_minor: f32) -> f32 {
     let q = fast_sqrt(x * x + z * z) - r_major;
     fast_sqrt(q * q + y * y) - r_minor
 }
 
 /// Rotate point in 3D
-#[inline]
+#[inline(always)]
 fn rotate_point(x: f32, y: f32, z: f32, ax: f32, ay: f32) -> (f32, f32, f32) {
     // Rotate around Y
     let cos_y = fast_cos(ay);
@@ -1164,24 +1169,24 @@ fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
 }
 
 /// Fast sine approximation (Bhaskara, ~0.1% error)
-#[inline]
+#[inline(always)]
 fn fast_sin(x: f32) -> f32 {
-    // Normalize to [-PI, PI]
-    let x = x % (2.0 * 3.14159265);
-    let x = if x > 3.14159265 { x - 2.0 * 3.14159265 } 
-            else if x < -3.14159265 { x + 2.0 * 3.14159265 } 
-            else { x };
+    // Normalize to [-PI, PI] without expensive modulo (use subtract loop)
+    let mut x = x;
+    while x > 3.14159265 { x -= 6.28318530; }
+    while x < -3.14159265 { x += 6.28318530; }
     
     // Bhaskara approximation (very fast, ~0.1% error)
     let abs_x = if x < 0.0 { -x } else { x };
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
+    let diff = 3.14159265 - abs_x;
     
-    sign * (16.0 * abs_x * (3.14159265 - abs_x)) / 
-           (5.0 * 3.14159265 * 3.14159265 - 4.0 * abs_x * (3.14159265 - abs_x))
+    sign * (16.0 * abs_x * diff) / 
+           (49.348022 - 4.0 * abs_x * diff)
 }
 
 /// Fast cosine (sin shifted by PI/2)
-#[inline]
+#[inline(always)]
 fn fast_cos(x: f32) -> f32 {
     fast_sin(x + 1.5707963)
 }
@@ -1412,14 +1417,14 @@ pub fn shader_cosmic_deform(input: PixelInput) -> PixelOutput {
 }
 
 /// Approximate tanh for shader math
-#[inline]
+#[inline(always)]
 fn fast_tanh(x: f32) -> f32 {
     let x2 = x * x;
     x / (1.0 + x.abs() + x2 * 0.28)
 }
 
 /// Approximate exp for shader math (fast, rough)
-#[inline]
+#[inline(always)]
 fn fast_exp(x: f32) -> f32 {
     let x = x.clamp(-10.0, 10.0);
     let t = 1.0 + x / 256.0;

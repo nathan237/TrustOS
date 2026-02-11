@@ -3887,7 +3887,8 @@ pub fn cmd_showcase3d() {
         let mut fps_start = start;
         let mut fps_frames = 0u32;
         let mut cur_fps = 0u32;
-        let mut step = 2usize; // Start at 2×2 (good quality)
+        // Start at step=2 for small screens, step=3 for large (>960px)
+        let mut step = if w > 960 { 3usize } else { 2 };
 
         loop {
             let elapsed = ticks_now().saturating_sub(start);
@@ -3897,13 +3898,14 @@ pub fn cmd_showcase3d() {
             }
 
             // Adaptive quality: adjust step based on actual FPS
-            if cur_fps > 0 && frame > 5 {
-                if cur_fps >= 24 && step > 1 {
-                    step = 1; // Full resolution — GPU fast enough
-                } else if cur_fps >= 12 && step > 2 {
-                    step = 2; // High quality
-                } else if cur_fps < 6 && step < 3 {
-                    step = 3; // Reduce quality to keep it smooth
+            // Checks every frame after first FPS measurement
+            if cur_fps > 0 {
+                if cur_fps >= 20 && step > 2 {
+                    step -= 1; // Improve quality one level
+                } else if cur_fps >= 30 && step > 1 {
+                    step = 1; // Full resolution
+                } else if cur_fps < 8 && step < 4 {
+                    step += 1; // Reduce quality to keep it smooth
                 }
             }
 
