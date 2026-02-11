@@ -5214,77 +5214,34 @@ pub fn run() {
         let mouse = crate::mouse::get_state();
         update_cursor(mouse.x, mouse.y);
         
-        // Handle keyboard with hotkey detection
+        // Handle keyboard input
+        // NOTE: read_char() returns ASCII values, NOT scancodes.
+        // The interrupt handler converts scancodes→ASCII and strips releases.
+        // Use keyboard::is_key_pressed(scancode) to check modifier/key state.
         while let Some(key) = crate::keyboard::read_char() {
-            // Check for hotkeys first
-            let scancode = key; // Assuming key is scancode
-            let is_release = scancode & 0x80 != 0;
-            let raw_code = scancode & 0x7F;
-            
-            // Update modifier state
-            engine::update_modifiers(raw_code, !is_release);
-            
-            // Check for Start Menu (Win key alone)
-            if engine::check_start_menu_trigger(raw_code, !is_release) {
-                // Toggle Desktop's own start menu (not engine's)
-                let mut d = DESKTOP.lock();
-                d.start_menu_open = !d.start_menu_open;
-                drop(d);
+            // ESC (ASCII 27) → exit desktop
+            if key == 27 {
+                crate::serial_println!("[GUI] ESC pressed, exiting desktop");
+                EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
+                continue;
             }
             
-            // Check hotkeys on key press
-            if !is_release {
-                // ESC key (scancode 0x01) → exit desktop
-                if raw_code == 0x01 {
-                    crate::serial_println!("[GUI] ESC pressed, exiting desktop");
-                    EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
-                    continue;
+            // Check modifier state from interrupt handler (tracks raw scancodes)
+            let alt = crate::keyboard::is_key_pressed(0x38);
+            let _ctrl = crate::keyboard::is_key_pressed(0x1D);
+            
+            // Alt+Tab (Tab = ASCII 9) → window switcher
+            if alt && key == 9 {
+                if !engine::is_alt_tab_active() {
+                    engine::start_alt_tab();
+                } else {
+                    engine::alt_tab_next();
                 }
-                match engine::check_hotkey(raw_code) {
-                    HotkeyAction::CloseWindow => {
-                        // Alt+F4: Close focused window
-                        DESKTOP.lock().close_focused_window();
-                    }
-                    HotkeyAction::SwitchWindow => {
-                        // Alt+Tab: Toggle window switcher
-                        if !engine::is_alt_tab_active() {
-                            engine::start_alt_tab();
-                        } else {
-                            engine::alt_tab_next();
-                        }
-                    }
-                    HotkeyAction::SnapLeft => {
-                        DESKTOP.lock().snap_focused_window(SnapDir::Left);
-                    }
-                    HotkeyAction::SnapRight => {
-                        DESKTOP.lock().snap_focused_window(SnapDir::Right);
-                    }
-                    HotkeyAction::Maximize => {
-                        DESKTOP.lock().toggle_maximize_focused();
-                    }
-                    HotkeyAction::Minimize => {
-                        DESKTOP.lock().minimize_focused_window();
-                    }
-                    HotkeyAction::ShowDesktop => {
-                        DESKTOP.lock().toggle_show_desktop();
-                    }
-                    HotkeyAction::OpenFileManager => {
-                        // Will open file manager when implemented
-                        engine::show_toast("Files", "File manager coming soon", engine::NotifyPriority::Info);
-                    }
-                    HotkeyAction::OpenTerminal => {
-                        DESKTOP.lock().open_terminal();
-                    }
-                    HotkeyAction::ToggleDevPanel => {
-                        crate::devtools::toggle_devpanel();
-                    }
-                    HotkeyAction::None => {
-                        // Pass to focused window
-                        handle_keyboard(key);
-                    }
-                    _ => {}
-                }
+                continue;
             }
+            
+            // Pass key to focused window
+            handle_keyboard(key);
         }
         
         // Handle Alt release to finish Alt+Tab
@@ -5373,6 +5330,14 @@ pub fn run() {
         // ═══════════════════════════════════════════════════════════════
         engine::wait_for_next_frame(frame_start);
     }
+    
+    // ═══════════════════════════════════════════════════════════════
+    // Cleanup before returning to shell
+    // ═══════════════════════════════════════════════════════════════
+    crate::serial_println!("[GUI] Desktop exiting, cleaning up...");
+    crate::framebuffer::set_double_buffer_mode(false);
+    crate::framebuffer::clear();
+    crate::serial_println!("[GUI] Desktop exited cleanly");
 }
 
 /// Snap direction for window snapping

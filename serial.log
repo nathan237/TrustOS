@@ -45,9 +45,9 @@ Memory map entries: 34
 [HEAP] Initialized: free=134008 KB
 [FB] Initializing scrollback buffer...
 [FB] Scrollback buffer initialized (1000 lines max)
-[INTEGRITY] .text   : 2324421 bytes, SHA-256: 3da73f8b099cb7c8...31c097f0
-[INTEGRITY] .rodata : 319032 bytes, SHA-256: 06094be297e8927c...39037b9d
-[INTEGRITY] kernel digest: a64877f1918fb6e3...1458f83d
+[INTEGRITY] .text   : 2323525 bytes, SHA-256: 98de4c2014b19e6f...c1bce281
+[INTEGRITY] .rodata : 318128 bytes, SHA-256: ceb3f7210de293c2...41b2da08
+[INTEGRITY] kernel digest: d3524d7fda651c3c...3422afcc
 ╔══════════════════════════════════════════════════════════════╗
 ║                      T R U S T - O S                         ║
 ║                 FAST • SECURE • RELIABLE                     ║
@@ -70,7 +70,7 @@ Detecting CPU capabilities...
 [CPU] Security: SMEP=false SMAP=false NX=true
 [CPU] Virt: VMX=false SVM=false
 [SIMD] SSE/SSE2 enabled
-[TSC] Initialized: 36744480 Hz (0 GHz)
+[TSC] Initialized: 36014120 Hz (0 GHz)
 [OK] CPU capabilities detected
 Parsing ACPI tables...
 [DEBUG] RSDP pointer from Limine: 0x1e97e014
@@ -108,7 +108,7 @@ Initializing paging subsystem...
 [OK] Paging initialized (NX enabled)
 [PAT] Skipping Write-Combining on VirtualBox (VMSVGA compat)
 Initializing userland support...
-[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff802a99bb
+[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff802a9a98
 [         0][CPU0][INFO ] [USERLAND] SYSCALL/SYSRET configured (STAR, LSTAR, SFMASK)
 [OK] Userland support ready
 Initializing thread subsystem...
@@ -119,7 +119,7 @@ Initializing security subsystem...
 Keyboard driver ready
 [OK] Keyboard ready
 [RTC] init start
-[RTC] Initialized: 2026-02-10 19:06:55
+[RTC] Initialized: 2026-02-10 19:15:52
 [OK] RTC initialized
 [RTC] init done
 [KB-IRQ] scancode=0x47
@@ -194,8 +194,8 @@ Keyboard driver ready
 [         0][CPU0][DEBUG] [E1000] Initializing RX ring (32 descriptors)
 [         0][CPU0][DEBUG] [E1000] Initializing TX ring (8 descriptors)
 [         0][CPU0][WARN ] [E1000] Link not detected - continuing anyway (VirtualBox NAT mode)
-[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:9B:C1:D5
-[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:9B:C1:D5
+[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:B3:6C:D8
+[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:B3:6C:D8
 [OK] Network driver: e1000
 [OK] Network ready
 [         0][CPU0][INFO ] [DHCP] Client started
@@ -285,8 +285,8 @@ Starting shell...
 
   T-RustOs v0.1.0 - Type 'help' for commands
 
-[19:06:57] trustos:/$ █ [KB-READ] popped 244 (0xF4)
-  █ [KB-IRQ] scancode=0x20
+[19:15:54] trustos:/$ █ [KB-READ] popped 244 (0xF4)
+  █   █   [KB-IRQ] scancode=0x20
 [KB-BUF] push ascii=100 (0x64) char='d'
 [KB-READ] popped 100 (0x64)
   d   dir   del   date   df   deluser   desktop   distro   disk█ [KB-IRQ] scancode=0x12
@@ -309,23 +309,7 @@ Starting shell...
 [KB-IRQ] scancode=0x18
 [KB-BUF] push ascii=111 (0x6F) char='o'
 [KB-READ] popped 111 (0x6F)
-                                          o   desktop█ [KB-IRQ] scancode=0x17
-[KB-BUF] push ascii=105 (0x69) char='i'
-[KB-READ] popped 105 (0x69)
-                                          i█ [KB-IRQ] scancode=0x19
-[KB-BUF] push ascii=112 (0x70) char='p'
-[KB-READ] popped 112 (0x70)
-  p█ [KB-IRQ] scancode=0x97
-[KB-IRQ] scancode=0x99
-[KB-IRQ] scancode=0x98
-[KB-IRQ] scancode=0x0E
-[KB-BUF] push ascii=8 (0x08) char=' '
-[KB-READ] popped 8 (0x08)
-     █ [KB-IRQ] scancode=0x8E
-[KB-IRQ] scancode=0x0E
-[KB-BUF] push ascii=8 (0x08) char=' '
-[KB-READ] popped 8 (0x08)
-        desktop█ [KB-IRQ] scancode=0x8E
+                                          o   desktop█ [KB-IRQ] scancode=0x98
 [KB-IRQ] scancode=0x19
 [KB-BUF] push ascii=112 (0x70) char='p'
 [KB-READ] popped 112 (0x70)
@@ -346,13 +330,66 @@ Starting shell...
 [FB] Background cache allocated: 8100 KB
 [Desktop] init_compositor...
 [Desktop] init_desktop_icons...
-[TrustCode] Demo editor opened
 [Desktop] init complete
 [Desktop] Entering desktop run loop
 [GUI] Frame timing init: TSC 36 MHz
 [GUI] Starting desktop environment...
 [GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start
 [GUI] Target: 60 FPS with HLT-based frame limiting
+[KB-IRQ] scancode=0x23
+[KB-BUF] push ascii=104 (0x68) char='h'
+[KB-READ] popped 104 (0x68)
+[KB-IRQ] scancode=0xA3
+[KB-IRQ] scancode=0x12
+[KB-BUF] push ascii=101 (0x65) char='e'
+[KB-READ] popped 101 (0x65)
+[KB-IRQ] scancode=0x92
+[KB-IRQ] scancode=0x26
+[KB-BUF] push ascii=108 (0x6C) char='l'
+[KB-READ] popped 108 (0x6C)
+[KB-IRQ] scancode=0x19
+[KB-BUF] push ascii=112 (0x70) char='p'
+[KB-READ] popped 112 (0x70)
+[KB-IRQ] scancode=0xA6
+[KB-IRQ] scancode=0x99
+[KB-IRQ] scancode=0x0E
+[KB-BUF] push ascii=8 (0x08) char=' '
+[KB-READ] popped 8 (0x08)
+[KB-IRQ] scancode=0x8E
+[KB-IRQ] scancode=0x0E
+[KB-BUF] push ascii=8 (0x08) char=' '
+[KB-READ] popped 8 (0x08)
+[KB-IRQ] scancode=0x8E
+[KB-IRQ] scancode=0x0E
+[KB-BUF] push ascii=8 (0x08) char=' '
+[KB-READ] popped 8 (0x08)
+[KB-IRQ] scancode=0x8E
+[KB-IRQ] scancode=0x0E
+[KB-BUF] push ascii=8 (0x08) char=' '
+[KB-READ] popped 8 (0x08)
+[KB-IRQ] scancode=0x8E
+[KB-IRQ] scancode=0x23
+[KB-BUF] push ascii=104 (0x68) char='h'
+[KB-READ] popped 104 (0x68)
+[KB-IRQ] scancode=0xA3
+[KB-IRQ] scancode=0x12
+[KB-BUF] push ascii=101 (0x65) char='e'
+[KB-READ] popped 101 (0x65)
+[KB-IRQ] scancode=0x26
+[KB-BUF] push ascii=108 (0x6C) char='l'
+[KB-READ] popped 108 (0x6C)
+[KB-IRQ] scancode=0x92
+[KB-IRQ] scancode=0x19
+[KB-BUF] push ascii=112 (0x70) char='p'
+[KB-READ] popped 112 (0x70)
+[KB-IRQ] scancode=0x99
+[KB-IRQ] scancode=0xA6
+[KB-IRQ] scancode=0x1C
+[KB-BUF] push ascii=10 (0x0A) char='
+'
+[KB-READ] popped 10 (0x0A)
+[TERM] Executing command: 'help' len=4
+[KB-IRQ] scancode=0x9C
 [KB-IRQ] scancode=0x1F
 [KB-BUF] push ascii=115 (0x73) char='s'
 [KB-READ] popped 115 (0x73)
@@ -364,10 +401,10 @@ Starting shell...
 [KB-IRQ] scancode=0x18
 [KB-BUF] push ascii=111 (0x6F) char='o'
 [KB-READ] popped 111 (0x6F)
-[KB-IRQ] scancode=0x98
 [KB-IRQ] scancode=0x11
 [KB-BUF] push ascii=119 (0x77) char='w'
 [KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x98
 [KB-IRQ] scancode=0x91
 [KB-IRQ] scancode=0x2E
 [KB-BUF] push ascii=99 (0x63) char='c'
@@ -427,7 +464,6 @@ Starting shell...
 [KB-BUF] push ascii=27 (0x1B) char=''
 [KB-READ] popped 27 (0x1B)
 [KB-IRQ] scancode=0x81
-[GUI] View mode changed
 [KB-IRQ] scancode=0x01
 [KB-BUF] push ascii=27 (0x1B) char=''
 [KB-READ] popped 27 (0x1B)
@@ -448,7 +484,15 @@ Starting shell...
 [KB-BUF] push ascii=27 (0x1B) char=''
 [KB-READ] popped 27 (0x1B)
 [KB-IRQ] scancode=0x81
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-READ] popped 27 (0x1B)
-[KB-IRQ] scancode=0x81
+[GUI] Exit Desktop from start menu
+[GUI] Desktop exit requested, returning to shell
+[Desktop] Returned to shell
+
+Returned to TrustOS shell. Type 'help' for commands.
+[19:16:39] trustos:/$ █   █ [KB-IRQ] scancode=0x38
+[KB-IRQ] scancode=0x0F
+[KB-BUF] push ascii=9 (0x09) char='	'
+[KB-READ] popped 9 (0x09)
+  █ [KB-IRQ] scancode=0x8F
+[KB-IRQ] scancode=0xB8
+  █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   
