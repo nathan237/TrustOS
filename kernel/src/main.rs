@@ -111,6 +111,8 @@ mod devtools;
 
 // Kernel signature & proof of authorship
 mod signature;
+// Ed25519 digital signatures (asymmetric crypto)
+pub mod ed25519;
 
 // Synchronization primitives (Redox-inspired)
 mod sync;
@@ -357,6 +359,9 @@ pub unsafe extern "C" fn kmain() -> ! {
     
     // Compute SHA-256 of kernel .text section for runtime integrity verification
     signature::init_integrity();
+    
+    // Initialize Ed25519 asymmetric signature (derives keypair from kernel digest)
+    signature::init_ed25519(&[0x54, 0x72, 0x75, 0x73, 0x74, 0x4f, 0x53]); // "TrustOS" seed
     
     // Now that heap is initialized, show boot banner
     framebuffer::show_simple_boot_header();

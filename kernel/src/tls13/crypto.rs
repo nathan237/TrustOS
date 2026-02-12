@@ -706,12 +706,12 @@ fn differential_add_and_double(
 }
 
 // Field element operations for GF(2^255 - 19)
-type Fe = [u64; 5];
+pub(crate) type Fe = [u64; 5];
 
-const FE_ZERO: Fe = [0, 0, 0, 0, 0];
-const FE_ONE: Fe = [1, 0, 0, 0, 0];
+pub(crate) const FE_ZERO: Fe = [0, 0, 0, 0, 0];
+pub(crate) const FE_ONE: Fe = [1, 0, 0, 0, 0];
 
-fn fe_from_bytes(b: &[u8; 32]) -> Fe {
+pub(crate) fn fe_from_bytes(b: &[u8; 32]) -> Fe {
     let mut h = [0u64; 5];
     
     fn load64(b: &[u8]) -> u64 {
@@ -731,7 +731,7 @@ fn fe_from_bytes(b: &[u8; 32]) -> Fe {
     h
 }
 
-fn fe_to_bytes(h: &Fe) -> [u8; 32] {
+pub(crate) fn fe_to_bytes(h: &Fe) -> [u8; 32] {
     // First do weak reduction to ensure limbs are bounded
     let mut limbs = *h;
     fe_reduce(&mut limbs);
@@ -800,7 +800,7 @@ fn fe_to_bytes(h: &Fe) -> [u8; 32] {
     s
 }
 
-fn fe_reduce(h: &mut Fe) {
+pub(crate) fn fe_reduce(h: &mut Fe) {
     let mut carry;
     
     for _ in 0..2 {
@@ -826,11 +826,11 @@ fn fe_reduce(h: &mut Fe) {
     }
 }
 
-fn fe_add(a: &Fe, b: &Fe) -> Fe {
+pub(crate) fn fe_add(a: &Fe, b: &Fe) -> Fe {
     [a[0] + b[0], a[1] + b[1], a[2] + b[2], a[3] + b[3], a[4] + b[4]]
 }
 
-fn fe_sub(a: &Fe, b: &Fe) -> Fe {
+pub(crate) fn fe_sub(a: &Fe, b: &Fe) -> Fe {
     // Subtract in GF(2^255-19) by computing a - b + 16*p
     // 16p = 16 * (2^255 - 19) = 2^259 - 304
     // In radix-51: we add enough headroom to avoid underflow
@@ -872,7 +872,7 @@ impl FieldElement51 {
     }
 }
 
-fn fe_mul(a: &Fe, b: &Fe) -> Fe {
+pub(crate) fn fe_mul(a: &Fe, b: &Fe) -> Fe {
     // Schoolbook multiplication with reduction mod 2^255-19
     // The result coefficients r[0..9] need to be computed then folded
     
@@ -934,7 +934,7 @@ fn fe_mul(a: &Fe, b: &Fe) -> Fe {
     h
 }
 
-fn fe_sq(a: &Fe) -> Fe {
+pub(crate) fn fe_sq(a: &Fe) -> Fe {
     fe_mul(a, a)
 }
 
@@ -960,7 +960,7 @@ fn fe_mul121666(a: &Fe) -> Fe {
 
 /// Compute z^(2^250-1), returning (z^(2^250-1), z^11)
 /// This follows the exact addition chain from curve25519-dalek
-fn pow22501(z: &Fe) -> (Fe, Fe) {
+pub(crate) fn pow22501(z: &Fe) -> (Fe, Fe) {
     // t0 = z^2
     let t0 = fe_sq(z);
     // t1 = z^8 = (z^2)^2^2
@@ -1012,7 +1012,7 @@ fn pow22501(z: &Fe) -> (Fe, Fe) {
     (t19, t3)
 }
 
-fn fe_invert(z: &Fe) -> Fe {
+pub(crate) fn fe_invert(z: &Fe) -> Fe {
     // z^(p-2) = z^(2^255-21)
     // The bits of p-2 = 2^255 - 21 = 2^255 - 32 + 11
     // In binary: 11010111111...11 (253 ones with gaps at positions 2 and 4)
@@ -1027,7 +1027,7 @@ fn fe_invert(z: &Fe) -> Fe {
     fe_mul(&t20, &t3)
 }
 
-fn fe_cswap(a: &mut Fe, b: &mut Fe, swap: u64) {
+pub(crate) fn fe_cswap(a: &mut Fe, b: &mut Fe, swap: u64) {
     let mask = (0u64).wrapping_sub(swap);
     for i in 0..5 {
         let t = mask & (a[i] ^ b[i]);

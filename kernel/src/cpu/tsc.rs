@@ -147,6 +147,57 @@ pub fn delay_millis(millis: u64) {
     delay_nanos(millis * 1_000_000);
 }
 
+/// PIT-based real-time delay in milliseconds — guaranteed wall-clock time
+/// Uses PIT Channel 2 one-shot mode, works reliably in VirtualBox
+pub fn pit_delay_ms(millis: u64) {
+    const PIT_FREQ: u64 = 1_193_182;
+    const PIT_CHANNEL2: u16 = 0x42;
+    const PIT_COMMAND: u16 = 0x43;
+    // PIT max count = 65535 → max ~54.9ms per shot
+    const MAX_MS_PER_SHOT: u64 = 50;
+
+    let mut remaining = millis;
+    while remaining > 0 {
+        let chunk = remaining.min(MAX_MS_PER_SHOT);
+        let pit_count = (PIT_FREQ * chunk / 1000) as u16;
+        if pit_count == 0 { break; }
+
+        unsafe {
+            use x86_64::instructions::port::Port;
+            let mut cmd_port: Port<u8> = Port::new(PIT_COMMAND);
+            let mut ch2_port: Port<u8> = Port::new(PIT_CHANNEL2);
+            let mut port61: Port<u8> = Port::new(0x61);
+
+            // Save port 0x61
+            let val = port61.read();
+            // Disable gate first to reset
+            port61.write(val & !0x01);
+
+            // Command: Channel 2, lobyte/hibyte, mode 0 (one-shot), binary
+            cmd_port.write(0b10110000);
+            // Write count
+            ch2_port.write((pit_count & 0xFF) as u8);
+            ch2_port.write((pit_count >> 8) as u8);
+
+            // Enable gate to start counting
+            port61.write((val & !0x20) | 0x01);
+
+            // Wait for bit 5 of port 0x61 to go high (counter reached 0)
+            loop {
+                let status = port61.read();
+                if (status & 0x20) != 0 {
+                    break;
+                }
+                core::hint::spin_loop();
+            }
+
+            // Restore
+            port61.write(val);
+        }
+        remaining -= chunk;
+    }
+}
+
 /// Calibrate TSC frequency using PIT
 /// Returns frequency in Hz
 pub fn calibrate_tsc() -> u64 {

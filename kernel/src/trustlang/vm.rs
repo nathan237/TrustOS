@@ -148,6 +148,16 @@ const BUILTIN_TO_STRING: u8 = 4;
 const BUILTIN_TO_INT: u8 = 5;
 const BUILTIN_SQRT: u8 = 6;
 const BUILTIN_ABS: u8 = 7;
+const BUILTIN_PIXEL: u8 = 8;
+const BUILTIN_CLEAR_SCREEN: u8 = 9;
+const BUILTIN_FILL_RECT: u8 = 10;
+const BUILTIN_DRAW_LINE: u8 = 11;
+const BUILTIN_DRAW_CIRCLE: u8 = 12;
+const BUILTIN_SCREEN_W: u8 = 13;
+const BUILTIN_SCREEN_H: u8 = 14;
+const BUILTIN_FLUSH: u8 = 15;
+const BUILTIN_DRAW_TEXT: u8 = 16;
+const BUILTIN_SLEEP: u8 = 17;
 
 /// Resolve builtin name → ID
 pub fn builtin_id(name: &str) -> Option<u8> {
@@ -160,6 +170,16 @@ pub fn builtin_id(name: &str) -> Option<u8> {
         "to_int" => Some(BUILTIN_TO_INT),
         "sqrt" => Some(BUILTIN_SQRT),
         "abs" => Some(BUILTIN_ABS),
+        "pixel" => Some(BUILTIN_PIXEL),
+        "clear_screen" => Some(BUILTIN_CLEAR_SCREEN),
+        "fill_rect" => Some(BUILTIN_FILL_RECT),
+        "draw_line" => Some(BUILTIN_DRAW_LINE),
+        "draw_circle" => Some(BUILTIN_DRAW_CIRCLE),
+        "screen_w" => Some(BUILTIN_SCREEN_W),
+        "screen_h" => Some(BUILTIN_SCREEN_H),
+        "flush" => Some(BUILTIN_FLUSH),
+        "draw_text" => Some(BUILTIN_DRAW_TEXT),
+        "sleep" => Some(BUILTIN_SLEEP),
         _ => None,
     }
 }
@@ -172,7 +192,7 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
 
     frames.push(CallFrame::new(bytecode.entry, 0));
 
-    let max_steps = 10_000_000; // prevent infinite loops
+    let max_steps = 500_000_000; // generous limit for graphics programs
     let mut steps = 0;
 
     loop {
@@ -232,25 +252,46 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                 let val = stack.pop().unwrap_or(Value::Void);
                 frame.locals[slot] = val;
             }
-            // Integer arithmetic
-            x if x == Op::AddI as u8 => { bin_op_i64(&mut stack, |a, b| a.wrapping_add(b))?; }
-            x if x == Op::SubI as u8 => { bin_op_i64(&mut stack, |a, b| a.wrapping_sub(b))?; }
-            x if x == Op::MulI as u8 => { bin_op_i64(&mut stack, |a, b| a.wrapping_mul(b))?; }
+            // Integer arithmetic (auto-promotes to f64 if operands are float)
+            x if x == Op::AddI as u8 => { bin_op_i64(&mut stack, |a, b| a.wrapping_add(b), |a, b| a + b)?; }
+            x if x == Op::SubI as u8 => { bin_op_i64(&mut stack, |a, b| a.wrapping_sub(b), |a, b| a - b)?; }
+            x if x == Op::MulI as u8 => { bin_op_i64(&mut stack, |a, b| a.wrapping_mul(b), |a, b| a * b)?; }
             x if x == Op::DivI as u8 => {
-                let b = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
-                let a = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
-                if b == 0 { return Err(String::from("division by zero")); }
-                stack.push(Value::I64(a / b));
+                let b_val = stack.pop().unwrap_or(Value::I64(0));
+                let a_val = stack.pop().unwrap_or(Value::I64(0));
+                match (&a_val, &b_val) {
+                    (Value::F64(a), Value::F64(b)) => stack.push(Value::F64(a / b)),
+                    (Value::I64(a), Value::F64(b)) => stack.push(Value::F64(*a as f64 / b)),
+                    (Value::F64(a), Value::I64(b)) => stack.push(Value::F64(a / *b as f64)),
+                    _ => {
+                        let b = b_val.as_i64()?;
+                        let a = a_val.as_i64()?;
+                        if b == 0 { return Err(String::from("division by zero")); }
+                        stack.push(Value::I64(a / b));
+                    }
+                }
             }
             x if x == Op::ModI as u8 => {
-                let b = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
-                let a = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
-                if b == 0 { return Err(String::from("modulo by zero")); }
-                stack.push(Value::I64(a % b));
+                let b_val = stack.pop().unwrap_or(Value::I64(0));
+                let a_val = stack.pop().unwrap_or(Value::I64(0));
+                match (&a_val, &b_val) {
+                    (Value::F64(a), Value::F64(b)) => stack.push(Value::F64(a % b)),
+                    (Value::I64(a), Value::F64(b)) => stack.push(Value::F64(*a as f64 % b)),
+                    (Value::F64(a), Value::I64(b)) => stack.push(Value::F64(a % *b as f64)),
+                    _ => {
+                        let b = b_val.as_i64()?;
+                        let a = a_val.as_i64()?;
+                        if b == 0 { return Err(String::from("modulo by zero")); }
+                        stack.push(Value::I64(a % b));
+                    }
+                }
             }
             x if x == Op::NegI as u8 => {
-                let v = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
-                stack.push(Value::I64(-v));
+                let v = stack.pop().unwrap_or(Value::I64(0));
+                match v {
+                    Value::F64(f) => stack.push(Value::F64(-f)),
+                    _ => stack.push(Value::I64(-v.as_i64()?)),
+                }
             }
             // Float arithmetic
             x if x == Op::AddF as u8 => { bin_op_f64(&mut stack, |a, b| a + b)?; }
@@ -261,13 +302,13 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                 let v = stack.pop().unwrap_or(Value::F64(0.0)).as_f64()?;
                 stack.push(Value::F64(-v));
             }
-            // Integer comparisons
-            x if x == Op::EqI as u8 => { cmp_i64(&mut stack, |a, b| a == b)?; }
-            x if x == Op::NeI as u8 => { cmp_i64(&mut stack, |a, b| a != b)?; }
-            x if x == Op::LtI as u8 => { cmp_i64(&mut stack, |a, b| a < b)?; }
-            x if x == Op::GtI as u8 => { cmp_i64(&mut stack, |a, b| a > b)?; }
-            x if x == Op::LeI as u8 => { cmp_i64(&mut stack, |a, b| a <= b)?; }
-            x if x == Op::GeI as u8 => { cmp_i64(&mut stack, |a, b| a >= b)?; }
+            // Integer comparisons (auto-promotes to f64 if operands are float)
+            x if x == Op::EqI as u8 => { cmp_i64(&mut stack, |a, b| a == b, |a, b| a == b)?; }
+            x if x == Op::NeI as u8 => { cmp_i64(&mut stack, |a, b| a != b, |a, b| a != b)?; }
+            x if x == Op::LtI as u8 => { cmp_i64(&mut stack, |a, b| a < b, |a, b| a < b)?; }
+            x if x == Op::GtI as u8 => { cmp_i64(&mut stack, |a, b| a > b, |a, b| a > b)?; }
+            x if x == Op::LeI as u8 => { cmp_i64(&mut stack, |a, b| a <= b, |a, b| a <= b)?; }
+            x if x == Op::GeI as u8 => { cmp_i64(&mut stack, |a, b| a >= b, |a, b| a >= b)?; }
             // Float comparisons
             x if x == Op::EqF as u8 => { cmp_f64(&mut stack, |a, b| a == b)?; }
             x if x == Op::NeF as u8 => { cmp_f64(&mut stack, |a, b| a != b)?; }
@@ -290,12 +331,12 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                 let v = stack.pop().unwrap_or(Value::Bool(false)).as_bool()?;
                 stack.push(Value::Bool(!v));
             }
-            // Bitwise
-            x if x == Op::BitAnd as u8 => { bin_op_i64(&mut stack, |a, b| a & b)?; }
-            x if x == Op::BitOr as u8 => { bin_op_i64(&mut stack, |a, b| a | b)?; }
-            x if x == Op::BitXor as u8 => { bin_op_i64(&mut stack, |a, b| a ^ b)?; }
-            x if x == Op::Shl as u8 => { bin_op_i64(&mut stack, |a, b| a << (b & 63))?; }
-            x if x == Op::Shr as u8 => { bin_op_i64(&mut stack, |a, b| a >> (b & 63))?; }
+            // Bitwise (convert floats to i64 if needed)
+            x if x == Op::BitAnd as u8 => { bin_op_i64(&mut stack, |a, b| a & b, |a, b| (a as i64 & b as i64) as f64)?; }
+            x if x == Op::BitOr as u8 => { bin_op_i64(&mut stack, |a, b| a | b, |a, b| (a as i64 | b as i64) as f64)?; }
+            x if x == Op::BitXor as u8 => { bin_op_i64(&mut stack, |a, b| a ^ b, |a, b| (a as i64 ^ b as i64) as f64)?; }
+            x if x == Op::Shl as u8 => { bin_op_i64(&mut stack, |a, b| a << (b & 63), |a, b| ((a as i64) << (b as i64 & 63)) as f64)?; }
+            x if x == Op::Shr as u8 => { bin_op_i64(&mut stack, |a, b| a >> (b & 63), |a, b| ((a as i64) >> (b as i64 & 63)) as f64)?; }
             // Conversion
             x if x == Op::I64toF64 as u8 => {
                 let v = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
@@ -427,10 +468,20 @@ fn read_u16(code: &[u8], ip: &mut usize) -> u16 {
     v
 }
 
-fn bin_op_i64(stack: &mut Vec<Value>, f: fn(i64, i64) -> i64) -> Result<(), String> {
-    let b = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
-    let a = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
-    stack.push(Value::I64(f(a, b)));
+fn bin_op_i64(stack: &mut Vec<Value>, fi: fn(i64, i64) -> i64, ff: fn(f64, f64) -> f64) -> Result<(), String> {
+    let b_val = stack.pop().unwrap_or(Value::I64(0));
+    let a_val = stack.pop().unwrap_or(Value::I64(0));
+    // Auto-promote to f64 if either operand is float
+    match (&a_val, &b_val) {
+        (Value::F64(a), Value::F64(b)) => stack.push(Value::F64(ff(*a, *b))),
+        (Value::I64(a), Value::F64(b)) => stack.push(Value::F64(ff(*a as f64, *b))),
+        (Value::F64(a), Value::I64(b)) => stack.push(Value::F64(ff(*a, *b as f64))),
+        _ => {
+            let a = a_val.as_i64()?;
+            let b = b_val.as_i64()?;
+            stack.push(Value::I64(fi(a, b)));
+        }
+    }
     Ok(())
 }
 
@@ -441,10 +492,20 @@ fn bin_op_f64(stack: &mut Vec<Value>, f: fn(f64, f64) -> f64) -> Result<(), Stri
     Ok(())
 }
 
-fn cmp_i64(stack: &mut Vec<Value>, f: fn(i64, i64) -> bool) -> Result<(), String> {
-    let b = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
-    let a = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
-    stack.push(Value::Bool(f(a, b)));
+fn cmp_i64(stack: &mut Vec<Value>, fi: fn(i64, i64) -> bool, ff: fn(f64, f64) -> bool) -> Result<(), String> {
+    let b_val = stack.pop().unwrap_or(Value::I64(0));
+    let a_val = stack.pop().unwrap_or(Value::I64(0));
+    // Auto-promote to f64 comparison if either operand is float
+    match (&a_val, &b_val) {
+        (Value::F64(a), Value::F64(b)) => stack.push(Value::Bool(ff(*a, *b))),
+        (Value::I64(a), Value::F64(b)) => stack.push(Value::Bool(ff(*a as f64, *b))),
+        (Value::F64(a), Value::I64(b)) => stack.push(Value::Bool(ff(*a, *b as f64))),
+        _ => {
+            let a = a_val.as_i64()?;
+            let b = b_val.as_i64()?;
+            stack.push(Value::Bool(fi(a, b)));
+        }
+    }
     Ok(())
 }
 
@@ -511,6 +572,160 @@ fn exec_builtin(id: u8, args: &[Value], output: &mut String) -> Result<Value, St
                 Value::F64(f) => Ok(Value::F64(libm::fabs(*f))),
                 _ => Ok(Value::I64(0)),
             }
+        }
+        // ══════════════════════════════════════════════════
+        // Graphics builtins — direct framebuffer access
+        // ══════════════════════════════════════════════════
+        BUILTIN_PIXEL => {
+            // pixel(x, y, r, g, b)
+            let x = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let y = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let r = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let g = args.get(3).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let b = args.get(4).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+            crate::framebuffer::put_pixel(x, y, color);
+            Ok(Value::Void)
+        }
+        BUILTIN_CLEAR_SCREEN => {
+            // clear_screen(r, g, b)
+            let r = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32 & 0xFF;
+            let g = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32 & 0xFF;
+            let b = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32 & 0xFF;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+            let (sw, sh) = crate::framebuffer::get_dimensions();
+            crate::framebuffer::fill_rect(0, 0, sw, sh, color);
+            Ok(Value::Void)
+        }
+        BUILTIN_FILL_RECT => {
+            // fill_rect(x, y, w, h, r, g, b)
+            let x = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let y = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let w = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let h = args.get(3).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+            let r = args.get(4).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let g = args.get(5).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let b = args.get(6).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+            crate::framebuffer::fill_rect(x, y, w, h, color);
+            Ok(Value::Void)
+        }
+        BUILTIN_DRAW_LINE => {
+            // draw_line(x1, y1, x2, y2, r, g, b)
+            let x0 = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let y0 = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let x1 = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let y1 = args.get(3).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let r = args.get(4).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let g = args.get(5).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let b = args.get(6).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+            // Bresenham line
+            let mut cx = x0;
+            let mut cy = y0;
+            let dx = (x1 - x0).abs();
+            let dy = -(y1 - y0).abs();
+            let sx: i64 = if x0 < x1 { 1 } else { -1 };
+            let sy: i64 = if y0 < y1 { 1 } else { -1 };
+            let mut err = dx + dy;
+            loop {
+                if cx >= 0 && cy >= 0 {
+                    crate::framebuffer::put_pixel(cx as u32, cy as u32, color);
+                }
+                if cx == x1 && cy == y1 { break; }
+                let e2 = 2 * err;
+                if e2 >= dy { err += dy; cx += sx; }
+                if e2 <= dx { err += dx; cy += sy; }
+            }
+            Ok(Value::Void)
+        }
+        BUILTIN_DRAW_CIRCLE => {
+            // draw_circle(cx, cy, radius, r, g, b)
+            let cx = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let cy = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let radius = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(0);
+            let r = args.get(3).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let g = args.get(4).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let b = args.get(5).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+            let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+            // Midpoint circle
+            let mut x = radius;
+            let mut y: i64 = 0;
+            let mut d = 1 - radius;
+            while x >= y {
+                let pts = [
+                    (cx + x, cy + y), (cx - x, cy + y),
+                    (cx + x, cy - y), (cx - x, cy - y),
+                    (cx + y, cy + x), (cx - y, cy + x),
+                    (cx + y, cy - x), (cx - y, cy - x),
+                ];
+                for (px, py) in pts {
+                    if px >= 0 && py >= 0 {
+                        crate::framebuffer::put_pixel(px as u32, py as u32, color);
+                    }
+                }
+                y += 1;
+                if d <= 0 {
+                    d += 2 * y + 1;
+                } else {
+                    x -= 1;
+                    d += 2 * (y - x) + 1;
+                }
+            }
+            Ok(Value::Void)
+        }
+        BUILTIN_SCREEN_W => {
+            let (w, _) = crate::framebuffer::get_dimensions();
+            Ok(Value::I64(w as i64))
+        }
+        BUILTIN_SCREEN_H => {
+            let (_, h) = crate::framebuffer::get_dimensions();
+            Ok(Value::I64(h as i64))
+        }
+        BUILTIN_FLUSH => {
+            // flush() — swap buffers if double-buffered
+            crate::framebuffer::swap_buffers();
+            Ok(Value::Void)
+        }
+        BUILTIN_DRAW_TEXT => {
+            // draw_text(text, x, y, r, g, b, scale)
+            if let Some(Value::Str(text)) = args.get(0) {
+                let x = args.get(1).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+                let y = args.get(2).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u32;
+                let r = args.get(3).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+                let g = args.get(4).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+                let b = args.get(5).and_then(|v| v.as_i64().ok()).unwrap_or(255) as u32 & 0xFF;
+                let scale = args.get(6).and_then(|v| v.as_i64().ok()).unwrap_or(1) as u32;
+                let color = 0xFF000000 | (r << 16) | (g << 8) | b;
+                // Draw text with scaling
+                let mut cx = x;
+                for c in text.chars() {
+                    let glyph = crate::framebuffer::font::get_glyph(c);
+                    for (row, &bits) in glyph.iter().enumerate() {
+                        for bit in 0..8u32 {
+                            if bits & (0x80 >> bit) != 0 {
+                                for sy in 0..scale {
+                                    for sx in 0..scale {
+                                        crate::framebuffer::put_pixel(
+                                            cx + bit * scale + sx,
+                                            y + row as u32 * scale + sy,
+                                            color,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    cx += 8 * scale;
+                }
+            }
+            Ok(Value::Void)
+        }
+        BUILTIN_SLEEP => {
+            // sleep(ms) — use PIT for reliable wall-clock timing
+            let ms = args.get(0).and_then(|v| v.as_i64().ok()).unwrap_or(0) as u64;
+            crate::cpu::tsc::pit_delay_ms(ms);
+            Ok(Value::Void)
         }
         _ => Err(format!("unknown builtin id: {}", id)),
     }

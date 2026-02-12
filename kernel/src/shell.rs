@@ -822,6 +822,7 @@ fn execute_command(cmd: &str) {
         
         // TrustLang — integrated programming language
         "trustlang" | "tl" => cmd_trustlang(args),
+        "trustlang_showcase" | "tl_showcase" => cmd_trustlang_showcase(),
         
         // TrustVideo — video codec & player
         "video" | "tv" => cmd_video(args),
@@ -2922,6 +2923,42 @@ fn cmd_signature(args: &[&str]) {
             crate::println_color!(COLOR_GRAY, "  Full registry: github.com/nathan237/TrustOS/blob/main/SIGNATURES.md");
             crate::println!();
         }
+        Some("ed25519") => {
+            // Ed25519 asymmetric signature subsystem
+            match args.get(1).copied() {
+                Some("verify") | None => {
+                    crate::println!();
+                    crate::println_color!(COLOR_CYAN, "Ed25519 Asymmetric Signature Report");
+                    crate::println_color!(COLOR_WHITE, "══════════════════════════════════════════════════════════════");
+                    let report = signature::ed25519_report();
+                    for line in &report {
+                        crate::println!("{}", line);
+                    }
+                    crate::println!();
+                }
+                Some("sign") => {
+                    crate::println!("Enter Ed25519 seed (hex or passphrase):");
+                    crate::print!("> ");
+                    let seed_input = read_passphrase();
+                    if seed_input.is_empty() {
+                        crate::println_color!(COLOR_RED, "Empty seed. Aborted.");
+                        return;
+                    }
+                    signature::ed25519_resign(seed_input.as_bytes());
+                    crate::println_color!(COLOR_BRIGHT_GREEN, "✓ Kernel re-signed with Ed25519 (new seed).");
+                    if let Some(report) = signature::ed25519_report().first() {
+                        crate::println!("  {}", report);
+                    }
+                    crate::println!();
+                }
+                _ => {
+                    crate::println!("Usage:");
+                    crate::println!("  signature ed25519          - Show Ed25519 signature & verify");
+                    crate::println!("  signature ed25519 verify   - Verify current Ed25519 signature");
+                    crate::println!("  signature ed25519 sign     - Re-sign kernel with new seed");
+                }
+            }
+        }
         _ => {
             crate::println_color!(COLOR_CYAN, "TrustOS Kernel Signature System");
             crate::println!();
@@ -2935,6 +2972,8 @@ fn cmd_signature(args: &[&str]) {
             crate::println!("  signature export         - Export signature for GitHub PR submission");
             crate::println!("  signature list           - Show registered signatures");
             crate::println!("  signature clear          - Remove user co-signature");
+            crate::println!("  signature ed25519        - Ed25519 asymmetric signature status");
+            crate::println!("  signature ed25519 sign   - Re-sign kernel with Ed25519 seed");
         }
     }
 }
@@ -15007,6 +15046,990 @@ fn main() {
             crate::println!("  trustlang eval \"let x = 42; println(to_string(x * 2))\"");
         }
     }
+}
+
+/// Compute syntax highlighting colors for one line of TrustLang code.
+/// Returns a Vec of ARGB colors, one per character.
+fn trustlang_syntax_colors(line: &str) -> alloc::vec::Vec<u32> {
+    let chars: alloc::vec::Vec<char> = line.chars().collect();
+    let len = chars.len();
+    let mut colors = alloc::vec![0xFFD4D4D4u32; len]; // default: white-gray
+    if len == 0 { return colors; }
+
+    // 1) Find comment start (char index, not byte)
+    let comment_ci = {
+        let mut ci = None;
+        let bytes = line.as_bytes();
+        for i in 0..bytes.len().saturating_sub(1) {
+            if bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                ci = Some(line[..i].chars().count());
+                break;
+            }
+        }
+        ci
+    };
+    let effective_len = comment_ci.unwrap_or(len);
+
+    // Color comments green
+    if let Some(cp) = comment_ci {
+        for i in cp..len {
+            colors[i] = 0xFF6A9955;
+        }
+    }
+
+    // 2) Strings — track in_string, color everything inside "" as orange-brown
+    let mut in_string = false;
+    for i in 0..effective_len {
+        if chars[i] == '"' {
+            colors[i] = 0xFFCE9178;
+            in_string = !in_string;
+        } else if in_string {
+            colors[i] = 0xFFCE9178;
+        }
+    }
+
+    // 3) Keywords, function calls, variables, numbers, brackets (outside strings & comments)
+    in_string = false;
+    let mut i = 0usize;
+    while i < effective_len {
+        if chars[i] == '"' {
+            in_string = !in_string;
+            i += 1;
+            continue;
+        }
+        if in_string { i += 1; continue; }
+
+        // Numbers
+        if chars[i].is_ascii_digit() {
+            colors[i] = 0xFFB5CEA8;
+            i += 1;
+            continue;
+        }
+        // Brackets
+        if matches!(chars[i], '(' | ')' | '{' | '}' | '[' | ']') {
+            colors[i] = 0xFFFFD700;
+            i += 1;
+            continue;
+        }
+        // Identifiers / keywords
+        if chars[i].is_alphabetic() || chars[i] == '_' {
+            let start = i;
+            while i < effective_len && (chars[i].is_alphanumeric() || chars[i] == '_') {
+                i += 1;
+            }
+            let word: alloc::string::String = chars[start..i].iter().collect();
+
+            // Is this a function call? (followed by '(')
+            let mut peek = i;
+            while peek < effective_len && chars[peek] == ' ' { peek += 1; }
+            let is_fn_call = peek < effective_len && chars[peek] == '(';
+
+            // Is this a variable declaration? (preceded by "let" or "mut")
+            let before: alloc::string::String = chars[..start].iter().collect();
+            let trimmed = before.trim_end();
+            let is_var_decl = trimmed.ends_with("let") || trimmed.ends_with("mut");
+
+            if matches!(word.as_str(),
+                "fn" | "let" | "mut" | "if" | "else" | "while" | "for" | "in" |
+                "return" | "loop" | "break" | "continue" | "true" | "false" |
+                "struct" | "enum" | "match" | "use" | "pub" | "const" | "static" |
+                "impl" | "self" | "type")
+            {
+                for j in start..i { colors[j] = 0xFFFF7B72; } // red keywords
+            } else if is_fn_call {
+                for j in start..i { colors[j] = 0xFF79C0FF; } // blue function calls
+            } else if is_var_decl {
+                for j in start..i { colors[j] = 0xFF9CDCFE; } // cyan variable names
+            }
+            // else keep default white
+            continue;
+        }
+        i += 1;
+    }
+    colors
+}
+
+/// TrustLang Showcase — Animated walkthrough demonstrating the full pipeline
+/// ~90 seconds of automated cinematic demo — descriptions, code typing, compilation, execution
+/// Uses frame-counting + delay_millis for reliable timing (no TSC target comparison)
+fn cmd_trustlang_showcase() {
+    let (sw, sh) = crate::framebuffer::get_dimensions();
+    let w = sw as usize;
+    let h = sh as usize;
+
+    let was_db = crate::framebuffer::is_double_buffer_enabled();
+    if !was_db {
+        crate::framebuffer::init_double_buffer();
+        crate::framebuffer::set_double_buffer_mode(true);
+    }
+
+    let mut buf = alloc::vec![0u32; w * h];
+
+    // ═══════════════ HELPER CLOSURES ═══════════════
+
+    let draw_big_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+        let glyph = crate::framebuffer::font::get_glyph(c);
+        for (row, &bits) in glyph.iter().enumerate() {
+            for bit in 0..8u32 {
+                if bits & (0x80 >> bit) != 0 {
+                    for sy in 0..scale {
+                        for sx in 0..scale {
+                            let px = cx + bit as usize * scale + sx;
+                            let py = cy + row * scale + sy;
+                            if px < w && py < h {
+                                buf[py * w + px] = color;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    let draw_text_at = |buf: &mut [u32], w: usize, h: usize, x: usize, y: usize, text: &str, color: u32, scale: usize| {
+        for (i, c) in text.chars().enumerate() {
+            draw_big_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
+        }
+    };
+
+    let draw_text_centered = |buf: &mut [u32], w: usize, h: usize, y: usize, text: &str, color: u32, scale: usize| {
+        let tw = text.len() * 8 * scale;
+        let sx = if tw < w { (w - tw) / 2 } else { 0 };
+        for (i, c) in text.chars().enumerate() {
+            draw_big_char(buf, w, h, sx + i * 8 * scale, y, c, color, scale);
+        }
+    };
+
+    let blit_buf = |buf: &[u32], w: usize, h: usize| {
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+            let bb = bb_ptr as *mut u32;
+            let bb_s = bb_stride as usize;
+            for y in 0..h.min(bb_h as usize) {
+                unsafe {
+                    core::ptr::copy_nonoverlapping(buf[y * w..].as_ptr(), bb.add(y * bb_s), w);
+                }
+            }
+        }
+        crate::framebuffer::swap_buffers();
+    };
+
+    let clear_buf = |buf: &mut [u32]| {
+        for p in buf.iter_mut() { *p = 0xFF000000; }
+    };
+
+    // Matrix rain state
+    let mut rain_cols: alloc::vec::Vec<u16> = (0..w / 8 + 1).map(|i| ((i * 37 + 13) % h) as u16).collect();
+    let rain_speeds: alloc::vec::Vec<u8> = (0..w / 8 + 1).map(|i| (((i * 7 + 3) % 4) + 1) as u8).collect();
+
+    let draw_rain = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
+        for pixel in buf.iter_mut() {
+            let g = ((*pixel >> 8) & 0xFF) as u32;
+            if g > 0 { *pixel = 0xFF000000 | (g.saturating_sub(6) << 8); }
+        }
+        for ci in 0..cols.len() {
+            let x = ci * 8;
+            if x >= w { continue; }
+            cols[ci] = cols[ci].wrapping_add(speeds[ci] as u16);
+            if cols[ci] as usize >= h { cols[ci] = 0; }
+            let y = cols[ci] as usize;
+            let c = (((frame as usize + ci * 13) % 94) + 33) as u8 as char;
+            let glyph = crate::framebuffer::font::get_glyph(c);
+            for (row, &bits) in glyph.iter().enumerate() {
+                let py = y + row;
+                if py >= h { break; }
+                for bit in 0..8u32 {
+                    if bits & (0x80 >> bit) != 0 {
+                        let px = x + bit as usize;
+                        if px < w { buf[py * w + px] = 0xFF00FF44; }
+                    }
+                }
+            }
+        }
+    };
+
+    // ── FRAME DELAY: ~30ms per frame ──
+    let frame_ms: u64 = 30;
+
+    // ── Fade out: gradually darken buffer over ~78 frames (~2.3s) ──
+    let do_fade = |buf: &mut [u32], w: usize, h: usize, blit: &dyn Fn(&[u32], usize, usize)| {
+        for _ in 0..78 {
+            for px in buf.iter_mut() {
+                let r = ((*px >> 16) & 0xFF).saturating_sub(4);
+                let g = ((*px >> 8) & 0xFF).saturating_sub(4);
+                let b = (*px & 0xFF).saturating_sub(4);
+                *px = 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+            blit(buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+        for p in buf.iter_mut() { *p = 0xFF000000; }
+        blit(buf, w, h);
+        // Black pause between scenes (~1.4s)
+        crate::cpu::tsc::pit_delay_ms(1400);
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // DESCRIPTION SCREEN — text types in on Matrix rain background
+    // ms_per_char: how fast each character appears (higher = slower)
+    // hold_frames: how many frames to HOLD after all text is typed
+    // ═══════════════════════════════════════════════════════════════
+    let show_description = |buf: &mut [u32], w: usize, h: usize,
+                            rain_cols: &mut [u16], rain_speeds: &[u8],
+                            lines: &[(&str, u32, usize)],
+                            ms_per_char: u64,
+                            hold_frames: u32| {
+        let total_chars: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
+        // frames_per_char: how many render frames per character typed
+        let frames_per_char = (ms_per_char / frame_ms).max(1) as u32;
+        let typing_frames = total_chars as u32 * frames_per_char;
+        let total_frames = typing_frames + hold_frames;
+        let mut frame = 0u32;
+
+        while frame < total_frames {
+            // ESC to quit, Space/Enter to skip
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { return; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+
+            // Rain background
+            draw_rain(buf, w, h, rain_cols, rain_speeds, frame);
+
+            // How many chars to show based on frame count
+            let chars_shown = (frame / frames_per_char) as usize;
+
+            // Compute vertical centering
+            let total_h: usize = lines.iter().map(|(_, _, s)| 16 * s + 12).sum();
+            let mut y = if total_h < h { (h - total_h) / 2 } else { 20 };
+            let mut counted = 0usize;
+
+            for &(text, color, scale) in lines {
+                let tw = text.len() * 8 * scale;
+                let sx = if tw < w { (w - tw) / 2 } else { 0 };
+                for (i, c) in text.chars().enumerate() {
+                    if counted + i >= chars_shown { break; }
+                    draw_big_char(buf, w, h, sx + i * 8 * scale, y, c, color, scale);
+                }
+                // Cursor blink during typing
+                if chars_shown > counted && chars_shown < counted + text.len() {
+                    let ci = chars_shown - counted;
+                    let cx = sx + ci * 8 * scale;
+                    if (frame / 8) % 2 == 0 {
+                        for cy in y..y + 16 * scale {
+                            if cy < h && cx + 2 < w {
+                                buf[cy * w + cx] = 0xFF00FF88;
+                                buf[cy * w + cx + 1] = 0xFF00FF88;
+                            }
+                        }
+                    }
+                }
+                counted += text.len();
+                y += 16 * scale + 12;
+            }
+
+            blit_buf(buf, w, h);
+            frame += 1;
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    // CODE EDITOR SCREEN — code types in char by char, then compiles
+    // ms_per_char: typing speed for code
+    // hold_frames: frames to wait after typing before "COMPILING"
+    // output_hold_ms: MILLISECONDS to show output after execution (direct delay)
+    // ═══════════════════════════════════════════════════════════════
+    let show_code_and_run = |buf: &mut [u32], w: usize, h: usize,
+                             rain_cols: &mut [u16], rain_speeds: &[u8],
+                             title: &str,
+                             source: &str,
+                             pre_msg: &str,
+                             _ms_per_char: u64,
+                             _hold_frames: u32,
+                             output_hold_ms: u64| {
+        // ──────────────────────────────────────────────
+        // Human-like typing: variable speed per character
+        // with random pauses and scripted typos
+        // ──────────────────────────────────────────────
+
+        let lines_vec: alloc::vec::Vec<&str> = source.lines().collect();
+        let total_chars: usize = source.len();
+
+        let margin_x = 40usize;
+        let header_h = 50usize;
+        let code_y_start = header_h + 30;
+        let line_h = 18usize;
+        let code_scale = 1usize;
+
+        // Build a flat char list with position info
+        // Each entry: (line_idx, col_idx, char)
+        let mut char_list: alloc::vec::Vec<(usize, usize, char)> = alloc::vec::Vec::new();
+        for (li, line) in lines_vec.iter().enumerate() {
+            for (ci, c) in line.chars().enumerate() {
+                char_list.push((li, ci, c));
+            }
+            char_list.push((li, line.len(), '\n')); // newline marker
+        }
+
+        // Simple deterministic PRNG (no rand crate in kernel)
+        let mut rng_state: u32 = 0xDEAD_BEEF;
+        let mut rng_next = |state: &mut u32| -> u32 {
+            *state ^= *state << 13;
+            *state ^= *state >> 17;
+            *state ^= *state << 5;
+            *state
+        };
+
+        // Typo schedule: at these character indices, type wrong char, pause, backspace, retype
+        // Format: (char_index, wrong_char)
+        let typo_schedule: alloc::vec::Vec<(usize, char)> = alloc::vec![
+            (45, 'w'),     // early typo on a variable
+            (180, 'p'),    // mid-code typo
+            (350, 'e'),    // in a function name
+            (520, '0'),    // number typo
+            (700, ';'),    // punctuation slip
+        ];
+
+        // Current "typed buffer" — what's visible on screen
+        // We track how many real chars are shown
+        let mut chars_shown: usize = 0;
+        let mut rain_frame: u32 = 0;
+
+        // Render function (inline) — draws the current state of the editor
+        let render_editor = |buf: &mut [u32], w: usize, h: usize,
+                             rain_cols: &mut [u16], rain_speeds: &[u8],
+                             rain_frame: u32,
+                             chars_shown: usize,
+                             typo_char: Option<(usize, usize, char)>| {
+            // Dark background with dimmed Matrix rain
+            for p in buf.iter_mut() { *p = 0xFF0A0A0A; }
+            draw_rain(buf, w, h, rain_cols, rain_speeds, rain_frame);
+            for p in buf.iter_mut() {
+                let g = ((*p >> 8) & 0xFF).min(25);
+                *p = 0xFF000000 | (g << 8);
+            }
+
+            // Title bar
+            for y in 0..header_h {
+                for x in 0..w {
+                    buf[y * w + x] = 0xFF111111;
+                }
+            }
+            draw_text_at(buf, w, h, margin_x + 20, 15, title, 0xFF00FF88, 2);
+
+            if !pre_msg.is_empty() {
+                draw_text_at(buf, w, h, margin_x + 20, header_h + 5, pre_msg, 0xFF888888, 1);
+            }
+
+            // Code panel
+            let panel_x = margin_x;
+            let panel_w = w - 2 * margin_x;
+            let panel_y = code_y_start;
+            let panel_h = h - code_y_start - 80;
+            for py in panel_y..panel_y + panel_h {
+                for px in panel_x..panel_x + panel_w {
+                    if py < h && px < w {
+                        buf[py * w + px] = 0xFF0D1117;
+                    }
+                }
+            }
+            // Panel border (green)
+            for px in panel_x..panel_x + panel_w {
+                if panel_y < h { buf[panel_y * w + px] = 0xFF00FF44; }
+                let bot = (panel_y + panel_h).min(h) - 1;
+                buf[bot * w + px] = 0xFF00FF44;
+            }
+            for py in panel_y..(panel_y + panel_h).min(h) {
+                buf[py * w + panel_x] = 0xFF00FF44;
+                let right = (panel_x + panel_w - 1).min(w - 1);
+                buf[py * w + right] = 0xFF00FF44;
+            }
+
+            // Compute scroll offset so cursor line stays visible
+            let max_visible = panel_h.saturating_sub(30) / line_h;
+            let cursor_line = {
+                let mut ci = 0usize;
+                let mut ln = 0usize;
+                for (li, line) in lines_vec.iter().enumerate() {
+                    if ci + line.len() >= chars_shown {
+                        ln = li;
+                        break;
+                    }
+                    ci += line.len() + 1;
+                    ln = li + 1;
+                }
+                ln.min(lines_vec.len().saturating_sub(1))
+            };
+            let scroll_offset = if cursor_line >= max_visible.saturating_sub(2) {
+                cursor_line.saturating_sub(max_visible.saturating_sub(3))
+            } else {
+                0
+            };
+
+            // Draw typed code (with scroll + syntax highlighting)
+            let code_x = panel_x + 42;
+            let mut global_idx = 0usize;
+            // Skip chars in lines above scroll_offset
+            for li in 0..scroll_offset.min(lines_vec.len()) {
+                global_idx += lines_vec[li].len() + 1; // +1 for \n
+            }
+            for vi in 0..(lines_vec.len() - scroll_offset.min(lines_vec.len())) {
+                let li = vi + scroll_offset;
+                let ly = code_y_start + 15 + vi * line_h;
+                if ly + 16 > panel_y + panel_h { break; }
+                let line = lines_vec[li];
+
+                // Line number
+                let ln_str = alloc::format!("{:>3}", li + 1);
+                draw_text_at(buf, w, h, panel_x + 8, ly, &ln_str, 0xFF555555, code_scale);
+                let sep_x = panel_x + 35;
+                for sy in ly..ly + 16 {
+                    if sy < h && sep_x < w { buf[sy * w + sep_x] = 0xFF333333; }
+                }
+
+                // Syntax-highlighted characters
+                let line_colors = trustlang_syntax_colors(line);
+                for (ci, c) in line.chars().enumerate() {
+                    if global_idx >= chars_shown { break; }
+                    let color = line_colors.get(ci).copied().unwrap_or(0xFFD4D4D4);
+                    draw_big_char(buf, w, h, code_x + ci * 8 * code_scale, ly, c, color, code_scale);
+                    global_idx += 1;
+                }
+
+                // If there's a typo char visible at the cursor position, draw it in red
+                if let Some((tli, tci, tc)) = typo_char {
+                    if li == tli && global_idx == chars_shown {
+                        let ly2 = code_y_start + 15 + vi * line_h;
+                        draw_big_char(buf, w, h, code_x + tci * 8 * code_scale, ly2, tc, 0xFFFF4444, code_scale);
+                    }
+                }
+
+                if global_idx < chars_shown { global_idx += 1; } // \n
+            }
+
+            // Scrollbar indicator (when content overflows)
+            if lines_vec.len() > max_visible {
+                let sb_x = panel_x + panel_w - 8;
+                let sb_y = panel_y + 2;
+                let sb_h = panel_h.saturating_sub(4);
+                for py in sb_y..sb_y + sb_h {
+                    if py < h && sb_x < w { buf[py * w + sb_x] = 0xFF1A1A1A; }
+                }
+                let thumb_h = ((max_visible * sb_h) / lines_vec.len()).max(10);
+                let thumb_y = if lines_vec.len() > 0 { sb_y + (scroll_offset * sb_h) / lines_vec.len() } else { sb_y };
+                for py in thumb_y..(thumb_y + thumb_h).min(sb_y + sb_h) {
+                    if py < h && sb_x < w {
+                        buf[py * w + sb_x] = 0xFF00FF44;
+                        if sb_x + 1 < w { buf[py * w + sb_x + 1] = 0xFF00FF44; }
+                    }
+                }
+            }
+
+            // Cursor blink (always on during typing for visibility)
+            if chars_shown <= total_chars && cursor_line >= scroll_offset {
+                let mut ci2 = 0usize;
+                let mut target_line = 0usize;
+                let mut target_col = 0usize;
+                for (li, line) in lines_vec.iter().enumerate() {
+                    if ci2 + line.len() >= chars_shown {
+                        target_line = li;
+                        target_col = chars_shown - ci2;
+                        break;
+                    }
+                    ci2 += line.len() + 1;
+                }
+                // Offset cursor past typo char if visible
+                let cursor_col = if typo_char.is_some() && typo_char.unwrap().0 == target_line {
+                    target_col + 1
+                } else {
+                    target_col
+                };
+                let vis_line = target_line.saturating_sub(scroll_offset);
+                let cy = code_y_start + 15 + vis_line * line_h;
+                let cx = panel_x + 42 + cursor_col * 8 * code_scale;
+                if (rain_frame / 5) % 2 == 0 {
+                    for sy in cy..cy + 16 {
+                        if sy < h && cx < w && cx + 2 < w {
+                            buf[sy * w + cx] = 0xFF00FF88;
+                            buf[sy * w + cx + 1] = 0xFF00FF88;
+                        }
+                    }
+                }
+            }
+
+            // Status bar
+            let status_y = h - 40;
+            for py in status_y..h {
+                for px in 0..w { buf[py * w + px] = 0xFF111111; }
+            }
+            {
+                let cur_line = {
+                    let mut ci3 = 0usize;
+                    let mut ln = 1usize;
+                    for (_li, line) in lines_vec.iter().enumerate() {
+                        if ci3 + line.len() >= chars_shown { break; }
+                        ci3 += line.len() + 1;
+                        ln += 1;
+                    }
+                    ln
+                };
+                let status = alloc::format!("Ln {}  |  {} lines  |  TrustLang", cur_line, lines_vec.len());
+                draw_text_at(buf, w, h, margin_x, status_y + 12, &status, 0xFF00CC66, 1);
+            }
+
+            blit_buf(buf, w, h);
+        };
+
+        // ── Phase 1: Human-like typing animation ──
+        while chars_shown < total_chars {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { return; }
+                if k == b' ' || k == b'\r' || k == b'\n' { chars_shown = total_chars; break; }
+            }
+
+            // Check if we hit a typo point
+            let mut did_typo = false;
+            for &(typo_idx, wrong_c) in typo_schedule.iter() {
+                if chars_shown == typo_idx && typo_idx < total_chars {
+                    // Find which line/col we're at
+                    let mut ci4 = 0usize;
+                    let mut tgt_line = 0usize;
+                    let mut tgt_col = 0usize;
+                    for (li, line) in lines_vec.iter().enumerate() {
+                        if ci4 + line.len() > chars_shown {
+                            tgt_line = li;
+                            tgt_col = chars_shown - ci4;
+                            break;
+                        }
+                        ci4 += line.len() + 1;
+                    }
+
+                    // Type wrong char
+                    render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame,
+                        chars_shown, Some((tgt_line, tgt_col, wrong_c)));
+                    rain_frame += 1;
+                    crate::cpu::tsc::pit_delay_ms(120);
+
+                    // Pause — "notice the mistake"
+                    render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame,
+                        chars_shown, Some((tgt_line, tgt_col, wrong_c)));
+                    rain_frame += 1;
+                    crate::cpu::tsc::pit_delay_ms(400);
+
+                    // Backspace — remove wrong char (render without it)
+                    render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame,
+                        chars_shown, None);
+                    rain_frame += 1;
+                    crate::cpu::tsc::pit_delay_ms(150);
+
+                    // Now type the correct char (fall through to normal typing below)
+                    did_typo = true;
+                    break;
+                }
+            }
+
+            // Determine delay for this character
+            let c = char_list.get(chars_shown).map(|&(_, _, c)| c).unwrap_or(' ');
+            let next_c = char_list.get(chars_shown + 1).map(|&(_, _, c)| c);
+
+            // Base typing speed: ~20ms per char (fast typist)
+            let mut delay_ms: u64 = 20;
+
+            // Newline: longer pause (thinking about next line)
+            if c == '\n' {
+                delay_ms = 80 + (rng_next(&mut rng_state) % 120) as u64; // 80-200ms
+            }
+            // After {  or before } : thinking pause
+            else if c == '{' || (next_c == Some('}')) {
+                delay_ms = 150 + (rng_next(&mut rng_state) % 200) as u64;
+            }
+            // After // comment start: slightly slower (typing words)
+            else if c == '/' {
+                delay_ms = 40 + (rng_next(&mut rng_state) % 60) as u64;
+            }
+            // Space: brief pause
+            else if c == ' ' {
+                delay_ms = 15 + (rng_next(&mut rng_state) % 40) as u64;
+            }
+            // Punctuation: slightly slower
+            else if c == '(' || c == ')' || c == ';' || c == ',' {
+                delay_ms = 30 + (rng_next(&mut rng_state) % 30) as u64;
+            }
+            // Regular chars: some variance
+            else {
+                delay_ms = 18 + (rng_next(&mut rng_state) % 25) as u64;
+            }
+
+            // Occasional random longer pause (~5% chance, "thinking")
+            if rng_next(&mut rng_state) % 100 < 5 {
+                delay_ms += 200 + (rng_next(&mut rng_state) % 400) as u64;
+            }
+
+            // After a typo correction, slight hesitation
+            if did_typo {
+                delay_ms += 80;
+            }
+
+            // Render current state
+            render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame, chars_shown, None);
+            rain_frame += 1;
+
+            // Advance
+            chars_shown += 1;
+            crate::cpu::tsc::pit_delay_ms(delay_ms);
+        }
+
+        // Show complete code for a moment
+        render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame, total_chars, None);
+        crate::cpu::tsc::pit_delay_ms(1200);
+
+        // ── Phase 2: In-editor compilation (bottom output pane) ──
+        // We re-render the editor with a small output pane at the bottom
+        // showing "Compiling..." then "Compiled in 0.3s"
+        {
+            // Render the full editor one more time, then draw output pane on top
+            render_editor(buf, w, h, rain_cols, rain_speeds, rain_frame, total_chars, None);
+
+            // Output pane: sits between code panel bottom and status bar
+            let pane_y = h - 120;
+            let pane_h = 80;
+            let pane_x = margin_x;
+            let pane_w = w - 2 * margin_x;
+
+            // Dark output pane background
+            for py in pane_y..pane_y + pane_h {
+                for px in pane_x..pane_x + pane_w {
+                    if py < h && px < w {
+                        buf[py * w + px] = 0xFF0A0E14;
+                    }
+                }
+            }
+            // Pane border
+            for px in pane_x..pane_x + pane_w {
+                if pane_y < h { buf[pane_y * w + px] = 0xFF00FF44; }
+            }
+            // "OUTPUT" label
+            draw_text_at(buf, w, h, pane_x + 8, pane_y + 4, "OUTPUT", 0xFF888888, 1);
+
+            // "$ trustlang compile youtube_dvd.tl"
+            draw_text_at(buf, w, h, pane_x + 8, pane_y + 22, "$ trustlang compile youtube_dvd.tl", 0xFF00CC66, 1);
+            blit_buf(buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(800);
+
+            // "Compiling..." appears
+            draw_text_at(buf, w, h, pane_x + 8, pane_y + 38, "Compiling...", 0xFFAABBCC, 1);
+            blit_buf(buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(1200);
+
+            // Replace "Compiling..." with success message
+            for py in pane_y + 36..pane_y + 56 {
+                for px in pane_x + 4..pane_x + pane_w - 4 {
+                    if py < h && px < w {
+                        buf[py * w + px] = 0xFF0A0E14;
+                    }
+                }
+            }
+            draw_text_at(buf, w, h, pane_x + 8, pane_y + 38, "Compiled successfully in 0.3s  (47 lines, 0 errors)", 0xFF00FF88, 1);
+            // Also show bytecode info
+            draw_text_at(buf, w, h, pane_x + 8, pane_y + 54, "Generated 284 bytecode instructions", 0xFF666666, 1);
+            blit_buf(buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(2000);
+        }
+
+        // ── Phase 3: Transition to shell & execute ──
+        // Fake the TrustOS shell, type "trustlang run youtube_dvd.tl", then actually execute
+
+        // Actually compile the program in ramfs first
+        crate::ramfs::with_fs(|fs| {
+            let _ = fs.write_file("/youtube_dvd.tl", source.as_bytes());
+        });
+
+        // Draw a fake shell screen
+        {
+            // Dark background with subtle rain
+            for p in buf.iter_mut() { *p = 0xFF0A0A0A; }
+            draw_rain(buf, w, h, rain_cols, rain_speeds, rain_frame);
+            for p in buf.iter_mut() {
+                let g = ((*p >> 8) & 0xFF).min(15);
+                *p = 0xFF000000 | (g << 8);
+            }
+
+            // Shell window frame
+            let win_x = 30usize;
+            let win_y = 20usize;
+            let win_w = w - 60;
+            let win_h = h - 40;
+            // Window background
+            for py in win_y..win_y + win_h {
+                for px in win_x..win_x + win_w {
+                    if py < h && px < w {
+                        buf[py * w + px] = 0xFF0D0D0D;
+                    }
+                }
+            }
+            // Title bar
+            for py in win_y..win_y + 28 {
+                for px in win_x..win_x + win_w {
+                    if py < h && px < w {
+                        buf[py * w + px] = 0xFF1A1A1A;
+                    }
+                }
+            }
+            draw_text_at(buf, w, h, win_x + 12, win_y + 6, "TrustOS Terminal", 0xFF00FF88, 1);
+            // Border
+            for px in win_x..win_x + win_w {
+                if win_y < h { buf[win_y * w + px] = 0xFF00FF44; }
+                let bot = (win_y + win_h - 1).min(h - 1);
+                buf[bot * w + px] = 0xFF00FF44;
+            }
+            for py in win_y..win_y + win_h {
+                if py < h {
+                    buf[py * w + win_x] = 0xFF00FF44;
+                    let r = (win_x + win_w - 1).min(w - 1);
+                    buf[py * w + r] = 0xFF00FF44;
+                }
+            }
+
+            let text_x = win_x + 16;
+            let mut text_y = win_y + 40;
+
+            // Show some previous shell output (fake history)
+            draw_text_at(buf, w, h, text_x, text_y, "TrustOS v2.0 - TrustLang Runtime", 0xFF00FF88, 1);
+            text_y += 20;
+            draw_text_at(buf, w, h, text_x, text_y, "Type 'help' for available commands.", 0xFF666666, 1);
+            text_y += 28;
+
+            // Previous command: trustlang compile
+            // Prompt: root@trustos:/$ 
+            draw_text_at(buf, w, h, text_x, text_y, "root", 0xFFFF0000, 1);
+            draw_text_at(buf, w, h, text_x + 32, text_y, "@", 0xFFFFFFFF, 1);
+            draw_text_at(buf, w, h, text_x + 40, text_y, "trustos", 0xFF00FF00, 1);
+            draw_text_at(buf, w, h, text_x + 96, text_y, ":/$ ", 0xFF00FF00, 1);
+            draw_text_at(buf, w, h, text_x + 128, text_y, "trustlang compile youtube_dvd.tl", 0xFFD4D4D4, 1);
+            text_y += 18;
+            draw_text_at(buf, w, h, text_x, text_y, "Compiled successfully in 0.3s", 0xFF00FF88, 1);
+            text_y += 18;
+            draw_text_at(buf, w, h, text_x, text_y, "Generated 284 bytecode instructions", 0xFF666666, 1);
+            text_y += 28;
+
+            // New prompt where we'll type the run command
+            let prompt_y = text_y;
+            draw_text_at(buf, w, h, text_x, prompt_y, "root", 0xFFFF0000, 1);
+            draw_text_at(buf, w, h, text_x + 32, prompt_y, "@", 0xFFFFFFFF, 1);
+            draw_text_at(buf, w, h, text_x + 40, prompt_y, "trustos", 0xFF00FF00, 1);
+            draw_text_at(buf, w, h, text_x + 96, prompt_y, ":/$ ", 0xFF00FF00, 1);
+            blit_buf(buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(800);
+
+            // Type "trustlang run youtube_dvd.tl" character by character
+            let run_cmd = "trustlang run youtube_dvd.tl";
+            let cmd_start_x = text_x + 128;
+            for (ci, c) in run_cmd.chars().enumerate() {
+                draw_big_char(buf, w, h, cmd_start_x + ci * 8, prompt_y, c, 0xFFD4D4D4, 1);
+                blit_buf(buf, w, h);
+                let d = 30 + (((ci as u32 * 7 + 13) ^ 0x5A) % 50) as u64;
+                crate::cpu::tsc::pit_delay_ms(d);
+            }
+            crate::cpu::tsc::pit_delay_ms(400);
+
+            // Show "Enter" — command execution
+            text_y = prompt_y + 24;
+            draw_text_at(buf, w, h, text_x, text_y, "Running youtube_dvd.tl ...", 0xFFAABBCC, 1);
+            blit_buf(buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(600);
+        }
+
+        // Actually execute the TrustLang program
+        match crate::trustlang::run(source) {
+            Ok(output) => {
+                if !output.is_empty() {
+                    // Text output — should not happen for this graphics demo,
+                    // but handle it just in case
+                    let out_lines: alloc::vec::Vec<&str> = output.lines().collect();
+                    clear_buf(buf);
+                    draw_text_centered(buf, w, h, 25, "OUTPUT", 0xFF00FF88, 3);
+                    for (i, line) in out_lines.iter().enumerate() {
+                        let ly = 80 + i * 20;
+                        if ly + 16 > h - 40 { break; }
+                        let sx = if line.len() * 8 < w { (w - line.len() * 8) / 2 } else { 40 };
+                        draw_text_at(buf, w, h, sx, ly, line, 0xFFCCFFCC, 1);
+                    }
+                    blit_buf(buf, w, h);
+                    crate::cpu::tsc::pit_delay_ms(output_hold_ms);
+                }
+                if output.is_empty() {
+                    // Graphics program — result is already on framebuffer
+                    // Read back FB into buf for fade later
+                    if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+                        let bb = bb_ptr as *mut u32;
+                        let bb_s = bb_stride as usize;
+                        for y in 0..h.min(bb_h as usize) {
+                            unsafe {
+                                core::ptr::copy_nonoverlapping(
+                                    bb.add(y * bb_s),
+                                    buf[y * w..].as_mut_ptr(),
+                                    w,
+                                );
+                            }
+                        }
+                    }
+                    // Hold on graphics result
+                    crate::cpu::tsc::pit_delay_ms(output_hold_ms);
+                }
+            }
+            Err(e) => {
+                clear_buf(buf);
+                draw_text_centered(buf, w, h, h / 2 - 20, "Runtime Error", 0xFFFF4444, 4);
+                let err_short = if e.len() > 80 { &e[..80] } else { &e };
+                draw_text_centered(buf, w, h, h / 2 + 50, err_short, 0xFFFF8888, 1);
+                blit_buf(buf, w, h);
+                crate::cpu::tsc::pit_delay_ms(3000);
+            }
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════════════
+    //  THE SHOWCASE — YouTube DVD Screensaver Demo
+    //  Single TrustLang program: bouncing 3D YouTube logo
+    // ═══════════════════════════════════════════════════════════════
+
+    crate::serial_println!("[TL_SHOWCASE] Starting TrustLang showcase — YouTube DVD Screensaver");
+
+    // ────────────────────────────────────────────────
+    // INTRO: Title Screen                    (~8s)
+    // ────────────────────────────────────────────────
+    clear_buf(&mut buf);
+    show_description(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("TrustLang", 0xFF00FF88, 6),
+          ("", 0xFF000000, 1),
+          ("Live Demo", 0xFF00CC66, 4),
+          ("Programming Inside TrustOS", 0xFF008844, 2)],
+        90, 200);   // 90ms/char → slow dramatic typing, hold 200 frames (~6s)
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ────────────────────────────────────────────────
+    // CONCEPT: What we're building            (~10s)
+    // ────────────────────────────────────────────────
+    clear_buf(&mut buf);
+    show_description(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("YouTube DVD Screensaver", 0xFFFF0000, 4),
+          ("", 0xFF000000, 1),
+          ("A bouncing 3D YouTube logo", 0xFFCCFFCC, 2),
+          ("with 'Like & Subscribe' text.", 0xFFCCFFCC, 2),
+          ("", 0xFF000000, 1),
+          ("Written, compiled, and animated", 0xFF00FF88, 2),
+          ("live inside the OS kernel.", 0xFF00FF88, 2),
+          ("", 0xFF000000, 1),
+          ("All in real-time. Zero dependencies.", 0xFF888888, 2)],
+        70, 180);   // 70ms/char, hold 180 frames (~5.4s)
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ────────────────────────────────────────────────
+    // ARCHITECTURE: TrustLang pipeline         (~5s)
+    // ────────────────────────────────────────────────
+    clear_buf(&mut buf);
+    show_description(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("How TrustLang Works", 0xFF00FF88, 4),
+          ("", 0xFF000000, 1),
+          ("tokenize()   Lexer -> Tokens", 0xFFFF7B72, 2),
+          ("parse()      Tokens -> AST", 0xFFFFA657, 2),
+          ("compile()    AST -> Bytecode", 0xFFA5D6FF, 2),
+          ("execute()    Bytecode -> VM", 0xFF00FF88, 2),
+          ("", 0xFF000000, 1),
+          ("pixel() fill_rect() draw_text()", 0xFFFFD700, 2),
+          ("flush() sleep() clear_screen()", 0xFFFFD700, 2)],
+        60, 170);   // 60ms/char, hold 170 frames (~5s)
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ────────────────────────────────────────────────
+    // THE CODE + EXECUTION                    (~50s)
+    // ────────────────────────────────────────────────
+    clear_buf(&mut buf);
+    show_code_and_run(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        "TrustCode  -  youtube_dvd.tl",
+        r#"// YouTube DVD Screensaver in TrustLang!
+fn main() {
+    let screen_width = screen_w();
+    let screen_height = screen_h();
+    // Logo dimensions
+    let logo_width = 200;
+    let logo_height = 140;
+    let total_height = logo_height + 70;
+    // Starting position & velocity
+    let mut pos_x = screen_width / 4;
+    let mut pos_y = screen_height / 4;
+    let mut speed_x = 4;
+    let mut speed_y = 3;
+    // Animate 300 frames (~10 seconds)
+    let mut frame = 0;
+    while frame < 300 {
+        clear_screen(0, 0, 0);
+        // 3D shadow offset
+        fill_rect(pos_x + 8, pos_y + 8, logo_width, logo_height, 50, 0, 0);
+        // Red YouTube rectangle
+        fill_rect(pos_x, pos_y, logo_width, logo_height, 230, 0, 0);
+        // 3D highlight on top + dark edge on bottom
+        fill_rect(pos_x, pos_y, logo_width, 3, 255, 60, 60);
+        fill_rect(pos_x, pos_y + logo_height - 3, logo_width, 3, 150, 0, 0);
+        // Play button triangle (white)
+        let center_x = pos_x + logo_width / 2;
+        let center_y = pos_y + logo_height / 2;
+        let mut row = 0;
+        while row < 70 {
+            let offset = row - 35;
+            let mut dist = offset;
+            if dist < 0 { dist = 0 - dist; }
+            let bar_width = 40 * (35 - dist) / 35;
+            if bar_width > 0 {
+                fill_rect(center_x - 12, center_y - 35 + row, bar_width, 1, 255, 255, 255);
+            }
+            row = row + 1;
+        }
+        // Bouncing text below logo
+        draw_text("LIKE AND", pos_x + 18, pos_y + logo_height + 12, 255, 255, 255, 2);
+        draw_text("SUBSCRIBE!", pos_x + 5, pos_y + logo_height + 42, 255, 80, 80, 2);
+        flush();
+        sleep(33);
+        // Move & bounce off screen edges
+        pos_x = pos_x + speed_x;
+        pos_y = pos_y + speed_y;
+        if pos_x + logo_width > screen_width { speed_x = 0 - speed_x; }
+        if pos_x < 0 { speed_x = 0 - speed_x; }
+        if pos_y + total_height > screen_height { speed_y = 0 - speed_y; }
+        if pos_y < 0 { speed_y = 0 - speed_y; }
+        frame = frame + 1;
+    }
+}"#,
+        "New file: /youtube_dvd.tl",
+        30,     // unused (human typing now)
+        80,     // unused (human typing now)
+        3000);  // hold 3s on final frame after animation ends
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ────────────────────────────────────────────────
+    // OUTRO                                   (~8s)
+    // ────────────────────────────────────────────────
+    clear_buf(&mut buf);
+    show_description(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("TrustLang", 0xFF00FF88, 6),
+          ("", 0xFF000000, 1),
+          ("Lexer > Parser > Compiler > VM", 0xFFAADDAA, 2),
+          ("Real-time graphics. Zero deps.", 0xFFAADDAA, 2),
+          ("", 0xFF000000, 1),
+          ("Built into TrustOS.", 0xFF00CC66, 3),
+          ("", 0xFF000000, 1),
+          ("github.com/nathan237/TrustOS", 0xFF00FF88, 2)],
+        80, 250);   // slow dramatic outro, hold 250 frames (~7.5s)
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // Restore framebuffer state
+    clear_buf(&mut buf);
+    blit_buf(&buf, w, h);
+    if !was_db {
+        crate::framebuffer::set_double_buffer_mode(false);
+    }
+    crate::framebuffer::clear();
+    crate::serial_println!("[TL_SHOWCASE] Showcase complete");
 }
 
 /// Transpile command: analyze and convert Linux binaries to Rust

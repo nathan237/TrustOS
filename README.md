@@ -4,13 +4,13 @@
 
 ### **Trust** the code. **Rust** is the reason.
 
-**A fully auditable, bare-metal operating system — 99,000 lines of pure Rust. Zero C. Zero secrets.**
+**A fully auditable, bare-metal operating system — 120,000 lines of pure Rust. Zero C. Zero secrets.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-99%2C000%2B%20lines-blue?style=for-the-badge)]()
-[![ISO](https://img.shields.io/badge/ISO-6.25%20MB-purple?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.1.1-orange?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-120%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![ISO](https://img.shields.io/badge/ISO-10.86%20MB-purple?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.1.6-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -23,10 +23,12 @@
 
 </div>
 
-## � Recent Modifications
+## 🆕 Recent Modifications
 
 | Date | Changes |
 |------|----------|
+| **2026-02-12** | **Ed25519 Signatures** — Full RFC 8032 Ed25519 asymmetric signature system (SHA-512, extended twisted Edwards curve, TweetNaCl-style scalar mod l), replaces forgeable HMAC-only signatures. **Cross-platform build** — Makefile + build.sh for Linux/macOS, no hardcoded Windows paths. **TrustLang Showcase** — Proper syntax highlighting (keywords red, function calls blue, variables cyan, strings orange, comments green, brackets gold) + auto-scrolling editor when code exceeds panel height |
+| **2026-02-12** | **3D Chess** — Full 3D chess game with low-poly pieces, proper look-at camera (spherical coords, forward/right/up basis), AI opponent (minimax depth 2), board labels, shadows, reflections, scroll zoom, piece selection highlighting |
 | **2026-02-11 18:00** | Terminal: timestamp cyan, `neofetch` command with ASCII art, `user`/`id`/`hostname`/`history` commands, colorized outputs (date/uname/free/net/ps/df/mkdir/touch/rm), `del`/`top`/`lsblk`/`ipconfig`/`version`/`time` aliases |
 | **2026-02-11 16:30** | Terminal: help arguments in cyan (`\x01B`), commands green, descriptions white |
 | **2026-02-11 15:00** | Keyboard: fixed Shift stuck bug (`0xAA` scancode filter removal), terminal scrollbar, color marker system (`\x01` prefix), categorized help, prompt with timestamp + red root + cwd, `cd`/`pwd`/`ls` use actual cwd |
@@ -41,10 +43,10 @@ In a world where your operating system is a black box — millions of lines of l
 
 TrustOS is the answer: **every single line is open, readable, and auditable.**
 
-- 🔍 **Fully auditable** — 99,000 lines of Rust, all on GitHub. No binary blobs. No hidden code.
+- 🔍 **Fully auditable** — 120,000 lines of Rust, all on GitHub. No binary blobs. No hidden code.
 - 🦀 **Memory safe by design** — Rust's ownership model prevents entire categories of vulnerabilities (buffer overflows, use-after-free, data races).
 - 🧩 **Zero dependencies on C** — no libc, no glibc, no C runtime. Every driver, every protocol, every pixel is Rust.
-- 📖 **Readable** — one person wrote it in 7 days. If one person can build it, one person can understand it.
+- 📖 **Readable** — one person wrote it in 8 days. If one person can build it, one person can understand it.
 
 > *"The only OS where you can trace every packet, every pixel, and every keystroke back to its source code."*
 
@@ -52,20 +54,20 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 
 | Metric | Value |
 |--------|-------|
-| **Total code** | 99,000+ lines of Rust |
-| **Source files** | 207+ `.rs` files |
-| **ISO size** | 6.25 MB |
+| **Total code** | 120,000+ lines of Rust |
+| **Source files** | 216+ `.rs` files |
+| **ISO size** | 10.86 MB |
 | **Boot time** | < 1 second |
 | **Desktop FPS** | 144 FPS (SSE2 SIMD) |
 | **C code** | 0 lines |
-| **Development time** | 7 days |
+| **Development time** | 8 days |
 
 ### TrustOS vs The World
 
 | | Traditional OS | TrustOS |
 |---|:---:|:---:|
 | **Language** | C/C++ with 40 years of memory bugs | 100% Rust — memory safe by design |
-| **Codebase** | Millions of lines, impossible to audit | 99K lines, one person can read it all |
+| Codebase | Millions of lines, impossible to audit | 120K lines, one person can read it all |
 | **Binary blobs** | Everywhere | None. Zero. |
 | **Telemetry** | Opt-out (maybe) | Doesn't exist — verify it yourself |
 | **Build** | Complex cross-compilation toolchains | `cargo build` — that's it |
@@ -78,7 +80,7 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 - **Multi-layer GPU compositor** with 8 independent rendering layers
 - **SSE2 SIMD optimized** — 144 FPS with zero flickering
 - **Taskbar, dock, start menu**, window management, settings panel
-- **13 built-in desktop apps**: Terminal, Files, TrustCode, Calculator, Network, Snake Game, Settings, About, TrustGL 3D, TrustBrowser, TrustEdit 3D, and more
+- **14 built-in desktop apps**: Terminal, Files, TrustCode, Calculator, Network, Snake Game, Chess 3D, Settings, About, TrustGL 3D, TrustBrowser, TrustEdit 3D, and more
 - **HoloMatrix 3D backgrounds**: volumetric wireframe scenes (cube, torus, DNA helix, character...)
 - **Mouse + keyboard** driven with smooth cursor
 
@@ -122,6 +124,17 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 - **Mouse-driven** with toolbar, viewport, and status bar
 - Launch with `trustedit` command or from the desktop Start Menu
 
+### ♟️ Chess 3D — Full 3D Chess Game
+- **Complete chess engine** — All rules: castling, en passant, promotion, check/checkmate
+- **3D low-poly rendering** — Board, pieces (King, Queen, Rook, Bishop, Knight, Pawn) with mesh geometry
+- **Look-at camera system** — Spherical coordinates, forward/right/up basis vectors, perspective projection
+- **AI opponent** — Minimax algorithm (depth 2) with piece-value + positional evaluation
+- **Board labels** — Algebraic notation (a-h, 1-8) along edges
+- **Shadows & reflections** — Piece shadows on board, reflective board surface
+- **Interactive controls** — Mouse piece selection, scroll zoom, camera orbit
+- **Matrix theme** — Green wireframe aesthetic matching TrustOS visual identity
+- Launch with `chess3d` command or from the desktop
+
 ### 🎮 Interactive Desktop Apps
 - **Calculator** — Full arithmetic with chained operations, keyboard & mouse input
 - **Snake Game** — Real-time gameplay with arrow keys, scoring, progressive speed
@@ -157,6 +170,7 @@ TrustOS is being built **with Linux binary compatibility in mind**. The infrastr
 > **TL;DR:** The architecture is designed for Linux compat (ELF + Linux ABI + Wayland-style compositor), and the pieces are being connected. The Wayland mention in commits refers to a real in-kernel compositor module — not yet a full Wayland display server that external clients can talk to.
 
 ### 🛡️ Security & Auth
+- **Ed25519 asymmetric signatures** — RFC 8032 digital signatures for unforgeable kernel authentication
 - **Capability-based** security model
 - **User authentication**: login, su, passwd, adduser
 - **File permissions**: chmod, chown
@@ -182,41 +196,55 @@ TrustOS is being built **with Linux binary compatibility in mind**. The infrastr
 - QEMU with OVMF (UEFI firmware)
 - `xorriso` (for ISO creation)
 
-### Build & Run
+### Build & Run (Linux / macOS)
 
 ```bash
 # Clone
 git clone https://github.com/nathan237/TrustOS.git
 cd TrustOS
 
-# Build kernel
-cargo build --release -p trustos_kernel
+# Check dependencies
+make check-deps
 
-# Create ISO
-cp target/x86_64-unknown-none/release/trustos_kernel iso_root/boot/
-xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin \
-  -no-emul-boot -boot-load-size 4 -boot-info-table \
-  --efi-boot boot/limine/limine-uefi-cd.bin \
-  -efi-boot-part --efi-boot-image --protective-msdos-label \
-  iso_root -o trustos.iso
-./limine/limine bios-install trustos.iso
+# Build + run in QEMU (UEFI)
+make run
 
-# Run
-qemu-system-x86_64 \
-  -cdrom trustos.iso \
-  -m 256M -machine q35 -smp 4 \
-  -display gtk -vga std \
-  -device virtio-gpu-pci \
-  -device virtio-net-pci,netdev=net0 \
-  -netdev user,id=net0 \
-  -drive "if=pflash,format=raw,file=OVMF.fd" \
-  -serial stdio
+# Or step by step:
+make build          # Build kernel only
+make iso            # Build + create ISO
+make run-bios       # Run in BIOS mode (no OVMF needed)
 ```
 
-### Windows (PowerShell)
+Or use the shell script directly:
+```bash
+chmod +x build.sh
+./build.sh              # Build kernel + create ISO
+./build.sh --run        # Build + run in QEMU (UEFI)
+./build.sh --run-bios   # Build + run in QEMU (BIOS)
+./build.sh --check      # Check dependencies
+```
+
+#### Install Dependencies
+
+```bash
+# Debian / Ubuntu
+sudo apt install qemu-system-x86 xorriso ovmf
+
+# Fedora
+sudo dnf install qemu xorriso edk2-ovmf
+
+# Arch
+sudo pacman -S qemu-full xorriso edk2-ovmf
+
+# macOS
+brew install qemu xorriso
+```
+
+### Build & Run (Windows — PowerShell)
 ```powershell
 cargo build --release -p trustos_kernel
-.\run-qemu.ps1
+.\run-vbox.ps1       # VirtualBox (full setup)
+.\run-qemu-gui.ps1   # QEMU with GUI
 ```
 
 ---
@@ -253,6 +281,7 @@ cargo build --release -p trustos_kernel
 | `benchmark` | GPU/SIMD performance benchmarks |
 | `neofetch` | System info display |
 | `trustedit` | Launch TrustEdit 3D model editor |
+| `chess3d` | Launch 3D Chess game vs AI |
 
 ---
 
@@ -332,7 +361,7 @@ cargo build --release -p trustos_kernel
 
 | Module | Lines | Description |
 |--------|-------|-------------|
-| `shell.rs` | ~14,000 | Command interpreter, 200+ commands, cinematic showcase |
+| `shell.rs` | ~17,000 | Command interpreter, 200+ commands, cinematic showcase |
 | `network/` | ~5,000 | Full TCP/IP stack with TLS 1.3, HTTPS |
 | `graphics/` | ~4,000 | HoloMatrix, raytracer, 3D mesh, OpenGL emu |
 | `compositor/` | ~3,000 | Multi-layer GPU compositor |
@@ -340,12 +369,15 @@ cargo build --release -p trustos_kernel
 | `linux/` | ~3,000 | Linux syscall emulation, ELF loader |
 | `trustlang/` | ~2,000 | Compiler + bytecode VM |
 | `formula3d.rs` | ~1,500 | Wireframe 3D engine with per-edge colors |
+| `chess.rs` | ~1,030 | Full chess engine: rules, AI minimax, game state |
+| `chess3d.rs` | ~1,093 | 3D chess renderer: look-at camera, low-poly meshes |
 | `model_editor.rs` | ~750 | TrustEdit 3D wireframe model editor |
 | `video/` | ~1,500 | TrustVideo codec & player |
 | `framebuffer/` | ~1,500 | SSE2 SIMD rendering |
 | `filesystem/` | ~2,000 | TrustFS with WAL, VFS, FAT32 |
 | `hypervisor/` | ~2,000 | VT-x/SVM, EPT, guest VM isolation |
 | `tls13/` | ~2,000 | TLS 1.3, crypto, X.509 certs |
+| `ed25519.rs` | ~720 | Ed25519 asymmetric signatures (RFC 8032) |
 
 ---
 
@@ -408,7 +440,8 @@ TrustOS uses a **cryptographic signature system** to recognize contributors. Whe
 
 1. **Sign your build** — Boot TrustOS, run `signature sign <your_name>` with a secret passphrase
 2. **Export your signature** — Run `signature export` to get your HMAC-SHA256 fingerprint
-3. **Include it in your PR** — Add your entry to [`SIGNATURES.md`](SIGNATURES.md)
+3. **Verify with Ed25519** — Run `signature ed25519` to see the asymmetric Ed25519 signature
+4. **Include it in your PR** — Add your entry to [`SIGNATURES.md`](SIGNATURES.md)
 4. **Get registered** — Once merged, you appear in the official developer registry
 
 **What this means for contributors:**
@@ -431,7 +464,11 @@ kernel/src/
 ├── main.rs              # Kernel entry point
 ├── shell.rs             # Shell + 200+ commands + showcase
 ├── desktop.rs           # COSMIC2 desktop manager
+├── chess.rs             # Chess engine (rules, AI, game state)
+├── chess3d.rs           # 3D Chess renderer (camera, meshes)
 ├── model_editor.rs      # TrustEdit 3D model editor
+├── signature.rs         # Kernel signatures (HMAC-SHA256 + Ed25519)
+├── ed25519.rs           # Ed25519 digital signatures (RFC 8032)
 ├── formula3d.rs         # Wireframe 3D engine
 ├── compositor/          # 8-layer GPU compositor
 ├── browser/             # HTML/CSS/JS browser engine
@@ -455,13 +492,13 @@ kernel/src/
 | Feature | TrustOS | Linux 0.01 (1991) | MenuetOS | SerenityOS |
 |---------|---------|-------------------|----------|------------|
 | Language | **Rust** | C | ASM | C++ |
-| Lines of code | 99K | 10K | 40K | 800K+ |
-| ISO size | **6.25 MB** | N/A | 1.44 MB | ~300 MB |
-| Dev time | **7 days** | 6 months | Years | Years |
+| Lines of code | **120K** | 10K | 40K | 800K+ |
+| ISO size | **10.86 MB** | N/A | 1.44 MB | ~300 MB |
+| Dev time | **8 days** | 6 months | Years | Years |
 | GUI Desktop | Yes (144 FPS) | No | Yes | Yes |
 | Web Browser | **Yes** (HTML/CSS/JS) | No | No | Yes |
 | Built-in compiler | **Yes** (TrustLang) | No | No | No |
-| 3D Engine | **Yes** (Formula3D) | No | No | No |
+| 3D Engine | **Yes** (Formula3D + Chess3D) | No | No | No |
 | Network + TLS 1.3 | **Yes** | No | No | Yes |
 | Hypervisor | **Yes** (VT-x/SVM) | No | No | No |
 | Memory safe | **Yes** (Rust) | No | No | No |
@@ -470,6 +507,17 @@ kernel/src/
 ---
 
 ## 📋 Changelog
+
+### v0.1.6 — February 2026
+- **Ed25519 Asymmetric Signatures** — Full RFC 8032 implementation: SHA-512, extended twisted Edwards curve (GF(2^255-19) field reuse from TLS), TweetNaCl-style scalar mod l reduction. Replaces forgeable HMAC-only system with proper public-key cryptography. `signature ed25519` shell command for verification.
+- **Cross-platform build system** — GNU Makefile + `build.sh` for Linux/macOS with auto-detected OVMF, no hardcoded Windows paths. `make run`, `make iso`, `make check-deps`.
+- **TrustLang Showcase syntax highlighting** — Proper multi-category coloring: keywords (red), function calls (blue), variable declarations (cyan), string literals (orange), comments (green), numbers (green), brackets (gold). Replaced per-character word matching with full-line tokenizer.
+- **TrustLang Showcase auto-scroll** — Editor panel now scrolls automatically when typed code exceeds visible area, with scrollbar indicator. Cursor line stays visible during typing animation.
+
+### v0.1.5 — February 2026
+- **3D Chess Game** — Full chess game with 3D low-poly pieces, proper look-at camera system (spherical coordinates, forward/right/up basis vectors), AI opponent (minimax depth 2), board labels, shadows, reflections, scroll zoom, piece selection highlighting, Matrix green theme
+- **Chess engine** — Complete chess rules: castling, en passant, pawn promotion, check/checkmate detection, legal move validation
+- **Camera redesign** — Replaced simple rotate-world projection with proper look-at camera: telephoto FOV, no edge distortion, centered projection
 
 ### v0.1.4 — February 2026
 - **Terminal neofetch** — ASCII art TrustOS banner with OS/Kernel/Arch/Uptime/Memory/Shell/Display info
@@ -528,7 +576,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 - GitHub: [@nathan237](https://github.com/nathan237)
 - Project: [TrustOS](https://github.com/nathan237/TrustOS)
 
-> Every line of TrustOS — 99,000+ lines of Rust — was designed, written, and tested by a single developer in 7 days.
+> Every line of TrustOS — 120,000+ lines of Rust — was designed, written, and tested by a single developer in 8 days.
 
 ---
 
@@ -538,7 +586,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 Created with ❤️ by [Nated0ge](https://github.com/nathan237)
 
-99,000 lines · 7 days · Zero C · Fully auditable
+120,000 lines · 8 days · Zero C · Fully auditable
 
 ⭐ **Star this repo** if you believe in transparent, auditable operating systems.
 
