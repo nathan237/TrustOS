@@ -490,6 +490,8 @@ pub enum WindowType {
     Browser, // Web browser
     ModelEditor, // TrustEdit 3D model editor
     Game3D,  // 3D FPS raycasting game
+    Chess,   // Chess game vs AI
+    Chess3D, // 3D Matrix-style chess
 }
 
 /// Window structure
@@ -789,6 +791,10 @@ pub struct Desktop {
     pub snake_states: BTreeMap<u32, SnakeState>,
     // 3D Game states (window_id -> Game3DState)
     pub game3d_states: BTreeMap<u32, crate::game3d::Game3DState>,
+    // Chess game states (window_id -> ChessState)
+    pub chess_states: BTreeMap<u32, crate::chess::ChessState>,
+    // 3D Chess states (window_id -> Chess3DState)
+    pub chess3d_states: BTreeMap<u32, crate::chess3d::Chess3DState>,
     // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
     pub scale_factor: u32,
     // Matrix rain state (depth-parallax advancing effect)
@@ -1098,6 +1104,8 @@ impl Desktop {
             calculator_states: BTreeMap::new(),
             snake_states: BTreeMap::new(),
             game3d_states: BTreeMap::new(),
+            chess_states: BTreeMap::new(),
+            chess3d_states: BTreeMap::new(),
             scale_factor: 1,
             matrix_chars: Vec::new(),
             matrix_heads: Vec::new(),
@@ -1122,6 +1130,7 @@ impl Desktop {
         self.calculator_states.clear();
         self.snake_states.clear();
         self.game3d_states.clear();
+        self.chess3d_states.clear();
         // Browser
         self.browser = None;
         self.browser_url_input.clear();
@@ -1542,6 +1551,12 @@ struct AppConfig {
             WindowType::Game3D => {
                 self.game3d_states.insert(window.id, crate::game3d::Game3DState::new());
             },
+            WindowType::Chess => {
+                self.chess_states.insert(window.id, crate::chess::ChessState::new());
+            },
+            WindowType::Chess3D => {
+                self.chess3d_states.insert(window.id, crate::chess3d::Chess3DState::new());
+            },
             _ => {}
         }
         
@@ -1569,6 +1584,8 @@ struct AppConfig {
         self.calculator_states.remove(&id);
         self.snake_states.remove(&id);
         self.game3d_states.remove(&id);
+        self.chess_states.remove(&id);
+        self.chess3d_states.remove(&id);
     }
     
     /// Minimize/restore a window (with animation)
@@ -1599,6 +1616,7 @@ struct AppConfig {
             self.editor_states.remove(&id);
             self.model_editor_states.remove(&id);
             self.game3d_states.remove(&id);
+            self.chess3d_states.remove(&id);
         }
     }
     
@@ -1819,6 +1837,46 @@ struct AppConfig {
                         }
                     }
                     
+                    // Handle chess board clicks (mouse selection & drag start)
+                    if self.windows[i].window_type == WindowType::Chess {
+                        let win = &self.windows[i];
+                        let game_x = win.x as i32 + 8;
+                        let game_y = win.y as i32 + TITLE_BAR_HEIGHT as i32 + 4;
+                        let game_w = win.width.saturating_sub(16) as i32;
+                        let cell_size: i32 = 48;
+                        let board_size = cell_size * 8;
+                        let board_x = game_x + (game_w - board_size) / 2;
+                        let board_y = game_y + 28;
+                        
+                        let col = (x - board_x) / cell_size;
+                        let row = (y - board_y) / cell_size;
+                        
+                        if x >= board_x && x < board_x + board_size && y >= board_y && y < board_y + board_size && col >= 0 && col < 8 && row >= 0 && row < 8 {
+                            let win_id = win.id;
+                            if let Some(chess) = self.chess_states.get_mut(&win_id) {
+                                chess.handle_mouse_click(col, row);
+                                chess.update_drag_position(x, y);
+                            }
+                        }
+                    }
+                    
+                    // Handle 3D chess board clicks
+                    if self.windows[i].window_type == WindowType::Chess3D {
+                        let win = &self.windows[i];
+                        let content_x = win.x as i32;
+                        let content_y = win.y as i32 + TITLE_BAR_HEIGHT as i32;
+                        let content_w = win.width as i32;
+                        let content_h = win.height.saturating_sub(TITLE_BAR_HEIGHT) as i32;
+                        let rel_x = x - content_x;
+                        let rel_y = y - content_y;
+                        if rel_x >= 0 && rel_y >= 0 && rel_x < content_w && rel_y < content_h {
+                            let win_id = win.id;
+                            if let Some(state) = self.chess3d_states.get_mut(&win_id) {
+                                state.handle_click(rel_x, rel_y, content_w, content_h);
+                            }
+                        }
+                    }
+                    
                     // Handle calculator button clicks
                     if self.windows[i].window_type == WindowType::Calculator {
                         let win = &self.windows[i];
@@ -1900,6 +1958,43 @@ struct AppConfig {
             for id in model_ids {
                 if let Some(state) = self.model_editor_states.get_mut(&id) {
                     state.handle_click(0, 0, 0, 0, false);
+                }
+            }
+            
+            // Notify chess about mouse release (drag & drop)
+            let chess_ids: Vec<u32> = self.windows.iter()
+                .filter(|w| w.window_type == WindowType::Chess && w.focused)
+                .map(|w| w.id)
+                .collect();
+            for id in chess_ids {
+                if let Some(chess) = self.chess_states.get_mut(&id) {
+                    if chess.drag_from.is_some() {
+                        // Find the window to compute board coordinates
+                        if let Some(win) = self.windows.iter().find(|w| w.id == id) {
+                            let game_x = win.x as i32 + 8;
+                            let game_y = win.y as i32 + TITLE_BAR_HEIGHT as i32 + 4;
+                            let game_w = win.width.saturating_sub(16) as i32;
+                            let cell_size: i32 = 48;
+                            let board_size = cell_size * 8;
+                            let board_x = game_x + (game_w - board_size) / 2;
+                            let board_y = game_y + 28;
+                            
+                            let col = (x - board_x) / cell_size;
+                            let row = (y - board_y) / cell_size;
+                            chess.handle_mouse_release(col, row);
+                        }
+                    }
+                }
+            }
+            
+            // Notify Chess3D about mouse release (stop drag rotation)
+            let chess3d_ids: Vec<u32> = self.windows.iter()
+                .filter(|w| w.window_type == WindowType::Chess3D && w.focused)
+                .map(|w| w.id)
+                .collect();
+            for id in chess3d_ids {
+                if let Some(state) = self.chess3d_states.get_mut(&id) {
+                    state.handle_mouse_release();
                 }
             }
         }
@@ -2201,7 +2296,7 @@ struct AppConfig {
     fn check_start_menu_click(&self, x: i32, y: i32) -> Option<u8> {
         // Same dimensions as draw_start_menu()
         let menu_w = 280u32;
-        let menu_h = 472u32;
+        let menu_h = 504u32;
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
@@ -2210,10 +2305,10 @@ struct AppConfig {
             return None;
         }
         
-        // 13 list items at menu_y + 30 + (i * 32), each 30px tall
+        // 15 list items at menu_y + 30 + (i * 32), each 30px tall
         // Matches draw_start_menu items array:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=TrustDoom3D, 9=Settings, 10=Exit Desktop, 11=Shutdown, 12=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=TrustDoom3D, 9=Chess, 10=Chess3D, 11=Settings, 12=Exit Desktop, 13=Shutdown, 14=Reboot
         let items_start_y = menu_y + 30;
         let item_spacing = 32;
         let item_h = 30;
@@ -2266,19 +2361,31 @@ struct AppConfig {
             8 => { // TrustDoom 3D
                 self.create_window("TrustDoom 3D", 80, 50, 640, 480, WindowType::Game3D);
             },
-            9 => { // Settings
+            9 => { // Chess
+                self.create_window("TrustChess", 200, 80, 480, 520, WindowType::Chess);
+            },
+            10 => { // Chess 3D — open fullscreen
+                let sw = self.width;
+                let sh = self.height;
+                let id = self.create_window("TrustChess 3D", 0, 0, sw, sh - TASKBAR_HEIGHT, WindowType::Chess3D);
+                // Mark as maximized
+                if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
+                    w.maximized = true;
+                }
+            },
+            11 => { // Settings
                 self.open_settings_panel();
             },
-            10 => { // Exit Desktop
+            12 => { // Exit Desktop
                 crate::serial_println!("[GUI] Exit Desktop from start menu");
                 EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
             },
-            11 => { // Shutdown
+            13 => { // Shutdown
                 crate::println!("\n\n=== SYSTEM SHUTDOWN ===");
                 crate::println!("Goodbye!");
                 loop { x86_64::instructions::hlt(); }
             },
-            12 => { // Reboot
+            14 => { // Reboot
                 crate::serial_println!("[SYSTEM] Reboot requested");
                 // Triple fault reboot
                 unsafe {
@@ -2348,6 +2455,16 @@ struct AppConfig {
                 WindowType::Game3D => {
                     if let Some(game) = self.game3d_states.get_mut(&win_id) {
                         game.handle_key(key);
+                    }
+                },
+                WindowType::Chess => {
+                    if let Some(chess) = self.chess_states.get_mut(&win_id) {
+                        chess.handle_key(key);
+                    }
+                },
+                WindowType::Chess3D => {
+                    if let Some(state) = self.chess3d_states.get_mut(&win_id) {
+                        state.handle_key(key);
                     }
                 },
                 WindowType::Browser => {
@@ -2895,6 +3012,8 @@ struct AppConfig {
                 output.push(String::from("  \x01Gmatrix3d       \x01W3D Matrix tunnel"));
                 output.push(String::from("  \x01Gshowcase3d     \x01W3D cinematic demo"));
                 output.push(String::from("  \x01Gfilled3d       \x01WFilled 3D test"));
+                output.push(String::from("  \x01Gchess          \x01WChess game vs AI"));
+                output.push(String::from("  \x01Gchess3d        \x01W3D chess (Matrix style)"));
                 output.push(String::from(""));
                 // Shell
                 output.push(String::from("\x01Y[Shell]"));
@@ -3186,6 +3305,14 @@ struct AppConfig {
             "exit" | "quit" => {
                 output.push(String::from("\x01MUse the X button to close the terminal"));
             },
+            "chess" => {
+                output.push(String::from("\x01G\u{265A} TrustChess \x01M— Opening chess window..."));
+                output.push(String::from("\x01MPlay vs AI (Black). Arrow keys, Enter, Esc."));
+            },
+            "chess3d" => {
+                output.push(String::from("\x01G\u{265A} TrustChess 3D \x01M— Opening 3D chess window..."));
+                output.push(String::from("\x01MWASD:Camera  ZX:Zoom  O:Auto-rotate  Click:Move"));
+            },
             _ => {
                 output.push(format!("\x01Rbash: \x01Wcommand not found: \x01G{}", cmd));
                 output.push(String::from("\x01MType '\x01Ghelp\x01M' for available commands"));
@@ -3273,6 +3400,30 @@ struct AppConfig {
                 state.handle_mouse_move(vx, vy, vw, vh);
             }
         }
+        
+        // Update chess drag position
+        let chess_info: Option<u32> = self.windows.iter()
+            .find(|w| w.focused && !w.minimized && w.window_type == WindowType::Chess)
+            .map(|w| w.id);
+        if let Some(win_id) = chess_info {
+            if let Some(chess) = self.chess_states.get_mut(&win_id) {
+                if chess.drag_from.is_some() {
+                    chess.update_drag_position(x, y);
+                }
+            }
+        }
+        
+        // Forward mouse move to Chess3D (drag rotation)
+        let chess3d_info: Option<(u32, i32, i32)> = self.windows.iter()
+            .find(|w| w.focused && !w.minimized && w.window_type == WindowType::Chess3D)
+            .map(|w| (w.id, w.x, w.y));
+        if let Some((win_id, wx, wy)) = chess3d_info {
+            if let Some(state) = self.chess3d_states.get_mut(&win_id) {
+                let rel_x = x - wx;
+                let rel_y = y - wy - TITLE_BAR_HEIGHT as i32;
+                state.handle_mouse_move(rel_x, rel_y);
+            }
+        }
     }
     
     /// Handle scroll wheel
@@ -3281,6 +3432,14 @@ struct AppConfig {
         let model_info = self.windows.iter().rev().find(|w| w.focused && !w.minimized && w.window_type == WindowType::ModelEditor).map(|w| w.id);
         if let Some(win_id) = model_info {
             if let Some(state) = self.model_editor_states.get_mut(&win_id) {
+                state.handle_scroll(delta);
+            }
+            return;
+        }
+        // Handle Chess3D scroll (zoom) separately
+        let chess3d_info = self.windows.iter().rev().find(|w| w.focused && !w.minimized && w.window_type == WindowType::Chess3D).map(|w| w.id);
+        if let Some(win_id) = chess3d_info {
+            if let Some(state) = self.chess3d_states.get_mut(&win_id) {
                 state.handle_scroll(delta);
             }
             return;
@@ -3340,6 +3499,17 @@ struct AppConfig {
             }
         }
         
+        // Tick chess timers (~60fps → ~16ms per frame)
+        let chess_ids: Vec<u32> = self.chess_states.keys().copied().collect();
+        for id in chess_ids {
+            let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
+            if is_active {
+                if let Some(chess) = self.chess_states.get_mut(&id) {
+                    chess.tick_timer(16); // ~16ms per frame at 60fps
+                }
+            }
+        }
+        
         // Toggle cursor blink every ~45 frames (slower for readability)
         if self.frame_count % 45 == 0 {
             self.cursor_blink = !self.cursor_blink;
@@ -3389,6 +3559,9 @@ struct AppConfig {
         
         // Fourth pass: render 3D game windows (needs &mut for state)
         self.draw_game3d_windows();
+        
+        // Fifth pass: render 3D chess windows (needs &mut for state)
+        self.draw_chess3d_windows();
         
         // ALWAYS draw taskbar last (on top of everything, never covered by windows)
         self.draw_taskbar();
@@ -4307,7 +4480,7 @@ struct AppConfig {
     
     fn draw_start_menu(&self) {
         let menu_w = 280u32;
-        let menu_h = 472u32;
+        let menu_h = 504u32;
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
@@ -4330,7 +4503,7 @@ struct AppConfig {
         framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 26) as u32, menu_w - 4, GREEN_MUTED);
         
         // Menu items
-        let items: [(&str, &str, bool); 13] = [
+        let items: [(&str, &str, bool); 15] = [
             (">_", "Terminal", false),
             ("[]", "Files", false),
             ("##", "Calculator", false),
@@ -4340,6 +4513,8 @@ struct AppConfig {
             ("WW", "Browser", false),
             ("Sk", "Snake", false),
             ("3D", "TrustDoom 3D", false),
+            ("Kk", "Chess", false),
+            ("C3", "Chess 3D", false),
             ("@)", "Settings", false),
             ("<-", "Exit Desktop", true),
             ("!!", "Shutdown", true),
@@ -4429,6 +4604,8 @@ struct AppConfig {
             WindowType::ModelEditor => "/\\",
             WindowType::TextEditor => "Tx",
             WindowType::Game => "Sk",
+            WindowType::Chess => "Kk",
+            WindowType::Chess3D => "C3",
             _ => "::",
         };
         let icon_color = if window.focused { GREEN_PRIMARY } else { GREEN_TERTIARY };
@@ -4572,6 +4749,17 @@ struct AppConfig {
         // Special rendering for Snake game
         if window.window_type == WindowType::Game {
             self.draw_snake_game(window);
+            return;
+        }
+        
+        // Special rendering for Chess game
+        if window.window_type == WindowType::Chess {
+            self.draw_chess_game(window);
+            return;
+        }
+        
+        // Special rendering for 3D Chess game (rendered in draw_chess3d_windows)
+        if window.window_type == WindowType::Chess3D {
             return;
         }
         
@@ -4791,6 +4979,43 @@ struct AppConfig {
                 let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
                 
                 if content_w < 80 || content_h < 60 { continue; }
+                
+                let buf_w = content_w as usize;
+                let buf_h = content_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
+                
+                state.render(&mut buf, buf_w, buf_h);
+                
+                // Blit buffer to framebuffer
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
+                        let sy = content_y + py as u32;
+                        framebuffer::put_pixel(sx, sy, color);
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Render 3D chess windows (needs &mut self for state mutation during render)
+    fn draw_chess3d_windows(&mut self) {
+        let chess3d_windows: Vec<(u32, i32, i32, u32, u32)> = self.windows.iter()
+            .filter(|w| w.window_type == WindowType::Chess3D && w.visible && !w.minimized)
+            .map(|w| (w.id, w.x, w.y, w.width, w.height))
+            .collect();
+        
+        for (win_id, wx, wy, ww, wh) in chess3d_windows {
+            if let Some(state) = self.chess3d_states.get_mut(&win_id) {
+                let content_x = wx as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_w = ww;
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                
+                if content_w < 100 || content_h < 100 { continue; }
+                
+                state.tick();
                 
                 let buf_w = content_w as usize;
                 let buf_h = content_h as usize;
@@ -5080,6 +5305,309 @@ struct AppConfig {
                 self.draw_text(game_x as i32 + 8, game_y as i32 + game_h as i32 - 18, 
                                "Arrow Keys to move", GREEN_TERTIARY);
             }
+        }
+    }
+    
+    /// Draw a chess piece silhouette at pixel position (px, py) within a 48x48 cell
+    fn draw_chess_piece_sprite(px: u32, py: u32, piece: i8) {
+        let abs_p = if piece < 0 { -piece } else { piece };
+        let is_white = piece > 0;
+
+        let fill = if is_white { 0xFFE8E0D0_u32 } else { 0xFF2A2A2A_u32 };
+        let outline = if is_white { 0xFF1A1A1A_u32 } else { 0xFF888888_u32 };
+
+        // Parts: (x_offset, y_offset, width, height) relative to cell (px, py)
+        // Pieces designed for 48x48 cells, centered horizontally
+        let parts: &[(u32, u32, u32, u32)] = match abs_p {
+            1 => &[ // PAWN — round head, narrow neck, flared base
+                (20, 12, 8, 7),   // head ball
+                (22, 19, 4, 3),   // neck
+                (19, 22, 10, 3),  // collar
+                (16, 25, 16, 3),  // skirt
+                (14, 28, 20, 3),  // base top
+                (12, 31, 24, 4),  // base bottom
+            ],
+            2 => &[ // KNIGHT — horse head profile (faces left)
+                (21, 8, 6, 3),    // ear
+                (17, 11, 14, 4),  // upper head
+                (13, 15, 14, 3),  // muzzle extends left
+                (13, 18, 8, 2),   // lower jaw
+                (19, 17, 10, 5),  // neck upper
+                (21, 22, 8, 5),   // neck lower
+                (16, 27, 16, 3),  // shoulder
+                (13, 30, 22, 3),  // base
+                (11, 33, 26, 3),  // footer
+            ],
+            3 => &[ // BISHOP — pointed mitre with slit
+                (23, 6, 2, 3),    // point
+                (21, 9, 6, 4),    // upper mitre
+                (19, 13, 10, 4),  // mid mitre
+                (21, 17, 6, 5),   // stem
+                (18, 22, 12, 4),  // lower body
+                (15, 26, 18, 3),  // base top
+                (13, 29, 22, 3),  // base
+                (11, 32, 26, 4),  // footer
+            ],
+            4 => &[ // ROOK — tower with crenellations
+                (15, 7, 4, 4),    // left merlon
+                (22, 7, 4, 4),    // center merlon
+                (29, 7, 4, 4),    // right merlon
+                (15, 11, 18, 3),  // top wall
+                (17, 14, 14, 12), // body (tall)
+                (15, 26, 18, 3),  // lower rim
+                (13, 29, 22, 3),  // base
+                (11, 32, 26, 4),  // footer
+            ],
+            5 => &[ // QUEEN — crown with points + round body
+                (23, 4, 2, 3),    // top jewel
+                (17, 7, 2, 3),    // left crown point
+                (23, 6, 2, 3),    // center crown point
+                (29, 7, 2, 3),    // right crown point
+                (16, 10, 16, 4),  // crown base
+                (20, 14, 8, 4),   // neck
+                (17, 18, 14, 6),  // body
+                (15, 24, 18, 3),  // lower
+                (13, 27, 22, 3),  // base
+                (11, 30, 26, 4),  // footer
+            ],
+            6 => &[ // KING — cross on top + tall body
+                (23, 4, 2, 6),    // cross vertical
+                (20, 6, 8, 2),    // cross horizontal
+                (18, 10, 12, 4),  // crown
+                (20, 14, 8, 3),   // neck
+                (17, 17, 14, 7),  // body
+                (15, 24, 18, 3),  // lower
+                (13, 27, 22, 3),  // base
+                (11, 30, 26, 4),  // footer
+            ],
+            _ => return,
+        };
+
+        // Outline pass — draw each part inflated by 1px
+        for &(x, y, w, h) in parts {
+            framebuffer::fill_rect(px + x - 1, py + y - 1, w + 2, h + 2, outline);
+        }
+        // Fill pass
+        for &(x, y, w, h) in parts {
+            framebuffer::fill_rect(px + x, py + y, w, h, fill);
+        }
+        // Highlight pass — thin bright line on left side for 3D effect
+        let hl = if is_white { 0x66FFFFFF_u32 } else { 0x44FFFFFF_u32 };
+        for &(x, y, w, h) in parts {
+            if w > 4 && h > 2 {
+                framebuffer::fill_rect(px + x + 1, py + y + 1, 1, h - 2, hl);
+            }
+        }
+
+        // Bishop slit — distinctive diagonal cut
+        if abs_p == 3 {
+            let slit_color = outline;
+            framebuffer::fill_rect(px + 22, py + 14, 4, 1, slit_color);
+            framebuffer::fill_rect(px + 21, py + 15, 4, 1, slit_color);
+        }
+    }
+
+    /// Draw chess game board
+    fn draw_chess_game(&self, window: &Window) {
+        let game_x = window.x as u32 + 8;
+        let game_y = window.y as u32 + TITLE_BAR_HEIGHT + 4;
+        let game_w = window.width.saturating_sub(16);
+        let game_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
+        
+        if game_w < 200 || game_h < 200 {
+            return;
+        }
+        
+        // Background
+        framebuffer::fill_rect(game_x, game_y, game_w, game_h, 0xFF0A0E0B);
+        
+        if let Some(chess) = self.chess_states.get(&window.id) {
+            // Board dimensions
+            let cell_size: u32 = 48;
+            let board_size = cell_size * 8;
+            let board_x = game_x + (game_w.saturating_sub(board_size)) / 2;
+            let board_y = game_y + 28;
+            
+            // ── Title ──
+            self.draw_text(game_x as i32 + 8, game_y as i32 + 6, "TRUSTCHESS", GREEN_PRIMARY);
+            
+            // ── Score display (material advantage) ──
+            let score = chess.material_score();
+            let score_text = if score > 0 {
+                format!("+{}", score / 100)
+            } else if score < 0 {
+                format!("{}", score / 100)
+            } else {
+                String::from("=")
+            };
+            let score_color = if score > 0 { 0xFFFFFFFF } else if score < 0 { 0xFFCC4444 } else { GREEN_MUTED };
+            // Score bar next to title
+            self.draw_text(game_x as i32 + 96, game_y as i32 + 6, &score_text, score_color);
+            
+            // ── Timer display ──
+            if chess.timer_enabled {
+                let btime = crate::chess::ChessState::format_time(chess.black_time_ms);
+                let wtime = crate::chess::ChessState::format_time(chess.white_time_ms);
+                // Black timer (top-right)
+                let timer_color_b = if !chess.white_turn && chess.timer_started { 0xFFCC4444 } else { GREEN_MUTED };
+                self.draw_text(board_x as i32 + board_size as i32 + 8, board_y as i32 + 4, &btime, timer_color_b);
+                crate::framebuffer::draw_char_at(board_x + board_size + 8, board_y + 14, 'B', 0xFFCC4444);
+                // White timer (bottom-right)
+                let timer_color_w = if chess.white_turn && chess.timer_started { 0xFFFFFFFF } else { GREEN_MUTED };
+                self.draw_text(board_x as i32 + board_size as i32 + 8, board_y as i32 + board_size as i32 - 20, &wtime, timer_color_w);
+                crate::framebuffer::draw_char_at(board_x + board_size + 8, board_y + board_size - 10, 'W', 0xFFFFFFFF);
+            }
+            
+            // ── Draw board ──
+            for row in 0..8u32 {
+                for col in 0..8u32 {
+                    let sq = (row * 8 + col) as usize;
+                    let px = board_x + col * cell_size;
+                    let py = board_y + row * cell_size;
+                    
+                    // Square colors — dark/light alternating
+                    let is_light = (row + col) % 2 == 0;
+                    let mut bg = if is_light { 0xFF3D5A3D } else { 0xFF1A2E1A };
+                    
+                    // Highlight selected piece
+                    if chess.selected == Some(sq) {
+                        bg = 0xFF5A7A2A; // Gold-green
+                    }
+                    
+                    // Highlight valid moves
+                    if chess.valid_moves.contains(&sq) {
+                        bg = if is_light { 0xFF4A8A4A } else { 0xFF2A6A2A };
+                    }
+                    
+                    // Highlight last move
+                    if chess.last_move_from == Some(sq) || chess.last_move_to == Some(sq) {
+                        bg = if is_light { 0xFF5A6A3A } else { 0xFF3A4A2A };
+                    }
+                    
+                    // Highlight cursor
+                    if chess.cursor == sq {
+                        bg = 0xFF00AA44; // Bright green cursor
+                    }
+                    
+                    framebuffer::fill_rect(px, py, cell_size, cell_size, bg);
+                    
+                    // Draw piece (skip if being dragged from this square)
+                    let piece = chess.board[sq];
+                    let is_being_dragged = chess.drag_from == Some(sq) && chess.dragging_piece.is_some();
+                    if piece != 0 && !is_being_dragged {
+                        Self::draw_chess_piece_sprite(px, py, piece);
+                    }
+                    
+                    // Valid move dots (for empty target squares)
+                    if chess.valid_moves.contains(&sq) && (piece == 0 || is_being_dragged) {
+                        let dot_x = px + cell_size / 2 - 3;
+                        let dot_y = py + cell_size / 2 - 3;
+                        framebuffer::fill_rect(dot_x, dot_y, 6, 6, 0xFF00FF66);
+                    }
+                    
+                    // Valid move capture indicator (circle corners on enemy-occupied squares)
+                    if chess.valid_moves.contains(&sq) && piece != 0 && !is_being_dragged {
+                        // Draw corner triangles to indicate capturable
+                        for dx in 0..4u32 {
+                            framebuffer::put_pixel(px + dx, py, 0xFF00FF66);
+                            framebuffer::put_pixel(px, py + dx, 0xFF00FF66);
+                            framebuffer::put_pixel(px + cell_size - 1 - dx, py, 0xFF00FF66);
+                            framebuffer::put_pixel(px + cell_size - 1, py + dx, 0xFF00FF66);
+                            framebuffer::put_pixel(px + dx, py + cell_size - 1, 0xFF00FF66);
+                            framebuffer::put_pixel(px, py + cell_size - 1 - dx, 0xFF00FF66);
+                            framebuffer::put_pixel(px + cell_size - 1 - dx, py + cell_size - 1, 0xFF00FF66);
+                            framebuffer::put_pixel(px + cell_size - 1, py + cell_size - 1 - dx, 0xFF00FF66);
+                        }
+                    }
+                }
+            }
+            
+            // ── Draw dragged piece at mouse cursor ──
+            if let (Some(_from), Some(dp)) = (chess.drag_from, chess.dragging_piece) {
+                let dx = chess.drag_pixel_x;
+                let dy = chess.drag_pixel_y;
+                if dx > 24 && dy > 24 {
+                    Self::draw_chess_piece_sprite(dx as u32 - 24, dy as u32 - 24, dp);
+                }
+            }
+            
+            // ── Board border ──
+            for i in 0..board_size {
+                framebuffer::put_pixel(board_x + i, board_y, GREEN_MUTED);
+                framebuffer::put_pixel(board_x + i, board_y + board_size, GREEN_MUTED);
+            }
+            for i in 0..board_size + 1 {
+                framebuffer::put_pixel(board_x, board_y + i, GREEN_MUTED);
+                framebuffer::put_pixel(board_x + board_size, board_y + i, GREEN_MUTED);
+            }
+            
+            // ── File labels (a-h) ──
+            for c in 0..8u32 {
+                let label = (b'a' + c as u8) as char;
+                crate::framebuffer::draw_char_at(board_x + c * cell_size + cell_size / 2 - 4, board_y + board_size + 4, label, GREEN_TERTIARY);
+            }
+            // ── Rank labels (8-1) ──
+            for r in 0..8u32 {
+                let label = (b'8' - r as u8) as char;
+                crate::framebuffer::draw_char_at(board_x - 14, board_y + r * cell_size + cell_size / 2 - 6, label, GREEN_TERTIARY);
+            }
+            
+            // ── Material score bar (visual) ──
+            let bar_y = board_y + board_size + 18;
+            let bar_w = board_size;
+            let bar_h = 6u32;
+            framebuffer::fill_rect(board_x, bar_y, bar_w, bar_h, 0xFF1A1A1A);
+            // Fill proportional to score — center = equal, left = black advantage, right = white
+            let max_score = 2000i32; // Clamp range
+            let clamped = score.clamp(-max_score, max_score);
+            let center = board_x + bar_w / 2;
+            if clamped > 0 {
+                let fill_w = ((clamped as u32) * (bar_w / 2)) / max_score as u32;
+                framebuffer::fill_rect(center, bar_y, fill_w.min(bar_w / 2), bar_h, 0xFFFFFFFF);
+            } else if clamped < 0 {
+                let fill_w = (((-clamped) as u32) * (bar_w / 2)) / max_score as u32;
+                let fill_w = fill_w.min(bar_w / 2);
+                framebuffer::fill_rect(center - fill_w, bar_y, fill_w, bar_h, 0xFFCC4444);
+            }
+            // Center tick mark
+            framebuffer::fill_rect(center, bar_y, 1, bar_h, GREEN_MUTED);
+            
+            // ── Status message ──
+            let status_y = bar_y + bar_h + 6;
+            let msg_color = match chess.phase {
+                crate::chess::GamePhase::Check => ACCENT_RED,
+                crate::chess::GamePhase::Checkmate => 0xFFFF4444,
+                crate::chess::GamePhase::Stalemate => ACCENT_AMBER,
+                crate::chess::GamePhase::Promotion => ACCENT_BLUE,
+                _ => GREEN_PRIMARY,
+            };
+            self.draw_text(board_x as i32, status_y as i32, &chess.message, msg_color);
+            
+            // ── Turn indicator ──
+            let turn_text = if chess.white_turn { "White" } else { "Black" };
+            let turn_color = if chess.white_turn { 0xFFFFFFFF } else { 0xFFCC4444 };
+            self.draw_text(board_x as i32 + board_size as i32 - 60, status_y as i32, turn_text, turn_color);
+            
+            // ── Move history (last 6) ──
+            let hist_y = status_y as u32 + 18;
+            let hist_start = if chess.move_history.len() > 6 { chess.move_history.len() - 6 } else { 0 };
+            let mut hx = board_x as i32;
+            for (i, m) in chess.move_history[hist_start..].iter().enumerate() {
+                let num = hist_start + i + 1;
+                let entry = format!("{}. {} ", num, m);
+                self.draw_text(hx, hist_y as i32, &entry, GREEN_MUTED);
+                hx += entry.len() as i32 * 8 + 4;
+                if hx > board_x as i32 + board_size as i32 - 40 {
+                    break; // Don't overflow
+                }
+            }
+            
+            // ── Controls hint ──
+            let hint_y = game_y + game_h - 30;
+            self.draw_text(game_x as i32 + 4, hint_y as i32,
+                           "Mouse:Click/Drag  Arrows:Move  Enter:Select", GREEN_TERTIARY);
+            self.draw_text(game_x as i32 + 4, hint_y as i32 + 12,
+                           "Esc:Desel  R:Reset  T:Timer  +:Preset", GREEN_TERTIARY);
         }
     }
     

@@ -7,9 +7,9 @@ Memory map entries: 34
   0x0000000000 - 0x0000001000 (        4096 bytes) USABLE
   0x0000001000 - 0x0000002000 (        4096 bytes) BOOTLOADER
   0x0000002000 - 0x00000a0000 (      647168 bytes) USABLE
-  0x0000100000 - 0x0038cc1000 (   951848960 bytes) USABLE
-  0x0038cc1000 - 0x0038fa5000 (     3031040 bytes) KERNEL
-  0x0038fa5000 - 0x00392ec000 (     3436544 bytes) BOOTLOADER
+  0x0000100000 - 0x0038c83000 (   951595008 bytes) USABLE
+  0x0038c83000 - 0x0038f85000 (     3153920 bytes) KERNEL
+  0x0038f85000 - 0x00392ec000 (     3567616 bytes) BOOTLOADER
   0x00392ec000 - 0x003bc10000 (    43139072 bytes) USABLE
   0x003bc10000 - 0x003bc2d000 (      118784 bytes) BOOTLOADER
   0x003bc2d000 - 0x003d314000 (    24014848 bytes) USABLE
@@ -45,9 +45,9 @@ Memory map entries: 34
 [HEAP] Initialized: free=265080 KB
 [FB] Initializing scrollback buffer...
 [FB] Scrollback buffer initialized (1000 lines max)
-[INTEGRITY] .text   : 2444197 bytes, SHA-256: 5b5ba7854fcfdeda...d28bed12
-[INTEGRITY] .rodata : 326024 bytes, SHA-256: 6f8d67e3c91838cd...845c19b9
-[INTEGRITY] kernel digest: 24ed85dba397a304...b3a7b9b2
+[INTEGRITY] .text   : 2563941 bytes, SHA-256: deaeb85130c2dca5...9599b4cb
+[INTEGRITY] .rodata : 329496 bytes, SHA-256: 268fb278b7af7a85...714dedde
+[INTEGRITY] kernel digest: 6ade1267e1fb379a...4a0e1e76
 ╔══════════════════════════════════════════════════════════════╗
 ║                      T R U S T - O S                         ║
 ║                 FAST • SECURE • RELIABLE                     ║
@@ -64,13 +64,13 @@ Initializing early interrupts...
 Detecting CPU capabilities...
 [CPU] AMD Ryzen 7 5800X 8-Core Processor
 [CPU] Vendor: Amd, Family: 25, Model: 33
-[CPU] TSC: true (invariant: true, freq: 32 MHz)
+[CPU] TSC: true (invariant: true, freq: 35 MHz)
 [CPU] SIMD: SSE=true SSE2=true SSE4.2=true AVX=true AVX2=true
 [CPU] Crypto: AES-NI=true PCLMULQDQ=true SHA=true RDRAND=true
 [CPU] Security: SMEP=false SMAP=false NX=true
 [CPU] Virt: VMX=false SVM=false
 [SIMD] SSE/SSE2 enabled
-[TSC] Initialized: 32762840 Hz (0 GHz)
+[TSC] Initialized: 35404600 Hz (0 GHz)
 [OK] CPU capabilities detected
 Parsing ACPI tables...
 [DEBUG] RSDP pointer from Limine: 0x3e97e014
@@ -108,7 +108,7 @@ Initializing paging subsystem...
 [OK] Paging initialized (NX enabled)
 [PAT] Skipping Write-Combining on VirtualBox (VMSVGA compat)
 Initializing userland support...
-[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff802e2760
+[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff802feef8
 [         0][CPU0][INFO ] [USERLAND] SYSCALL/SYSRET configured (STAR, LSTAR, SFMASK)
 [OK] Userland support ready
 Initializing thread subsystem...
@@ -119,7 +119,7 @@ Initializing security subsystem...
 Keyboard driver ready
 [OK] Keyboard ready
 [RTC] init start
-[RTC] Initialized: 2026-02-11 15:28:48
+[RTC] Initialized: 2026-02-12 00:28:38
 [OK] RTC initialized
 [RTC] init done
 [KB-IRQ] scancode=0x47
@@ -197,8 +197,8 @@ Keyboard driver ready
 [         0][CPU0][DEBUG] [E1000] Initializing RX ring (32 descriptors)
 [         0][CPU0][DEBUG] [E1000] Initializing TX ring (8 descriptors)
 [         0][CPU0][WARN ] [E1000] Link not detected - continuing anyway (VirtualBox NAT mode)
-[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:F4:BF:3D
-[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:F4:BF:3D
+[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:20:76:11
+[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:20:76:11
 [OK] Network driver: e1000
 [OK] Network ready
 [         0][CPU0][INFO ] [DHCP] Client started
@@ -288,8 +288,8 @@ Starting shell...
 
   T-RustOs v0.1.0 - Type 'help' for commands
 
-[15:28:50] trustos:/$ █ [KB-READ] popped 244 (0xF4)
-  █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █ [KB-IRQ] scancode=0x20
+[00:28:39] trustos:/$ █ [KB-READ] popped 244 (0xF4)
+  █ [KB-IRQ] scancode=0x20
 [KB-BUF] push ascii=100 (0x64) char='d'
 [KB-READ] popped 100 (0x64)
   d   dir   del   date   df   deluser   desktop   distro   disk█ [KB-IRQ] scancode=0x12
@@ -300,19 +300,19 @@ Starting shell...
 [KB-IRQ] scancode=0x1F
 [KB-BUF] push ascii=115 (0x73) char='s'
 [KB-READ] popped 115 (0x73)
-                                                                                                                          s   desktop█ [KB-IRQ] scancode=0x25
+                                                                                                                          s   desktop█ [KB-IRQ] scancode=0x9F
+[KB-IRQ] scancode=0x25
 [KB-BUF] push ascii=107 (0x6B) char='k'
 [KB-READ] popped 107 (0x6B)
-                                          k   desktop█ [KB-IRQ] scancode=0x9F
-[KB-IRQ] scancode=0xA5
+                                          k   desktop█ [KB-IRQ] scancode=0xA5
 [KB-IRQ] scancode=0x14
 [KB-BUF] push ascii=116 (0x74) char='t'
 [KB-READ] popped 116 (0x74)
-                                          t   desktop█ [KB-IRQ] scancode=0x18
+                                          t   desktop█ [KB-IRQ] scancode=0x94
+[KB-IRQ] scancode=0x18
 [KB-BUF] push ascii=111 (0x6F) char='o'
 [KB-READ] popped 111 (0x6F)
-                                          o   desktop█ [KB-IRQ] scancode=0x94
-[KB-IRQ] scancode=0x19
+                                          o   desktop█ [KB-IRQ] scancode=0x19
 [KB-BUF] push ascii=112 (0x70) char='p'
 [KB-READ] popped 112 (0x70)
                                           p█ [KB-IRQ] scancode=0x98
@@ -336,32 +336,74 @@ Starting shell...
 [Desktop] init_desktop_icons...
 [Desktop] init complete
 [Desktop] Entering desktop run loop
-[GUI] Frame timing init: TSC 32 MHz
+[GUI] Frame timing init: TSC 35 MHz
 [GUI] Starting desktop environment...
 [GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start
 [GUI] Target: 60 FPS with HLT-based frame limiting
-[KB-IRQ] scancode=0x23
-[KB-BUF] push ascii=104 (0x68) char='h'
-[KB-READ] popped 104 (0x68)
-[KB-IRQ] scancode=0xA3
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-[KB-IRQ] scancode=0x92
-[KB-IRQ] scancode=0x26
-[KB-BUF] push ascii=108 (0x6C) char='l'
-[KB-READ] popped 108 (0x6C)
-[KB-IRQ] scancode=0x19
-[KB-BUF] push ascii=112 (0x70) char='p'
-[KB-READ] popped 112 (0x70)
-[KB-IRQ] scancode=0xA6
-[KB-IRQ] scancode=0x99
-[KB-IRQ] scancode=0x1C
-[KB-BUF] push ascii=10 (0x0A) char='
-'
-[KB-READ] popped 10 (0x0A)
-[TERM] Executing command: 'help' len=4
-[KB-IRQ] scancode=0x9C
+[KB-IRQ] scancode=0x2D
+[KB-BUF] push ascii=120 (0x78) char='x'
+[KB-READ] popped 120 (0x78)
+[KB-IRQ] scancode=0xAD
+[KB-IRQ] scancode=0x2E
+[KB-BUF] push ascii=99 (0x63) char='c'
+[KB-READ] popped 99 (0x63)
+[KB-IRQ] scancode=0xAE
+[KB-IRQ] scancode=0x2E
+[KB-BUF] push ascii=99 (0x63) char='c'
+[KB-READ] popped 99 (0x63)
+[KB-IRQ] scancode=0xAE
+[KB-IRQ] scancode=0x2E
+[KB-BUF] push ascii=99 (0x63) char='c'
+[KB-READ] popped 99 (0x63)
+[KB-IRQ] scancode=0xAE
+[KB-IRQ] scancode=0x2D
+[KB-BUF] push ascii=120 (0x78) char='x'
+[KB-READ] popped 120 (0x78)
+[KB-IRQ] scancode=0xAD
+[KB-IRQ] scancode=0x2D
+[KB-BUF] push ascii=120 (0x78) char='x'
+[KB-READ] popped 120 (0x78)
+[KB-IRQ] scancode=0xAD
+[KB-IRQ] scancode=0x2E
+[KB-BUF] push ascii=99 (0x63) char='c'
+[KB-READ] popped 99 (0x63)
+[KB-IRQ] scancode=0xAE
+[KB-IRQ] scancode=0x2E
+[KB-BUF] push ascii=99 (0x63) char='c'
+[KB-READ] popped 99 (0x63)
+[KB-IRQ] scancode=0xAE
+[KB-IRQ] scancode=0x2E
+[KB-BUF] push ascii=99 (0x63) char='c'
+[KB-READ] popped 99 (0x63)
+[KB-IRQ] scancode=0xAE
+[KB-IRQ] scancode=0x2C
+[KB-BUF] push ascii=122 (0x7A) char='z'
+[KB-READ] popped 122 (0x7A)
+[KB-IRQ] scancode=0xAC
+[KB-IRQ] scancode=0x2C
+[KB-BUF] push ascii=122 (0x7A) char='z'
+[KB-READ] popped 122 (0x7A)
+[KB-IRQ] scancode=0xAC
+[KB-IRQ] scancode=0x2C
+[KB-BUF] push ascii=122 (0x7A) char='z'
+[KB-READ] popped 122 (0x7A)
+[KB-IRQ] scancode=0xAC
+[KB-IRQ] scancode=0x2C
+[KB-BUF] push ascii=122 (0x7A) char='z'
+[KB-READ] popped 122 (0x7A)
+[KB-IRQ] scancode=0xAC
+[KB-IRQ] scancode=0x2C
+[KB-BUF] push ascii=122 (0x7A) char='z'
+[KB-READ] popped 122 (0x7A)
+[KB-IRQ] scancode=0xAC
+[KB-IRQ] scancode=0x2C
+[KB-BUF] push ascii=122 (0x7A) char='z'
+[KB-READ] popped 122 (0x7A)
+[KB-IRQ] scancode=0xAC
+[KB-IRQ] scancode=0x2C
+[KB-BUF] push ascii=122 (0x7A) char='z'
+[KB-READ] popped 122 (0x7A)
+[KB-IRQ] scancode=0xAC
 [KB-IRQ] scancode=0x01
 [KB-BUF] push ascii=27 (0x1B) char=''
 [KB-READ] popped 27 (0x1B)
@@ -377,13 +419,568 @@ Starting shell...
 [Desktop] Returned to shell
 
 Returned to TrustOS shell. Type 'help' for commands.
-[15:43:34] trustos:/$ █ [KB-IRQ] scancode=0x81
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-READ] popped 27 (0x1B)
-  █ [KB-IRQ] scancode=0x81
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-READ] popped 27 (0x1B)
-  █ [KB-IRQ] scancode=0x81
+[00:30:11] trustos:/$ █ [KB-IRQ] scancode=0x81
+  █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █ [KB-IRQ] scancode=0x20
+[KB-BUF] push ascii=100 (0x64) char='d'
+[KB-READ] popped 100 (0x64)
+  d   dir   del   date   df   deluser   desktop   distro   disk█ [KB-IRQ] scancode=0x12
+[KB-BUF] push ascii=101 (0x65) char='e'
+[KB-READ] popped 101 (0x65)
+                                                                                                                                                                                                                                                                                                                                  e   del   deluser   desktop█ [KB-IRQ] scancode=0xA0
+[KB-IRQ] scancode=0x92
+[KB-IRQ] scancode=0x1F
+[KB-BUF] push ascii=115 (0x73) char='s'
+[KB-READ] popped 115 (0x73)
+                                                                                                                          s   desktop█ [KB-IRQ] scancode=0x9F
+[KB-IRQ] scancode=0x25
+[KB-BUF] push ascii=107 (0x6B) char='k'
+[KB-READ] popped 107 (0x6B)
+                                          k   desktop█ [KB-IRQ] scancode=0xA5
+[KB-IRQ] scancode=0x14
+[KB-BUF] push ascii=116 (0x74) char='t'
+[KB-READ] popped 116 (0x74)
+                                          t   desktop█ [KB-IRQ] scancode=0x94
+[KB-IRQ] scancode=0x18
+[KB-BUF] push ascii=111 (0x6F) char='o'
+[KB-READ] popped 111 (0x6F)
+                                          o   desktop█ [KB-IRQ] scancode=0x19
+[KB-BUF] push ascii=112 (0x70) char='p'
+[KB-READ] popped 112 (0x70)
+                                          p█ [KB-IRQ] scancode=0x98
+[KB-IRQ] scancode=0x99
+[KB-IRQ] scancode=0x1C
+[KB-BUF] push ascii=10 (0x0A) char='
+'
+[KB-READ] popped 10 (0x0A)
   
+ [Desktop] init start: 1920x1080 (clearing 0 windows, 10 icons)
+[Desktop] state cleared, windows=0 icons=0
+[Scaling] Auto-detected 1x scale for 1920x1080 framebuffer
+[Scaling] Scale factor set to 1x
+[Desktop] UI scale factor: 1x
+[Desktop] init_double_buffer...
+[FB] Double buffer allocated: 1920x1080 (8100 KB)
+[Desktop] init_background_cache...
+[FB] Background cache allocated: 8100 KB
+[Desktop] init_compositor...
+[Desktop] init_desktop_icons...
+[Desktop] init complete
+[Desktop] Entering desktop run loop
+[GUI] Frame timing init: TSC 35 MHz
+[GUI] Starting desktop environment...
+[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start
+[GUI] Target: 60 FPS with HLT-based frame limiting
+[KB-IRQ] scancode=0x9C
+[KB-IRQ] scancode=0x12
+[KB-BUF] push ascii=101 (0x65) char='e'
+[KB-READ] popped 101 (0x65)
+[KB-IRQ] scancode=0x92
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: no window open, exiting desktop
+[GUI] Desktop exit requested, returning to shell
+[GUI] Desktop exiting, cleaning up...
+[GUI] Desktop exited cleanly
+[Desktop] Returned to shell
+
+Returned to TrustOS shell. Type 'help' for commands.
+[00:36:13] trustos:/$ █ [KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x20
+[KB-BUF] push ascii=100 (0x64) char='d'
+[KB-READ] popped 100 (0x64)
+  d   dir   del   date   df   deluser   desktop   distro   disk█ [KB-IRQ] scancode=0x12
+[KB-BUF] push ascii=101 (0x65) char='e'
+[KB-READ] popped 101 (0x65)
+                                                                                                                                                                                                                                                                                                                                  e   del   deluser   desktop█ [KB-IRQ] scancode=0xA0
+[KB-IRQ] scancode=0x92
+[KB-IRQ] scancode=0x1F
+[KB-BUF] push ascii=115 (0x73) char='s'
+[KB-READ] popped 115 (0x73)
+                                                                                                                          s   desktop█ [KB-IRQ] scancode=0x9F
+[KB-IRQ] scancode=0x25
+[KB-BUF] push ascii=107 (0x6B) char='k'
+[KB-READ] popped 107 (0x6B)
+                                          k   desktop█ [KB-IRQ] scancode=0xA5
+[KB-IRQ] scancode=0x14
+[KB-BUF] push ascii=116 (0x74) char='t'
+[KB-READ] popped 116 (0x74)
+                                          t   desktop█ [KB-IRQ] scancode=0x94
+[KB-IRQ] scancode=0x18
+[KB-BUF] push ascii=111 (0x6F) char='o'
+[KB-READ] popped 111 (0x6F)
+                                          o   desktop█ [KB-IRQ] scancode=0x19
+[KB-BUF] push ascii=112 (0x70) char='p'
+[KB-READ] popped 112 (0x70)
+                                          p█ [KB-IRQ] scancode=0x98
+[KB-IRQ] scancode=0x99
+[KB-IRQ] scancode=0x0E
+[KB-BUF] push ascii=8 (0x08) char=' '
+[KB-READ] popped 8 (0x08)
+        desktop█ [KB-IRQ] scancode=0x8E
+[KB-IRQ] scancode=0x0E
+[KB-BUF] push ascii=8 (0x08) char=' '
+[KB-READ] popped 8 (0x08)
+                                                desktop█ [KB-IRQ] scancode=0x8E
+[KB-IRQ] scancode=0x0E
+[KB-BUF] push ascii=8 (0x08) char=' '
+[KB-READ] popped 8 (0x08)
+                                                desktop█ [KB-IRQ] scancode=0x8E
+[KB-IRQ] scancode=0x0E
+[KB-BUF] push ascii=8 (0x08) char=' '
+[KB-READ] popped 8 (0x08)
+                                                desktop█ [KB-IRQ] scancode=0x8E
+[KB-IRQ] scancode=0x25
+[KB-BUF] push ascii=107 (0x6B) char='k'
+[KB-READ] popped 107 (0x6B)
+                                          k   desktop█ [KB-IRQ] scancode=0xA5
+[KB-IRQ] scancode=0x14
+[KB-BUF] push ascii=116 (0x74) char='t'
+[KB-READ] popped 116 (0x74)
+                                          t   desktop█ [KB-IRQ] scancode=0x94
+[KB-IRQ] scancode=0x18
+[KB-BUF] push ascii=111 (0x6F) char='o'
+[KB-READ] popped 111 (0x6F)
+                                          o   desktop█ [KB-IRQ] scancode=0x19
+[KB-BUF] push ascii=112 (0x70) char='p'
+[KB-READ] popped 112 (0x70)
+                                          p█ [KB-IRQ] scancode=0x98
+[KB-IRQ] scancode=0x99
+[KB-IRQ] scancode=0x1C
+[KB-BUF] push ascii=10 (0x0A) char='
+'
+[KB-READ] popped 10 (0x0A)
+  
+ [Desktop] init start: 1920x1080 (clearing 0 windows, 10 icons)
+[Desktop] state cleared, windows=0 icons=0
+[Scaling] Auto-detected 1x scale for 1920x1080 framebuffer
+[Scaling] Scale factor set to 1x
+[Desktop] UI scale factor: 1x
+[Desktop] init_double_buffer...
+[FB] Double buffer allocated: 1920x1080 (8100 KB)
+[Desktop] init_background_cache...
+[FB] Background cache allocated: 8100 KB
+[Desktop] init_compositor...
+[Desktop] init_desktop_icons...
+[Desktop] init complete
+[Desktop] Entering desktop run loop
+[GUI] Frame timing init: TSC 35 MHz
+[GUI] Starting desktop environment...
+[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start
+[GUI] Target: 60 FPS with HLT-based frame limiting
+[KB-IRQ] scancode=0x9C
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x1E
+[KB-BUF] push ascii=97 (0x61) char='a'
+[KB-READ] popped 97 (0x61)
+[KB-IRQ] scancode=0x9E
+[KB-IRQ] scancode=0x11
+[KB-BUF] push ascii=119 (0x77) char='w'
+[KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x91
+[KB-IRQ] scancode=0x11
+[KB-BUF] push ascii=119 (0x77) char='w'
+[KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x91
+[KB-IRQ] scancode=0x11
+[KB-BUF] push ascii=119 (0x77) char='w'
+[KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x91
+[KB-IRQ] scancode=0x11
+[KB-BUF] push ascii=119 (0x77) char='w'
+[KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x91
+[KB-IRQ] scancode=0x11
+[KB-BUF] push ascii=119 (0x77) char='w'
+[KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x91
+[KB-IRQ] scancode=0x11
+[KB-BUF] push ascii=119 (0x77) char='w'
+[KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x91
+[KB-IRQ] scancode=0x11
+[KB-BUF] push ascii=119 (0x77) char='w'
+[KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x91
+[KB-IRQ] scancode=0x11
+[KB-BUF] push ascii=119 (0x77) char='w'
+[KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x91
+[KB-IRQ] scancode=0x11
+[KB-BUF] push ascii=119 (0x77) char='w'
+[KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x91
+[KB-IRQ] scancode=0x11
+[KB-BUF] push ascii=119 (0x77) char='w'
+[KB-READ] popped 119 (0x77)
+[KB-IRQ] scancode=0x91
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: closed focused window
+[KB-IRQ] scancode=0x81
+[KB-IRQ] scancode=0x01
+[KB-BUF] push ascii=27 (0x1B) char=''
+[KB-READ] popped 27 (0x1B)
+[GUI] ESC: no window open, exiting desktop
+[GUI] Desktop exit requested, returning to shell
+[GUI] Desktop exiting, cleaning up...
+[GUI] Desktop exited cleanly
+[Desktop] Returned to shell
+
+Returned to TrustOS shell. Type 'help' for commands.
+[00:37:55] trustos:/$ █ [KB-IRQ] scancode=0x81
+  [KB-IRQ] scancode=0x23
+[KB-BUF] push ascii=104 (0x68) char='h'
+[KB-READ] popped 104 (0x68)
+  h   help   head   hostname   history   hexdump   hwinfo   hv   hypervisor█ [KB-IRQ] scancode=0xA3
+[KB-IRQ] scancode=0x12
+[KB-BUF] push ascii=101 (0x65) char='e'
+[KB-READ] popped 101 (0x65)
+                                                                                                                                                                                                                                                                                                                                  e   help   head   hexdump█ [KB-IRQ] scancode=0x92
+[KB-IRQ] scancode=0x26
+[KB-BUF] push ascii=108 (0x6C) char='l'
+[KB-READ] popped 108 (0x6C)
+                                                                                                                          l   help█ [KB-IRQ] scancode=0x19
+[KB-BUF] push ascii=112 (0x70) char='p'
+[KB-READ] popped 112 (0x70)
+                                          p█ [KB-IRQ] scancode=0xA6
+[KB-IRQ] scancode=0x99
+[KB-IRQ] scancode=0x1C
+[KB-BUF] push ascii=10 (0x0A) char='
+'
+[KB-READ] popped 10 (0x0A)
+  
+ ======================================================================
+          TrustOS -- Secure Bare-Metal Operating System
+       x86_64 kernel written in Rust -- no libc, no std
+======================================================================
+
+  Features: RAMFS file system, TCP/IP networking, ELF loader,
+  Linux syscall compat, GUI desktop compositor, SMP multicore.
+
+  Type 'help <command>' or 'man <command>' for detailed usage.
+  Tab = auto-complete | Up/Down = history | PageUp/Down = scroll
+
+  FILE SYSTEM
+    ls [path]           List directory contents (-l long, -a hidden)
+    cd <path>           Change working directory
+    pwd                 Print current working directory
+    mkdir <dir>         Create directory (-p recursive)
+    rmdir <dir>         Remove empty directory
+    touch <file>        Create empty file or update timestamp
+    rm <file>           Remove file or directory (-r recursive)
+    cp <src> <dst>      Copy file or directory
+    mv <src> <dst>      Move or rename file
+    cat <file>          Display file contents (supports > redirect)
+    head <file>         Show first N lines (-n N)
+    tail <file>         Show last N lines (-n N)
+    wc <file>           Count lines, words, bytes
+    stat <file>         Display file metadata (size, type, perms)
+    tree [path]         Display directory tree structure
+    find <path> <name>  Search for files by name pattern
+    ln -s <tgt> <link>  Create symbolic link
+    readlink <link>     Display link target
+    basename <path>     Strip directory from path
+    dirname <path>      Strip filename from path
+    realpath <path>     Resolve to absolute path
+    file <path>         Identify file type (ELF, text, etc.)
+    chmod <mode> <f>    Change file permissions (octal)
+    chown <u>[:<g>] <f> Change file ownership
+
+  TEXT PROCESSING
+    echo <text>         Print text (supports > redirect)
+    grep <pat> <file>   Search for pattern (-i case insensitive)
+    sort <file>         Sort lines (-r reverse, -n numeric)
+    uniq <file>         Remove duplicate adjacent lines (-c count)
+    cut -d<d> -f<n>     Cut columns by delimiter
+    tr <a> <b>          Translate characters (a->b)
+    tee <file>          Write stdin to file + stdout
+    rev <text>          Reverse string
+    diff <a> <b>        Compare two files line by line
+    cmp <a> <b>         Compare two files byte by byte
+    patch <file>        Apply diff patch
+    strings <file>      Extract printable strings from binary
+    od <file>           Octal dump of file
+    hexdump <file>      Hex dump of file contents
+    base64 <file>       Encode/decode base64 (-d decode)
+    md5sum <file>       Compute MD5 hash
+    sha256sum <file>    Compute SHA-256 hash
+
+  SYSTEM & PROCESS
+    clear               Clear terminal screen
+    time / uptime       Show system uptime
+    date                Display current date and time
+    whoami              Print current username
+    hostname            Display system hostname
+    id                  Print user/group IDs
+    uname [-a]          System information (kernel, arch)
+[KB-IRQ] scancode=0x9C
+    env / printenv      Display environment variables
+    export K=V          Set environment variable
+    unset <var>         Remove environment variable
+    set                 Show all shell variables
+    alias <n>=<cmd>     Create command alias
+    unalias <name>      Remove command alias
+    source <file>       Execute commands from script file
+    history             Show command history
+    ps                  List running processes
+    top / htop          Real-time process monitor
+    kill <pid>          Send signal to process
+    killall <name>      Kill processes by name
+    nice <n> <cmd>      Run command with priority
+    nohup <cmd>         Run command immune to hangups
+    bg / fg             Background/foreground job control
+    tasks / jobs        List active kernel tasks
+    threads             Show kernel thread info
+    free                Display memory usage statistics
+    df                  Show disk space usage
+    vmstat              Virtual memory statistics
+    iostat              I/O statistics by device
+    lsof [pid]          List open files per process
+    strace <cmd>        Trace system calls of command
+    sleep <secs>        Pause execution for N seconds
+    watch <cmd>         Execute command repeatedly
+    timeout <s> <cmd>   Run command with time limit
+
+  USER MANAGEMENT
+    login               Switch to another user account
+    su <user>           Substitute user identity
+    passwd [user]       Change user password
+    adduser <name>      Create new user account
+    deluser <name>      Delete user account
+    users               List all user accounts
+
+  HARDWARE & DEVICES
+    lspci [-v]          List PCI devices (vendor/class)
+    lshw / hwinfo       Full hardware inventory
+    lscpu               CPU model, cores, features, frequency
+    lsmem               Memory layout and total RAM
+    lsusb               List USB controllers & devices
+    dmidecode           BIOS/SMBIOS firmware tables
+    hdparm <dev>        Disk drive parameters
+    smpstatus           SMP multicore status (per-CPU state)
+    smp <cmd>           SMP control (start/stop cores)
+    modprobe <mod>      Load kernel module
+    lsmod               List loaded kernel modules
+    insmod / rmmod      Insert or remove module
+
+  DISK & STORAGE
+    disk                Show detected disk drives
+    dd if=<> of=<>      Block-level copy (raw disk I/O)
+    ahci <cmd>          AHCI controller commands
+    fdisk <dev>         Partition table editor
+    lsblk               List block devices
+    blkid               Show block device UUIDs
+    mkfs <type> <dev>   Format partition (fat32, ext2)
+    fsck <dev>          File system consistency check
+    mount <dev> <dir>   Mount file system
+    umount <dir>        Unmount file system
+    sync                Flush all pending writes to disk
+    persist <cmd>       Manage persistent storage
+
+  NETWORK
+    ifconfig / ip       Show network interface status
+    ipconfig [cmd]      Configure IP settings
+    ping <host>         ICMP echo to test connectivity
+    curl <url>          HTTP/HTTPS client (GET, POST)
+    wget <url>          Download file from URL
+    download <url>      Download and save file
+    nslookup <host>     DNS lookup (A, AAAA records)
+    arp [-a]            Show ARP table (IP->MAC mappings)
+    route               Display routing table
+    traceroute <host>   Trace packet path to destination
+    netstat             Show active connections & listeners
+    browse <url>        Text-mode web browser
+    tcpsyn <host:port>  Raw TCP SYN connection test
+    httpget <url>       Raw HTTP GET request
+
+  LINUX SUBSYSTEM
+    linux               Launch Linux compatibility shell
+    linux status        Show Linux subsystem status
+    linux install       Install Linux binaries from rootfs
+    linux start         Start Linux init process
+    linux exec <bin>    Execute ELF binary directly
+    alpine <cmd>        Alpine Linux package manager
+    distro list         List available distributions
+    distro install <id> Download & install distribution
+    distro run <id>     Launch installed distribution
+    exec <file>         Execute binary (ELF or script)
+    elfinfo <file>      Display ELF binary header info
+
+  GRAPHICS & DESKTOP
+    desktop / gui       Launch windowed desktop environment
+    cosmic              Launch COSMIC V2 compositor
+    open <app>          Open desktop with specific app
+    trustedit           3D model editor (wireframe viewer)
+    calculator / calc   Launch calculator app
+    snake               Launch Snake game
+    glmode [on|off]     Toggle OpenGL compositing mode
+    theme <name>        Switch color theme (matrix, nord, etc.)
+    anim <cmd>          Configure UI animations
+    holo / holomatrix   Holographic matrix visualizer
+    imgview <file>      Display image file (PPM, BMP)
+    imgdemo             Run image rendering demo
+    wayland [cmd]       Wayland compositor control
+    gterm               Launch graphical terminal
+    fontsmooth [0-3]    Set font anti-aliasing level
+
+  PROGRAMMING & TOOLS
+    trustlang / tl      TrustLang programming language REPL
+    transpile <file>    Binary-to-Rust transpiler (ELF analysis)
+    video / tv          TrustVideo codec player (record/play)
+    bc                  Calculator / math expression evaluator
+    cal                 Display calendar
+    factor <n>          Prime factorization of integer
+    seq <a> [b] <c>     Print numeric sequence
+    yes [text]          Repeat text infinitely
+    xargs <cmd>         Build command from stdin
+    printf <fmt> <args> Formatted text output
+    expr <expr>         Evaluate arithmetic expression
+    read <var>          Read user input into variable
+
+  ARCHIVING & COMPRESSION
+    tar <opts> <file>   Archive/extract tar files
+    gzip / gunzip       Compress/decompress gzip files
+    zip / unzip         Compress/extract zip archives
+
+  DEVELOPER & DEBUG
+    dmesg [-n N]        Kernel ring buffer (last N messages)
+    memdbg / heapdbg    Heap allocation stats & fragmentation
+    perf / perfstat     CPU, IRQ, scheduler, memory profiling
+    irqstat / irqs      Per-CPU interrupt counters
+    regs / cpuregs      CPU register dump (CR0/CR3/CR4/EFER)
+    peek <addr> [n]     Hex dump memory region
+    poke <addr> <val>   Write byte to memory address
+    devpanel            Toggle real-time FPS/heap/IRQ overlay
+    timecmd <cmd>       Run command & measure elapsed time
+    benchmark [test]    Run performance benchmarks
+    keytest             Interactive keyboard scancode tester
+    test                Run internal kernel test suite
+    panic               Trigger kernel panic (debug only)
+
+  SERVICES & SCHEDULING
+    service <name> <op> Manage system services (start/stop)
+    systemctl <cmd>     Systemd-style service control
+    crontab [-e|-l]     Schedule recurring jobs
+    at <time> <cmd>     Schedule one-time command execution
+    sysctl <key>[=val]  View/modify kernel parameters
+
+  SECURITY & IDENTITY
+    security / sec      Security subsystem status & caps
+    signature / sig     Kernel signature & proof of authorship
+    hv / hypervisor     Hypervisor management commands
+
+  SYSTEM CONTROL
+    exit / logout       Exit current session
+    reboot              Restart the system
+    shutdown / halt     Power off the system
+    reset               Reset terminal state
+    tty                 Print terminal device name
+    stty <opts>         Configure terminal settings
+    loadkeys <map>      Load keyboard layout
+    setfont <font>      Change console font
+
+  EASTER EGGS
+    neofetch            System info with ASCII art logo
+    matrix              Fullscreen Matrix rain animation
+    cowsay <text>       ASCII cow says your message
+    showcase [N]        Automated demo (marketing video)
+    showcase3d          3D graphics cinematic showcase
+
+  Total: ~170 commands | Type 'man <cmd>' for detailed usage
+
+[00:38:13] trustos:/$ █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   █   

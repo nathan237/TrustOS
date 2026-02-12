@@ -390,6 +390,43 @@ impl Compiler {
                     return Err(format!("undefined variable: {}", name));
                 }
             }
+            Expr::Index { array, index } => {
+                // arr[i] = val  →  stack already has value on top
+                // We need: array, index, value → ArraySet → store back
+                // Value is already on stack from the caller.
+                // We need to: load array, then index, then bring value to top
+                // Reorder: push array, push index, then the value is already below
+                // Actually: the value is on stack top. We need to get arr and idx under it.
+                
+                // Strategy: store value in a temp, load array, load index, load value, ArraySet, store array back
+                if let Expr::Ident(arr_name) = array.as_ref() {
+                    if let Some(&arr_slot) = fc.locals.get(arr_name) {
+                        // temp slot for the value
+                        let temp_slot = fc.next_local;
+                        fc.next_local += 1;
+                        // Store value to temp
+                        fc.emit_op(&mut self.strings, Op::StoreLocal);
+                        fc.code.push(temp_slot);
+                        // Load array
+                        fc.emit_op(&mut self.strings, Op::LoadLocal);
+                        fc.code.push(arr_slot);
+                        // Compile index expression
+                        self.compile_expr(fc, index)?;
+                        // Load value back from temp
+                        fc.emit_op(&mut self.strings, Op::LoadLocal);
+                        fc.code.push(temp_slot);
+                        // ArraySet: pops array, index, value → pushes modified array
+                        fc.emit_op(&mut self.strings, Op::ArraySet);
+                        // Store modified array back
+                        fc.emit_op(&mut self.strings, Op::StoreLocal);
+                        fc.code.push(arr_slot);
+                    } else {
+                        return Err(format!("undefined variable: {}", arr_name));
+                    }
+                } else {
+                    return Err(String::from("array index assignment requires a variable"));
+                }
+            }
             _ => return Err(String::from("invalid assignment target")),
         }
         Ok(())
