@@ -16,6 +16,7 @@
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
 [![Watch the demo](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
+[![Watch the Film](https://img.shields.io/badge/▶%20TrustOS%20Film-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/FILM_ID)
 
 [Why "Trust"?](#-why-trustos) · [Features](#-features) · [Quick Start](#-quick-start) · [Architecture](#-architecture) · [Contributing](#-contributing)
 
@@ -27,6 +28,7 @@
 
 | Date | Changes |
 |------|----------|
+| **2026-02-12** | **TrustOS Film** — Built-in cinematic animated explainer with 12 unique scene-specific animations (floating windows, question marks rain, screen shatter, binary flood, redacted bars, earthquake shake, light burst, odometer counter, glow pulse cards, sparkle dissolve, expanding rings, matrix rain callback), 8 animated backgrounds, odometer counters, and fast-paced transitions. Run `film` in the shell. |
 | **2026-02-12** | **Ed25519 Signatures** — Full RFC 8032 Ed25519 asymmetric signature system (SHA-512, extended twisted Edwards curve, TweetNaCl-style scalar mod l), replaces forgeable HMAC-only signatures. **Cross-platform build** — Makefile + build.sh for Linux/macOS, no hardcoded Windows paths. **TrustLang Showcase** — Proper syntax highlighting (keywords red, function calls blue, variables cyan, strings orange, comments green, brackets gold) + auto-scrolling editor when code exceeds panel height |
 | **2026-02-12** | **3D Chess** — Full 3D chess game with low-poly pieces, proper look-at camera (spherical coords, forward/right/up basis), AI opponent (minimax depth 2), board labels, shadows, reflections, scroll zoom, piece selection highlighting |
 | **2026-02-11 18:00** | Terminal: timestamp cyan, `neofetch` command with ASCII art, `user`/`id`/`hostname`/`history` commands, colorized outputs (date/uname/free/net/ps/df/mkdir/touch/rm), `del`/`top`/`lsblk`/`ipconfig`/`version`/`time` aliases |
@@ -331,7 +333,27 @@ cargo build --release -p trustos_kernel
 
 ---
 
-## 🏗️ Architecture
+## � TrustOS Film
+
+TrustOS includes a **built-in cinematic animated explainer** — a 2-minute film that runs entirely inside the OS, rendered in real-time on the framebuffer.
+
+**Run it:** type `film` in the TrustOS shell.
+
+| ACT | Theme | Animation |
+|-----|-------|-----------|
+| **I — The Question** | "You use a computer every day..." | Floating windows, question marks rain, screen shatter |
+| **II — The Problem** | "It controls EVERYTHING" | Binary flood, redacted classified document, earthquake bar chart |
+| **III — The Solution** | "What if one person could understand ALL of it?" | Light burst with star rays, odometer counter 0→120,000 |
+| **IV — The Proof** | Real packet journey through the stack | Animated packet with trail, circuit-board background |
+| **V — The Future** | "TrustOS proves it." | Sparkle dissolve, expanding shockwave rings, matrix rain callback |
+
+> 12 unique scene-specific animations, 8 animated backgrounds, all integer math (no_std compatible).
+
+[![Watch on YouTube](https://img.shields.io/badge/▶%20Watch%20the%20Film-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/FILM_ID)
+
+---
+
+## �🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -509,6 +531,7 @@ kernel/src/
 ## 📋 Changelog
 
 ### v0.1.6 — February 2026
+- **TrustOS Film** — Built-in animated cinematic explainer (`film` command): 5-act narrative structure (The Question → The Problem → The Solution → The Proof → The Future) with 12 scene-specific animations: floating windows, question marks rain, screen shatter, binary flood, redacted bars, earthquake shake bar chart, light burst, odometer counter (0→120K), glow pulse feature cards, sparkle dissolve, expanding shockwave rings, matrix rain callback. 8 unique animated backgrounds (pulsing nebula, red scanlines, blueprint dot-grid, green sparks, starfield, circuit traces, sunrise gradient, matrix rain). All rendering integer-only (no_std compatible).
 - **Ed25519 Asymmetric Signatures** — Full RFC 8032 implementation: SHA-512, extended twisted Edwards curve (GF(2^255-19) field reuse from TLS), TweetNaCl-style scalar mod l reduction. Replaces forgeable HMAC-only system with proper public-key cryptography. `signature ed25519` shell command for verification.
 - **Cross-platform build system** — GNU Makefile + `build.sh` for Linux/macOS with auto-detected OVMF, no hardcoded Windows paths. `make run`, `make iso`, `make check-deps`.
 - **TrustLang Showcase syntax highlighting** — Proper multi-category coloring: keywords (red), function calls (blue), variable declarations (cyan), string literals (orange), comments (green), numbers (green), brackets (gold). Replaced per-character word matching with full-line tokenizer.

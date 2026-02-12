@@ -823,6 +823,7 @@ fn execute_command(cmd: &str) {
         // TrustLang — integrated programming language
         "trustlang" | "tl" => cmd_trustlang(args),
         "trustlang_showcase" | "tl_showcase" => cmd_trustlang_showcase(),
+        "film" | "trustos_film" => cmd_trustos_film(),
         
         // TrustVideo — video codec & player
         "video" | "tv" => cmd_video(args),
@@ -16030,6 +16031,1340 @@ fn main() {
     }
     crate::framebuffer::clear();
     crate::serial_println!("[TL_SHOWCASE] Showcase complete");
+}
+
+/// TrustOS Film — Animated cinematic explainer for non-technical audiences
+/// Each scene uses a unique background for maximum visual retention:
+///   ACT I:   Slow pulsing deep-blue gradient  (mystery, intrigue)
+///   ACT II:  Red scan-lines / warning stripes  (urgency, alarm)
+///   Bars:    Blueprint dot-grid                (data, precision)
+///   ACT III: Rising green particle sparks      (hope, energy)
+///   Grid:    Deep-space starfield              (scale, wonder)
+///   ACT IV:  Circuit-board trace lines         (tech, proof)
+///   ACT V:   Sunrise gradient warm glow        (inspiration)
+///   Outro:   Matrix rain callback              (signature)
+/// Retention techniques applied: pattern interrupts every scene,
+/// high-contrast color shifts, kinetic text, less text per screen,
+/// constant subtle motion, under-2-minute total runtime.
+fn cmd_trustos_film() {
+    let (sw, sh) = crate::framebuffer::get_dimensions();
+    let w = sw as usize;
+    let h = sh as usize;
+
+    let was_db = crate::framebuffer::is_double_buffer_enabled();
+    if !was_db {
+        crate::framebuffer::init_double_buffer();
+        crate::framebuffer::set_double_buffer_mode(true);
+    }
+
+    let mut buf = alloc::vec![0u32; w * h];
+
+    // ═══════════════ HELPER CLOSURES ═══════════════
+
+    let draw_big_char = |buf: &mut [u32], w: usize, h: usize,
+                         cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+        let glyph = crate::framebuffer::font::get_glyph(c);
+        for (row, &bits) in glyph.iter().enumerate() {
+            for bit in 0..8u32 {
+                if bits & (0x80 >> bit) != 0 {
+                    for sy in 0..scale {
+                        for sx in 0..scale {
+                            let px = cx + bit as usize * scale + sx;
+                            let py = cy + row * scale + sy;
+                            if px < w && py < h { buf[py * w + px] = color; }
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    let draw_text_at = |buf: &mut [u32], w: usize, h: usize,
+                        x: usize, y: usize, text: &str, color: u32, scale: usize| {
+        for (i, c) in text.chars().enumerate() {
+            draw_big_char(buf, w, h, x + i * 8 * scale, y, c, color, scale);
+        }
+    };
+
+    let draw_text_centered = |buf: &mut [u32], w: usize, h: usize,
+                              y: usize, text: &str, color: u32, scale: usize| {
+        let tw = text.len() * 8 * scale;
+        let sx = if tw < w { (w - tw) / 2 } else { 0 };
+        for (i, c) in text.chars().enumerate() {
+            draw_big_char(buf, w, h, sx + i * 8 * scale, y, c, color, scale);
+        }
+    };
+
+    let blit_buf = |buf: &[u32], w: usize, h: usize| {
+        if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+            let bb = bb_ptr as *mut u32;
+            let bb_s = bb_stride as usize;
+            for y in 0..h.min(bb_h as usize) {
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        buf[y * w..].as_ptr(), bb.add(y * bb_s), w);
+                }
+            }
+        }
+        crate::framebuffer::swap_buffers();
+    };
+
+    let clear_buf = |buf: &mut [u32]| {
+        for p in buf.iter_mut() { *p = 0xFF000000; }
+    };
+
+    // Filled rectangle helper
+    let draw_rect = |buf: &mut [u32], w: usize, h: usize,
+                     x: usize, y: usize, rw: usize, rh: usize, color: u32| {
+        for dy in 0..rh {
+            for dx in 0..rw {
+                let px = x + dx;
+                let py = y + dy;
+                if px < w && py < h { buf[py * w + px] = color; }
+            }
+        }
+    };
+
+    let frame_ms: u64 = 30;
+
+    let do_fade = |buf: &mut [u32], w: usize, h: usize,
+                   blit: &dyn Fn(&[u32], usize, usize)| {
+        for _ in 0..40 {
+            for px in buf.iter_mut() {
+                let r = ((*px >> 16) & 0xFF).saturating_sub(8);
+                let g = ((*px >> 8) & 0xFF).saturating_sub(8);
+                let b = (*px & 0xFF).saturating_sub(8);
+                *px = 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+            blit(buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+        for p in buf.iter_mut() { *p = 0xFF000000; }
+        blit(buf, w, h);
+        crate::cpu::tsc::pit_delay_ms(400);
+    };
+
+    // ═══════════════ BACKGROUND GENERATORS ═══════════════
+    // Each produces a unique animated background per-frame.
+
+    // BG1: Pulsing deep-blue/purple nebula gradient (ACT I — mystery)
+    let bg_pulse = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
+        // Integer-based sine approximation (no libm in no_std)
+        // Triangle wave oscillating 0..40..0 over ~160 frames
+        let phase = (frame % 160) as u32;
+        let pulse = if phase < 80 { phase / 2 } else { (160 - phase) / 2 };
+        let phase2 = ((frame + 40) % 120) as u32;
+        let pulse2 = if phase2 < 60 { phase2 / 2 } else { (120 - phase2) / 2 };
+        for y in 0..h {
+            let yf = (y as u32 * 40) / h as u32;
+            for x in 0..w {
+                let xf = (x as u32 * 10) / w as u32;
+                let r = (yf / 4 + pulse2 / 3).min(40);
+                let g = (xf / 3).min(15);
+                let b = (yf + pulse + xf / 2).min(80);
+                buf[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+        }
+    };
+
+    // BG2: Red warning scan-lines (ACT II — danger/urgency)
+    let bg_scanlines = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
+        let scroll = (frame as usize * 2) % h;
+        for y in 0..h {
+            let sy = (y + scroll) % h;
+            let stripe = (sy / 4) % 2 == 0;
+            for x in 0..w {
+                let base_r = if stripe { 35u32 } else { 15 };
+                let flash = if (sy % 60) < 2 { 30u32 } else { 0 };
+                let r = (base_r + flash).min(65);
+                let g = 2;
+                let b = 5;
+                buf[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+        }
+    };
+
+    // BG3: Blueprint dot-grid (comparison bars — precision)
+    let bg_dotgrid = |buf: &mut [u32], w: usize, h: usize, _frame: u32| {
+        for y in 0..h {
+            for x in 0..w {
+                let on_grid = (x % 20 < 2) && (y % 20 < 2);
+                let color = if on_grid { 0xFF0A1A3A } else { 0xFF060E1E };
+                buf[y * w + x] = color;
+            }
+        }
+    };
+
+    // BG4: Rising green sparks / particles (ACT III — hope)
+    let bg_sparks = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
+        // Dim previous frame for trailing effect
+        for px in buf.iter_mut() {
+            let r = ((*px >> 16) & 0xFF).saturating_sub(8);
+            let g = ((*px >> 8) & 0xFF).saturating_sub(12);
+            let b = (*px & 0xFF).saturating_sub(8);
+            *px = 0xFF000000 | (r << 16) | (g << 8) | b;
+        }
+        // Spawn particles rising from bottom
+        for i in 0..24u32 {
+            let seed = (i.wrapping_mul(2654435761).wrapping_add(frame.wrapping_mul(37))) as usize;
+            let px = (seed.wrapping_mul(7919)) % w;
+            let rise = (frame as usize + seed) % h;
+            let py = h.saturating_sub(rise);
+            let brightness = (50 + (seed % 40)) as u32;
+            if px < w && py < h {
+                buf[py * w + px] = 0xFF000000 | (brightness / 4 << 16) | (brightness << 8) | (brightness / 3);
+                if px + 1 < w { buf[py * w + px + 1] = 0xFF000000 | (brightness << 8); }
+            }
+        }
+    };
+
+    // BG5: Deep-space starfield (feature grid — wonder/scale)
+    let bg_stars = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
+        for p in buf.iter_mut() { *p = 0xFF050510; }
+        // Fixed stars with twinkle
+        for i in 0..80u32 {
+            let sx = ((i.wrapping_mul(7919)) as usize) % w;
+            let sy = ((i.wrapping_mul(104729)) as usize) % h;
+            let twinkle = ((frame.wrapping_add(i * 17)) % 30) as u32;
+            let bright = if twinkle < 15 { 40 + twinkle * 3 } else { 40 + (30 - twinkle) * 3 };
+            let bright = bright.min(120);
+            if sx < w && sy < h {
+                buf[sy * w + sx] = 0xFF000000 | (bright << 16) | (bright << 8) | bright;
+            }
+        }
+    };
+
+    // BG6: Circuit-board traces (ACT IV — technical proof)
+    let bg_circuit = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
+        for p in buf.iter_mut() { *p = 0xFF0A0A14; }
+        // Horizontal and vertical traces
+        let trace_color = 0xFF0F2818u32;
+        let active_color = 0xFF00AA44u32;
+        for i in 0..20u32 {
+            let ty = ((i.wrapping_mul(7919) as usize) % h) & !3;
+            let tx = ((i.wrapping_mul(104729) as usize) % w) & !3;
+            // Horizontal lines
+            if ty < h {
+                for x in 0..w {
+                    buf[ty * w + x] = trace_color;
+                }
+            }
+            // Vertical lines
+            if tx < w {
+                for y in 0..h {
+                    buf[y * w + tx] = trace_color;
+                }
+            }
+        }
+        // Animated pulse along a trace
+        let pulse_y = ((frame as usize * 3) % h) & !3;
+        if pulse_y < h {
+            let pw = (w / 4).min(120);
+            let px_start = (frame as usize * 5) % w;
+            for dx in 0..pw {
+                let px = (px_start + dx) % w;
+                buf[pulse_y * w + px] = active_color;
+                if pulse_y + 1 < h { buf[(pulse_y + 1) * w + px] = active_color; }
+            }
+        }
+    };
+
+    // BG7: Sunrise warm gradient (ACT V — inspiration)
+    let bg_sunrise = |buf: &mut [u32], w: usize, h: usize, frame: u32| {
+        let lift = (frame as u32).min(60); // sun rises over 60 frames
+        for y in 0..h {
+            let yf = y as u32 * 100 / h as u32; // 0=top, 100=bottom
+            let warmth = if yf > 50 { (yf - 50).min(50) + lift } else { lift / 2 };
+            let r = (warmth * 2).min(90);
+            let g = (warmth * 3 / 4).min(45);
+            let b = (20u32.saturating_sub(warmth / 3)).min(30);
+            for x in 0..w {
+                buf[y * w + x] = 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+        }
+        // Sun glow at bottom center
+        let sun_cx = w / 2;
+        let sun_cy = h - (lift as usize * h / 200);
+        let sun_r = 80usize + lift as usize;
+        for dy in 0..sun_r {
+            for dx in 0..sun_r {
+                let dist_sq = dx * dx + dy * dy;
+                if dist_sq < sun_r * sun_r {
+                    let intensity = (sun_r * sun_r - dist_sq) * 60 / (sun_r * sun_r);
+                    let intensity = intensity as u32;
+                    for (sx, sy) in [(sun_cx + dx, sun_cy.wrapping_sub(dy)),
+                                     (sun_cx.wrapping_sub(dx), sun_cy.wrapping_sub(dy))] {
+                        if sx < w && sy < h {
+                            let existing = buf[sy * w + sx];
+                            let er = ((existing >> 16) & 0xFF) + intensity;
+                            let eg = ((existing >> 8) & 0xFF) + intensity * 2 / 3;
+                            let eb = (existing & 0xFF) + intensity / 4;
+                            buf[sy * w + sx] = 0xFF000000
+                                | (er.min(255) << 16)
+                                | (eg.min(255) << 8)
+                                | eb.min(255);
+                        }
+                    }
+                }
+            }
+        }
+    };
+
+    // BG8: Matrix rain — signature callback for outro only
+    let mut rain_cols: alloc::vec::Vec<u16> =
+        (0..w / 8 + 1).map(|i| ((i * 37 + 13) % h) as u16).collect();
+    let rain_speeds: alloc::vec::Vec<u8> =
+        (0..w / 8 + 1).map(|i| (((i * 7 + 3) % 4) + 1) as u8).collect();
+
+    let draw_rain = |buf: &mut [u32], w: usize, h: usize,
+                     cols: &mut [u16], speeds: &[u8], frame: u32| {
+        for pixel in buf.iter_mut() {
+            let g = ((*pixel >> 8) & 0xFF) as u32;
+            if g > 0 { *pixel = 0xFF000000 | (g.saturating_sub(6) << 8); }
+        }
+        for ci in 0..cols.len() {
+            let x = ci * 8;
+            if x >= w { continue; }
+            cols[ci] = cols[ci].wrapping_add(speeds[ci] as u16);
+            if cols[ci] as usize >= h { cols[ci] = 0; }
+            let y = cols[ci] as usize;
+            let c = (((frame as usize + ci * 13) % 94) + 33) as u8 as char;
+            let glyph = crate::framebuffer::font::get_glyph(c);
+            for (row, &bits) in glyph.iter().enumerate() {
+                let py = y + row;
+                if py >= h { break; }
+                for bit in 0..8u32 {
+                    if bits & (0x80 >> bit) != 0 {
+                        let px = x + bit as usize;
+                        if px < w { buf[py * w + px] = 0xFF00FF44; }
+                    }
+                }
+            }
+        }
+    };
+
+    // ═══════════════ SCENE RENDERER ═══════════════
+    // Generic scene: animate background + type text on top.
+    // bg_id: 1=pulse, 2=scanlines, 3=dotgrid, 4=sparks, 5=stars,
+    //        6=circuit, 7=sunrise, 8=rain
+    let show_scene = |buf: &mut [u32], w: usize, h: usize,
+                      rain_cols: &mut [u16], rain_speeds: &[u8],
+                      lines: &[(&str, u32, usize)],
+                      ms_per_char: u64, hold_frames: u32, bg_id: u8| {
+        let total_chars: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
+        let frames_per_char = (ms_per_char / frame_ms).max(1) as u32;
+        let typing_frames = total_chars as u32 * frames_per_char;
+        let total_frames = typing_frames + hold_frames;
+        let mut frame = 0u32;
+        while frame < total_frames {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { return; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            // Draw the per-scene background
+            match bg_id {
+                1 => bg_pulse(buf, w, h, frame),
+                2 => bg_scanlines(buf, w, h, frame),
+                3 => bg_dotgrid(buf, w, h, frame),
+                4 => bg_sparks(buf, w, h, frame),
+                5 => bg_stars(buf, w, h, frame),
+                6 => bg_circuit(buf, w, h, frame),
+                7 => bg_sunrise(buf, w, h, frame),
+                8 => draw_rain(buf, w, h, rain_cols, rain_speeds, frame),
+                _ => { for p in buf.iter_mut() { *p = 0xFF000000; } }
+            }
+            let chars_shown = (frame / frames_per_char) as usize;
+            let total_h: usize = lines.iter().map(|(_, _, s)| 16 * s + 12).sum();
+            let mut y = if total_h < h { (h - total_h) / 2 } else { 20 };
+            let mut counted = 0usize;
+            for &(text, color, scale) in lines {
+                let tw = text.len() * 8 * scale;
+                let sx = if tw < w { (w - tw) / 2 } else { 0 };
+                for (i, c) in text.chars().enumerate() {
+                    if counted + i >= chars_shown { break; }
+                    draw_big_char(buf, w, h, sx + i * 8 * scale, y, c, color, scale);
+                }
+                // Blinking cursor during typing
+                if chars_shown > counted && chars_shown < counted + text.len() {
+                    let ci = chars_shown - counted;
+                    let cx = sx + ci * 8 * scale;
+                    if (frame / 8) % 2 == 0 {
+                        for cy in y..y + 16 * scale {
+                            if cy < h && cx + 2 < w {
+                                buf[cy * w + cx] = 0xFFFFFFFF;
+                                buf[cy * w + cx + 1] = 0xFFFFFFFF;
+                            }
+                        }
+                    }
+                }
+                counted += text.len();
+                y += 16 * scale + 12;
+            }
+            blit_buf(buf, w, h);
+            frame += 1;
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    };
+
+    crate::serial_println!("[FILM] TrustOS Film started");
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ACT I  —  THE QUESTION  (unique animations per scene)
+    // ═══════════════════════════════════════════════════════════════
+    clear_buf(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("ACT I", 0xFF88CCFF, 5)],
+        50, 30, 1);
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 1: Floating Windows — "You use a computer every day" ──
+    {
+        let fpc = 2u32;
+        let text1 = "You use a computer";
+        let text2 = "every single day.";
+        let total_chars = text1.len() + text2.len();
+        let total_frames = total_chars as u32 * fpc + 50;
+        // Window state: x, y, width, height, color, dx, dy
+        let mut wins: [(i32,i32,usize,usize,u32,i32,i32); 6] = [
+            (80, 40, 120, 80, 0xFF3355AA, 2, 1),
+            (w as i32 - 220, 90, 100, 70, 0xFF55AA33, -1, 2),
+            (180, h as i32 - 180, 130, 85, 0xFFAA5533, 1, -1),
+            (w as i32 / 2, 60, 110, 75, 0xFF8844CC, -2, 1),
+            (40, h as i32 / 2, 125, 80, 0xFF4488CC, 1, -2),
+            (w as i32 - 160, h as i32 / 2 + 40, 100, 65, 0xFFCC8844, -1, -1),
+        ];
+        for frame in 0..total_frames {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { break; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            bg_pulse(&mut buf, w, h, frame);
+            // Animate floating windows
+            for wi in 0..6 {
+                let win = &mut wins[wi];
+                // Only show window after a staggered delay
+                if frame < (wi as u32) * 8 { continue; }
+                win.0 += win.5;
+                win.1 += win.6;
+                if win.0 < 0 || win.0 + win.2 as i32 > w as i32 { win.5 = -win.5; win.0 += win.5; }
+                if win.1 < 0 || win.1 + win.3 as i32 > h as i32 { win.6 = -win.6; win.1 += win.6; }
+                let wx = win.0.max(0) as usize;
+                let wy = win.1.max(0) as usize;
+                let wc = win.4;
+                let wr = ((wc >> 16) & 0xFF) / 3;
+                let wg = ((wc >> 8)  & 0xFF) / 3;
+                let wb = (wc & 0xFF) / 3;
+                let dim = 0xFF000000 | (wr << 16) | (wg << 8) | wb;
+                draw_rect(&mut buf, w, h, wx, wy, win.2, win.3, dim);
+                draw_rect(&mut buf, w, h, wx, wy, win.2, 10, wc);
+                // Fake content lines inside window
+                for li in 0..3usize {
+                    let ly = wy + 16 + li * 12;
+                    if ly + 5 < wy + win.3 {
+                        draw_rect(&mut buf, w, h, wx + 6, ly, win.2.saturating_sub(12), 5, 0xFF222233);
+                    }
+                }
+            }
+            // Type text on top
+            let chars_shown = (frame / fpc) as usize;
+            let scale = 3usize;
+            let line_h = 16 * scale + 12;
+            let y1 = h / 2 - line_h;
+            let y2 = h / 2 + 4;
+            let tw1 = text1.len() * 8 * scale;
+            let sx1 = if tw1 < w { (w - tw1) / 2 } else { 0 };
+            for (i, c) in text1.chars().enumerate() {
+                if i >= chars_shown { break; }
+                draw_big_char(&mut buf, w, h, sx1 + i * 8 * scale, y1, c, 0xFFFFFFFF, scale);
+            }
+            if chars_shown > text1.len() {
+                let tw2 = text2.len() * 8 * scale;
+                let sx2 = if tw2 < w { (w - tw2) / 2 } else { 0 };
+                let extra = chars_shown - text1.len();
+                for (i, c) in text2.chars().enumerate() {
+                    if i >= extra { break; }
+                    draw_big_char(&mut buf, w, h, sx2 + i * 8 * scale, y2, c, 0xFFFFFFFF, scale);
+                }
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 2: Question Marks Rain — "Do you really know?" ──
+    {
+        let fpc = 2u32;
+        let text1 = "Do you really know";
+        let text2 = "what it does?";
+        let total_chars = text1.len() + text2.len();
+        let total_frames = total_chars as u32 * fpc + 60;
+        let num_qcols = w / 10;
+        let mut qy: alloc::vec::Vec<i32> = (0..num_qcols).map(|i| -((i * 37 % 200) as i32)).collect();
+        for frame in 0..total_frames {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { break; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            bg_pulse(&mut buf, w, h, frame);
+            // Rain question marks with acceleration
+            let speed = 1 + (frame / 30) as i32;
+            for qi in 0..num_qcols {
+                qy[qi] += speed + (qi as i32 % 3);
+                if qy[qi] > h as i32 { qy[qi] = -(qi as i32 * 13 % 60); }
+                if qy[qi] >= 0 {
+                    let px = qi * 10 + 2;
+                    let py = qy[qi] as usize;
+                    let bright = 0xFF000000 | (0x40 << 16) | (0x60 << 8) | 0xFF;
+                    if px < w && py < h {
+                        draw_big_char(&mut buf, w, h, px, py, '?', bright, 1);
+                    }
+                }
+            }
+            // Type text
+            let chars_shown = (frame / fpc) as usize;
+            let scale = 3usize;
+            let y1 = h / 2 - 40;
+            let y2 = h / 2 + 20;
+            let tw1 = text1.len() * 8 * scale;
+            let sx1 = if tw1 < w { (w - tw1) / 2 } else { 0 };
+            for (i, c) in text1.chars().enumerate() {
+                if i >= chars_shown { break; }
+                draw_big_char(&mut buf, w, h, sx1 + i * 8 * scale, y1, c, 0xFFCCCCCC, scale);
+            }
+            if chars_shown > text1.len() {
+                let tw2 = text2.len() * 8 * scale;
+                let sx2 = if tw2 < w { (w - tw2) / 2 } else { 0 };
+                let extra = chars_shown - text1.len();
+                for (i, c) in text2.chars().enumerate() {
+                    if i >= extra { break; }
+                    draw_big_char(&mut buf, w, h, sx2 + i * 8 * scale, y2, c, 0xFFFF9944, 4);
+                }
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 3: Screen Shatter — "The honest answer... is no." ──
+    {
+        let fpc = 2u32;
+        let text1 = "The honest answer...";
+        let text2 = "is no.";
+        let type_frames = (text1.len() + text2.len()) as u32 * fpc;
+        let shatter_frames = 50u32;
+        let total_frames = type_frames + shatter_frames;
+        // Crack directions: dx, dy pairs radiating from center
+        let cracks: [(i32, i32); 12] = [
+            (3,0),(-3,0),(0,3),(0,-3),(2,2),(-2,2),(2,-2),(-2,-2),
+            (3,1),(-3,1),(1,-3),(-1,3),
+        ];
+        for frame in 0..total_frames {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { break; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            bg_scanlines(&mut buf, w, h, frame);
+            // Type text
+            let chars_shown = (frame / fpc) as usize;
+            let scale1 = 3usize;
+            let y1 = h / 2 - 60;
+            let tw1 = text1.len() * 8 * scale1;
+            let sx1 = if tw1 < w { (w - tw1) / 2 } else { 0 };
+            for (i, c) in text1.chars().enumerate() {
+                if i >= chars_shown { break; }
+                draw_big_char(&mut buf, w, h, sx1 + i * 8 * scale1, y1, c, 0xFF888888, scale1);
+            }
+            if chars_shown > text1.len() {
+                let scale2 = 5usize;
+                let tw2 = text2.len() * 8 * scale2;
+                let sx2 = if tw2 < w { (w - tw2) / 2 } else { 0 };
+                let extra = chars_shown - text1.len();
+                for (i, c) in text2.chars().enumerate() {
+                    if i >= extra { break; }
+                    draw_big_char(&mut buf, w, h, sx2 + i * 8 * scale2, h / 2, c, 0xFFFF4444, scale2);
+                }
+            }
+            // Shatter effect after typing
+            if frame > type_frames {
+                let progress = frame - type_frames;
+                let cx = w / 2;
+                let cy = h / 2;
+                for &(cdx, cdy) in cracks.iter() {
+                    for step in 0..(progress * 4) as i32 {
+                        let px = (cx as i32 + cdx * step).max(0) as usize;
+                        let py = (cy as i32 + cdy * step).max(0) as usize;
+                        if px < w && py < h {
+                            buf[py * w + px] = 0xFFFFFFFF;
+                            if px + 1 < w { buf[py * w + px + 1] = 0xFFFFDDDD; }
+                            if py + 1 < h { buf[(py + 1) * w + px] = 0xFFFFDDDD; }
+                        }
+                    }
+                }
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ACT II  —  THE PROBLEM  (binary flood + redacted bars)
+    // ═══════════════════════════════════════════════════════════════
+    clear_buf(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("ACT II", 0xFFFF6644, 5),
+          ("", 0xFF000000, 1),
+          ("The Problem", 0xFFFF4444, 3)],
+        50, 30, 2);
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 4: Binary Flood — "It controls EVERYTHING" ──
+    {
+        let fpc = 2u32;
+        let lines_txt: [(&str, u32, usize); 5] = [
+            ("Your computer runs on", 0xFFCCCCCC, 2),
+            ("an operating system.", 0xFFCCCCCC, 2),
+            ("", 0xFF000000, 1),
+            ("It controls", 0xFFCCCCCC, 2),
+            ("EVERYTHING.", 0xFFFF6644, 4),
+        ];
+        let total_chars: usize = lines_txt.iter().map(|(t,_,_)| t.len()).sum();
+        let total_frames = total_chars as u32 * fpc + 70;
+        for frame in 0..total_frames {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { break; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            bg_scanlines(&mut buf, w, h, frame);
+            // Binary flood: 0s and 1s cascading from top
+            let flood_rows = (frame as usize * 3).min(h);
+            for fy in 0..flood_rows {
+                if fy >= h { break; }
+                // Sparse binary chars
+                for fx_step in 0..w / 12 {
+                    let fx = fx_step * 12;
+                    let seed = (fy.wrapping_mul(7919) + fx.wrapping_mul(104729) + frame as usize * 37) % 100;
+                    if seed < 15 {
+                        let c = if seed < 8 { '0' } else { '1' };
+                        let bright = (20 + (seed * 2)) as u32;
+                        let color = 0xFF000000 | (bright << 16) | ((bright / 2) << 8) | (bright / 4);
+                        draw_big_char(&mut buf, w, h, fx, fy, c, color, 1);
+                    }
+                }
+            }
+            // Type text on top with dark backdrop
+            let chars_shown = (frame / fpc) as usize;
+            let total_h: usize = lines_txt.iter().map(|(_,_,s)| 16 * s + 12).sum();
+            let mut y = if total_h < h { (h - total_h) / 2 } else { 20 };
+            let mut counted = 0usize;
+            for &(text, color, scale) in lines_txt.iter() {
+                let tw = text.len() * 8 * scale;
+                let sx = if tw < w { (w - tw) / 2 } else { 0 };
+                // Dark background behind text
+                if !text.is_empty() {
+                    draw_rect(&mut buf, w, h, sx.saturating_sub(4), y.saturating_sub(2),
+                        tw + 8, 16 * scale + 4, 0xCC000000);
+                }
+                for (i, c) in text.chars().enumerate() {
+                    if counted + i >= chars_shown { break; }
+                    draw_big_char(&mut buf, w, h, sx + i * 8 * scale, y, c, color, scale);
+                }
+                counted += text.len();
+                y += 16 * scale + 12;
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 5: Redacted Bars — "Nobody knows what's inside" ──
+    {
+        let fpc = 2u32;
+        let lines_txt: [(&str, u32, usize); 5] = [
+            ("But nobody knows", 0xFFCCCCCC, 3),
+            ("what's inside it.", 0xFFCCCCCC, 3),
+            ("", 0xFF000000, 1),
+            ("Not even the people", 0xFFFF4444, 2),
+            ("who wrote it.", 0xFFFF4444, 2),
+        ];
+        let total_chars: usize = lines_txt.iter().map(|(t,_,_)| t.len()).sum();
+        let type_frames = total_chars as u32 * fpc;
+        let redact_frames = 60u32;
+        let total_frames = type_frames + redact_frames;
+        // Fake document lines to redact
+        let doc_lines: [(&str, usize); 6] = [
+            ("Source code: kernel/mm/init.c", 60),
+            ("Author: CLASSIFIED", 140),
+            ("Memory manager: UNKNOWN", 220),
+            ("Security audit: NONE PERFORMED", 300),
+            ("Bug count: UNTRACKED", 380),
+            ("Last review: NEVER", 460),
+        ];
+        for frame in 0..total_frames {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { break; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            bg_scanlines(&mut buf, w, h, frame);
+            // Draw fake document on left side
+            let doc_x = 30usize;
+            for &(line, dy) in doc_lines.iter() {
+                if dy < h {
+                    draw_text_at(&mut buf, w, h, doc_x, dy, line, 0xFF445566, 1);
+                }
+            }
+            // Redact bars sliding in after typing completes
+            if frame > type_frames {
+                let progress = frame - type_frames;
+                for (di, &(_line, dy)) in doc_lines.iter().enumerate() {
+                    let delay = di as u32 * 6;
+                    if progress > delay {
+                        let bar_w = ((progress - delay) as usize * 12).min(280);
+                        if dy < h {
+                            draw_rect(&mut buf, w, h, doc_x, dy.saturating_sub(2),
+                                bar_w, 14, 0xFF000000);
+                            if bar_w > 80 {
+                                draw_text_at(&mut buf, w, h, doc_x + 4, dy,
+                                    "REDACTED", 0xFFFF2222, 1);
+                            }
+                        }
+                    }
+                }
+            }
+            // Main text on right side
+            let chars_shown = (frame / fpc) as usize;
+            let text_x_base = w / 2 + 20;
+            let total_h: usize = lines_txt.iter().map(|(_,_,s)| 16 * s + 12).sum();
+            let mut y = if total_h < h { (h - total_h) / 2 } else { 20 };
+            let mut counted = 0usize;
+            for &(text, color, scale) in lines_txt.iter() {
+                let sx = text_x_base;
+                for (i, c) in text.chars().enumerate() {
+                    if counted + i >= chars_shown { break; }
+                    draw_big_char(&mut buf, w, h, sx + i * 8 * scale, y, c, color, scale);
+                }
+                counted += text.len();
+                y += 16 * scale + 12;
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 6: Bar Chart with Earthquake Shake ──
+    {
+        let bar_data: [(&str, u32, u32); 4] = [
+            ("Windows",  50_000_000, 0xFFFF4444),
+            ("macOS",    30_000_000, 0xFFFFAA22),
+            ("Linux",    28_000_000, 0xFFFF8800),
+            ("TrustOS",     120_000, 0xFF00FF88),
+        ];
+        let max_val = 50_000_000u32;
+        let bar_max_w = w * 3 / 5;
+        let bar_h_px = 40usize;
+        let bar_spacing = 80usize;
+        let start_y = h / 2 - (bar_data.len() * bar_spacing) / 2;
+        let label_x = 40usize;
+
+        let mut shake_x: i32 = 0;
+        let mut shake_y: i32 = 0;
+
+        for frame in 0..160u32 {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { break; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            bg_dotgrid(&mut buf, w, h, frame);
+
+            let progress = if frame < 30 { 0u32 }
+                else { ((frame - 30) * 100 / 70).min(100) };
+
+            // Earthquake shake when TrustOS bar appears (frame 100+)
+            if frame > 100 && frame < 130 {
+                let seed = frame.wrapping_mul(7919) as i32;
+                shake_x = (seed % 7) - 3;
+                shake_y = ((seed / 7) % 5) - 2;
+            } else {
+                shake_x = 0;
+                shake_y = 0;
+            }
+
+            draw_text_centered(&mut buf, w, h,
+                (30i32 + shake_y) as usize,
+                "Lines of Code per OS", 0xFFFFFFFF, 3);
+
+            for (i, &(name, val, color)) in bar_data.iter().enumerate() {
+                let y = ((start_y + i * bar_spacing) as i32 + shake_y).max(0) as usize;
+                let adj_label_x = (label_x as i32 + shake_x).max(0) as usize;
+                draw_text_at(&mut buf, w, h, adj_label_x, y + 10,
+                    name, 0xFFFFFFFF, 2);
+                let bar_x = (adj_label_x + 170).min(w.saturating_sub(10));
+                draw_rect(&mut buf, w, h, bar_x, y,
+                    bar_max_w, bar_h_px, 0xFF111122);
+                let full_w = (val as usize * bar_max_w) / max_val as usize;
+                let target_w = full_w.max(12);
+                let current_w = target_w * progress as usize / 100;
+                draw_rect(&mut buf, w, h, bar_x, y,
+                    current_w, bar_h_px, color);
+
+                // Flash effect on TrustOS bar appearance
+                if i == 3 && frame > 100 && frame < 110 {
+                    let flash = 0xFF88FFAA;
+                    draw_rect(&mut buf, w, h, bar_x, y,
+                        current_w + 4, bar_h_px + 4, flash);
+                }
+
+                if frame > 70 {
+                    let label = if val >= 1_000_000 {
+                        alloc::format!("{}M", val / 1_000_000)
+                    } else {
+                        alloc::format!("{}K", val / 1000)
+                    };
+                    draw_text_at(&mut buf, w, h, bar_x + current_w + 10,
+                        y + 10, &label, 0xFFFFFFFF, 2);
+                }
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // Contrast emphasis
+    clear_buf(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("50 million vs 120 thousand.", 0xFFFFFFFF, 3),
+          ("", 0xFF000000, 1),
+          ("Like comparing a city", 0xFFCCCCCC, 2),
+          ("to a single house.", 0xFF00FF88, 2),
+          ("", 0xFF000000, 1),
+          ("Except the house", 0xFFCCCCCC, 2),
+          ("does everything.", 0xFF00FF88, 3)],
+        50, 80, 2);
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ACT III  —  THE SOLUTION  (light burst + odometer counter)
+    // ═══════════════════════════════════════════════════════════════
+    clear_buf(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("ACT III", 0xFF00FF88, 5),
+          ("", 0xFF000000, 1),
+          ("The Solution", 0xFF00CC66, 3)],
+        50, 30, 4);
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 7: Light Burst — "What if one person could understand ALL of it?" ──
+    {
+        let fpc = 2u32;
+        let text1 = "What if one person";
+        let text2 = "could understand ALL of it?";
+        let total_chars = text1.len() + text2.len();
+        let total_frames = total_chars as u32 * fpc + 60;
+        // 8 ray directions (dx, dy)
+        let rays: [(i32, i32); 16] = [
+            (4,0),(-4,0),(0,4),(0,-4),(3,3),(-3,3),(3,-3),(-3,-3),
+            (4,1),(4,-1),(-4,1),(-4,-1),(1,4),(1,-4),(-1,4),(-1,-4),
+        ];
+        for frame in 0..total_frames {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { break; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            bg_sparks(&mut buf, w, h, frame);
+            // Light burst: pulsing center with star rays
+            let cx = w / 2;
+            let cy = h / 2;
+            // Pulsing intensity
+            let phase = (frame % 40) as u32;
+            let pulse = if phase < 20 { phase * 4 } else { (40 - phase) * 4 };
+            // Draw rays
+            let ray_len = 40 + (frame / 2) as i32;
+            for &(rdx, rdy) in rays.iter() {
+                for step in 0..ray_len {
+                    let px = (cx as i32 + rdx * step).max(0) as usize;
+                    let py = (cy as i32 + rdy * step).max(0) as usize;
+                    if px < w && py < h {
+                        let falloff = (ray_len - step) as u32 * 3;
+                        let bright = (pulse + falloff).min(180);
+                        let r = bright;
+                        let g = (bright * 3 / 4).min(140);
+                        let b = (bright / 3).min(60);
+                        let existing = buf[py * w + px];
+                        let er = ((existing >> 16) & 0xFF) + r;
+                        let eg = ((existing >> 8) & 0xFF) + g;
+                        let eb = (existing & 0xFF) + b;
+                        buf[py * w + px] = 0xFF000000
+                            | (er.min(255) << 16)
+                            | (eg.min(255) << 8)
+                            | eb.min(255);
+                    }
+                }
+            }
+            // Center glow
+            let glow_r = 15 + (pulse / 4) as usize;
+            for dy in 0..glow_r {
+                for dx in 0..glow_r {
+                    if dx * dx + dy * dy < glow_r * glow_r {
+                        for &(sx, sy) in &[(cx+dx, cy+dy),(cx+dx, cy.wrapping_sub(dy)),
+                                           (cx.wrapping_sub(dx), cy+dy),
+                                           (cx.wrapping_sub(dx), cy.wrapping_sub(dy))] {
+                            if sx < w && sy < h {
+                                buf[sy * w + sx] = 0xFFFFFFCC;
+                            }
+                        }
+                    }
+                }
+            }
+            // Type text
+            let chars_shown = (frame / fpc) as usize;
+            let scale = 3usize;
+            let y1 = h / 4;
+            let y2 = y1 + 16 * scale + 12;
+            let tw1 = text1.len() * 8 * scale;
+            let sx1 = if tw1 < w { (w - tw1) / 2 } else { 0 };
+            for (i, c) in text1.chars().enumerate() {
+                if i >= chars_shown { break; }
+                draw_big_char(&mut buf, w, h, sx1 + i * 8 * scale, y1, c, 0xFFFFFFFF, scale);
+            }
+            if chars_shown > text1.len() {
+                let tw2 = text2.len() * 8 * scale;
+                let sx2 = if tw2 < w { (w - tw2) / 2 } else { 0 };
+                let extra = chars_shown - text1.len();
+                for (i, c) in text2.chars().enumerate() {
+                    if i >= extra { break; }
+                    draw_big_char(&mut buf, w, h, sx2 + i * 8 * scale, y2, c, 0xFF00FF88, scale);
+                }
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 8: Odometer Counter — TrustOS stats ──
+    {
+        let stats: [(&str, &str, u32, u32); 4] = [
+            ("", "lines of code", 120_000, 0xFF00FF88),
+            ("", "author", 1, 0xFFFFFFFF),
+            ("", "secrets", 0, 0xFFFFFFFF),
+            ("100%", "Rust.  0% C.", 0, 0xFFFF7744),
+        ];
+        let total_frames = 140u32;
+        for frame in 0..total_frames {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { break; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            bg_sparks(&mut buf, w, h, frame);
+            // Title
+            draw_text_centered(&mut buf, w, h, 40, "TrustOS", 0xFF00FF88, 6);
+            // Odometer: numbers roll from 0 to target
+            let progress = if frame < 20 { 0u32 }
+                else { ((frame - 20) * 100 / 80).min(100) };
+            let line_y_start = h / 2 - 40;
+            for (si, &(prefix, suffix, target, color)) in stats.iter().enumerate() {
+                let y = line_y_start + si * 48;
+                let scale = 2usize;
+                if target > 0 {
+                    let current = (target as u64 * progress as u64 / 100) as u32;
+                    let num_str = if current >= 1000 {
+                        alloc::format!("{},{:03}", current / 1000, current % 1000)
+                    } else {
+                        alloc::format!("{}", current)
+                    };
+                    let full = alloc::format!("{} {}", num_str, suffix);
+                    draw_text_centered(&mut buf, w, h, y, &full, color, scale);
+                } else if !prefix.is_empty() {
+                    let full = alloc::format!("{} {}", prefix, suffix);
+                    if frame > 60 + si as u32 * 15 {
+                        draw_text_centered(&mut buf, w, h, y, &full, color, scale);
+                    }
+                } else {
+                    let full = alloc::format!("0 {}", suffix);
+                    if frame > 60 + si as u32 * 15 {
+                        draw_text_centered(&mut buf, w, h, y, &full, color, scale);
+                    }
+                }
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 9: Feature Grid with Glow Pulse ──
+    {
+        let features: [(&str, &str, u32); 8] = [
+            ("Network",   "TCP/IP, DNS, HTTP, DHCP",       0xFF4488FF),
+            ("Security",  "TLS 1.3, Ed25519, SHA-256",     0xFFFF4444),
+            ("Language",  "TrustLang: full compiler",      0xFF44FF88),
+            ("GUI",       "Windows, themes, animations",   0xFFFFAA22),
+            ("Storage",   "FAT32, persistence, AHCI",      0xFF8888FF),
+            ("Browser",   "HTTP + HTML in the kernel",     0xFF44DDFF),
+            ("Games",     "Snake, Tetris, Pong, Chess",    0xFFFF88FF),
+            ("Video",     "Built-in video codec",          0xFFFFDD44),
+        ];
+        let cols = 2usize;
+        let cell_w = (w.saturating_sub(120)) / cols;
+        let cell_h = 70usize;
+        let grid_y = 100usize;
+        let grid_x = 40usize;
+
+        for reveal in 0..features.len() {
+            for frame in 0..30u32 {
+                if let Some(k) = crate::keyboard::try_read_key() {
+                    if k == 0x1B { break; }
+                }
+                bg_stars(&mut buf, w, h, frame + reveal as u32 * 30);
+                draw_text_centered(&mut buf, w, h, 30,
+                    "All of this in 10 MB:", 0xFFFFFFFF, 3);
+                for (fi, &(name, desc, color)) in features.iter().enumerate() {
+                    if fi > reveal { break; }
+                    let col = fi % cols;
+                    let row = fi / cols;
+                    let fx = grid_x + col * (cell_w + 40);
+                    let fy = grid_y + row * (cell_h + 20);
+
+                    // Glow pulse: bright border that fades after reveal
+                    let glow = if fi == reveal && frame < 15 {
+                        (15 - frame) * 12
+                    } else { 0 };
+                    let glow = glow as u32;
+
+                    // Card background
+                    draw_rect(&mut buf, w, h, fx, fy, cell_w, cell_h, 0xFF0E0E1E);
+
+                    // Glow border (all 4 sides)
+                    if glow > 0 {
+                        let gc = 0xFF000000 | (glow.min(255) << 16) | (glow.min(255) << 8) | glow.min(255);
+                        draw_rect(&mut buf, w, h, fx.saturating_sub(2), fy.saturating_sub(2),
+                            cell_w + 4, 3, gc);
+                        draw_rect(&mut buf, w, h, fx.saturating_sub(2), fy + cell_h,
+                            cell_w + 4, 3, gc);
+                        draw_rect(&mut buf, w, h, fx.saturating_sub(2), fy,
+                            3, cell_h, gc);
+                        draw_rect(&mut buf, w, h, fx + cell_w, fy,
+                            3, cell_h, gc);
+                    }
+
+                    // Top color bar
+                    draw_rect(&mut buf, w, h, fx, fy, cell_w, 3, color);
+                    draw_rect(&mut buf, w, h, fx, fy + cell_h - 1, cell_w, 1, 0xFF222244);
+                    draw_text_at(&mut buf, w, h, fx + 10, fy + 12,
+                        name, color, 2);
+                    draw_text_at(&mut buf, w, h, fx + 10, fy + 42,
+                        desc, 0xFFAAAAAA, 1);
+                }
+                blit_buf(&buf, w, h);
+                crate::cpu::tsc::pit_delay_ms(frame_ms);
+            }
+        }
+        crate::cpu::tsc::pit_delay_ms(1500);
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ACT IV  —  THE PROOF  (bg: circuit-board traces — technical)
+    //  Retention: interactive-feeling animation, pattern interrupt
+    // ═══════════════════════════════════════════════════════════════
+    clear_buf(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("ACT IV", 0xFF00FF88, 5),
+          ("", 0xFF000000, 1),
+          ("The Proof", 0xFF00CC66, 3)],
+        50, 30, 6);
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    clear_buf(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("When you visit a website,", 0xFFCCCCCC, 2),
+          ("this is what happens", 0xFFCCCCCC, 2),
+          ("inside TrustOS:", 0xFF00FF88, 2)],
+        50, 60, 6);
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Packet journey animation (on circuit bg) ──
+    {
+        let stages: [(&str, u32); 5] = [
+            ("App",     0xFF4488FF),
+            ("TLS 1.3", 0xFFFF4444),
+            ("TCP/IP",  0xFFFFAA22),
+            ("Driver",  0xFF44FF88),
+            ("Wire",    0xFF8888FF),
+        ];
+        let n = stages.len();
+        let stage_w = (w.saturating_sub(80)) / (n + 1);
+        let stage_h = 60usize;
+        let lane_y = h / 2 - stage_h / 2;
+
+        for pass in 0..2u32 {
+            let label = if pass == 0 { "Sending packet..." }
+                        else         { "Response received!" };
+            let pkt_color = if pass == 0 { 0xFF00FF88 } else { 0xFF44DDFF };
+
+            for frame in 0..150u32 {
+                if let Some(k) = crate::keyboard::try_read_key() {
+                    if k == 0x1B { break; }
+                }
+                bg_circuit(&mut buf, w, h, frame + pass * 150);
+
+                draw_text_centered(&mut buf, w, h, 30,
+                    label, 0xFFFFFFFF, 2);
+
+                for (si, &(name, color)) in stages.iter().enumerate() {
+                    let sx = 40 + si * stage_w;
+                    let bw = stage_w.saturating_sub(15);
+                    draw_rect(&mut buf, w, h, sx, lane_y, bw, stage_h,
+                              0xFF0E1020);
+                    draw_rect(&mut buf, w, h, sx, lane_y, bw, 3, color);
+                    draw_rect(&mut buf, w, h, sx, lane_y + stage_h - 1, bw, 1, 0xFF222244);
+                    let tx = sx + bw / 2 - name.len() * 4;
+                    draw_text_at(&mut buf, w, h, tx, lane_y + 22,
+                        name, color, 1);
+                    if si < n - 1 {
+                        let ax = sx + bw;
+                        draw_rect(&mut buf, w, h, ax,
+                            lane_y + stage_h / 2 - 1, 15, 3, 0xFF334455);
+                        // Arrow head
+                        draw_rect(&mut buf, w, h, ax + 12,
+                            lane_y + stage_h / 2 - 3, 3, 7, 0xFF556677);
+                    }
+                }
+
+                // Animated packet with trail
+                let progress = (frame * 100 / 120).min(100) as usize;
+                let total_travel = (n - 1) * stage_w;
+                let pkt_off = if pass == 0 {
+                    total_travel * progress / 100
+                } else {
+                    total_travel - total_travel * progress / 100
+                };
+                let pkt_x = 40 + pkt_off + stage_w / 2 - 8;
+                let pkt_y = lane_y + stage_h + 18;
+                // Trail glow
+                for trail in 1..6u32 {
+                    let tx = if pass == 0 { pkt_x.saturating_sub(trail as usize * 6) }
+                             else { pkt_x + trail as usize * 6 };
+                    let alpha = (60u32.saturating_sub(trail * 12)).min(255);
+                    let tc = 0xFF000000 | (alpha / 4 << 16) | (alpha << 8) | (alpha / 3);
+                    draw_rect(&mut buf, w, h, tx, pkt_y + 2, 8, 12, tc);
+                }
+                draw_rect(&mut buf, w, h, pkt_x, pkt_y, 16, 16, pkt_color);
+                draw_text_at(&mut buf, w, h,
+                    pkt_x.saturating_sub(16), pkt_y + 20,
+                    "packet", 0xFFCCCCCC, 1);
+
+                blit_buf(&buf, w, h);
+                crate::cpu::tsc::pit_delay_ms(frame_ms);
+            }
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // Post-demo — emotional beat
+    clear_buf(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("Every step is visible.", 0xFFFFFFFF, 3),
+          ("Every byte is readable.", 0xFFFFFFFF, 3),
+          ("", 0xFF000000, 1),
+          ("Nothing is hidden.", 0xFF00FF88, 4)],
+        50, 80, 4);
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ═══════════════════════════════════════════════════════════════
+    //  ACT V  —  THE FUTURE  (sparkle dissolve + expanding rings)
+    // ═══════════════════════════════════════════════════════════════
+    clear_buf(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("ACT V", 0xFFFFDD88, 5),
+          ("", 0xFF000000, 1),
+          ("The Future", 0xFFFFAA44, 3)],
+        50, 30, 7);
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    clear_buf(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("You deserve to understand", 0xFFFFFFFF, 3),
+          ("your own machine.", 0xFFFFFFFF, 3)],
+        50, 60, 7);
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 10: Sparkle Dissolve — "Computing is not magic" ──
+    {
+        let fpc = 2u32;
+        let text1 = "Computing is not magic.";
+        let text2 = "It's math and logic.";
+        let total_chars = text1.len() + text2.len();
+        let total_frames = total_chars as u32 * fpc + 80;
+        for frame in 0..total_frames {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { break; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            bg_sunrise(&mut buf, w, h, frame);
+            // Sparkles: random bright points that form geometric shapes
+            let sparkle_count = (frame * 2).min(200) as usize;
+            for si in 0..sparkle_count {
+                let seed = si.wrapping_mul(2654435761).wrapping_add(frame as usize * 131);
+                let sx = seed % w;
+                let sy = (seed / w) % h;
+                // In later frames, sparkles concentrate into geometric shapes
+                let constrained = frame > 60;
+                let (fx, fy) = if constrained {
+                    // Form rectangles/diamond shapes around center
+                    let cx = w / 2;
+                    let cy = h / 2;
+                    let shape_phase = (si % 4);
+                    match shape_phase {
+                        0 => {  // Top horizontal line
+                            let lx = cx.saturating_sub(100) + (si * 3) % 200;
+                            (lx, cy.saturating_sub(60))
+                        }
+                        1 => {  // Bottom horizontal line
+                            let lx = cx.saturating_sub(100) + (si * 7) % 200;
+                            (lx, cy + 60)
+                        }
+                        2 => {  // Left vertical line
+                            let ly = cy.saturating_sub(60) + (si * 5) % 120;
+                            (cx.saturating_sub(100), ly)
+                        }
+                        _ => {  // Right vertical line
+                            let ly = cy.saturating_sub(60) + (si * 11) % 120;
+                            (cx + 100, ly)
+                        }
+                    }
+                } else {
+                    (sx, sy)
+                };
+                if fx < w && fy < h {
+                    let bright = (100 + (seed % 155)) as u32;
+                    buf[fy * w + fx] = 0xFF000000 | (bright << 16) | (bright << 8) | bright;
+                    if fx + 1 < w { buf[fy * w + fx + 1] = 0xFF000000 | (bright << 16) | ((bright / 2) << 8); }
+                }
+            }
+            // Type text
+            let chars_shown = (frame / fpc) as usize;
+            let scale = 3usize;
+            let y1 = h / 4;
+            let y2 = y1 + 16 * scale + 16;
+            let tw1 = text1.len() * 8 * scale;
+            let sx1 = if tw1 < w { (w - tw1) / 2 } else { 0 };
+            for (i, c) in text1.chars().enumerate() {
+                if i >= chars_shown { break; }
+                draw_big_char(&mut buf, w, h, sx1 + i * 8 * scale, y1, c, 0xFFCCCCCC, scale);
+            }
+            if chars_shown > text1.len() {
+                let tw2 = text2.len() * 8 * scale;
+                let sx2 = if tw2 < w { (w - tw2) / 2 } else { 0 };
+                let extra = chars_shown - text1.len();
+                for (i, c) in text2.chars().enumerate() {
+                    if i >= extra { break; }
+                    draw_big_char(&mut buf, w, h, sx2 + i * 8 * scale, y2, c, 0xFFFFDD88, scale);
+                }
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Scene 11: Expanding Rings — "TrustOS proves it." ──
+    {
+        let fpc = 2u32;
+        let text = "TrustOS proves it.";
+        let type_frames = text.len() as u32 * fpc;
+        let ring_frames = 60u32;
+        let total_frames = type_frames + ring_frames;
+        for frame in 0..total_frames {
+            if let Some(k) = crate::keyboard::try_read_key() {
+                if k == 0x1B { break; }
+                if k == b' ' || k == b'\r' || k == b'\n' { break; }
+            }
+            bg_sunrise(&mut buf, w, h, frame);
+            let cx = w / 2;
+            let cy = h / 2;
+            // Expanding concentric rings (shockwave)
+            if frame > type_frames / 2 {
+                let ring_progress = frame.saturating_sub(type_frames / 2);
+                let num_rings = 5u32;
+                for ri in 0..num_rings {
+                    let radius = (ring_progress as usize * 4).saturating_sub(ri as usize * 30);
+                    if radius == 0 || radius > w { continue; }
+                    let bright = (200u32.saturating_sub(ri * 30)).min(255);
+                    let r_color = 0xFF000000 | ((bright / 3) << 16) | (bright << 8) | ((bright * 2 / 3).min(255));
+                    // Draw ring using distance check in a bounding box
+                    let r2_outer = radius * radius;
+                    let r_inner = radius.saturating_sub(3);
+                    let r2_inner = r_inner * r_inner;
+                    let y_start = cy.saturating_sub(radius);
+                    let y_end = (cy + radius).min(h);
+                    for py in y_start..y_end {
+                        let dy = if py >= cy { py - cy } else { cy - py };
+                        let dy2 = dy * dy;
+                        // Solve for x range where r_inner^2 <= dx^2+dy^2 <= r_outer^2
+                        if dy2 > r2_outer { continue; }
+                        let dx_max_sq = r2_outer - dy2;
+                        let dx_min_sq = if r2_inner > dy2 { r2_inner - dy2 } else { 0 };
+                        // Integer sqrt approximation
+                        let mut dx_max = 0usize;
+                        while (dx_max + 1) * (dx_max + 1) <= dx_max_sq { dx_max += 1; }
+                        let mut dx_min = 0usize;
+                        while (dx_min + 1) * (dx_min + 1) <= dx_min_sq { dx_min += 1; }
+                        // Draw right arc
+                        for dx in dx_min..=dx_max {
+                            let px = cx + dx;
+                            if px < w { buf[py * w + px] = r_color; }
+                        }
+                        // Draw left arc
+                        for dx in dx_min..=dx_max {
+                            let px = cx.wrapping_sub(dx);
+                            if px < w { buf[py * w + px] = r_color; }
+                        }
+                    }
+                }
+            }
+            // Type text
+            let chars_shown = (frame / fpc) as usize;
+            let scale = 4usize;
+            let tw = text.len() * 8 * scale;
+            let sx = if tw < w { (w - tw) / 2 } else { 0 };
+            let ty = h / 2 - 8 * scale;
+            for (i, c) in text.chars().enumerate() {
+                if i >= chars_shown { break; }
+                draw_big_char(&mut buf, w, h, sx + i * 8 * scale, ty, c, 0xFF00FF88, scale);
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::pit_delay_ms(frame_ms);
+        }
+    }
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ═══════════════════════════════════════════════════════════════
+    //  OUTRO  (Matrix rain callback — signature TrustOS feel)
+    // ═══════════════════════════════════════════════════════════════
+    clear_buf(&mut buf);
+    show_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+        &[("Trust the code.", 0xFF00FF88, 5),
+          ("", 0xFF000000, 1),
+          ("Rust is the reason.", 0xFFFF7744, 3),
+          ("", 0xFF000000, 1),
+          ("github.com/nathan237/TrustOS", 0xFFCCCCCC, 2)],
+        60, 150, 8);
+    do_fade(&mut buf, w, h, &blit_buf);
+
+    // ── Cleanup ──
+    clear_buf(&mut buf);
+    blit_buf(&buf, w, h);
+    if !was_db {
+        crate::framebuffer::set_double_buffer_mode(false);
+    }
+    crate::framebuffer::clear();
+    crate::serial_println!("[FILM] TrustOS Film complete");
 }
 
 /// Transpile command: analyze and convert Linux binaries to Rust
