@@ -84,6 +84,9 @@ mod wayland;
 // Binary-to-Rust transpiler (analyze and convert Linux binaries)
 mod transpiler;
 
+// TrustView — binary analysis engine (ELF parser, disassembler, xrefs)
+mod binary_analysis;
+
 // TrustLang — integrated programming language (Rust-like, bytecode VM)
 mod trustlang;
 

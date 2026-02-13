@@ -492,6 +492,7 @@ pub enum WindowType {
     Game3D,  // 3D FPS raycasting game
     Chess,   // Chess game vs AI
     Chess3D, // 3D Matrix-style chess
+    BinaryViewer, // TrustView binary analyzer
 }
 
 /// Window structure
@@ -795,6 +796,8 @@ pub struct Desktop {
     pub chess_states: BTreeMap<u32, crate::chess::ChessState>,
     // 3D Chess states (window_id -> Chess3DState)
     pub chess3d_states: BTreeMap<u32, crate::chess3d::Chess3DState>,
+    // Binary viewer states (window_id -> BinaryViewerState)
+    pub binary_viewer_states: BTreeMap<u32, crate::apps::binary_viewer::BinaryViewerState>,
     // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
     pub scale_factor: u32,
     // Matrix rain state (depth-parallax advancing effect)
@@ -1106,6 +1109,7 @@ impl Desktop {
             game3d_states: BTreeMap::new(),
             chess_states: BTreeMap::new(),
             chess3d_states: BTreeMap::new(),
+            binary_viewer_states: BTreeMap::new(),
             scale_factor: 1,
             matrix_chars: Vec::new(),
             matrix_heads: Vec::new(),
@@ -1131,6 +1135,7 @@ impl Desktop {
         self.snake_states.clear();
         self.game3d_states.clear();
         self.chess3d_states.clear();
+        self.binary_viewer_states.clear();
         // Browser
         self.browser = None;
         self.browser_url_input.clear();
@@ -1557,6 +1562,9 @@ struct AppConfig {
             WindowType::Chess3D => {
                 self.chess3d_states.insert(window.id, crate::chess3d::Chess3DState::new());
             },
+            WindowType::BinaryViewer => {
+                // State is inserted externally via open_binary_viewer()
+            },
             _ => {}
         }
         
@@ -1586,6 +1594,7 @@ struct AppConfig {
         self.game3d_states.remove(&id);
         self.chess_states.remove(&id);
         self.chess3d_states.remove(&id);
+        self.binary_viewer_states.remove(&id);
     }
     
     /// Minimize/restore a window (with animation)
@@ -1874,6 +1883,19 @@ struct AppConfig {
                             if let Some(state) = self.chess3d_states.get_mut(&win_id) {
                                 state.handle_click(rel_x, rel_y, content_w, content_h);
                             }
+                        }
+                    }
+                    
+                    // Handle binary viewer clicks
+                    if self.windows[i].window_type == WindowType::BinaryViewer {
+                        let win = &self.windows[i];
+                        let rel_x = x - win.x;
+                        let rel_y = y - win.y;
+                        let win_id = win.id;
+                        let ww = win.width;
+                        let wh = win.height;
+                        if let Some(viewer) = self.binary_viewer_states.get_mut(&win_id) {
+                            viewer.handle_click(rel_x, rel_y, ww, wh);
                         }
                     }
                     
@@ -2465,6 +2487,24 @@ struct AppConfig {
                 WindowType::Chess3D => {
                     if let Some(state) = self.chess3d_states.get_mut(&win_id) {
                         state.handle_key(key);
+                    }
+                },
+                WindowType::BinaryViewer => {
+                    if let Some(viewer) = self.binary_viewer_states.get_mut(&win_id) {
+                        use crate::keyboard::{KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_PGUP, KEY_PGDOWN, KEY_HOME, KEY_END};
+                        match key {
+                            KEY_UP => viewer.handle_scancode(0x48),
+                            KEY_DOWN => viewer.handle_scancode(0x50),
+                            KEY_LEFT => viewer.handle_scancode(0x4B),
+                            KEY_RIGHT => viewer.handle_scancode(0x4D),
+                            KEY_PGUP => viewer.handle_scancode(0x49),
+                            KEY_PGDOWN => viewer.handle_scancode(0x51),
+                            KEY_HOME => viewer.handle_scancode(0x47),
+                            KEY_END => viewer.handle_scancode(0x4F),
+                            0x09 => viewer.handle_scancode(0x0F), // Tab
+                            0x0D | 0x0A => viewer.handle_scancode(0x1C), // Enter
+                            _ => viewer.handle_key(key as char),
+                        }
                     }
                 },
                 WindowType::Browser => {
@@ -4763,6 +4803,12 @@ struct AppConfig {
             return;
         }
         
+        // Binary Viewer handled here
+        if window.window_type == WindowType::BinaryViewer {
+            self.draw_binary_viewer(window);
+            return;
+        }
+        
         // Special rendering for Browser
         if window.window_type == WindowType::Browser {
             self.draw_browser(window);
@@ -5611,6 +5657,33 @@ struct AppConfig {
         }
     }
     
+    /// Draw TrustView binary viewer
+    fn draw_binary_viewer(&self, window: &Window) {
+        if let Some(state) = self.binary_viewer_states.get(&window.id) {
+            let draw_text = |x: i32, y: i32, text: &str, color: u32| {
+                self.draw_text(x, y, text, color);
+            };
+            crate::apps::binary_viewer::draw_binary_viewer(
+                state,
+                window.x, window.y,
+                window.width, window.height,
+                &draw_text,
+            );
+        }
+    }
+
+    /// Open binary viewer for a file path
+    pub fn open_binary_viewer(&mut self, path: &str) -> Result<u32, &'static str> {
+        let analysis = crate::binary_analysis::analyze_path(path)?;
+        let state = crate::apps::binary_viewer::BinaryViewerState::new(analysis, path);
+        
+        let title_str = alloc::format!("TrustView — {}", path);
+        // Large window for multi-panel view
+        let id = self.create_window(&title_str, 50, 50, 1100, 650, WindowType::BinaryViewer);
+        self.binary_viewer_states.insert(id, state);
+        Ok(id)
+    }
+
     /// Draw interactive Calculator
     fn draw_calculator(&self, window: &Window) {
         use crate::gui::windows11::colors;

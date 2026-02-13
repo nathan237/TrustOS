@@ -167,6 +167,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "exit", "reboot", "shutdown", "poweroff",
     // Execution
     "exec", "run",
+    // Binary analysis
+    "trustview", "tv",
     // Fun
     "neofetch", "matrix", "cowsay",
     // Showcase
@@ -822,6 +824,9 @@ fn execute_command(cmd: &str) {
         // Binary-to-Rust transpiler
         "transpile" | "disasm" | "analyze" => cmd_transpile(args),
         
+        // TrustView — binary analysis viewer
+        "trustview" | "tv" => cmd_trustview(args),
+        
         // TrustLang — integrated programming language
         "trustlang" | "tl" => cmd_trustlang(args),
         "trustlang_showcase" | "tl_showcase" => cmd_trustlang_showcase(),
@@ -1247,6 +1252,7 @@ fn cmd_help(args: &[&str]) {
     crate::println_color!(COLOR_CYAN, "  PROGRAMMING & TOOLS");
     crate::println!("    trustlang / tl      TrustLang programming language REPL");
     crate::println!("    transpile <file>    Binary-to-Rust transpiler (ELF analysis)");
+    crate::println!("    trustview <file>    TrustView binary analyzer (Ghidra-style)");
     crate::println!("    video / tv          TrustVideo codec player (record/play)");
     crate::println!("    film                TrustOS Film cinematic demo");
     crate::println!("    bc                  Calculator / math expression evaluator");
@@ -18379,6 +18385,69 @@ fn cmd_trustos_film() {
     }
     crate::framebuffer::clear();
     crate::serial_println!("[FILM] TrustOS Film complete");
+}
+
+/// TrustView — open binary file in Ghidra-style desktop viewer
+fn cmd_trustview(args: &[&str]) {
+    if args.is_empty() {
+        crate::println_color!(COLOR_CYAN, "TrustView — Binary Analysis Viewer");
+        crate::println_color!(COLOR_GREEN, "Usage: trustview <file>");
+        crate::println_color!(COLOR_GREEN, "       tv <file>");
+        crate::println!("");
+        crate::println!("Opens an ELF binary in the desktop binary viewer.");
+        crate::println!("Panels: Navigation | Hex | Disassembly | Info/Xrefs");
+        crate::println!("");
+        crate::println!("Quick analysis (terminal only):");
+        crate::println!("  trustview info <file>  — Print binary summary");
+        return;
+    }
+
+    let subcmd = args[0];
+
+    if subcmd == "info" {
+        // Terminal-only quick summary
+        let path = args.get(1).copied().unwrap_or("");
+        if path.is_empty() {
+            crate::println_color!(COLOR_RED, "Usage: trustview info <file>");
+            return;
+        }
+        match crate::binary_analysis::analyze_path(path) {
+            Ok(bf) => {
+                crate::println_color!(COLOR_CYAN, "=== TrustView Analysis: {} ===", path);
+                crate::println!("{}", bf.summary());
+                crate::println!("");
+                // Show detected functions
+                crate::println_color!(COLOR_CYAN, "Detected Functions ({}):", bf.xrefs.functions.len());
+                for func in bf.xrefs.functions.iter().take(20) {
+                    let name = if func.name.is_empty() {
+                        alloc::format!("sub_{:X}", func.entry)
+                    } else {
+                        func.name.clone()
+                    };
+                    crate::println!("  0x{:08X} {} ({} insns, {} blocks)", 
+                        func.entry, name, func.instruction_count, func.basic_blocks);
+                }
+                if bf.xrefs.functions.len() > 20 {
+                    crate::println!("  ... and {} more", bf.xrefs.functions.len() - 20);
+                }
+            },
+            Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+        }
+        return;
+    }
+
+    // Open in desktop viewer
+    let path = subcmd;
+    use crate::desktop::DESKTOP;
+    let mut desktop = DESKTOP.lock();
+    match desktop.open_binary_viewer(path) {
+        Ok(id) => {
+            crate::println_color!(COLOR_GREEN, "TrustView opened: {} (window #{})", path, id);
+        },
+        Err(e) => {
+            crate::println_color!(COLOR_RED, "Failed to open '{}': {}", path, e);
+        }
+    }
 }
 
 /// Transpile command: analyze and convert Linux binaries to Rust
