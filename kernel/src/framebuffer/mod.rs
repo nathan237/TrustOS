@@ -1031,7 +1031,7 @@ impl fmt::Write for Writer {
     }
 }
 
-/// Internal print function
+/// Internal print function (framebuffer + serial)
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
@@ -1039,11 +1039,27 @@ pub fn _print(args: fmt::Arguments) {
     crate::serial::_print(args);
 }
 
+/// Internal print function (framebuffer ONLY, no serial output)
+/// Used for UI elements like autocomplete suggestions that shouldn't pollute serial
+#[doc(hidden)]
+pub fn _print_fb_only(args: fmt::Arguments) {
+    use core::fmt::Write;
+    Writer.write_fmt(args).unwrap();
+}
+
 /// Print to framebuffer console
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => {
         $crate::framebuffer::_print(format_args!($($arg)*))
+    };
+}
+
+/// Print to framebuffer ONLY (no serial)
+#[macro_export]
+macro_rules! print_fb_only {
+    ($($arg:tt)*) => {
+        $crate::framebuffer::_print_fb_only(format_args!($($arg)*))
     };
 }
 

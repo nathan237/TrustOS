@@ -83,6 +83,19 @@ pub extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptSta
     // Record timer event
     crate::trace::record_event(crate::trace::EventType::TimerTick, 0);
     
+    // TrustLab trace: emit timer event at reduced rate
+    {
+        static TIMER_DIVISOR: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+        let count = TIMER_DIVISOR.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        if count % 100 == 0 {
+            crate::lab_mode::trace_bus::emit_static(
+                crate::lab_mode::trace_bus::EventCategory::Interrupt,
+                "timer tick (x100)",
+                count,
+            );
+        }
+    }
+    
     // Notify scheduler
     crate::scheduler::on_timer_tick();
     
@@ -117,6 +130,13 @@ pub extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: Interrupt
     
     // Process scancode through keyboard driver
     crate::keyboard::handle_scancode(scancode);
+    
+    // TrustLab trace: emit keyboard event
+    crate::lab_mode::trace_bus::emit_static(
+        crate::lab_mode::trace_bus::EventCategory::Keyboard,
+        "key press",
+        scancode as u64,
+    );
     
     // Send EOI
     unsafe {

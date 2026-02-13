@@ -337,6 +337,13 @@ pub fn open(path: &str, flags: OpenFlags) -> VfsResult<Fd> {
         flags,
     });
     
+    // TrustLab trace
+    crate::lab_mode::trace_bus::emit(
+        crate::lab_mode::trace_bus::EventCategory::FileSystem,
+        alloc::format!("open(\"{}\")", path),
+        fd as u64,
+    );
+    
     Ok(fd)
 }
 
@@ -400,11 +407,25 @@ pub fn write(fd: Fd, buf: &[u8]) -> VfsResult<usize> {
         file.offset = write_offset + bytes_written as u64;
     }
     
+    // TrustLab trace
+    crate::lab_mode::trace_bus::emit(
+        crate::lab_mode::trace_bus::EventCategory::FileSystem,
+        alloc::format!("write fd={} {} bytes", fd, bytes_written),
+        bytes_written as u64,
+    );
+    
     Ok(bytes_written)
 }
 
 /// Close a file descriptor
 pub fn close(fd: Fd) -> VfsResult<()> {
+    // TrustLab trace
+    crate::lab_mode::trace_bus::emit(
+        crate::lab_mode::trace_bus::EventCategory::FileSystem,
+        alloc::format!("close fd={}", fd),
+        fd as u64,
+    );
+    
     let mut vfs = VFS.write();
     vfs.open_files.remove(&fd).ok_or(VfsError::BadFd)?;
     Ok(())

@@ -143,6 +143,15 @@ pub fn track_alloc(size: usize) {
     
     // Update largest alloc
     let _ = LARGEST_ALLOC.fetch_max(size, Ordering::Relaxed);
+    
+    // TrustLab trace (only large allocations to avoid flood)
+    if size >= 4096 {
+        crate::lab_mode::trace_bus::emit(
+            crate::lab_mode::trace_bus::EventCategory::Memory,
+            alloc::format!("alloc {} bytes", size),
+            size as u64,
+        );
+    }
 }
 
 /// Called when a deallocation happens
@@ -150,6 +159,15 @@ pub fn track_dealloc(size: usize) {
     DEALLOC_COUNT.fetch_add(1, Ordering::Relaxed);
     DEALLOC_BYTES_TOTAL.fetch_add(size as u64, Ordering::Relaxed);
     CURRENT_LIVE_ALLOCS.fetch_sub(1, Ordering::Relaxed);
+    
+    // TrustLab trace (only large deallocations)
+    if size >= 4096 {
+        crate::lab_mode::trace_bus::emit(
+            crate::lab_mode::trace_bus::EventCategory::Memory,
+            alloc::format!("dealloc {} bytes", size),
+            size as u64,
+        );
+    }
 }
 
 /// Memory debug stats

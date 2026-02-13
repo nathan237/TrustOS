@@ -97,6 +97,13 @@ pub fn schedule() {
                 task_id.0
             );
             
+            // TrustLab trace
+            crate::lab_mode::trace_bus::emit(
+                crate::lab_mode::trace_bus::EventCategory::Scheduler,
+                alloc::format!("context switch -> task {}", task_id.0),
+                task_id.0,
+            );
+            
             return;
         }
     }

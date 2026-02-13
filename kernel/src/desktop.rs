@@ -493,6 +493,7 @@ pub enum WindowType {
     Chess,   // Chess game vs AI
     Chess3D, // 3D Matrix-style chess
     BinaryViewer, // TrustView binary analyzer
+    LabMode,      // TrustLab introspection laboratory
 }
 
 /// Window structure
@@ -798,6 +799,8 @@ pub struct Desktop {
     pub chess3d_states: BTreeMap<u32, crate::chess3d::Chess3DState>,
     // Binary viewer states (window_id -> BinaryViewerState)
     pub binary_viewer_states: BTreeMap<u32, crate::apps::binary_viewer::BinaryViewerState>,
+    // Lab mode states (window_id -> LabState)
+    pub lab_states: BTreeMap<u32, crate::lab_mode::LabState>,
     // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
     pub scale_factor: u32,
     // Matrix rain state (depth-parallax advancing effect)
@@ -1110,6 +1113,7 @@ impl Desktop {
             chess_states: BTreeMap::new(),
             chess3d_states: BTreeMap::new(),
             binary_viewer_states: BTreeMap::new(),
+            lab_states: BTreeMap::new(),
             scale_factor: 1,
             matrix_chars: Vec::new(),
             matrix_heads: Vec::new(),
@@ -1136,6 +1140,7 @@ impl Desktop {
         self.game3d_states.clear();
         self.chess3d_states.clear();
         self.binary_viewer_states.clear();
+        self.lab_states.clear();
         // Browser
         self.browser = None;
         self.browser_url_input.clear();
@@ -1565,6 +1570,9 @@ struct AppConfig {
             WindowType::BinaryViewer => {
                 // State is inserted externally via open_binary_viewer()
             },
+            WindowType::LabMode => {
+                self.lab_states.insert(window.id, crate::lab_mode::LabState::new());
+            },
             _ => {}
         }
         
@@ -1595,6 +1603,7 @@ struct AppConfig {
         self.chess_states.remove(&id);
         self.chess3d_states.remove(&id);
         self.binary_viewer_states.remove(&id);
+        self.lab_states.remove(&id);
     }
     
     /// Minimize/restore a window (with animation)
@@ -2330,14 +2339,14 @@ struct AppConfig {
         // 15 list items at menu_y + 30 + (i * 32), each 30px tall
         // Matches draw_start_menu items array:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=TrustDoom3D, 9=Chess, 10=Chess3D, 11=Settings, 12=Exit Desktop, 13=Shutdown, 14=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=TrustLab, 11=Settings, 12=Exit Desktop, 13=Shutdown, 14=Reboot
         let items_start_y = menu_y + 30;
         let item_spacing = 32;
         let item_h = 30;
         
         if y >= items_start_y {
             let idx = ((y - items_start_y) / item_spacing) as u8;
-            if idx < 13 {
+            if idx < 15 {
                 // Verify within item height (not in gap)
                 let item_top = items_start_y + (idx as i32 * item_spacing);
                 if y < item_top + item_h {
@@ -2352,7 +2361,7 @@ struct AppConfig {
     fn handle_menu_action(&mut self, action: u8) {
         // Matches draw_start_menu items array order:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=TrustDoom3D, 9=Settings, 10=Exit Desktop, 11=Shutdown, 12=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=TrustLab, 11=Settings, 12=Exit Desktop, 13=Shutdown, 14=Reboot
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
@@ -2380,13 +2389,10 @@ struct AppConfig {
             7 => { // Snake
                 self.create_window("Snake Game", 250, 120, 340, 360, WindowType::Game);
             },
-            8 => { // TrustDoom 3D
-                self.create_window("TrustDoom 3D", 80, 50, 640, 480, WindowType::Game3D);
-            },
-            9 => { // Chess
+            8 => { // Chess
                 self.create_window("TrustChess", 200, 80, 480, 520, WindowType::Chess);
             },
-            10 => { // Chess 3D — open fullscreen
+            9 => { // Chess 3D — open fullscreen
                 let sw = self.width;
                 let sh = self.height;
                 let id = self.create_window("TrustChess 3D", 0, 0, sw, sh - TASKBAR_HEIGHT, WindowType::Chess3D);
@@ -2394,6 +2400,9 @@ struct AppConfig {
                 if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
                     w.maximized = true;
                 }
+            },
+            10 => { // TrustLab
+                self.open_lab_mode();
             },
             11 => { // Settings
                 self.open_settings_panel();
@@ -2504,6 +2513,16 @@ struct AppConfig {
                             0x09 => viewer.handle_scancode(0x0F), // Tab
                             0x0D | 0x0A => viewer.handle_scancode(0x1C), // Enter
                             _ => viewer.handle_key(key as char),
+                        }
+                    }
+                },
+                WindowType::LabMode => {
+                    if let Some(lab) = self.lab_states.get_mut(&win_id) {
+                        // Printable ASCII → handle_char, control keys → handle_key
+                        if key >= 0x20 && key < 0x7F {
+                            lab.handle_char(key as char);
+                        } else {
+                            lab.handle_key(key);
                         }
                     }
                 },
@@ -3550,6 +3569,17 @@ struct AppConfig {
             }
         }
         
+        // Tick TrustLab states — live data refresh
+        let lab_ids: Vec<u32> = self.lab_states.keys().copied().collect();
+        for id in lab_ids {
+            let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
+            if is_active {
+                if let Some(lab) = self.lab_states.get_mut(&id) {
+                    lab.tick();
+                }
+            }
+        }
+        
         // Toggle cursor blink every ~45 frames (slower for readability)
         if self.frame_count % 45 == 0 {
             self.cursor_blink = !self.cursor_blink;
@@ -4552,9 +4582,9 @@ struct AppConfig {
             ("/\\", "TrustEdit 3D", false),
             ("WW", "Browser", false),
             ("Sk", "Snake", false),
-            ("3D", "TrustDoom 3D", false),
             ("Kk", "Chess", false),
             ("C3", "Chess 3D", false),
+            ("Lb", "TrustLab", false),
             ("@)", "Settings", false),
             ("<-", "Exit Desktop", true),
             ("!!", "Shutdown", true),
@@ -4806,6 +4836,14 @@ struct AppConfig {
         // Binary Viewer handled here
         if window.window_type == WindowType::BinaryViewer {
             self.draw_binary_viewer(window);
+            return;
+        }
+        
+        // TrustLab Mode
+        if window.window_type == WindowType::LabMode {
+            if let Some(state) = self.lab_states.get(&window.id) {
+                crate::lab_mode::draw_lab(state, window.x, window.y, window.width, window.height);
+            }
             return;
         }
         
@@ -5682,6 +5720,13 @@ struct AppConfig {
         let id = self.create_window(&title_str, 50, 50, 1100, 650, WindowType::BinaryViewer);
         self.binary_viewer_states.insert(id, state);
         Ok(id)
+    }
+
+    /// Open TrustLab mode window
+    pub fn open_lab_mode(&mut self) -> u32 {
+        let id = self.create_window("TrustLab \u{2014} OS Introspection", 30, 30, 1200, 700, WindowType::LabMode);
+        self.focus_window(id);
+        id
     }
 
     /// Draw interactive Calculator

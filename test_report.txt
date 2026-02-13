@@ -1,0 +1,228 @@
+﻿==================================================================
+  TrustOS Automated Test Report (QEMU)
+  Generated: 2026-02-13 14:44:00
+  Boot time: 6.3s  |  Test duration: 197.9s
+  QEMU: q35, 256M RAM, 2 CPUs, virtio-net, serial TCP
+==================================================================
+
+SUMMARY
+  Total:   95
+  Passed:  86
+  Failed:  9
+  Rate:    90.5%
+
+==================================================================
+DETAILED RESULTS
+==================================================================
+
+-- SHELL --
+  [OK]   echo simple text
+  [OK]   echo with spaces
+  [OK]   pwd default root
+  [OK]   whoami
+  [OK]   hostname
+  [OK]   version
+  [OK]   uname -a
+  [OK]   clear no crash
+  [OK]   history
+  [OK]   help
+  [OK]   cowsay
+
+-- SYSINFO --
+  [OK]   date
+  [OK]   uptime
+  [OK]   info
+  [OK]   free heap
+  [OK]   df disk usage
+  [OK]   ps processes
+  [OK]   env variables
+  [OK]   lscpu
+  [OK]   lsmem
+  [OK]   lspci
+  [OK]   lsblk
+  [OK]   vmstat
+  [OK]   iostat
+  [OK]   dmesg
+  [OK]   neofetch
+
+-- FS --
+  [OK]   mkdir test_dir
+  [OK]   ls sees new dir
+  [OK]   touch file
+  [OK]   echo to file
+  [OK]   cat file
+  [OK]   ls dir content
+  [OK]   stat file
+  [OK]   wc file
+  [OK]   cp file
+  [OK]   cat copied file
+  [OK]   mv file
+  [OK]   cat renamed file
+  [OK]   grep in file
+  [OK]   find file
+  [OK]   tree
+  [OK]   head file
+  [OK]   tail file
+  [OK]   diff two files
+  [OK]   hexdump file
+  [OK]   rm file
+  [OK]   rm verify gone
+  [OK]   cd directory
+  [OK]   pwd after cd
+  [OK]   cd back to root
+
+-- TEXT --
+  [OK]   seq 5
+  [OK]   seq 3 7
+  [OK]   factor 12
+  [OK]   factor 97 prime
+  [OK]   factor invalid
+  [OK]   expr 2 + 3
+  [OK]   cal
+
+-- SELFTEST --
+  [OK]   builtin self-test
+
+-- TRUSTLANG --
+  [OK]   eval println
+  [OK]   eval 2+3
+  [OK]   eval 6*7
+  [OK]   eval string
+  [OK]   eval 100/4
+  [OK]   eval 17 mod 5
+  [OK]   eval bool
+  [OK]   eval let var
+  [FAIL] eval if-else
+         Cmd:    trustlang eval if 10 > 5 { println("yes"); } else { println("no"); }
+         Output: [31mError:[0m L1:19: expected LBrace, got RBrace
+  [OK]   eval loop
+
+-- USERS --
+  [OK]   id
+  [OK]   users
+
+-- NET --
+  [OK]   ifconfig
+  [OK]   arp
+  [OK]   route
+  [OK]   netstat
+  [OK]   ping gateway
+  [OK]   nslookup
+
+-- SECURITY --
+  [OK]   create sig file
+  [OK]   sig sign
+  [OK]   sig verify
+
+-- STUBS --
+  [FAIL] bc stub
+         Cmd:    bc
+         Output: 
+  [FAIL] base64 stub
+         Cmd:    base64
+         Output: 
+  [FAIL] md5sum stub
+         Cmd:    md5sum
+         Output: 
+  [FAIL] sha256sum stub
+         Cmd:    sha256sum
+         Output: 
+
+-- PROC --
+  [OK]   sleep 0
+  [FAIL] tty
+         Cmd:    tty
+         Output: 
+
+-- DISK --
+  [FAIL] disk info
+         Cmd:    disk
+         Output: 
+  [FAIL] fdisk
+         Cmd:    fdisk
+         Output: 
+  [FAIL] blkid
+         Cmd:    blkid
+         Output: 
+
+-- AUDIO --
+  [OK]   beep
+  [OK]   audio status
+
+-- DEBUG --
+  [OK]   irqstat
+  [OK]   smpstatus
+  [OK]   perf
+  [OK]   memdbg
+  [OK]   regs
+
+==================================================================
+FAILURES REQUIRING ACTION
+==================================================================
+  [TRUSTLANG] eval if-else
+    Command: trustlang eval if 10 > 5 { println("yes"); } else { println("no"); }
+    Output:  [31mError:[0m L1:19: expected LBrace, got RBrace
+
+  [STUBS] bc stub
+    Command: bc
+    Output:  
+
+  [STUBS] base64 stub
+    Command: base64
+    Output:  
+
+  [STUBS] md5sum stub
+    Command: md5sum
+    Output:  
+
+  [STUBS] sha256sum stub
+    Command: sha256sum
+    Output:  
+
+  [PROC] tty
+    Command: tty
+    Output:  
+
+  [DISK] disk info
+    Command: disk
+    Output:  
+
+  [DISK] fdisk
+    Command: fdisk
+    Output:  
+
+  [DISK] blkid
+    Command: blkid
+    Output:  
+
+==================================================================
+KNOWN BUGS (manual observation)
+==================================================================
+  CHESS-3D: White pieces don't move first -- black starts instead
+  CHESS-3D: Pawn promotion is not implemented
+  CHESS-2D: Pawn promotion is not implemented
+
+==================================================================
+STUBS (declared but not yet implemented)
+==================================================================
+  bc        -- calculator stub
+  base64    -- encoding stub
+  md5sum    -- hash stub
+  sha256sum -- hash stub
+
+==================================================================
+CATEGORY BREAKDOWN
+==================================================================
+                86 / 95
+    -> FAIL: eval if-else
+    -> FAIL: bc stub
+    -> FAIL: base64 stub
+    -> FAIL: md5sum stub
+    -> FAIL: sha256sum stub
+    -> FAIL: tty
+    -> FAIL: disk info
+    -> FAIL: fdisk
+    -> FAIL: blkid
+
+==================================================================
+  End of report

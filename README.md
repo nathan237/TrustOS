@@ -530,6 +530,9 @@ kernel/src/
 
 ## 📋 Changelog
 
+### v0.1.7 — February 2026
+- **TrustLab — OS Introspection Laboratory** — Real-time 6-panel educational workspace (`lab` / `trustlab` command, or Start Menu). Panels: Hardware Status (CPU gauge, heap bar, IRQ rate, uptime, alloc stats), Kernel Trace (scrolling event log with category filters, pause toggle), Command Guide (searchable reference of ~55 commands, fuzzy search, category tabs), File Tree (VFS browser with expand/collapse, file sizes, color-coded extensions), TrustLang Editor (syntax-highlighted code editor with F5 execution and output pane), Live Trace (auto-scrolling real-time event feed). Tab/Shift+Tab panel navigation. Zero-cost trace bus (512-slot ring buffer, gated by `LAB_ACTIVE` flag). Kernel hooks in interrupts, VFS, scheduler, and memory allocator emit events in real time.
+
 ### v0.1.6 — February 2026
 - **TrustOS Film** — Built-in animated cinematic explainer (`film` command): 5-act narrative structure (The Question → The Problem → The Solution → The Proof → The Future) with 12 scene-specific animations: floating windows, question marks rain, screen shatter, binary flood, redacted bars, earthquake shake bar chart, light burst, odometer counter (0→120K), glow pulse feature cards, sparkle dissolve, expanding shockwave rings, matrix rain callback. 8 unique animated backgrounds (pulsing nebula, red scanlines, blueprint dot-grid, green sparks, starfield, circuit traces, sunrise gradient, matrix rain). All rendering integer-only (no_std compatible).
 - **Ed25519 Asymmetric Signatures** — Full RFC 8032 implementation: SHA-512, extended twisted Edwards curve (GF(2^255-19) field reuse from TLS), TweetNaCl-style scalar mod l reduction. Replaces forgeable HMAC-only system with proper public-key cryptography. `signature ed25519` shell command for verification.

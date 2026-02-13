@@ -87,6 +87,9 @@ mod transpiler;
 // TrustView — binary analysis engine (ELF parser, disassembler, xrefs)
 mod binary_analysis;
 
+// TrustLab — real-time educational OS introspection laboratory
+mod lab_mode;
+
 // TrustLang — integrated programming language (Rust-like, bytecode VM)
 mod trustlang;
 

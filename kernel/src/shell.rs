@@ -169,6 +169,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "exec", "run",
     // Binary analysis
     "trustview", "tv",
+    // TrustLab
+    "lab", "trustlab",
     // Fun
     "neofetch", "matrix", "cowsay",
     // Showcase
@@ -230,15 +232,15 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
     history_reset();
     
     // Show initial cursor
-    crate::print_color!(COLOR_BRIGHT_GREEN, "█");
-    crate::print!("\x08");
+    crate::print_fb_only!("█");
+    crate::print_fb_only!("\x08");
     
     loop {
         if let Some(c) = read_char() {
             // Hide cursor before processing
             let under_cursor = if cursor < pos { buffer[cursor] as char } else { ' ' };
-            crate::print!("{}", under_cursor);
-            crate::print!("\x08");
+            crate::print_fb_only!("{}", under_cursor);
+            crate::print_fb_only!("\x08");
             cursor_visible = true;
             blink_counter = 0;
             
@@ -319,13 +321,13 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                         }
                         pos = pos.saturating_sub(1);
                         cursor = cursor.saturating_sub(1);
-                        crate::print!("\x08");
+                        crate::print_fb_only!("\x08");
                         for i in cursor..pos {
                             crate::print!("{}", buffer[i] as char);
                         }
-                        crate::print!(" ");
+                        crate::print_fb_only!(" ");
                         for _ in cursor..=pos {
-                            crate::print!("\x08");
+                            crate::print_fb_only!("\x08");
                         }
                         // Update and show suggestions
                         update_suggestions(buffer, pos, &mut suggestions);
@@ -404,7 +406,7 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                 KEY_LEFT => {
                     if cursor > 0 {
                         cursor -= 1;
-                        crate::print!("\x08");
+                        crate::print_fb_only!("\x08");
                     }
                 }
                 KEY_RIGHT => {
@@ -415,7 +417,7 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                 }
                 KEY_HOME => {
                     while cursor > 0 {
-                        crate::print!("\x08");
+                        crate::print_fb_only!("\x08");
                         cursor -= 1;
                     }
                 }
@@ -438,9 +440,9 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                         for i in cursor..pos {
                             crate::print!("{}", buffer[i] as char);
                         }
-                        crate::print!(" ");
+                        crate::print_fb_only!(" ");
                         for _ in cursor..=pos {
-                            crate::print!("\x08");
+                            crate::print_fb_only!("\x08");
                         }
                         update_suggestions(buffer, pos, &mut suggestions);
                         if !suggestions.is_empty() && pos > 0 {
@@ -470,7 +472,7 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                             crate::print!("{}", buffer[i] as char);
                         }
                         for _ in cursor..pos {
-                            crate::print!("\x08");
+                            crate::print_fb_only!("\x08");
                         }
                     }
                 }
@@ -486,7 +488,7 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                         crate::print!("{}", buffer[i] as char);
                     }
                     for _ in cursor..pos {
-                        crate::print!("\x08");
+                        crate::print_fb_only!("\x08");
                     }
                 }
                 c if c >= 0x20 && c < 0x7F && pos < buffer.len() - 1 => {
@@ -509,7 +511,7 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                         crate::print!("{}", buffer[i] as char);
                     }
                     for _ in cursor..pos {
-                        crate::print!("\x08");
+                        crate::print_fb_only!("\x08");
                     }
                     
                     // Update and show suggestions if we have matches
@@ -527,9 +529,9 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                 _ => {}
             }
             
-            // Re-show cursor after key processing
-            crate::print_color!(COLOR_BRIGHT_GREEN, "█");
-            crate::print!("\x08");
+            // Re-show cursor after key processing (fb only, don't pollute serial)
+            crate::print_fb_only!("█");
+            crate::print_fb_only!("\x08");
         } else {
             // No input - handle cursor blinking
             blink_counter += 1;
@@ -538,12 +540,12 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                 cursor_visible = !cursor_visible;
                 
                 if cursor_visible {
-                    crate::print_color!(COLOR_BRIGHT_GREEN, "█");
-                    crate::print!("\x08");
+                    crate::print_fb_only!("█");
+                    crate::print_fb_only!("\x08");
                 } else {
                     let under_cursor = if cursor < pos { buffer[cursor] as char } else { ' ' };
-                    crate::print!("{}", under_cursor);
-                    crate::print!("\x08");
+                    crate::print_fb_only!("{}", under_cursor);
+                    crate::print_fb_only!("\x08");
                 }
             }
             for _ in 0..100 { core::hint::spin_loop(); }
@@ -552,8 +554,8 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
     
     // Hide cursor before returning
     let under_cursor = if cursor < pos { buffer[cursor] as char } else { ' ' };
-    crate::print!("{}", under_cursor);
-    if cursor < pos { crate::print!("\x08"); }
+    crate::print_fb_only!("{}", under_cursor);
+    if cursor < pos { crate::print_fb_only!("\x08"); }
     
     buffer[pos] = 0;
     pos
@@ -592,40 +594,43 @@ fn show_suggestions_at_row(input_row: usize, suggestions: &[&str], selected_idx:
         return;
     }
     
+    // Use direct Writer access to guarantee no serial output
+    use core::fmt::Write;
     for (i, cmd) in suggestions.iter().enumerate() {
         crate::framebuffer::set_cursor(0, input_row + 1 + i);
         if i as i32 == selected_idx {
-            crate::print_color!(COLOR_GREEN, " > ");
-            crate::print_color!(COLOR_BRIGHT_GREEN, "{}", cmd);
+            let _ = write!(crate::framebuffer::Writer, " > {}", cmd);
         } else {
-            crate::print_color!(COLOR_DARK_GREEN, "   {}", cmd);
+            let _ = write!(crate::framebuffer::Writer, "   {}", cmd);
         }
     }
 }
 
 /// Clear the suggestions display at given row
 fn clear_suggestions_at_row(input_row: usize, count: usize) {
+    use core::fmt::Write;
     for i in 0..count {
         crate::framebuffer::set_cursor(0, input_row + 1 + i);
         for _ in 0..40 {
-            crate::print!(" ");
+            let _ = write!(crate::framebuffer::Writer, " ");
         }
     }
 }
 
 /// Clear the current input line display
 fn clear_line_display(cursor: usize, pos: usize) {
+    use core::fmt::Write;
     // Move cursor to start of input
     for _ in 0..cursor {
-        crate::print!("\x08");
+        let _ = write!(crate::framebuffer::Writer, "\x08");
     }
     // Clear all characters
     for _ in 0..pos {
-        crate::print!(" ");
+        let _ = write!(crate::framebuffer::Writer, " ");
     }
     // Move back to start
     for _ in 0..pos {
-        crate::print!("\x08");
+        let _ = write!(crate::framebuffer::Writer, "\x08");
     }
 }
 
@@ -663,17 +668,42 @@ fn execute_command(cmd: &str) {
         return;
     }
     
-    // Handle output redirection
-    let (cmd_part, redirect) = if let Some(pos) = cmd.find('>') {
-        let append = cmd[pos..].starts_with(">>");
-        let file = if append {
-            cmd[pos + 2..].trim()
+    // Handle output redirection (skip > inside parentheses or quotes)
+    let (cmd_part, redirect) = {
+        let mut redir_pos: Option<usize> = None;
+        let mut paren_depth: i32 = 0;
+        let mut in_single_quote = false;
+        let mut in_double_quote = false;
+        let bytes = cmd.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            let ch = bytes[i] as char;
+            match ch {
+                '\'' if !in_double_quote => in_single_quote = !in_single_quote,
+                '"' if !in_single_quote => in_double_quote = !in_double_quote,
+                '(' if !in_single_quote && !in_double_quote => paren_depth += 1,
+                ')' if !in_single_quote && !in_double_quote => {
+                    if paren_depth > 0 { paren_depth -= 1; }
+                }
+                '>' if !in_single_quote && !in_double_quote && paren_depth == 0 => {
+                    redir_pos = Some(i);
+                    break;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        if let Some(pos) = redir_pos {
+            let append = cmd[pos..].starts_with(">>");
+            let file = if append {
+                cmd[pos + 2..].trim()
+            } else {
+                cmd[pos + 1..].trim()
+            };
+            (cmd[..pos].trim(), Some((file, append)))
         } else {
-            cmd[pos + 1..].trim()
-        };
-        (cmd[..pos].trim(), Some((file, append)))
-    } else {
-        (cmd, None)
+            (cmd, None)
+        }
     };
     
     // Split into command and arguments
@@ -826,6 +856,9 @@ fn execute_command(cmd: &str) {
         
         // TrustView — binary analysis viewer
         "trustview" | "tv" => cmd_trustview(args),
+        
+        // TrustLab — OS introspection laboratory
+        "lab" | "trustlab" => cmd_lab(args),
         
         // TrustLang — integrated programming language
         "trustlang" | "tl" => cmd_trustlang(args),
@@ -19377,6 +19410,47 @@ fn cmd_video(args: &[&str]) {
             crate::println!("Controls during playback:");
             crate::println!("  Q / ESC        Stop playback");
             crate::println!("  Space          Pause / Resume");
+        }
+    }
+}
+
+/// TrustLab — OS introspection laboratory
+fn cmd_lab(args: &[&str]) {
+    match args.first().copied().unwrap_or("open") {
+        "open" | "" => {
+            crate::println!("\x01G[TrustLab]\x01W Opening OS Introspection Laboratory...");
+            crate::println!("  6-panel real-time kernel dashboard");
+            crate::println!("  Use Tab to cycle panels, arrow keys to navigate");
+            crate::desktop::DESKTOP.lock().open_lab_mode();
+        }
+        "help" | "--help" | "-h" => {
+            crate::println!("\x01B╔══════════════════════════════════════════╗");
+            crate::println!("\x01B║  \x01WTrustLab — OS Introspection Laboratory\x01B  ║");
+            crate::println!("\x01B╚══════════════════════════════════════════╝");
+            crate::println!("");
+            crate::println!("\x01YUsage:\x01W lab [command]");
+            crate::println!("");
+            crate::println!("\x01YCommands:\x01W");
+            crate::println!("  open     Open the Lab window (default)");
+            crate::println!("  help     Show this help");
+            crate::println!("");
+            crate::println!("\x01YPanels:\x01W");
+            crate::println!("  1. \x01GHardware Status\x01W  — CPU, memory, IRQ stats");
+            crate::println!("  2. \x01YLive Kernel Trace\x01W — Real-time event log");
+            crate::println!("  3. \x01BCommand Guide\x01W    — Searchable command reference");
+            crate::println!("  4. \x01CFile System Tree\x01W — VFS browser");
+            crate::println!("  5. \x01MTrustLang Editor\x01W — Inline code editor");
+            crate::println!("  6. \x01YEvent Stream\x01W     — Filtered event feed");
+            crate::println!("");
+            crate::println!("\x01YControls:\x01W");
+            crate::println!("  Tab        Cycle focused panel");
+            crate::println!("  Arrows     Navigate within panel");
+            crate::println!("  PgUp/Down  Scroll faster");
+            crate::println!("  F5         Run code (in editor panel)");
+        }
+        other => {
+            crate::println!("\x01RUnknown lab command: {}\x01W", other);
+            crate::println!("Type 'lab help' for usage.");
         }
     }
 }

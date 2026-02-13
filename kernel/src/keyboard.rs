@@ -467,7 +467,6 @@ pub fn handle_scancode(scancode: u8) {
 /// Read a character from the keyboard buffer (non-blocking)
 pub fn read_char() -> Option<u8> {
     if let Some(b) = KEYBOARD_BUFFER.lock().pop() {
-        crate::serial_println!("[KB-READ] popped {} (0x{:02X})", b, b);
         return Some(b);
     }
     serial::read_byte()
