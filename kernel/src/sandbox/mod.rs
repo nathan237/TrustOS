@@ -7,6 +7,7 @@ pub mod policy;
 pub mod net_proxy;
 pub mod fs;
 pub mod js_sandbox;
+pub mod container;
 
 extern crate alloc;
 

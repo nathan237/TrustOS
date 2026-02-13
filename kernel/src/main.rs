@@ -780,6 +780,11 @@ pub unsafe extern "C" fn kmain() -> ! {
     sandbox::init();
     framebuffer::print_boot_status("Web Sandbox ready", BootStatus::Ok);
 
+    // Phase 18b: Container Daemon (auto-starts default web container)
+    serial_println!("[PHASE] Container daemon boot");
+    sandbox::container::boot_daemon();
+    framebuffer::print_boot_status("Container daemon ready", BootStatus::Ok);
+
     // Final boot summary
     println!();
     framebuffer::draw_separator(framebuffer::get_cursor().1 as u32 * 16, framebuffer::COLOR_GREEN);

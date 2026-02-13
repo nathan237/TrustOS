@@ -863,6 +863,7 @@ fn execute_command(cmd: &str) {
         "netstat" => cmd_netstat(),
         "browse" | "www" | "web" => cmd_browse(args),
         "sandbox" | "websandbox" => cmd_sandbox(args),
+        "container" | "webcontainer" | "wc" => cmd_container(args),
         
         // Additional Unix commands
         "which" => cmd_which(args),
@@ -1203,6 +1204,7 @@ fn cmd_help(args: &[&str]) {
     crate::println!("    netstat             Show active connections & listeners");
     crate::println!("    browse <url>        Text-mode web browser");
     crate::println!("    sandbox <cmd>       Web sandbox (open/allow/deny/fs/status/list/kill)");
+    crate::println!("    container <cmd>     Web container daemon (status/list/create/go/stop)");
     crate::println!("    tcpsyn <host:port>  Raw TCP SYN connection test");
     crate::println!("    httpget <url>       Raw HTTP GET request");
     crate::println!();
@@ -14713,6 +14715,268 @@ fn cmd_browse(args: &[&str]) {
         }
         Err(e) => {
             crate::println_color!(COLOR_RED, "Failed to load page: {}", e);
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Web Container — persistent isolated web service management
+// ═══════════════════════════════════════════════════════════════════════════
+
+fn cmd_container(args: &[&str]) {
+    let subcmd = args.first().copied().unwrap_or("help");
+    match subcmd {
+        "status" | "info" => {
+            if args.len() >= 2 {
+                // Show specific container
+                let id: u32 = args[1].parse().unwrap_or(0);
+                match crate::sandbox::container::container_status(id) {
+                    Some(s) => crate::println!("{}", s),
+                    None => crate::println_color!(COLOR_RED, "Container #{} not found", id),
+                }
+            } else {
+                // Show daemon status
+                crate::println!("{}", crate::sandbox::container::daemon_status());
+            }
+        }
+
+        "list" | "ls" => {
+            let containers = crate::sandbox::container::list_containers();
+            if containers.is_empty() {
+                crate::println!("No containers.");
+            } else {
+                crate::println_color!(COLOR_CYAN, "Web Containers:");
+                crate::println!("  {:>4}  {:>10}  {:>3}  {}", "ID", "Health", "Def", "Name");
+                crate::println!("  {}", "-".repeat(45));
+                for (id, name, health, is_default) in &containers {
+                    let def = if *is_default { " * " } else { "   " };
+                    crate::println!("  {:>4}  {:>10?}  {}  {}", id, health, def, name);
+                }
+            }
+        }
+
+        "create" => {
+            // container create [name] [secure|default|dev]
+            let preset_str = args.get(1).copied().unwrap_or("default");
+            let config = match preset_str {
+                "secure" => crate::sandbox::container::ContainerConfig::secure(),
+                "dev" => crate::sandbox::container::ContainerConfig::dev(),
+                _ => {
+                    let mut cfg = crate::sandbox::container::ContainerConfig::default();
+                    // If first arg doesn't look like a preset, use it as the name
+                    if preset_str != "default" {
+                        cfg.name = String::from(preset_str);
+                    }
+                    cfg
+                }
+            };
+            let mut daemon = crate::sandbox::container::CONTAINER_DAEMON.lock();
+            let id = daemon.create_container(config);
+            match daemon.start_container(id) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Container #{} created and started", id),
+                Err(e) => crate::println_color!(COLOR_RED, "Created #{} but failed to start: {:?}", id, e),
+            }
+        }
+
+        "go" | "navigate" | "open" => {
+            // container go <url> [container_id]
+            if args.len() < 2 {
+                crate::println!("Usage: container go <url> [container_id]");
+                return;
+            }
+            let url = args[1];
+            let container_id: Option<u32> = args.get(2).and_then(|s| s.parse().ok());
+
+            crate::println_color!(COLOR_CYAN, "[Container] Fetching {}...", url);
+            let mut daemon = crate::sandbox::container::CONTAINER_DAEMON.lock();
+            match daemon.navigate(container_id, url) {
+                Ok(resp) => {
+                    crate::println_color!(COLOR_GREEN, "  Status: {} | {} | {} bytes",
+                        resp.status_code, resp.content_type, resp.body.len());
+
+                    if resp.is_html() {
+                        let html_str = resp.body_string();
+                        let doc = crate::browser::html_parser::parse_html(&html_str);
+                        if !doc.title.is_empty() {
+                            crate::println!("  Title: {}", doc.title);
+                        }
+                        crate::println!();
+                        render_document_text(&doc, 0);
+                    } else {
+                        let text = resp.body_string();
+                        let preview: String = text.chars().take(2000).collect();
+                        crate::println!("{}", preview);
+                        if text.len() > 2000 {
+                            crate::println!("  ... ({} bytes total)", text.len());
+                        }
+                    }
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "  Error: {:?}", e);
+                }
+            }
+        }
+
+        "stop" => {
+            if args.len() < 2 {
+                crate::println!("Usage: container stop <id>");
+                return;
+            }
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let mut daemon = crate::sandbox::container::CONTAINER_DAEMON.lock();
+            match daemon.stop_container(id) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Container #{} stopped", id),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {:?}", e),
+            }
+        }
+
+        "start" => {
+            if args.len() < 2 {
+                crate::println!("Usage: container start <id>");
+                return;
+            }
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let mut daemon = crate::sandbox::container::CONTAINER_DAEMON.lock();
+            match daemon.start_container(id) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Container #{} started", id),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {:?}", e),
+            }
+        }
+
+        "restart" => {
+            if args.len() < 2 {
+                crate::println!("Usage: container restart <id>");
+                return;
+            }
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let mut daemon = crate::sandbox::container::CONTAINER_DAEMON.lock();
+            match daemon.restart_container(id) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Container #{} restarted", id),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {:?}", e),
+            }
+        }
+
+        "destroy" | "rm" => {
+            if args.len() < 2 {
+                crate::println!("Usage: container destroy <id>");
+                return;
+            }
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let mut daemon = crate::sandbox::container::CONTAINER_DAEMON.lock();
+            match daemon.destroy_container(id) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Container #{} destroyed", id),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {:?}", e),
+            }
+        }
+
+        "allow" => {
+            if args.len() < 3 {
+                crate::println!("Usage: container allow <id> <domain>");
+                return;
+            }
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let domain = args[2];
+            // Get sandbox ID then drop daemon lock to avoid deadlock
+            let sandbox_id = {
+                let mut daemon = crate::sandbox::container::CONTAINER_DAEMON.lock();
+                if let Some(container) = daemon.get_mut(id) {
+                    container.config.allowed_domains.push(String::from(domain));
+                    container.sandbox_id
+                } else {
+                    crate::println_color!(COLOR_RED, "Container #{} not found", id);
+                    return;
+                }
+            };
+            // Apply to live sandbox outside daemon lock
+            if let Some(sid) = sandbox_id {
+                let mut mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+                if let Some(sb) = mgr.get_mut(sid) {
+                    sb.policy.allow_domain(domain);
+                }
+            }
+            crate::println_color!(COLOR_GREEN, "Domain '{}' allowed in container #{}", domain, id);
+        }
+
+        "deny" | "block" => {
+            if args.len() < 3 {
+                crate::println!("Usage: container deny <id> <domain>");
+                return;
+            }
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let domain = args[2];
+            let sandbox_id = {
+                let mut daemon = crate::sandbox::container::CONTAINER_DAEMON.lock();
+                if let Some(container) = daemon.get_mut(id) {
+                    container.config.blocked_domains.push(String::from(domain));
+                    container.sandbox_id
+                } else {
+                    crate::println_color!(COLOR_RED, "Container #{} not found", id);
+                    return;
+                }
+            };
+            if let Some(sid) = sandbox_id {
+                let mut mgr = crate::sandbox::SANDBOX_MANAGER.lock();
+                if let Some(sb) = mgr.get_mut(sid) {
+                    sb.policy.deny_domain(domain);
+                }
+            }
+            crate::println_color!(COLOR_GREEN, "Domain '{}' blocked in container #{}", domain, id);
+        }
+
+        "watchdog" => {
+            crate::sandbox::container::watchdog_tick();
+            crate::println_color!(COLOR_GREEN, "Watchdog tick executed.");
+        }
+
+        "history" => {
+            if args.len() < 2 {
+                crate::println!("Usage: container history <id>");
+                return;
+            }
+            let id: u32 = args[1].parse().unwrap_or(0);
+            let daemon = crate::sandbox::container::CONTAINER_DAEMON.lock();
+            if let Some(container) = daemon.get(id) {
+                if container.history.is_empty() {
+                    crate::println!("No navigation history.");
+                } else {
+                    crate::println_color!(COLOR_CYAN, "Navigation history for container #{}:", id);
+                    for (i, url) in container.history.iter().enumerate() {
+                        crate::println!("  {}. {}", i + 1, url);
+                    }
+                }
+            } else {
+                crate::println_color!(COLOR_RED, "Container #{} not found", id);
+            }
+        }
+
+        _ => {
+            crate::println_color!(COLOR_CYAN, "TrustOS Web Container — persistent isolated web service daemon");
+            crate::println!();
+            crate::println!("Usage: container <command> [args...]");
+            crate::println!();
+            crate::println_color!(COLOR_WHITE, "  Daemon:");
+            crate::println!("    status [id]           Show daemon or container status");
+            crate::println!("    list                  List all containers");
+            crate::println!("    watchdog              Run watchdog health check");
+            crate::println!();
+            crate::println_color!(COLOR_WHITE, "  Lifecycle:");
+            crate::println!("    create [secure|dev]   Create a new container");
+            crate::println!("    start <id>            Start a container");
+            crate::println!("    stop <id>             Stop a container");
+            crate::println!("    restart <id>          Restart a container");
+            crate::println!("    destroy <id>          Remove a container");
+            crate::println!();
+            crate::println_color!(COLOR_WHITE, "  Navigation:");
+            crate::println!("    go <url> [id]         Navigate through container");
+            crate::println!("    history <id>          Show navigation history");
+            crate::println!();
+            crate::println_color!(COLOR_WHITE, "  Security:");
+            crate::println!("    allow <id> <domain>   Allow domain access");
+            crate::println!("    deny <id> <domain>    Block domain access");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  The default container is auto-started at boot.");
+            crate::println_color!(COLOR_YELLOW, "  All web traffic is proxied through the kernel.");
+            crate::println_color!(COLOR_YELLOW, "  Isolation: software (capabilities) | hardware (EPT - future)");
         }
     }
 }
