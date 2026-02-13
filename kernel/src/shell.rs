@@ -11417,9 +11417,14 @@ fn cmd_synth(args: &[&str]) {
             }
             crate::println_color!(COLOR_GREEN, "Demo complete!");
         }
+        // ── Pattern Sequencer commands ──
+        Some("pattern") | Some("pat") => {
+            cmd_synth_pattern(&args[1..]);
+        }
         Some(_) | None => {
-            crate::println_color!(COLOR_CYAN, "TrustSynth — Audio Synthesizer");
+            crate::println_color!(COLOR_CYAN, "TrustSynth — Audio Synthesizer & Sequencer");
             crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  Synth:");
             crate::println!("  synth note <note> [ms] [wave]  Play a note (e.g. C4, A#3)");
             crate::println!("  synth freq <hz> [ms]           Play a frequency");
             crate::println!("  synth wave <type>               Set waveform (sine/square/saw/tri/noise)");
@@ -11429,6 +11434,145 @@ fn cmd_synth(args: &[&str]) {
             crate::println!("  synth demo                      Play demo scale");
             crate::println!("  synth status                    Show synth status");
             crate::println!("  synth stop                      Stop playback");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  Pattern Sequencer:");
+            crate::println!("  synth pattern list              List all patterns");
+            crate::println!("  synth pattern show <name>       Display pattern grid");
+            crate::println!("  synth pattern new <name> [N] [bpm]  Create pattern (N steps)");
+            crate::println!("  synth pattern play <name> [loops]   Play pattern (loop)");
+            crate::println!("  synth pattern stop              Stop playback");
+            crate::println!("  synth pattern bpm <name> <bpm>  Set tempo");
+            crate::println!("  synth pattern wave <name> <wf>  Set waveform");
+            crate::println!("  synth pattern set <name> <step> <note>  Set note at step");
+            crate::println!("  synth pattern del <name>        Delete pattern");
+        }
+    }
+}
+
+fn cmd_synth_pattern(args: &[&str]) {
+    match args.first().copied() {
+        Some("list") | Some("ls") | None => {
+            let list = crate::audio::pattern_list();
+            crate::println!("{}", list);
+        }
+        Some("show") | Some("view") => {
+            match args.get(1) {
+                Some(name) => {
+                    match crate::audio::pattern_show(name) {
+                        Ok(s) => crate::println!("{}", s),
+                        Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+                    }
+                }
+                None => crate::println_color!(COLOR_YELLOW, "Usage: synth pattern show <name>"),
+            }
+        }
+        Some("new") | Some("create") => {
+            let name = match args.get(1) {
+                Some(n) => *n,
+                None => {
+                    crate::println_color!(COLOR_YELLOW, "Usage: synth pattern new <name> [steps] [bpm]");
+                    return;
+                }
+            };
+            let steps = args.get(2).and_then(|s| s.parse::<usize>().ok()).unwrap_or(16);
+            let bpm = args.get(3).and_then(|s| s.parse::<u16>().ok()).unwrap_or(120);
+            match crate::audio::pattern_new(name, steps, bpm) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Pattern \"{}\" created ({} steps, {} BPM)", name, steps, bpm),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("play") => {
+            let name = match args.get(1) {
+                Some(n) => *n,
+                None => {
+                    crate::println_color!(COLOR_YELLOW, "Usage: synth pattern play <name> [loops]");
+                    return;
+                }
+            };
+            let loops = args.get(2).and_then(|s| s.parse::<u32>().ok()).unwrap_or(1);
+            match crate::audio::pattern_play(name, loops) {
+                Ok(()) => {}
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("stop") => {
+            match crate::audio::pattern_stop() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Pattern playback stopped"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("bpm") | Some("tempo") => {
+            if args.len() < 3 {
+                crate::println_color!(COLOR_YELLOW, "Usage: synth pattern bpm <name> <60-300>");
+                return;
+            }
+            let name = args[1];
+            let bpm = match args[2].parse::<u16>() {
+                Ok(b) if b >= 30 && b <= 300 => b,
+                _ => {
+                    crate::println_color!(COLOR_RED, "BPM must be 30-300");
+                    return;
+                }
+            };
+            match crate::audio::pattern_set_bpm(name, bpm) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "\"{}\" BPM set to {}", name, bpm),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("wave") | Some("waveform") => {
+            if args.len() < 3 {
+                crate::println_color!(COLOR_YELLOW, "Usage: synth pattern wave <name> <sine|square|saw|tri|noise>");
+                return;
+            }
+            let name = args[1];
+            let wf = match crate::audio::synth::Waveform::from_str(args[2]) {
+                Some(w) => w,
+                None => {
+                    crate::println_color!(COLOR_RED, "Unknown waveform");
+                    return;
+                }
+            };
+            match crate::audio::pattern_set_wave(name, wf) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "\"{}\" waveform set to {}", name, wf.name()),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("set") | Some("note") => {
+            // synth pattern set <name> <step#> <note>
+            if args.len() < 4 {
+                crate::println_color!(COLOR_YELLOW, "Usage: synth pattern set <name> <step#> <note|-->");
+                crate::println!("  Example: synth pattern set mypattern 0 C4");
+                crate::println!("  Example: synth pattern set mypattern 3 --  (rest)");
+                return;
+            }
+            let name = args[1];
+            let step_idx = match args[2].parse::<usize>() {
+                Ok(i) => i,
+                Err(_) => {
+                    crate::println_color!(COLOR_RED, "Step must be a number");
+                    return;
+                }
+            };
+            let note = args[3];
+            match crate::audio::pattern_set_note(name, step_idx, note) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "\"{}\" step {} = {}", name, step_idx, note),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("del") | Some("delete") | Some("rm") => {
+            match args.get(1) {
+                Some(name) => {
+                    match crate::audio::pattern_remove(name) {
+                        Ok(()) => crate::println_color!(COLOR_GREEN, "Pattern \"{}\" deleted", name),
+                        Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+                    }
+                }
+                None => crate::println_color!(COLOR_YELLOW, "Usage: synth pattern del <name>"),
+            }
+        }
+        Some(other) => {
+            crate::println_color!(COLOR_RED, "Unknown pattern command: {}", other);
+            crate::println!("Use: list, show, new, play, stop, bpm, wave, set, del");
         }
     }
 }
