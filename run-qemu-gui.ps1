@@ -36,6 +36,8 @@ $qemuArgs = @(
     "-device", "virtio-gpu-pci,xres=1280,yres=800",
     "-device", "virtio-net-pci,netdev=net0",
     "-netdev", "user,id=net0",
+    "-device", "intel-hda",
+    "-device", "hda-duplex",
     "-drive", "if=pflash,format=raw,file=$PSScriptRoot\OVMF.fd",
     "-rtc", "base=utc,clock=vm",
     "-serial", "file:$serialFile",

@@ -109,6 +109,9 @@ mod model_editor;
 // Developer tools (profiler, dmesg, memdbg, devpanel, peek/poke)
 mod devtools;
 
+// TrustSynth — polyphonic audio synthesizer engine
+mod audio;
+
 // Kernel signature & proof of authorship
 mod signature;
 // Ed25519 digital signatures (asymmetric crypto)

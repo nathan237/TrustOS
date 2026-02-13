@@ -7,9 +7,9 @@ Memory map entries: 34
   0x0000000000 - 0x0000001000 (        4096 bytes) USABLE
   0x0000001000 - 0x0000002000 (        4096 bytes) BOOTLOADER
   0x0000002000 - 0x00000a0000 (      647168 bytes) USABLE
-  0x0000100000 - 0x0038c5a000 (   951427072 bytes) USABLE
-  0x0038c5a000 - 0x0038f70000 (     3235840 bytes) KERNEL
-  0x0038f70000 - 0x00392ec000 (     3653632 bytes) BOOTLOADER
+  0x0000100000 - 0x0038c23000 (   951201792 bytes) USABLE
+  0x0038c23000 - 0x0038f53000 (     3342336 bytes) KERNEL
+  0x0038f53000 - 0x00392ec000 (     3772416 bytes) BOOTLOADER
   0x00392ec000 - 0x003bc10000 (    43139072 bytes) USABLE
   0x003bc10000 - 0x003bc54000 (      278528 bytes) BOOTLOADER
   0x003bc54000 - 0x003d33b000 (    24014848 bytes) USABLE
@@ -45,9 +45,9 @@ Memory map entries: 34
 [HEAP] Initialized: free=265080 KB
 [FB] Initializing scrollback buffer...
 [FB] Scrollback buffer initialized (1000 lines max)
-[INTEGRITY] .text   : 2635029 bytes, SHA-256: a521bbc4353a4058...5e3717da
-[INTEGRITY] .rodata : 338424 bytes, SHA-256: a65d3c9270e64490...875c34d8
-[INTEGRITY] kernel digest: bfdfc5563de71b22...b6142260
+[INTEGRITY] .text   : 2730597 bytes, SHA-256: 5ac4fb8df248704b...73a1d346
+[INTEGRITY] .rodata : 349800 bytes, SHA-256: 79a750ccd8f3eb7e...465c506e
+[INTEGRITY] kernel digest: 7d628d14c9e08c82...864d3e18
 [ED25519] Public key: e6ff743d65a7dbc3...1a5b023cd338a820
 [ED25519] Kernel digest signed
 ╔══════════════════════════════════════════════════════════════╗
@@ -72,7 +72,7 @@ Detecting CPU capabilities...
 [CPU] Security: SMEP=false SMAP=false NX=true
 [CPU] Virt: VMX=false SVM=false
 [SIMD] SSE/SSE2 enabled
-[TSC] Initialized: 32556120 Hz (0 GHz)
+[TSC] Initialized: 32144960 Hz (0 GHz)
 [OK] CPU capabilities detected
 Parsing ACPI tables...
 [DEBUG] RSDP pointer from Limine: 0x3e97e014
@@ -110,7 +110,7 @@ Initializing paging subsystem...
 [OK] Paging initialized (NX enabled)
 [PAT] Skipping Write-Combining on VirtualBox (VMSVGA compat)
 Initializing userland support...
-[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff802fab88
+[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff80316590
 [         0][CPU0][INFO ] [USERLAND] SYSCALL/SYSRET configured (STAR, LSTAR, SFMASK)
 [OK] Userland support ready
 Initializing thread subsystem...
@@ -121,7 +121,7 @@ Initializing security subsystem...
 Keyboard driver ready
 [OK] Keyboard ready
 [RTC] init start
-[RTC] Initialized: 2026-02-12 13:49:32
+[RTC] Initialized: 2026-02-13 01:02:41
 [OK] RTC initialized
 [RTC] init done
 [KB-IRQ] scancode=0x47
@@ -199,8 +199,8 @@ Keyboard driver ready
 [         0][CPU0][DEBUG] [E1000] Initializing RX ring (32 descriptors)
 [         0][CPU0][DEBUG] [E1000] Initializing TX ring (8 descriptors)
 [         0][CPU0][WARN ] [E1000] Link not detected - continuing anyway (VirtualBox NAT mode)
-[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:EC:83:B1
-[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:EC:83:B1
+[         0][CPU0][INFO ] [E1000] MAC: 08:00:27:48:36:D6
+[         0][CPU0][INFO ] [NET] MAC updated: 08:00:27:48:36:D6
 [OK] Network driver: e1000
 [OK] Network ready
 [         0][CPU0][INFO ] [DHCP] Client started
@@ -290,90 +290,5 @@ Starting shell...
 
   T-RustOs v0.1.0 - Type 'help' for commands
 
-[13:49:33] trustos:/$ █ [KB-READ] popped 244 (0xF4)
-  █   █   █   █   █ [KB-IRQ] scancode=0x14
-[KB-BUF] push ascii=116 (0x74) char='t'
-[KB-READ] popped 116 (0x74)
-  t   touch   type   tail   tree   time   test   trustedit   tasks█ [KB-IRQ] scancode=0x13
-[KB-BUF] push ascii=114 (0x72) char='r'
-[KB-READ] popped 114 (0x72)
-                                                                                                                                                                                                                                                                                                                                  r   tree   trustedit█ [KB-IRQ] scancode=0x94
-[KB-IRQ] scancode=0x93
-[KB-IRQ] scancode=0x16
-[KB-BUF] push ascii=117 (0x75) char='u'
-[KB-READ] popped 117 (0x75)
-                                                                                  u   trustedit█ [KB-IRQ] scancode=0x96
-[KB-IRQ] scancode=0x1F
-[KB-BUF] push ascii=115 (0x73) char='s'
-[KB-READ] popped 115 (0x73)
-                                          s   trustedit█ [KB-IRQ] scancode=0x9F
-[KB-IRQ] scancode=0x14
-[KB-BUF] push ascii=116 (0x74) char='t'
-[KB-READ] popped 116 (0x74)
-                                          t   trustedit█ [KB-IRQ] scancode=0x94
-[KB-IRQ] scancode=0x26
-[KB-BUF] push ascii=108 (0x6C) char='l'
-[KB-READ] popped 108 (0x6C)
-                                          l█ [KB-IRQ] scancode=0xA6
-[KB-IRQ] scancode=0x1E
-[KB-BUF] push ascii=97 (0x61) char='a'
-[KB-READ] popped 97 (0x61)
-  a█ [KB-IRQ] scancode=0x9E
-[KB-IRQ] scancode=0x31
-[KB-BUF] push ascii=110 (0x6E) char='n'
-[KB-READ] popped 110 (0x6E)
-  n█ [KB-IRQ] scancode=0x22
-[KB-BUF] push ascii=103 (0x67) char='g'
-[KB-READ] popped 103 (0x67)
-  g█ [KB-IRQ] scancode=0xB1
-[KB-IRQ] scancode=0xA2
-[KB-IRQ] scancode=0x2A
-[KB-IRQ] scancode=0x0C
-[KB-BUF] push ascii=95 (0x5F) char='_'
-[KB-READ] popped 95 (0x5F)
-  _█ [KB-IRQ] scancode=0x8C
-[KB-IRQ] scancode=0xAA
-[KB-IRQ] scancode=0x1F
-[KB-BUF] push ascii=115 (0x73) char='s'
-[KB-READ] popped 115 (0x73)
-  s█ [KB-IRQ] scancode=0x9F
-[KB-IRQ] scancode=0x23
-[KB-BUF] push ascii=104 (0x68) char='h'
-[KB-READ] popped 104 (0x68)
-  h█ [KB-IRQ] scancode=0xA3
-[KB-IRQ] scancode=0x18
-[KB-BUF] push ascii=111 (0x6F) char='o'
-[KB-READ] popped 111 (0x6F)
-  o█ [KB-IRQ] scancode=0x11
-[KB-BUF] push ascii=119 (0x77) char='w'
-[KB-READ] popped 119 (0x77)
-  w█ [KB-IRQ] scancode=0x98
-[KB-IRQ] scancode=0x91
-[KB-IRQ] scancode=0x2E
-[KB-BUF] push ascii=99 (0x63) char='c'
-[KB-READ] popped 99 (0x63)
-  c█ [KB-IRQ] scancode=0xAE
-[KB-IRQ] scancode=0x1E
-[KB-BUF] push ascii=97 (0x61) char='a'
-[KB-READ] popped 97 (0x61)
-  a█ [KB-IRQ] scancode=0x1F
-[KB-BUF] push ascii=115 (0x73) char='s'
-[KB-READ] popped 115 (0x73)
-  s█ [KB-IRQ] scancode=0x9E
-[KB-IRQ] scancode=0x9F
-[KB-IRQ] scancode=0x12
-[KB-BUF] push ascii=101 (0x65) char='e'
-[KB-READ] popped 101 (0x65)
-  e█ [KB-IRQ] scancode=0x1C
-[KB-BUF] push ascii=10 (0x0A) char='
-'
-[KB-READ] popped 10 (0x0A)
-  
- [KB-IRQ] scancode=0x92
-[FB] Double buffer allocated: 1920x1080 (8100 KB)
-[KB-IRQ] scancode=0x9C
-[TL_SHOWCASE] Starting TrustLang showcase — YouTube DVD Screensaver
-[KB-IRQ] scancode=0x01
-[KB-BUF] push ascii=27 (0x1B) char=''
-[KB-READ] popped 27 (0x1B)
-[KB-IRQ] scancode=0x81
+[01:02:43] trustos:/$ █ [KB-READ] popped 244 (0xF4)
+  █   █   █   █ 

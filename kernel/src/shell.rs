@@ -154,6 +154,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "disk", "dd", "ahci", "fdisk", "partitions",
     // Hardware
     "lspci", "lshw", "hwinfo",
+    // Audio
+    "beep", "audio", "synth",
     // Network
     "ifconfig", "ip", "ipconfig", "ping", "curl", "wget", "download",
     "nslookup", "dig", "arp", "route", "netstat",
@@ -841,6 +843,11 @@ fn execute_command(cmd: &str) {
         "lspci" => cmd_lspci(args),
         "lshw" | "hwinfo" => cmd_lshw(),
         
+        // Audio commands
+        "beep" => cmd_beep(args),
+        "audio" => cmd_audio(args),
+        "synth" => cmd_synth(args),
+        
         // Network commands
         "ifconfig" | "ip" => cmd_ifconfig(),
         "ipconfig" => cmd_ipconfig(args),
@@ -1128,6 +1135,10 @@ fn cmd_help(args: &[&str]) {
     crate::println!("    sleep <secs>        Pause execution for N seconds");
     crate::println!("    watch <cmd>         Execute command repeatedly");
     crate::println!("    timeout <s> <cmd>   Run command with time limit");
+    crate::println!("    which <cmd>         Show command location");
+    crate::println!("    whereis <cmd>       Locate command binary and manpage");
+    crate::println!("    script <file>       Record terminal session to file");
+    crate::println!("    timecmd <cmd>       Measure command execution time");
     crate::println!();
     
     // USER MANAGEMENT
@@ -1154,6 +1165,10 @@ fn cmd_help(args: &[&str]) {
     crate::println!("    modprobe <mod>      Load kernel module");
     crate::println!("    lsmod               List loaded kernel modules");
     crate::println!("    insmod / rmmod      Insert or remove module");
+    crate::println!("    beep [freq] [ms]    Play a tone (default 440Hz 500ms)");
+    crate::println!("    audio               Audio driver status / control");
+    crate::println!("    synth <cmd>         TrustSynth polyphonic synthesizer");
+    crate::println!("                         note/freq/wave/adsr/preset/demo/status");
     crate::println!();
     
     // DISK & STORAGE
@@ -1229,6 +1244,7 @@ fn cmd_help(args: &[&str]) {
     crate::println!("    trustlang / tl      TrustLang programming language REPL");
     crate::println!("    transpile <file>    Binary-to-Rust transpiler (ELF analysis)");
     crate::println!("    video / tv          TrustVideo codec player (record/play)");
+    crate::println!("    film                TrustOS Film cinematic demo");
     crate::println!("    bc                  Calculator / math expression evaluator");
     crate::println!("    cal                 Display calendar");
     crate::println!("    factor <n>          Prime factorization of integer");
@@ -1299,9 +1315,10 @@ fn cmd_help(args: &[&str]) {
     crate::println!("    cowsay <text>       ASCII cow says your message");
     crate::println!("    showcase [N]        Automated demo (marketing video)");
     crate::println!("    showcase3d          3D graphics cinematic showcase");
+    crate::println!("    filled3d            3D filled polygon rendering demo");
     crate::println!();
     
-    crate::println_color!(COLOR_BRIGHT_GREEN, "  Total: ~170 commands | Type 'man <cmd>' for detailed usage");
+    crate::println_color!(COLOR_BRIGHT_GREEN, "  Total: ~180 commands | Type 'man <cmd>' for detailed usage");
     crate::println!();
 }
 fn cmd_man(args: &[&str]) {
@@ -11183,6 +11200,238 @@ fn cmd_traceroute(args: &[&str]) {
 }
 
 // ==================== HARDWARE COMMANDS ====================
+
+// ── Audio Commands ──
+
+fn cmd_beep(args: &[&str]) {
+    let freq = args.first()
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(440);
+    let duration = args.get(1)
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(500);
+
+    if freq < 20 || freq > 20000 {
+        crate::println_color!(COLOR_RED, "Frequency must be 20-20000 Hz");
+        return;
+    }
+    if duration > 10000 {
+        crate::println_color!(COLOR_RED, "Duration max 10000 ms");
+        return;
+    }
+
+    // Initialize HDA if needed
+    if !crate::drivers::hda::is_initialized() {
+        crate::print_color!(COLOR_YELLOW, "Initializing audio driver... ");
+        match crate::drivers::hda::init() {
+            Ok(()) => crate::println_color!(COLOR_GREEN, "OK"),
+            Err(e) => {
+                crate::println_color!(COLOR_RED, "FAILED: {}", e);
+                return;
+            }
+        }
+    }
+
+    crate::println!("Playing {}Hz for {}ms...", freq, duration);
+    match crate::drivers::hda::play_tone(freq, duration) {
+        Ok(()) => crate::println_color!(COLOR_GREEN, "Done"),
+        Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+    }
+}
+
+fn cmd_audio(args: &[&str]) {
+    match args.first().copied() {
+        Some("init") => {
+            crate::print_color!(COLOR_YELLOW, "Initializing Intel HDA driver... ");
+            match crate::drivers::hda::init() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "OK"),
+                Err(e) => crate::println_color!(COLOR_RED, "FAILED: {}", e),
+            }
+        }
+        Some("status") | None => {
+            let status = crate::drivers::hda::status();
+            crate::println!("{}", status);
+        }
+        Some("stop") => {
+            match crate::drivers::hda::stop() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Playback stopped"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("test") => {
+            // Play a quick scale: C D E F G A B C
+            if !crate::drivers::hda::is_initialized() {
+                crate::print_color!(COLOR_YELLOW, "Initializing audio driver... ");
+                match crate::drivers::hda::init() {
+                    Ok(()) => crate::println_color!(COLOR_GREEN, "OK"),
+                    Err(e) => {
+                        crate::println_color!(COLOR_RED, "FAILED: {}", e);
+                        return;
+                    }
+                }
+            }
+            crate::println!("Playing test scale...");
+            let notes = [262, 294, 330, 349, 392, 440, 494, 523]; // C4 to C5
+            for &freq in &notes {
+                let _ = crate::drivers::hda::play_tone(freq, 200);
+            }
+            crate::println_color!(COLOR_GREEN, "Done");
+        }
+        Some(other) => {
+            crate::println_color!(COLOR_YELLOW, "Usage: audio [init|status|stop|test]");
+        }
+    }
+}
+
+fn cmd_synth(args: &[&str]) {
+    match args.first().copied() {
+        Some("note") | Some("play") => {
+            // synth note C4 [duration_ms] [waveform]
+            let note_name = match args.get(1) {
+                Some(n) => *n,
+                None => {
+                    crate::println_color!(COLOR_YELLOW, "Usage: synth note <note> [duration_ms] [waveform]");
+                    crate::println!("  Examples: synth note C4");
+                    crate::println!("           synth note A#3 1000 saw");
+                    return;
+                }
+            };
+            let duration = args.get(2)
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(500);
+            // Set waveform if specified
+            if let Some(wf_str) = args.get(3) {
+                if let Some(wf) = crate::audio::synth::Waveform::from_str(wf_str) {
+                    let _ = crate::audio::set_waveform(wf);
+                }
+            }
+            if duration > 10000 {
+                crate::println_color!(COLOR_RED, "Duration max 10000 ms");
+                return;
+            }
+            crate::println!("Synth: {} for {}ms", note_name, duration);
+            match crate::audio::play_note(note_name, duration) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Done"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("freq") => {
+            // synth freq 440 [duration_ms]
+            let freq = match args.get(1).and_then(|s| s.parse::<u32>().ok()) {
+                Some(f) => f,
+                None => {
+                    crate::println_color!(COLOR_YELLOW, "Usage: synth freq <hz> [duration_ms]");
+                    return;
+                }
+            };
+            let duration = args.get(2)
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(500);
+            if freq < 20 || freq > 20000 {
+                crate::println_color!(COLOR_RED, "Frequency must be 20-20000 Hz");
+                return;
+            }
+            crate::println!("Synth: {}Hz for {}ms", freq, duration);
+            match crate::audio::play_freq(freq, duration) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Done"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("wave") | Some("waveform") => {
+            // synth wave sine|square|saw|triangle|noise
+            match args.get(1) {
+                Some(wf_str) => {
+                    match crate::audio::synth::Waveform::from_str(wf_str) {
+                        Some(wf) => {
+                            let _ = crate::audio::set_waveform(wf);
+                            crate::println_color!(COLOR_GREEN, "Waveform set to: {}", wf.name());
+                        }
+                        None => crate::println_color!(COLOR_RED, "Unknown waveform (use: sine, square, saw, triangle, noise)"),
+                    }
+                }
+                None => crate::println_color!(COLOR_YELLOW, "Usage: synth wave <sine|square|saw|triangle|noise>"),
+            }
+        }
+        Some("adsr") => {
+            // synth adsr <attack_ms> <decay_ms> <sustain_%> <release_ms>
+            if args.len() < 5 {
+                crate::println_color!(COLOR_YELLOW, "Usage: synth adsr <attack_ms> <decay_ms> <sustain_%> <release_ms>");
+                crate::println!("  Example: synth adsr 10 50 70 100");
+                return;
+            }
+            let a = args[1].parse::<u32>().unwrap_or(10);
+            let d = args[2].parse::<u32>().unwrap_or(50);
+            let s = args[3].parse::<u32>().unwrap_or(70);
+            let r = args[4].parse::<u32>().unwrap_or(100);
+            let _ = crate::audio::set_adsr(a, d, s, r);
+            crate::println_color!(COLOR_GREEN, "ADSR set: A={}ms D={}ms S={}% R={}ms", a, d, s, r);
+        }
+        Some("preset") => {
+            // synth preset default|organ|pluck|pad
+            match args.get(1).copied() {
+                Some(name) => {
+                    match crate::audio::set_envelope_preset(name) {
+                        Ok(()) => crate::println_color!(COLOR_GREEN, "Envelope preset: {}", name),
+                        Err(e) => crate::println_color!(COLOR_RED, "{}", e),
+                    }
+                }
+                None => crate::println_color!(COLOR_YELLOW, "Usage: synth preset <default|organ|pluck|pad>"),
+            }
+        }
+        Some("volume") | Some("vol") => {
+            match args.get(1).and_then(|s| s.parse::<u8>().ok()) {
+                Some(v) => {
+                    let _ = crate::audio::set_volume(v);
+                    crate::println_color!(COLOR_GREEN, "Master volume: {}/255", v);
+                }
+                None => crate::println_color!(COLOR_YELLOW, "Usage: synth volume <0-255>"),
+            }
+        }
+        Some("status") => {
+            let s = crate::audio::status();
+            crate::println!("{}", s);
+        }
+        Some("stop") => {
+            match crate::audio::stop() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Synth stopped"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("demo") => {
+            crate::println!("TrustSynth Demo — playing scale with different waveforms...");
+            let notes = ["C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5"];
+            let waveforms = [
+                ("Sine",     crate::audio::synth::Waveform::Sine),
+                ("Square",   crate::audio::synth::Waveform::Square),
+                ("Sawtooth", crate::audio::synth::Waveform::Sawtooth),
+                ("Triangle", crate::audio::synth::Waveform::Triangle),
+            ];
+            for (wf_name, wf) in &waveforms {
+                let _ = crate::audio::set_waveform(*wf);
+                crate::println!("  {} waveform:", wf_name);
+                for note in &notes {
+                    crate::print!("    {} ", note);
+                    let _ = crate::audio::play_note(note, 200);
+                }
+                crate::println!();
+            }
+            crate::println_color!(COLOR_GREEN, "Demo complete!");
+        }
+        Some(_) | None => {
+            crate::println_color!(COLOR_CYAN, "TrustSynth — Audio Synthesizer");
+            crate::println!();
+            crate::println!("  synth note <note> [ms] [wave]  Play a note (e.g. C4, A#3)");
+            crate::println!("  synth freq <hz> [ms]           Play a frequency");
+            crate::println!("  synth wave <type>               Set waveform (sine/square/saw/tri/noise)");
+            crate::println!("  synth adsr <A> <D> <S%> <R>    Set envelope (ms, ms, %, ms)");
+            crate::println!("  synth preset <name>             Set preset (default/organ/pluck/pad)");
+            crate::println!("  synth volume <0-255>            Set master volume");
+            crate::println!("  synth demo                      Play demo scale");
+            crate::println!("  synth status                    Show synth status");
+            crate::println!("  synth stop                      Stop playback");
+        }
+    }
+}
 
 fn cmd_lspci(args: &[&str]) {
     let devices = crate::pci::get_devices();
