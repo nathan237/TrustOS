@@ -112,6 +112,9 @@ mod devtools;
 // TrustSynth — polyphonic audio synthesizer engine
 mod audio;
 
+// Web Sandbox — capability-gated isolated web execution environment
+mod sandbox;
+
 // Kernel signature & proof of authorship
 mod signature;
 // Ed25519 digital signatures (asymmetric crypto)
@@ -769,6 +772,13 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[PHASE] Persistence init");
     persistence::init();
     framebuffer::print_boot_status("Persistence system ready", BootStatus::Ok);
+
+    // ========================================================================
+    // Phase 18: Web Sandbox
+    // ========================================================================
+    serial_println!("[PHASE] Web Sandbox init");
+    sandbox::init();
+    framebuffer::print_boot_status("Web Sandbox ready", BootStatus::Ok);
 
     // Final boot summary
     println!();
