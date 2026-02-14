@@ -37,6 +37,8 @@ pub struct KernelTraceState {
     refresh_counter: u64,
     /// Paused
     pub paused: bool,
+    /// Selected event index (for detail view via click)
+    pub selected_event: Option<usize>,
 }
 
 impl KernelTraceState {
@@ -50,6 +52,7 @@ impl KernelTraceState {
             is_live: false,
             refresh_counter: 0,
             paused: false,
+            selected_event: None,
         }
     }
     
@@ -63,6 +66,7 @@ impl KernelTraceState {
             is_live: true,
             refresh_counter: 0,
             paused: false,
+            selected_event: None,
         }
     }
     
@@ -136,6 +140,68 @@ impl KernelTraceState {
             _ => {}
         }
     }
+
+    /// Handle mouse click inside the trace panel content area
+    pub fn handle_click(&mut self, local_x: i32, local_y: i32, w: u32, _h: u32) {
+        let cw = char_w();
+        let lh = char_h() + 1;
+        if lh <= 0 || cw <= 0 { return; }
+
+        let status_h = lh;
+        let filter_y_start = status_h;
+        let log_y_start = filter_y_start + lh + 2;
+
+        // Click on filter bar → toggle category
+        if local_y >= filter_y_start && local_y < filter_y_start + lh {
+            let cats = [
+                EventCategory::Interrupt,
+                EventCategory::Scheduler,
+                EventCategory::Memory,
+                EventCategory::FileSystem,
+                EventCategory::Syscall,
+                EventCategory::Keyboard,
+            ];
+            let mut fx = 0i32;
+            for (i, cat) in cats.iter().enumerate() {
+                let label_len = cat.label().len() as i32 + 1;
+                let label_end = fx + label_len * cw;
+                if local_x >= fx && local_x < label_end {
+                    let idx = *cat as usize;
+                    if idx < self.filters.len() {
+                        self.filters[idx] = !self.filters[idx];
+                    }
+                    return;
+                }
+                fx = label_end;
+                if fx > w as i32 - 20 { break; }
+            }
+            return;
+        }
+
+        // Click on event log area → select event for detail view
+        if local_y >= log_y_start {
+            let row = ((local_y - log_y_start) / lh) as usize;
+            // Map row to filtered event index
+            let filtered: Vec<usize> = self.events.iter().enumerate()
+                .filter(|(_, e)| self.filters[e.category as usize])
+                .map(|(i, _)| i)
+                .collect();
+            let total_filtered = filtered.len();
+            let end = total_filtered.saturating_sub(self.scroll);
+            let visible_lines = 20usize; // approximate
+            let start = end.saturating_sub(visible_lines);
+            let clicked_idx = start + row;
+            if clicked_idx < end {
+                let event_idx = filtered[clicked_idx];
+                self.selected_event = if self.selected_event == Some(event_idx) {
+                    None // deselect on second click
+                } else {
+                    Some(event_idx)
+                };
+            }
+            return;
+        }
+    }
 }
 
 /// Draw the kernel trace panel
@@ -197,11 +263,28 @@ pub fn draw(state: &KernelTraceState, x: i32, y: i32, w: u32, h: u32) {
     // Calculate visible range (scroll from bottom)
     let total_filtered = filtered.len();
     let end = total_filtered.saturating_sub(state.scroll);
-    let start = end.saturating_sub(visible_lines);
+
+    // Reserve space for detail view if an event is selected
+    let detail_lines = if state.selected_event.is_some() { 4 } else { 0 };
+    let main_visible = visible_lines.saturating_sub(detail_lines);
+    let start = end.saturating_sub(main_visible);
+    
+    // Build index mapping for filtered events → original events
+    let filtered_indices: Vec<usize> = state.events.iter().enumerate()
+        .filter(|(_, e)| state.filters[e.category as usize])
+        .map(|(i, _)| i)
+        .collect();
     
     let mut cy = log_y;
     for i in start..end {
         let event = filtered[i];
+        let orig_idx = if i < filtered_indices.len() { filtered_indices[i] } else { i };
+        let is_selected = state.selected_event == Some(orig_idx);
+        
+        // Highlight selected row
+        if is_selected {
+            crate::framebuffer::fill_rect(x as u32, cy as u32, w, lh as u32, 0xFF1F2937);
+        }
         
         // Timestamp [MM:SS.mmm]
         let secs = event.timestamp_ms / 1000;
@@ -214,8 +297,18 @@ pub fn draw(state: &KernelTraceState, x: i32, y: i32, w: u32, h: u32) {
         let cat_label = event.category.label();
         draw_lab_text(cat_x, cy, cat_label, event.category.color());
         
+        // Syscall number badge (if present)
+        let msg_x_base = cat_x + (6 * cw);
+        let msg_x;
+        if let Some(nr) = event.syscall_nr {
+            let nr_label = format!("#{}", nr);
+            draw_lab_text(msg_x_base, cy, &nr_label, super::COL_PURPLE);
+            msg_x = msg_x_base + ((nr_label.len() as i32 + 1) * cw);
+        } else {
+            msg_x = msg_x_base;
+        }
+        
         // Message
-        let msg_x = cat_x + (6 * cw); // Fixed width for alignment
         let max_msg_w = w as i32 - (msg_x - x);
         let max_chars = if cw > 0 { (max_msg_w / cw) as usize } else { 20 };
         let msg = if event.message.len() > max_chars && max_chars > 3 {
@@ -223,10 +316,54 @@ pub fn draw(state: &KernelTraceState, x: i32, y: i32, w: u32, h: u32) {
         } else {
             &event.message
         };
-        draw_lab_text(msg_x, cy, msg, COL_TEXT);
+        draw_lab_text(msg_x, cy, msg, if is_selected { COL_ACCENT } else { COL_TEXT });
         
         cy += lh;
         if cy > y + h as i32 { break; }
+    }
+    
+    // Detail view for selected event (drawn at bottom of panel)
+    if let Some(sel_idx) = state.selected_event {
+        if sel_idx < state.events.len() {
+            let event = &state.events[sel_idx];
+            let detail_y = y + h as i32 - (detail_lines as i32 * lh);
+            // Separator line
+            crate::framebuffer::fill_rect(x as u32, (detail_y - 2) as u32, w, 1, super::COL_ACCENT);
+            
+            let mut dy = detail_y;
+            // Line 1: Category + full message
+            let header = format!("[{}] {}", event.category.label(), event.message);
+            draw_lab_text(x + 2, dy, &header, event.category.color());
+            dy += lh;
+            
+            // Line 2: Syscall details (if available)
+            if let Some(nr) = event.syscall_nr {
+                let name = super::trace_bus::syscall_name(nr);
+                let detail = if let Some(args) = event.syscall_args {
+                    format!("Syscall #{} ({}) args=[{:#x}, {:#x}, {:#x}]",
+                        nr, name, args[0], args[1], args[2])
+                } else {
+                    format!("Syscall #{} ({})", nr, name)
+                };
+                draw_lab_text(x + 2, dy, &detail, super::COL_PURPLE);
+                dy += lh;
+                
+                // Line 3: Return value
+                if let Some(ret) = event.syscall_ret {
+                    let ret_str = if ret < 0 {
+                        format!("Return: {} (error)", ret)
+                    } else {
+                        format!("Return: {} ({:#x})", ret, ret)
+                    };
+                    draw_lab_text(x + 2, dy, &ret_str, if ret < 0 { super::COL_RED } else { super::COL_GREEN });
+                }
+            } else {
+                // Non-syscall: show payload
+                let payload_str = format!("Payload: {} ({:#x}) | Timestamp: {}ms",
+                    event.payload, event.payload, event.timestamp_ms);
+                draw_lab_text(x + 2, dy, &payload_str, COL_DIM);
+            }
+        }
     }
     
     // Scroll indicator on right edge

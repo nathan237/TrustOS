@@ -4,15 +4,15 @@
 
 ### **Trust** the code. **Rust** is the reason.
 
-**A fully auditable, bare-metal operating system — 128,000+ lines of pure Rust. Zero C. Zero secrets.**
+**A fully auditable, bare-metal operating system — 136,000+ lines of pure Rust. Zero C. Zero secrets.**
 
 **🏆 The first bare-metal OS with a built-in real-time kernel introspection laboratory.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-128%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-136%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![ISO](https://img.shields.io/badge/ISO-8.19%20MB-purple?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.1.8-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.1.9-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -30,6 +30,7 @@
 
 | Date | Changes |
 |------|----------|
+| **2026-02-14** | **TrustLab v3 — UX Overhaul** — Full mouse/click support on all 7 panels, structured syscall tracing (50+ syscall names, args, return values in Kernel Trace), event detail panel, in-kernel UX auto-test suite (9 tests via `labtest` command). 136K+ lines. |
 | **2026-02-13** | **TrustLab v2 — Demo Mode** — Cinematic 27-second narrated demo with Matrix-themed Morpheus intro, 23 slides with panel-targeted narration, glitch transitions, red text overlay, progress bar, space-to-skip. PIT-based timing (100Hz). |
 | **2026-02-13** | **TrustLab — 7-Panel Introspection Laboratory** — Added Hex Editor panel (7th panel), execution pipeline visualizer, zero-cost trace bus with 512-slot ring buffer. The **first bare-metal OS with real-time kernel introspection**. |
 | **2026-02-12** | **TrustOS Film** — Built-in cinematic animated explainer with 12 unique scene-specific animations, 8 animated backgrounds. Run `film` in the shell. |
@@ -58,9 +59,9 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 
 | Metric | Value |
 |--------|-------|
-| **Total code** | 128,000+ lines of Rust |
-| **Source files** | 244 `.rs` files |
-| **Kernel modules** | 34 independent modules |
+| **Total code** | 136,000+ lines of Rust |
+| **Source files** | 248 `.rs` files |
+| **Kernel modules** | 35 independent modules |
 | **ISO size** | 8.19 MB |
 | **Boot time** | < 1 second |
 | **Desktop FPS** | 144 FPS (SSE2 SIMD) |
@@ -73,7 +74,7 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 | | Traditional OS | TrustOS |
 |---|:---:|:---:|
 | **Language** | C/C++ with 40 years of memory bugs | 100% Rust — memory safe by design |
-| Codebase | Millions of lines, impossible to audit | 128K lines, one person can read it all |
+| Codebase | Millions of lines, impossible to audit | 136K lines, one person can read it all |
 | **Binary blobs** | Everywhere | None. Zero. |
 | **Telemetry** | Opt-out (maybe) | Doesn't exist — verify it yourself |
 | **Build** | Complex cross-compilation toolchains | `cargo build` — that's it |
@@ -91,14 +92,17 @@ TrustLab is a 7-panel interactive workspace that lets you **watch the OS kernel 
 | Panel | What it shows |
 |-------|---------------|
 | **Hardware Status** | Live CPU gauge, heap usage bar, IRQ rate, uptime, allocation stats — updated every tick |
-| **Kernel Trace** | Scrolling event log of interrupts, syscalls, memory allocations, VFS operations — with category filters and pause toggle |
+| **Kernel Trace** | Scrolling event log with **structured syscall tracing** (50+ syscall names, args, return values), category filters, event detail panel, selected-row inspection |
 | **Command Guide** | Searchable reference of ~55 commands with fuzzy search and category tabs |
 | **File System Tree** | Interactive VFS browser with expand/collapse, file sizes, color-coded extensions (.rs = green, .tl = purple) |
 | **TrustLang Editor** | Syntax-highlighted code editor with F5 execution and output pane |
 | **Execution Pipeline** | Real-time data flow visualization through the kernel |
 | **Hex Editor** | Raw byte inspection with color-coded display |
 
-- **Zero-cost trace bus** — 512-slot ring buffer, gated by `LAB_ACTIVE` flag. The kernel hooks in interrupts, VFS, scheduler, and memory allocator emit events **only when TrustLab is open** — zero overhead otherwise.
+- **Full mouse interaction** — Click on any of the 7 panels to focus, interact with filters, select events, scroll stats, toggle pipeline stages. Every panel responds to clicks.
+- **Structured syscall tracing** — Every syscall emits structured data: syscall number, human-readable name (50+ mapped), arguments, and return value. Click any event in Kernel Trace to inspect details.
+- **Automated UX testing** — Type `labtest` in the TrustLab shell bar to run 9 automated usability tests (tab cycling, click dispatch, shell commands, trace propagation, syscall data, filters, hardware state, pipeline updates, guide search). Results appear in Kernel Trace + serial output.
+- **Zero-cost trace bus** — 512-slot ring buffer, gated by `LAB_ACTIVE` flag. Kernel hooks in interrupts, VFS, scheduler, syscall handler, and memory allocator emit events **only when TrustLab is open** — zero overhead otherwise.
 - **Cinematic demo mode** — Type `demo` inside TrustLab for a 27-second Matrix-themed narrated tour with Morpheus intro, glitch transitions, and panel-targeted narration.
 - **Launch**: `lab` or `trustlab` in shell, or from desktop Start Menu.
 
@@ -540,7 +544,7 @@ kernel/src/
 | Feature | TrustOS | SerenityOS | Redox OS | TempleOS | Linux |
 |---------|---------|------------|----------|----------|-------|
 | Language | **Rust** | C++ | Rust | HolyC | C |
-| Lines of code | **128K** | 800K+ | 200K+ | 100K | Millions |
+| Lines of code | **136K** | 800K+ | 200K+ | 100K | Millions |
 | Contributors | **1** | 1,141 | Community | 1 | Thousands |
 | Development time | **10 days** | 6+ years | 10+ years | ~10 years | 35+ years |
 | GUI Desktop | ✅ (144 FPS) | ✅ | ✅ | ✅ (16 colors) | Via X11/Wayland |
@@ -559,6 +563,13 @@ kernel/src/
 ---
 
 ## 📋 Changelog
+
+### v0.1.9 — February 2026
+- **TrustLab v3 — UX Overhaul** — Full mouse/click interaction on all 7 panels. Previously only 3 panels handled clicks; now Hardware Status (scroll stats), Kernel Trace (filter toggles, event selection), Command Guide (category tabs, row selection), Pipeline (stage flash, flow scroll), File Tree, TrustLang Editor, and Hex Editor all respond to mouse input.
+- **Structured syscall tracing** — New `emit_syscall()` in trace bus with `syscall_nr`, `syscall_args[3]`, `syscall_ret` fields. Human-readable syscall name mapping (50+ Linux x86_64 syscalls + TrustOS-specific 0x1000-0x1003). Every syscall now emits structured trace events. Kernel Trace shows syscall badges, args, and color-coded return values (green=success, red=error).
+- **Event detail panel** — Click any event in Kernel Trace to see full message, syscall name + args + return value in a 4-line detail panel at bottom of trace view.
+- **Automated UX test suite** — New `ux_test.rs` module with 9 tests: tab cycle (6 presses visit all panels), shell commands (7 cmds → correct panels), click focus (all 7 panel centers), trace event propagation, syscall structured data, filter key toggle, hardware live data, pipeline updates, guide search input. Triggered by `labtest` shell command. Results emitted to Kernel Trace + serial output.
+- **Network fixes** — E1000 RX poll loop bounded to prevent serial flood, TCP/IP robustness improvements.
 
 ### v0.1.8 — February 2026
 - **TrustLab Demo Mode** — Cinematic 27-second narrated demo with Matrix-themed Morpheus intro ("Are you ready to see the Matrix, Neo?"), 23 slides with panel-targeted narration, glitch transitions, red text overlay, progress bar with timer, space-to-skip navigation. PIT-based timing (100Hz) for reliable playback.
@@ -639,7 +650,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 - GitHub: [@nathan237](https://github.com/nathan237)
 - Project: [TrustOS](https://github.com/nathan237/TrustOS)
 
-> Every line of TrustOS — 128,000+ lines of Rust — was designed, written, and tested by a single developer in 10 days.
+> Every line of TrustOS — 136,000+ lines of Rust — was designed, written, and tested by a single developer in 11 days.
 
 ---
 
@@ -649,7 +660,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 Created with ❤️ by [Nated0ge](https://github.com/nathan237)
 
-120,000 lines · 8 days · Zero C · Fully auditable
+136,000 lines · 11 days · Zero C · Fully auditable
 
 ⭐ **Star this repo** if you believe in transparent, auditable operating systems.
 

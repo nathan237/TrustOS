@@ -554,16 +554,9 @@ impl NetworkDriver for E1000Driver {
         let desc_idx = self.rx_cur;
         let status = self.rx_descs[desc_idx].status;
         
-        // Debug: log when we check for packets (only occasionally to avoid spam)
-        static RX_CHECK_COUNT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
-        let count = RX_CHECK_COUNT.fetch_add(1, Ordering::Relaxed);
-        if count % 10000 == 0 {
-            crate::serial_println!("[E1000] RX check #{} status=0x{:02x}", count, status);
-        }
-        
         if status & RDESC_STA_DD == 0 { return None; }
         
-        crate::serial_println!("[E1000] RX packet received! len={}", self.rx_descs[desc_idx].length);
+        // Packet received (only log errors, not every packet)
         
         if self.rx_descs[desc_idx].errors != 0 {
             self.rx_errors.fetch_add(1, Ordering::Relaxed);

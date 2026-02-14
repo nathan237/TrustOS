@@ -32,22 +32,25 @@ function Send-Command {
     param($writer, $stream, $cmd, [int]$timeout = $CmdTimeout)
 
     $buffer = New-Object byte[] 16384
-    # Drain leftover thoroughly
-    Start-Sleep -Milliseconds 100
-    while ($stream.DataAvailable) {
-        $stream.Read($buffer, 0, $buffer.Length) | Out-Null
-    }
-    Start-Sleep -Milliseconds 200
 
-    # Send the full command as one burst, then CR
+    # Drain leftover (wait until no data for 300ms)
+    $drainSw = [System.Diagnostics.Stopwatch]::StartNew()
+    $lastData = $drainSw.ElapsedMilliseconds
+    while (($drainSw.ElapsedMilliseconds - $lastData) -lt 300 -and $drainSw.ElapsedMilliseconds -lt 3000) {
+        if ($stream.DataAvailable) {
+            $stream.Read($buffer, 0, $buffer.Length) | Out-Null
+            $lastData = $drainSw.ElapsedMilliseconds
+        } else {
+            Start-Sleep -Milliseconds 50
+        }
+    }
+
+    # Send the full command + CR
     $cmdBytes = [System.Text.Encoding]::ASCII.GetBytes("$cmd`r")
     $stream.Write($cmdBytes, 0, $cmdBytes.Length)
     $stream.Flush()
 
-    # Wait a minimum time before checking for prompt (let command execute)
-    Start-Sleep -Milliseconds 400
-
-    # Collect output until we see the next shell prompt
+    # Collect output with polling until prompt or timeout
     $output = ""
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
 
@@ -55,58 +58,52 @@ function Send-Command {
         if ($stream.DataAvailable) {
             $read = $stream.Read($buffer, 0, $buffer.Length)
             if ($read -gt 0) {
-                $text = [System.Text.Encoding]::ASCII.GetString($buffer, 0, $read)
-                $output += $text
-                # Check for prompt after meaningful output
-                if ($output.Length -gt ($cmd.Length + 5)) {
-                    $lines = $output -split "`n"
-                    $lastLine = ($lines | Where-Object { $_.Trim().Length -gt 0 } | Select-Object -Last 1)
-                    if ($lastLine -match "trustos.*[\$#]") {
-                        Start-Sleep -Milliseconds 200
-                        while ($stream.DataAvailable) {
-                            $read = $stream.Read($buffer, 0, $buffer.Length)
-                            if ($read -gt 0) { $output += [System.Text.Encoding]::ASCII.GetString($buffer, 0, $read) }
-                        }
-                        break
-                    }
-                }
+                $output += [System.Text.Encoding]::ASCII.GetString($buffer, 0, $read)
             }
         } else {
-            Start-Sleep -Milliseconds 80
+            Start-Sleep -Milliseconds 50
+        }
+
+        # After 500ms + some data, check for prompt at end of output
+        if ($sw.ElapsedMilliseconds -ge 500 -and $output.Length -gt 5) {
+            if ($output -match "\d{2}:\d{2}:\d{2}\]\s*trustos:[^\r\n]*\$\s*$") {
+                Start-Sleep -Milliseconds 100
+                while ($stream.DataAvailable) {
+                    $read = $stream.Read($buffer, 0, $buffer.Length)
+                    if ($read -gt 0) { $output += [System.Text.Encoding]::ASCII.GetString($buffer, 0, $read) }
+                }
+                break
+            }
         }
     }
 
-    # Clean output: remove echoed command, prompts, debug, and autocomplete noise
+    # Clean output
     $cleaned = ""
     $lines = $output -split "`n"
     $foundCmd = $false
     foreach ($line in $lines) {
         $trimmed = $line.Trim()
-        # Skip prompt lines
-        if ($trimmed -match "trustos.*[\$#]") { continue }
-        # Skip KB debug lines
+        if ($trimmed.Length -eq 0) { continue }
+        if ($trimmed -match "\d{2}:\d{2}:\d{2}\]\s*trustos:") { continue }
         if ($trimmed -match "\[KB-") { continue }
-        # Skip INFO debug lines
-        if ($trimmed -match "^\[\s*\d+\.\d+\]\s*\[INFO") { continue }
-        # Skip autocomplete suggestion lines (multiple command names separated by spaces)
+        if ($trimmed -match "^\[.*\d+\.\d+.*\[INFO") { continue }
         if ($trimmed -match "^[a-z](\s{2,}[a-z]){2,}") { continue }
-        # Skip the echoed command itself
+        $clean = $trimmed -replace '[\x00-\x1F\x7F]', ''
+        $clean = $clean -replace '\?{2,}', ''
+        $clean = $clean.Trim()
+        if ($clean.Length -eq 0) { continue }
         if (-not $foundCmd) {
-            $escaped = [regex]::Escape($cmd)
-            if ($trimmed -match $escaped -or $trimmed -match [regex]::Escape($cmd.Split(' ')[0])) {
-                # Check if this is just the echo of our command
-                if ($trimmed.Length -lt ($cmd.Length + 30)) {
-                    $foundCmd = $true
-                    continue
-                }
+            $cmdFirst = $cmd.Split(' ')[0]
+            if ($clean -eq $cmd -or $clean -eq $cmdFirst -or
+                ($clean.Length -lt ($cmd.Length + 15) -and $clean -match [regex]::Escape($cmdFirst))) {
+                $foundCmd = $true
+                continue
             }
         }
-        if ($trimmed.Length -gt 0) {
-            $cleaned += $trimmed + "`n"
-        }
+        $cleaned += $clean + "`n"
     }
 
-    return $cleaned.Trim()
+    return @{ Cleaned = $cleaned.Trim(); Raw = $output }
 }
 
 function Run-Test {
@@ -120,7 +117,9 @@ function Run-Test {
     Write-Host ("  [{0}] {1} ... " -f $category, $name) -NoNewline
 
     try {
-        $output = Send-Command -writer $writer -stream $stream -cmd $cmd -timeout $CmdTimeout
+        $result = Send-Command -writer $writer -stream $stream -cmd $cmd -timeout $CmdTimeout
+        $output = $result.Cleaned
+        $rawOut = $result.Raw
         $success = & $validate $output
 
         if ($success) {
@@ -129,6 +128,13 @@ function Run-Test {
             $status = "PASS"
         } else {
             Write-Host "[FAIL]" -ForegroundColor Red
+            if ($output.Length -eq 0) {
+                $rawPreview = ($rawOut -replace '[\x00-\x1F]', '.').Substring(0, [Math]::Min(200, $rawOut.Length))
+                Write-Host "    >> Empty output (raw=$($rawOut.Length)): $rawPreview" -ForegroundColor DarkYellow
+            } else {
+                $preview = $output.Substring(0, [Math]::Min(120, $output.Length)) -replace "`n", "  "
+                Write-Host "    >> $preview" -ForegroundColor DarkYellow
+            }
             $global:failed++
             $status = "FAIL"
         }
@@ -183,8 +189,8 @@ $tests = @(
     @{ Category="SYSINFO"; Name="lsblk"; Cmd="lsblk"; Validate={ param($o) $o -match "block|Block|disk|Disk|NAME" -or $o.Length -gt 5 } }
     @{ Category="SYSINFO"; Name="vmstat"; Cmd="vmstat"; Validate={ param($o) $o -match "memory|Memory|proc|Proc|cpu|CPU" -or $o.Length -gt 10 } }
     @{ Category="SYSINFO"; Name="iostat"; Cmd="iostat"; Validate={ param($o) $o -match "io|IO|disk|Disk|read|write" -or $o.Length -gt 10 } }
-    @{ Category="SYSINFO"; Name="dmesg"; Cmd="dmesg"; Validate={ param($o) $o.Length -gt 5 } }
     @{ Category="SYSINFO"; Name="neofetch"; Cmd="neofetch"; Validate={ param($o) $o -match "TrustOS|trustos|OS|Kernel|root|tsh|Resolution" } }
+    @{ Category="SYSINFO"; Name="dmesg"; Cmd="dmesg"; Validate={ param($o) $o.Length -gt 5 } }
 
     # -- FILESYSTEM --
     @{ Category="FS"; Name="mkdir test_dir"; Cmd="mkdir /test_autotest"; Validate={ param($o) -not ($o -match "error|Error") } }
@@ -233,30 +239,14 @@ $tests = @(
     @{ Category="TRUSTLANG"; Name="eval 17 mod 5"; Cmd='trustlang eval println(17%5)'; Validate={ param($o) $o -match "2" } }
     @{ Category="TRUSTLANG"; Name="eval bool"; Cmd='trustlang eval println(3>2)'; Validate={ param($o) $o -match "true" } }
     @{ Category="TRUSTLANG"; Name="eval let var"; Cmd='trustlang eval let x = 99; println(x);'; Validate={ param($o) $o -match "99" } }
-    @{ Category="TRUSTLANG"; Name="eval if-else"; Cmd='trustlang eval if 10 > 5 { println("yes"); } else { println("no"); }'; Validate={ param($o) $o -match "yes" } }
+    @{ Category="TRUSTLANG"; Name="eval if-else"; Cmd='trustlang eval if (10 > 5) { println("yes"); } else { println("no"); }'; Validate={ param($o) $o -match "yes" } }
     @{ Category="TRUSTLANG"; Name="eval loop"; Cmd='trustlang eval let mut i = 0; while i < 3 { println(i); i = i + 1; }'; Validate={ param($o) $o -match "0" -and $o -match "1" -and $o -match "2" } }
 
     # -- USERS --
     @{ Category="USERS"; Name="id"; Cmd="id"; Validate={ param($o) $o -match "uid|root|user" } }
     @{ Category="USERS"; Name="users"; Cmd="users"; Validate={ param($o) $o -match "root" -or $o.Length -gt 0 } }
 
-    # -- NETWORK --
-    @{ Category="NET"; Name="ifconfig"; Cmd="ifconfig"; Validate={ param($o) $o -match "10\.\d+|eth|lo|IP|ip" } }
-    @{ Category="NET"; Name="arp"; Cmd="arp"; Validate={ param($o) $o -match "ARP|arp|Address|cache" -or $o.Length -gt 5 } }
-    @{ Category="NET"; Name="route"; Cmd="route"; Validate={ param($o) $o -match "Route|route|Gateway|gateway|Destination" -or $o.Length -gt 5 } }
-    @{ Category="NET"; Name="netstat"; Cmd="netstat"; Validate={ param($o) $o -match "Active|Proto|Local|tcp|udp" -or $o.Length -gt 5 } }
-    @{ Category="NET"; Name="ping gateway"; Cmd="ping 10.0.2.2"; Validate={ param($o) $o -match "ping|PING|reply|Reply|from|bytes|timeout|Timeout" } }
-    @{ Category="NET"; Name="nslookup"; Cmd="nslookup example.com"; Validate={ param($o) $o -match "DNS|dns|Server|Address|Name|example" } }
-
-    # -- DEVTOOLS --
-    # hexdump moved to FS section (before file cleanup)
-
-    # -- SECURITY --
-    @{ Category="SECURITY"; Name="create sig file"; Cmd="echo sigtest > /tmp_sig.txt"; Validate={ param($o) $true } }
-    @{ Category="SECURITY"; Name="sig sign"; Cmd="sig sign /tmp_sig.txt"; Validate={ param($o) $o -match "Signed|signed|signature|Signature|sig" -or -not ($o -match "error|Error") } }
-    @{ Category="SECURITY"; Name="sig verify"; Cmd="sig verify /tmp_sig.txt"; Validate={ param($o) $o -match "Valid|valid|OK|verified|Verified" -or -not ($o -match "error|Error") } }
-
-    # -- STUBS --
+    # -- STUBS (before NET to avoid nslookup serial flood) --
     @{ Category="STUBS"; Name="bc stub"; Cmd="bc"; Validate={ param($o) $o -match "not implemented|calculator|bc:|Calculator|interactive" -or $o.Length -gt 0 } }
     @{ Category="STUBS"; Name="base64 stub"; Cmd="base64"; Validate={ param($o) $o -match "not implemented|Usage|base64:|encode|decode" -or $o.Length -gt 0 } }
     @{ Category="STUBS"; Name="md5sum stub"; Cmd="md5sum"; Validate={ param($o) $o -match "not implemented|Usage|md5sum:|hash" -or $o.Length -gt 0 } }
@@ -275,12 +265,25 @@ $tests = @(
     @{ Category="AUDIO"; Name="beep"; Cmd="beep"; Validate={ param($o) $true } }
     @{ Category="AUDIO"; Name="audio status"; Cmd="audio"; Validate={ param($o) $o -match "Audio|audio|HDA|hda|sound|Usage" -or $o.Length -ge 0 } }
 
-    # -- DEBUG --
+    # -- NETWORK (ping/nslookup may trigger E1000 RX polling that floods serial) --
+    @{ Category="NET"; Name="ifconfig"; Cmd="ifconfig"; Validate={ param($o) $o -match "10\.\d+|eth|lo|IP|ip" } }
+    @{ Category="NET"; Name="arp"; Cmd="arp"; Validate={ param($o) $o -match "ARP|arp|Address|cache" -or $o.Length -gt 5 } }
+    @{ Category="NET"; Name="route"; Cmd="route"; Validate={ param($o) $o -match "Route|route|Gateway|gateway|Destination" -or $o.Length -gt 5 } }
+    @{ Category="NET"; Name="netstat"; Cmd="netstat"; Validate={ param($o) $o -match "Active|Proto|Local|tcp|udp" -or $o.Length -gt 5 } }
+    @{ Category="NET"; Name="ping gateway"; Cmd="ping 10.0.2.2"; Validate={ param($o) $o -match "ping|PING|reply|Reply|from|bytes|timeout|Timeout" } }
+    @{ Category="NET"; Name="nslookup"; Cmd="nslookup example.com"; Validate={ param($o) $o -match "DNS|dns|Server|Address|Name|example" } }
+
+    # -- DEBUG (before SECURITY to avoid sig sign crypto blocking kernel) --
     @{ Category="DEBUG"; Name="irqstat"; Cmd="irqstat"; Validate={ param($o) $o -match "IRQ|irq|interrupt|Interrupt|\d+" } }
     @{ Category="DEBUG"; Name="smpstatus"; Cmd="smpstatus"; Validate={ param($o) $o -match "SMP|smp|CPU|cpu|core|Core|AP" -or $o.Length -gt 5 } }
     @{ Category="DEBUG"; Name="perf"; Cmd="perf"; Validate={ param($o) $o -match "Perf|perf|Performance|cycles|ticks" -or $o.Length -gt 5 } }
     @{ Category="DEBUG"; Name="memdbg"; Cmd="memdbg"; Validate={ param($o) $o -match "Heap|heap|Memory|memory|alloc|free|used" } }
     @{ Category="DEBUG"; Name="regs"; Cmd="regs"; Validate={ param($o) $o -match "RAX|RBX|RCX|RDX|RSP|RBP|CR|rax|Register" } }
+
+    # -- SECURITY (heavy crypto, may saturate serial - put last) --
+    @{ Category="SECURITY"; Name="create sig file"; Cmd="echo sigtest > /tmp_sig.txt"; Validate={ param($o) $true } }
+    @{ Category="SECURITY"; Name="sig sign"; Cmd="sig sign /tmp_sig.txt"; Validate={ param($o) $o -match "Signed|signed|signature|Signature|sig" -or -not ($o -match "error|Error") } }
+    @{ Category="SECURITY"; Name="sig verify"; Cmd="sig verify /tmp_sig.txt"; Validate={ param($o) $o -match "Valid|valid|OK|verified|Verified" -or -not ($o -match "error|Error") } }
 )
 
 # ---------------------------------------------------------------

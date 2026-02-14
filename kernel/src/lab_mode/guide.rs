@@ -148,6 +148,45 @@ impl GuideState {
             self.scroll = 0;
         }
     }
+
+    /// Handle mouse click inside the guide panel content area
+    pub fn handle_click(&mut self, local_x: i32, local_y: i32, w: u32, _h: u32) {
+        let cw = char_w();
+        let lh = char_h() + 1;
+        if lh <= 0 || cw <= 0 { return; }
+
+        // Row 0: search bar (click = focus, we already focus panel)
+        // Row 1: category tabs
+        let cat_y = lh;
+        if local_y >= cat_y && local_y < cat_y + lh {
+            let cats: [&str; 8] = ["ALL", "FS", "SYS", "NET", "GUI", "DEV", "HW", "FUN"];
+            let cat_vals: [Option<&str>; 8] = [None, Some("FS"), Some("SYS"), Some("NET"), Some("GUI"), Some("DEV"), Some("HW"), Some("FUN")];
+            let mut tx = 0i32;
+            for (i, cat) in cats.iter().enumerate() {
+                let label_end = tx + (cat.len() as i32 + 1) * cw;
+                if local_x >= tx && local_x < label_end {
+                    self.category_filter = cat_vals[i];
+                    self.selected = 0;
+                    self.scroll = 0;
+                    return;
+                }
+                tx = label_end;
+                if tx > w as i32 - 10 { break; }
+            }
+            return;
+        }
+
+        // Below: command list rows (after search + cats + separator)
+        let list_y = cat_y + lh + 5; // lh + 2px separator + 3px gap
+        if local_y >= list_y {
+            let row = ((local_y - list_y) / lh) as usize;
+            let clicked = self.scroll + row;
+            let filtered = self.filtered_commands();
+            if clicked < filtered.len() {
+                self.selected = clicked;
+            }
+        }
+    }
     
     fn filtered_commands(&self) -> Vec<&CmdEntry> {
         COMMANDS.iter()

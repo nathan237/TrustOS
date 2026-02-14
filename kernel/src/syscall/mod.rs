@@ -71,7 +71,12 @@ pub fn init() {
 /// - rdi = arg1, rsi = arg2, rdx = arg3, r10 = arg4, r8 = arg5, r9 = arg6
 pub fn handle(num: u64, a1: u64, a2: u64, a3: u64) -> u64 {
     // Extended handle with all 6 args
-    handle_full(num, a1, a2, a3, 0, 0, 0) as u64
+    let ret = handle_full(num, a1, a2, a3, 0, 0, 0);
+
+    // Emit structured syscall event to TrustLab trace bus
+    crate::lab_mode::trace_bus::emit_syscall(num, [a1, a2, a3], ret);
+
+    ret as u64
 }
 
 /// Full syscall handler with all 6 arguments

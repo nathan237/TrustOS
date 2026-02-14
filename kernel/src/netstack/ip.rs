@@ -68,18 +68,7 @@ pub fn handle_packet(data: &[u8]) {
     // Use total_length to get actual payload, ignoring Ethernet padding
     let payload = &data[header_len..total_length];
     
-    if protocol != 6 {
-        crate::serial_println!("[IP] {}.{}.{}.{} -> {}.{}.{}.{} proto={} ttl={}", 
-            source[0], source[1], source[2], source[3],
-            dest[0], dest[1], dest[2], dest[3],
-            protocol, ttl);
-    } else {
-        // Log TCP packets too
-        crate::serial_println!("[IP/TCP] {}.{}.{}.{} -> {}.{}.{}.{} len={}", 
-            source[0], source[1], source[2], source[3],
-            dest[0], dest[1], dest[2], dest[3],
-            payload.len());
-    }
+    // (packet logging removed to keep serial clean)
     
     match protocol {
         1 => crate::netstack::icmp::handle_packet(payload, ttl), // ICMP
@@ -139,14 +128,7 @@ pub fn send_packet(dest_ip: [u8; 4], protocol: u8, payload: &[u8]) -> Result<(),
     header[10] = (csum >> 8) as u8;
     header[11] = (csum & 0xFF) as u8;
     
-    // Debug: print IP header for TCP packets
-    if protocol == 6 {
-        crate::serial_println!("[IP] Header: {:02x}{:02x} {:02x}{:02x} {:02x}{:02x} {:02x}{:02x} {:02x}{:02x} {:02x}{:02x} src={}.{}.{}.{} dst={}.{}.{}.{}",
-            header[0], header[1], header[2], header[3], header[4], header[5],
-            header[6], header[7], header[8], header[9], header[10], header[11],
-            source_ip[0], source_ip[1], source_ip[2], source_ip[3],
-            dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3]);
-    }
+    // (TCP header debug logging removed to keep serial clean)
     
     // Combine header + payload
     let mut packet = header;
@@ -183,9 +165,7 @@ pub fn send_packet(dest_ip: [u8; 4], protocol: u8, payload: &[u8]) -> Result<(),
     // Send via Ethernet
     crate::netstack::send_frame(dest_mac, 0x0800, &packet)?;
     
-    crate::serial_println!("[IP] Sent {} bytes to {}.{}.{}.{} proto={} (next hop {}.{}.{}.{})", 
-        packet.len(), dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3], protocol,
-        next_hop_ip[0], next_hop_ip[1], next_hop_ip[2], next_hop_ip[3]);
+    // (send logging removed to keep serial clean)
     
     Ok(())
 }

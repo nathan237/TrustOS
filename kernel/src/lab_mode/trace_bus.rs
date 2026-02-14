@@ -69,6 +69,12 @@ pub struct LabEvent {
     pub message: String,
     /// Optional numeric payload
     pub payload: u64,
+    /// Syscall number (if category == Syscall)
+    pub syscall_nr: Option<u64>,
+    /// Syscall arguments (up to 3) if available
+    pub syscall_args: Option<[u64; 3]>,
+    /// Syscall return value
+    pub syscall_ret: Option<i64>,
 }
 
 /// Global event ring buffer
@@ -111,6 +117,9 @@ pub fn emit(category: EventCategory, message: String, payload: u64) {
         category,
         message,
         payload,
+        syscall_nr: None,
+        syscall_args: None,
+        syscall_ret: None,
     };
     
     let idx = WRITE_IDX.fetch_add(1, Ordering::Relaxed) as usize;
@@ -120,6 +129,101 @@ pub fn emit(category: EventCategory, message: String, payload: u64) {
         ring.buffer[slot] = Some(event);
     }
     TOTAL_EVENTS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Emit a syscall event with structured data (number, args, return value)
+pub fn emit_syscall(nr: u64, args: [u64; 3], ret: i64) {
+    if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    
+    let ts = crate::time::uptime_ms();
+    let name = syscall_name(nr);
+    let message = alloc::format!("{}({:#x}, {:#x}, {:#x}) = {}", name, args[0], args[1], args[2], ret);
+    let event = LabEvent {
+        timestamp_ms: ts,
+        category: EventCategory::Syscall,
+        message,
+        payload: nr,
+        syscall_nr: Some(nr),
+        syscall_args: Some(args),
+        syscall_ret: Some(ret),
+    };
+    
+    let idx = WRITE_IDX.fetch_add(1, Ordering::Relaxed) as usize;
+    let slot = idx % EVENT_RING_SIZE;
+    
+    if let Some(mut ring) = EVENT_RING.try_lock() {
+        ring.buffer[slot] = Some(event);
+    }
+    TOTAL_EVENTS.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Map Linux x86_64 syscall number to human-readable name
+pub fn syscall_name(nr: u64) -> &'static str {
+    match nr {
+        0 => "read",
+        1 => "write",
+        2 => "open",
+        3 => "close",
+        4 => "stat",
+        5 => "fstat",
+        6 => "lstat",
+        7 => "poll",
+        8 => "lseek",
+        9 => "mmap",
+        10 => "mprotect",
+        11 => "munmap",
+        12 => "brk",
+        13 => "rt_sigaction",
+        14 => "rt_sigprocmask",
+        20 => "writev",
+        21 => "access",
+        24 => "sched_yield",
+        35 => "nanosleep",
+        39 => "getpid",
+        41 => "socket",
+        42 => "connect",
+        43 => "accept",
+        44 => "sendto",
+        45 => "recvfrom",
+        48 => "shutdown",
+        49 => "bind",
+        50 => "listen",
+        56 => "clone",
+        57 => "fork",
+        58 => "vfork",
+        59 => "execve",
+        60 => "exit",
+        61 => "wait4",
+        62 => "kill",
+        63 => "uname",
+        72 => "fcntl",
+        79 => "getcwd",
+        80 => "chdir",
+        83 => "mkdir",
+        87 => "unlink",
+        89 => "readlink",
+        96 => "gettid",
+        102 => "getuid",
+        104 => "getgid",
+        107 => "geteuid",
+        108 => "getegid",
+        110 => "getppid",
+        158 => "arch_prctl",
+        218 => "set_tid_address",
+        228 => "clock_gettime",
+        231 => "exit_group",
+        273 => "set_robust_list",
+        274 => "get_robust_list",
+        302 => "prlimit64",
+        318 => "getrandom",
+        0x1000 => "debug_print",
+        0x1001 => "ipc_send",
+        0x1002 => "ipc_recv",
+        0x1003 => "ipc_create",
+        _ => "unknown",
+    }
 }
 
 /// Emit with a static string (avoids allocation in hot paths)

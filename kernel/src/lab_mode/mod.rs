@@ -25,6 +25,7 @@ pub mod kernel_trace;
 pub mod pipeline;
 pub mod hex_editor;
 pub mod demo;
+pub mod ux_test;
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -77,7 +78,7 @@ pub enum PanelId {
 }
 
 impl PanelId {
-    fn from_index(i: usize) -> Self {
+    pub(crate) fn from_index(i: usize) -> Self {
         match i {
             0 => PanelId::HardwareStatus,
             1 => PanelId::KernelTrace,
@@ -239,7 +240,7 @@ impl LabState {
     }
     
     /// Execute a shell bar command
-    fn execute_shell_command(&mut self) {
+    pub(crate) fn execute_shell_command(&mut self) {
         let raw: String = self.shell_input.trim().chars().collect();
         let cmd: String = raw.chars().map(|c| c.to_ascii_lowercase()).collect();
         self.shell_input.clear();
@@ -291,6 +292,9 @@ impl LabState {
                 self.editor_state.run_code();
                 self.focused_panel = PanelId::TrustLangEditor;
             }
+            "test" | "labtest" | "uxtest" => {
+                ux_test::run_ux_tests(self);
+            }
             _ => {
                 // Unknown command — show in trace
                 trace_bus::emit_static(
@@ -330,16 +334,27 @@ impl LabState {
 
                 // Dispatch click to panel
                 match pid {
+                    PanelId::HardwareStatus => {
+                        self.hw_state.handle_click(local_x, local_y, content_w, content_h);
+                    }
+                    PanelId::KernelTrace => {
+                        self.trace_state.handle_click(local_x, local_y, content_w, content_h);
+                    }
+                    PanelId::CommandGuide => {
+                        self.guide_state.handle_click(local_x, local_y, content_w, content_h);
+                    }
                     PanelId::FileTree => {
                         self.tree_state.handle_click(local_x, local_y, content_w, content_h);
                     }
                     PanelId::TrustLangEditor => {
                         self.editor_state.handle_click(local_x, local_y, content_w, content_h);
                     }
+                    PanelId::Pipeline => {
+                        self.pipeline_state.handle_click(local_x, local_y, content_w, content_h);
+                    }
                     PanelId::HexEditor => {
                         self.hex_state.handle_click(local_x, local_y, content_w, content_h);
                     }
-                    _ => {}
                 }
                 return;
             }
@@ -382,14 +397,14 @@ impl Drop for LabState {
 // ── Drawing ────────────────────────────────────────────────────────────────
 
 /// Compute the 6 panel rects given window content area
-struct PanelRect {
-    x: i32,
-    y: i32,
-    w: u32,
-    h: u32,
+pub(crate) struct PanelRect {
+    pub(crate) x: i32,
+    pub(crate) y: i32,
+    pub(crate) w: u32,
+    pub(crate) h: u32,
 }
 
-fn compute_panels(cx: i32, cy: i32, cw: u32, ch: u32) -> [PanelRect; 7] {
+pub(crate) fn compute_panels(cx: i32, cy: i32, cw: u32, ch: u32) -> [PanelRect; 7] {
     let gap = 4u32;
     // Reserve bottom for shell bar
     let content_h = ch.saturating_sub(SHELL_BAR_H + gap);
@@ -529,7 +544,7 @@ fn draw_shell_bar(state: &LabState, x: i32, y: i32, w: u32, h: u32) {
     // Input
     let input_x = x + 8 + (prompt.len() as i32 * char_w());
     if state.shell_input.is_empty() {
-        draw_lab_text(input_x, y + 7, "hw|trace|fs|edit|hex|pipe|help|run", COL_DIM);
+        draw_lab_text(input_x, y + 7, "hw|trace|fs|edit|hex|pipe|help|run|test", COL_DIM);
     } else {
         draw_lab_text(input_x, y + 7, &state.shell_input, COL_TEXT);
     }

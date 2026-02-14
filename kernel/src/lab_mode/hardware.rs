@@ -111,6 +111,18 @@ impl HardwareState {
             _ => {}
         }
     }
+
+    /// Handle mouse click inside the panel content area
+    pub fn handle_click(&mut self, _local_x: i32, local_y: i32, _w: u32, _h: u32) {
+        let lh = char_h() + 2;
+        if lh <= 0 { return; }
+        // Click on a stat row → scroll to make that row visible at top
+        let row = (local_y / lh) as usize;
+        if row > 2 {
+            // Skip CPU + Heap bars (first ~3 visual rows), scroll stats
+            self.scroll = row.saturating_sub(3);
+        }
+    }
 }
 
 /// Draw the hardware status panel

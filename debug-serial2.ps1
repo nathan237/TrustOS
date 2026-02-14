@@ -6,6 +6,7 @@ Get-Process -Name "qemu-system-x86_64" -ErrorAction SilentlyContinue | Stop-Proc
 Start-Sleep -Seconds 1
 
 $q = Start-Process -FilePath $QemuExe -ArgumentList "-cdrom `"$IsoPath`" -m 256M -machine q35 -cpu max -smp 2 -accel tcg,thread=multi -display gtk -vga std -serial tcp:127.0.0.1:${port},server,nowait -no-reboot" -PassThru
+Write-Host "QEMU PID: $($q.Id)"
 Start-Sleep -Seconds 2
 
 $c = New-Object System.Net.Sockets.TcpClient
@@ -15,65 +16,80 @@ for ($i = 0; $i -lt 60; $i++) {
 }
 
 $s = $c.GetStream()
-$s.ReadTimeout = 3000
+$s.ReadTimeout = 5000
 $buf = New-Object byte[] 16384
 
+# Wait for boot - look for prompt
 $bootText = ""
 $sw = [System.Diagnostics.Stopwatch]::StartNew()
-while ($sw.Elapsed.TotalSeconds -lt 25) {
+while ($sw.Elapsed.TotalSeconds -lt 30) {
     if ($s.DataAvailable) {
         $r = $s.Read($buf, 0, $buf.Length)
         if ($r -gt 0) { $bootText += [System.Text.Encoding]::ASCII.GetString($buf, 0, $r) }
-        if ($bootText -match "trustos") { break }
-    } else { Start-Sleep -Milliseconds 150 }
+        if ($bootText -match "trustos:/\$") { break }
+    } else {
+        Start-Sleep -Milliseconds 200
+    }
 }
 Write-Host ("Booted in {0}s" -f [math]::Round($sw.Elapsed.TotalSeconds,1))
-Start-Sleep -Seconds 1
+Start-Sleep -Seconds 2
 
-function Send-Debug {
-    param($stream, $cmd)
-    # Drain
-    while ($stream.DataAvailable) { $stream.Read($buf, 0, $buf.Length) | Out-Null }
+function Send-Debug($cmd) {
+    # Drain anything pending
+    while ($s.DataAvailable) { $s.Read($buf, 0, $buf.Length) | Out-Null }
     Start-Sleep -Milliseconds 200
     
-    Write-Host "`n--- Sending: $cmd ---"
-    $cmdBytes = [System.Text.Encoding]::ASCII.GetBytes("$cmd`r")
-    $stream.Write($cmdBytes, 0, $cmdBytes.Length)
-    $stream.Flush()
-    Start-Sleep -Seconds 2
+    Write-Host ""
+    Write-Host "========================================" 
+    Write-Host "SENDING: $cmd"
+    Write-Host "========================================" 
     
+    $cmdBytes = [System.Text.Encoding]::ASCII.GetBytes("$cmd`r")
+    $s.Write($cmdBytes, 0, $cmdBytes.Length)
+    $s.Flush()
+    
+    # Wait and collect output for 4 seconds
     $output = ""
-    while ($stream.DataAvailable) {
-        $r = $stream.Read($buf, 0, $buf.Length)
-        if ($r -gt 0) { $output += [System.Text.Encoding]::ASCII.GetString($buf, 0, $r) }
-    }
-    Write-Host ("RAW len={0}:" -f $output.Length)
-    $show = $output
-    if ($show.Length -gt 500) { $show = $show.Substring(0, 500) }
-    # Show with control chars visible
-    for ($i = 0; $i -lt $show.Length; $i++) {
-        $ch = $show[$i]
-        $code = [int][char]$ch
-        if ($code -lt 32 -and $code -ne 10 -and $code -ne 13) {
-            Write-Host -NoNewline ("[0x{0}]" -f $code.ToString('X2'))
+    $sw2 = [System.Diagnostics.Stopwatch]::StartNew()
+    while ($sw2.Elapsed.TotalSeconds -lt 4) {
+        if ($s.DataAvailable) {
+            $r = $s.Read($buf, 0, $buf.Length)
+            if ($r -gt 0) { $output += [System.Text.Encoding]::ASCII.GetString($buf, 0, $r) }
         } else {
-            Write-Host -NoNewline $ch
+            Start-Sleep -Milliseconds 100
         }
     }
-    Write-Host ""
+    
+    Write-Host "RAW (len=$($output.Length)):"
+    # Show with hex for control chars
+    $display = ""
+    for ($i = 0; $i -lt [Math]::Min(1200, $output.Length); $i++) {
+        $ch = $output[$i]
+        $code = [int][char]$ch
+        if ($code -lt 32 -and $code -ne 10 -and $code -ne 13) {
+            $display += "[0x$($code.ToString('X2'))]"
+        } else {
+            $display += $ch
+        }
+    }
+    Write-Host $display
+    Write-Host "--- LINES ---"
+    $lines = $output -split "`r?`n"
+    for ($li = 0; $li -lt $lines.Count; $li++) {
+        Write-Host ("  L{0}: [{1}]" -f $li, $lines[$li].TrimEnd())
+    }
+    Write-Host "--- END ---"
 }
 
-# Run a few "warm up" commands first to simulate being mid-test
-Send-Debug $s "echo warmup1"
-Send-Debug $s "echo warmup2"
-Send-Debug $s "echo warmup3"
-
-# Now test the commands that fail
-Send-Debug $s "bc"
-Send-Debug $s "base64"
-Send-Debug $s "tty"
-Send-Debug $s "blkid"
-Send-Debug $s "disk"
+# Test the 8 problematic commands
+Send-Debug "bc 2+3"
+Send-Debug "base64 hello"
+Send-Debug "md5sum hello"
+Send-Debug "sha256sum hello"
+Send-Debug "tty"
+Send-Debug "disk"
+Send-Debug "fdisk"
+Send-Debug "blkid"
 
 # Cleanup
 $c.Close()

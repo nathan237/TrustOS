@@ -222,6 +222,49 @@ impl PipelineState {
             _ => {}
         }
     }
+
+    /// Handle mouse click inside the pipeline panel content area
+    pub fn handle_click(&mut self, local_x: i32, local_y: i32, w: u32, _h: u32) {
+        let cw = char_w();
+        let lh = char_h() + 1;
+        if lh <= 0 || cw <= 0 { return; }
+
+        // Top area: pipeline stage boxes (3 rows × lh each)
+        let diagram_rows = 3;
+        let stage_area_h = lh * diagram_rows + 4;
+        if local_y < stage_area_h {
+            // Click on a stage box → reset its counters
+            let stage_w = (w as i32 / 4).max(12 * cw);
+            let gap = 2i32;
+            // Row 0: stages 0,1,2
+            if local_y < lh + gap {
+                let col = local_x / (stage_w + cw);
+                if col < 3 {
+                    let idx = col as usize;
+                    self.stages[idx].heat = 255; // flash it
+                }
+            }
+            // Row 1: stages 3,4,5
+            else if local_y < 2 * (lh + gap) {
+                let col = local_x / (stage_w + cw);
+                if col < 3 {
+                    let idx = 3 + col as usize;
+                    if idx < 6 { self.stages[idx].heat = 255; }
+                }
+            }
+            return;
+        }
+
+        // Flow log area: clicking scrolls
+        let stats_y = stage_area_h + 3 + lh + 2;
+        if local_y >= stats_y {
+            let row = ((local_y - stats_y) / lh) as usize;
+            // Scroll to bring clicked row closer to view
+            if row > 5 {
+                self.scroll = self.scroll.saturating_sub(row - 5);
+            }
+        }
+    }
 }
 
 /// Draw the pipeline viewer

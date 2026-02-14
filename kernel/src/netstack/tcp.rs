@@ -134,7 +134,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
 
     // Handle RST - immediately close connection
     if (flags & flags::RST) != 0 {
-        crate::serial_println!("[TCP] RST received, closing connection on port {}", dst_port);
+        // (RST log removed to keep serial clean)
         conn.state = TcpState::Closed;
         conn.fin_received = true;
         conn.fin_sent = true;
@@ -151,7 +151,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
         conn.ack = seq.wrapping_add(1);
         conn.pending_acks = 0;
         conn.last_ack_time = crate::logger::get_ticks();
-        crate::serial_println!("[TCP] Connection established");
+        // (connection established log removed)
         drop(conns);
         let _ = send_ack(src_ip, src_port, dst_port);
         return;
@@ -173,7 +173,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
 
         if new_ack > conn.ack {
             if !payload.is_empty() {
-                crate::serial_println!("[TCP] Storing {} bytes payload for port {}", payload.len(), dst_port);
+                // (payload log removed)
                 // Store payload in RX buffer
                 let mut rx = RX_DATA.lock();
                 rx.entry(conn_id).or_insert_with(Vec::new).push(payload.to_vec());
@@ -220,9 +220,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
 /// Send a TCP SYN (start of connection)
 pub fn send_syn(dest_ip: [u8; 4], dest_port: u16) -> Result<u16, &'static str> {
     let src_ip = get_source_ip();
-    crate::serial_println!("[TCP] src_ip={}.{}.{}.{} dest_ip={}.{}.{}.{}",
-        src_ip[0], src_ip[1], src_ip[2], src_ip[3],
-        dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3]);
+    // (SYN IP log removed)
     let src_port = NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed);
     let seq = NEXT_SEQ.fetch_add(1, Ordering::Relaxed);
 
@@ -241,13 +239,7 @@ pub fn send_syn(dest_ip: [u8; 4], dest_port: u16) -> Result<u16, &'static str> {
     segment[16] = (csum >> 8) as u8;
     segment[17] = (csum & 0xFF) as u8;
     
-    // Debug: print the full TCP segment
-    crate::serial_println!("[TCP] SYN segment: {:02x}{:02x} {:02x}{:02x} {:02x}{:02x}{:02x}{:02x} {:02x}{:02x}{:02x}{:02x} {:02x}{:02x} {:02x}{:02x}{:02x}{:02x} {:02x}{:02x} csum=0x{:04x}",
-        segment[0], segment[1], segment[2], segment[3],
-        segment[4], segment[5], segment[6], segment[7],
-        segment[8], segment[9], segment[10], segment[11],
-        segment[12], segment[13], segment[14], segment[15],
-        segment[16], segment[17], segment[18], segment[19], csum);
+    // (SYN segment debug removed)
 
     let conn_id = ConnectionId {
         src_ip: ip_to_u32(src_ip),
@@ -268,10 +260,7 @@ pub fn send_syn(dest_ip: [u8; 4], dest_port: u16) -> Result<u16, &'static str> {
         retransmit_count: 0,
     });
 
-    crate::serial_println!(
-        "[TCP] SYN -> {}.{}.{}.{}:{}",
-        dest_ip[0], dest_ip[1], dest_ip[2], dest_ip[3], dest_port
-    );
+    // (SYN direction log removed)
 
     crate::netstack::ip::send_packet(dest_ip, 6, &segment)?;
     Ok(src_port)
@@ -507,7 +496,7 @@ pub fn wait_for_established(dest_ip: [u8; 4], dest_port: u16, src_port: u16, tim
         if now.saturating_sub(last_syn_time) > RETRANSMIT_TIMEOUT_MS && syn_retries < MAX_RETRANSMITS {
             syn_retries += 1;
             last_syn_time = now;
-            crate::serial_println!("[TCP] SYN retransmit #{} for port {}", syn_retries, dest_port);
+            // (SYN retransmit log removed)
             
             // Rebuild and resend SYN
             let seq = {
