@@ -279,7 +279,24 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
     crate::log!("[EXEC] Ready to execute at {:#x}, stack at {:#x} (argc={}, argv={:#x})", 
         elf.entry_point, sp, args.len(), argv_ptr);
     
+    // ── Process lifecycle: spawn → run → exit → reap ────────────
+    let proc_name = args.first().copied().unwrap_or("user");
+    let pid = crate::process::spawn(proc_name).unwrap_or(0);
+    let prev_pid = crate::process::current_pid();
+    
+    // Update memory layout in the process table
+    crate::process::set_memory(pid, crate::process::MemoryLayout {
+        code_start: elf.min_vaddr,
+        code_end: elf.max_vaddr,
+        heap_start: UserMemoryRegion::HEAP_START,
+        heap_end: UserMemoryRegion::HEAP_START,
+        stack_start: stack_base,
+        stack_end: UserMemoryRegion::STACK_TOP,
+        ..Default::default()
+    });
+    
     // Switch to user address space and jump to Ring 3
+    let exit_code;
     unsafe {
         // Save kernel CR3
         let kernel_cr3: u64;
@@ -290,24 +307,33 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
         CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
         CURRENT_USER_STACK_BOTTOM.store(stack_base, Ordering::SeqCst);
         
+        // Mark as running in the process table
+        crate::process::start_running(pid);
+        
         // Activate user address space
         address_space.activate();
         
-        crate::log!("[EXEC] Entering Ring 3 at {:#x}...", elf.entry_point);
+        crate::log!("[EXEC] PID {} entering Ring 3 at {:#x}...", pid, elf.entry_point);
         
         // Jump to Ring 3 — returns when user process calls exit()
-        let exit_code = crate::userland::exec_ring3_process(elf.entry_point, sp);
+        exit_code = crate::userland::exec_ring3_process(elf.entry_point, sp);
         
         // Clear process context
         CURRENT_USER_SPACE.store(core::ptr::null_mut(), Ordering::Release);
         
         // Restore kernel CR3 (safety — return_from_ring3 already does this)
         core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
-        
-        crate::log!("[EXEC] Process exited with code {}", exit_code);
-        
-        ExecResult::Exited(exit_code)
     }
+    
+    // Record exit in process table and reap
+    crate::process::finish(pid, exit_code);
+    crate::process::reap(pid);
+    
+    // Restore previous PID (shell/kernel)
+    crate::process::set_current(prev_pid);
+    
+    crate::log!("[EXEC] PID {} exited with code {}", pid, exit_code);
+    ExecResult::Exited(exit_code)
 }
 
 /// Execute a Ring 3 hello world test program

@@ -150,27 +150,22 @@ impl Process {
         fd_table.insert(2, FdEntry { vfs_fd: 2, flags: 0 });
         
         // Create address space for userspace processes
-        // TODO: Re-enable AddressSpace once paging is stable
-        // For now, all processes use kernel address space
-        let (address_space, cr3) = (None, crate::memory::paging::kernel_cr3());
-        
-        // DISABLED: AddressSpace creation
-        // let (address_space, cr3) = if flags.0 & ProcessFlags::KERNEL != 0 {
-        //     // Kernel process uses kernel address space
-        //     (None, crate::memory::paging::kernel_cr3())
-        // } else {
-        //     // User process gets its own address space
-        //     match AddressSpace::new_with_kernel() {
-        //         Some(space) => {
-        //             let cr3 = space.cr3();
-        //             (Some(Arc::new(Mutex::new(space))), cr3)
-        //         }
-        //         None => {
-        //             // Fallback to kernel space if allocation fails
-        //             (None, crate::memory::paging::kernel_cr3())
-        //         }
-        //     }
-        // };
+        let (address_space, cr3) = if flags.0 & ProcessFlags::KERNEL != 0 {
+            // Kernel process uses kernel address space
+            (None, crate::memory::paging::kernel_cr3())
+        } else {
+            // User process gets its own address space
+            match AddressSpace::new_with_kernel() {
+                Some(space) => {
+                    let cr3 = space.cr3();
+                    (Some(Arc::new(Mutex::new(space))), cr3)
+                }
+                None => {
+                    // Fallback to kernel space if allocation fails
+                    (None, crate::memory::paging::kernel_cr3())
+                }
+            }
+        };
         
         Self {
             pid,
@@ -403,161 +398,56 @@ pub fn kill(pid: Pid) -> Result<(), &'static str> {
     }
 }
 
-/// Execute a program (load and run ELF)
-/// This function does not return on success (jumps to Ring 3)
-pub fn exec(path: &str, args: &[&str]) -> Result<(), &'static str> {
-    use crate::elf::{load_from_path, PF_W, PF_X};
-    use crate::memory::paging::{PageFlags, AddressSpace, UserMemoryRegion};
-    use crate::userland::{USER_STACK_TOP, USER_STACK_SIZE, jump_to_ring3_with_args};
+/// Spawn a new user process, register it in the process table, and return
+/// the assigned PID. The process starts in `Ready` state — the caller is
+/// responsible for actually running it (see `exec.rs`).
+pub fn spawn(name: &str) -> Result<Pid, &'static str> {
+    let ppid = current_pid();
+    let pid = create(name, ppid)?;
     
-    let current = current_pid();
-    crate::log!("[PROC] exec: {} for PID {}", path, current);
-    
-    // Load ELF from VFS
-    let elf = load_from_path(path).map_err(|e| {
-        crate::log_error!("[PROC] Failed to load ELF: {:?}", e);
-        "Failed to load ELF"
-    })?;
-    
-    crate::log!("[PROC] ELF loaded: entry={:#x}, {} segments", elf.entry_point, elf.segments.len());
-    
-    // Create user address space
-    let mut user_space = AddressSpace::new_with_kernel()
-        .ok_or("Failed to create address space")?;
-    
-    let hhdm = crate::memory::hhdm_offset();
-    
-    // Map ELF segments
-    for segment in &elf.segments {
-        let flags = if (segment.flags & PF_W) != 0 {
-            PageFlags::USER_DATA
-        } else if (segment.flags & PF_X) != 0 {
-            PageFlags::USER_CODE
-        } else {
-            PageFlags::USER_RODATA
-        };
-        
-        // Calculate pages needed
-        let start_page = segment.vaddr & !0xFFF;
-        let end_page = (segment.vaddr + segment.size + 0xFFF) & !0xFFF;
-        let page_count = ((end_page - start_page) / 4096) as usize;
-        
-        crate::log_debug!("[PROC] Mapping segment: {:#x}-{:#x} ({} pages), flags={:?}", 
-            start_page, end_page, page_count, flags);
-        
-        for i in 0..page_count {
-            let virt_page = start_page + (i as u64) * 4096;
-            
-            // Allocate physical page
-            let phys_page = alloc_physical_page()?;
-            
-            // Copy segment data to physical page
-            let page_virt = phys_page + hhdm;
-            unsafe {
-                // Zero the page first
-                core::ptr::write_bytes(page_virt as *mut u8, 0, 4096);
-                
-                // Calculate offset into segment data
-                let seg_offset = if virt_page < segment.vaddr {
-                    0
-                } else {
-                    (virt_page - segment.vaddr) as usize
-                };
-                
-                let page_start_in_seg = if segment.vaddr > virt_page {
-                    (segment.vaddr - virt_page) as usize
-                } else {
-                    0
-                };
-                
-                // How much to copy
-                let copy_end = core::cmp::min(
-                    seg_offset + 4096 - page_start_in_seg,
-                    segment.data.len()
-                );
-                
-                if seg_offset < segment.data.len() {
-                    let copy_len = copy_end - seg_offset;
-                    let dest = (page_virt + page_start_in_seg as u64) as *mut u8;
-                    let src = segment.data[seg_offset..].as_ptr();
-                    core::ptr::copy_nonoverlapping(src, dest, copy_len);
-                }
-            }
-            
-            // Map the page
-            user_space.map_page(virt_page, phys_page, flags);
-        }
-    }
-    
-    // Allocate user stack (8 pages = 32KB)
-    let stack_pages = 8;
-    let stack_base = USER_STACK_TOP - (stack_pages * 4096) as u64;
-    
-    for i in 0..stack_pages {
-        let virt_page = stack_base + (i as u64) * 4096;
-        let phys_page = alloc_physical_page()?;
-        
-        // Zero the stack
-        unsafe {
-            core::ptr::write_bytes((phys_page + hhdm) as *mut u8, 0, 4096);
-        }
-        
-        user_space.map_page(virt_page, phys_page, PageFlags::USER_DATA);
-    }
-    
-    let user_stack = USER_STACK_TOP - 8; // Align to 8 bytes
-    
-    crate::log!("[PROC] User stack at {:#x}", user_stack);
-    crate::log!("[PROC] Jumping to Ring 3: entry={:#x}", elf.entry_point);
-    
-    // Update process info
-    {
-        let mut table = PROCESS_TABLE.write();
-        if let Some(proc) = table.processes.get_mut(&current) {
-            proc.memory = MemoryLayout {
-                code_start: elf.min_vaddr,
-                code_end: elf.max_vaddr,
-                stack_start: stack_base,
-                stack_end: USER_STACK_TOP,
-                ..Default::default()
-            };
-            proc.cr3 = user_space.cr3();
-            proc.state = ProcessState::Running;
-        }
-    }
-    
-    // Activate user address space and jump to Ring 3
-    unsafe {
-        user_space.activate();
-        
-        // argc = number of args, argv = 0 (we'd need to set up argv properly)
-        jump_to_ring3_with_args(elf.entry_point, user_stack, args.len() as u64, 0);
-    }
-    
-    // Never reached - jump_to_ring3_with_args does not return
-    #[allow(unreachable_code)]
-    Ok(())
+    crate::log!("[PROC] Spawned process {} ({}) under parent {}", pid, name, ppid);
+    Ok(pid)
 }
 
-/// Allocate a physical page for userspace
-fn alloc_physical_page() -> Result<u64, &'static str> {
-    use alloc::vec::Vec;
-    
-    // Allocate aligned page from heap
-    let page: Vec<u8> = alloc::vec![0u8; 4096];
-    let virt = page.as_ptr() as u64;
-    
-    // Convert to physical (subtract HHDM)
-    let hhdm = crate::memory::hhdm_offset();
-    if virt < hhdm {
-        return Err("Invalid virtual address for physical conversion");
+/// Mark a process as Running and set it as the current PID.
+pub fn start_running(pid: Pid) {
+    set_state(pid, ProcessState::Running);
+    set_current(pid);
+}
+
+/// Record that a process has exited.  Marks it Zombie in the table.
+pub fn finish(pid: Pid, exit_code: i32) {
+    let mut table = PROCESS_TABLE.write();
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        proc.state = ProcessState::Zombie;
+        proc.exit_code = exit_code;
+        crate::log_debug!("[PROC] Process {} exited with code {}", pid, exit_code);
     }
-    let phys = virt - hhdm;
+}
+
+/// Reap a zombie process — remove it from the table entirely.
+pub fn reap(pid: Pid) {
+    let mut table = PROCESS_TABLE.write();
     
-    // Leak so it persists
-    core::mem::forget(page);
+    // Reparent children to kernel (PID 0)
+    if let Some(proc) = table.processes.get(&pid) {
+        let children: Vec<Pid> = proc.children.clone();
+        for child_pid in children {
+            if let Some(child) = table.processes.get_mut(&child_pid) {
+                child.ppid = PID_KERNEL;
+            }
+        }
+    }
     
-    Ok(phys)
+    table.processes.remove(&pid);
+    crate::log_debug!("[PROC] Reaped process {}", pid);
+}
+
+/// Update a process's memory layout in the table.
+pub fn set_memory(pid: Pid, memory: MemoryLayout) {
+    if let Some(proc) = PROCESS_TABLE.write().processes.get_mut(&pid) {
+        proc.memory = memory;
+    }
 }
 
 /// Print process tree
