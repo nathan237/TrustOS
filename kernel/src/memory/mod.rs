@@ -4,6 +4,7 @@
 //! Includes paging support for process isolation.
 
 pub mod heap;
+pub mod frame;
 pub mod paging;
 
 use core::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
@@ -89,11 +90,12 @@ pub fn init() {
 
 /// Get memory statistics
 pub fn stats() -> MemoryStats {
+    let (frames_total, frames_used) = frame::stats();
     MemoryStats {
         heap_used: heap::used(),
         heap_free: heap::free(),
-        frames_used: 0,
-        frames_free: 0,
+        frames_used: frames_used as usize,
+        frames_free: (frames_total - frames_used) as usize,
     }
 }
 

@@ -354,8 +354,54 @@ pub unsafe extern "C" fn kmain() -> ! {
             memory::init_with_hhdm_dynamic(hhdm_offset, heap_phys, dynamic_heap_size);
             heap_initialized = true;
             serial_println!("[HEAP] Initialized: free={} KB", memory::heap::free() / 1024);
+            
+            // Initialize frame allocator now that the heap is ready
+            // Collect USABLE regions from the memory map
+            let usable_regions: alloc::vec::Vec<memory::frame::PhysRegion> = mmap_response.entries()
+                .iter()
+                .filter(|e| e.entry_type == limine::memory_map::EntryType::USABLE)
+                .map(|e| memory::frame::PhysRegion { base: e.base, length: e.length })
+                .collect();
+            memory::frame::init(&usable_regions, heap_phys, dynamic_heap_size as u64);
         } else {
-            serial_println!("[HEAP] ERROR: No usable region found for {} MB heap!", dynamic_heap_size / 1024 / 1024);
+            // No region large enough for the computed heap size.
+            // Try again with the largest usable region we can find.
+            let mut best_base: u64 = 0;
+            let mut best_len: u64 = 0;
+            for entry in mmap_response.entries() {
+                if entry.entry_type != limine::memory_map::EntryType::USABLE && entry.length > best_len {
+                    // skip non-usable
+                }
+                if entry.entry_type == limine::memory_map::EntryType::USABLE && entry.length > best_len {
+                    best_len = entry.length;
+                    best_base = entry.base;
+                }
+            }
+            
+            if best_len >= memory::HEAP_SIZE_MIN as u64 {
+                let heap_start2 = align_up(core::cmp::max(best_base, 0x100000), 0x1000);
+                let usable_end = best_base.saturating_add(best_len);
+                let heap_size2 = core::cmp::min(
+                    (usable_end - heap_start2) as usize,
+                    dynamic_heap_size,
+                );
+                let heap_size2 = (heap_size2 / 4096) * 4096; // page-align down
+                
+                serial_println!("[HEAP] Fallback: using {:#x} size {} MB", heap_start2, heap_size2 / 1024 / 1024);
+                memory::init_with_hhdm_dynamic(hhdm_offset, heap_start2, heap_size2);
+                heap_initialized = true;
+                serial_println!("[HEAP] Initialized: free={} KB", memory::heap::free() / 1024);
+                
+                // Initialize frame allocator
+                let usable_regions: alloc::vec::Vec<memory::frame::PhysRegion> = mmap_response.entries()
+                    .iter()
+                    .filter(|e| e.entry_type == limine::memory_map::EntryType::USABLE)
+                    .map(|e| memory::frame::PhysRegion { base: e.base, length: e.length })
+                    .collect();
+                memory::frame::init(&usable_regions, heap_start2, heap_size2 as u64);
+            } else {
+                serial_println!("[HEAP] ERROR: No usable region found for heap!");
+            }
         }
     }
     

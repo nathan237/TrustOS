@@ -5,12 +5,58 @@
 
 use alloc::vec::Vec;
 use alloc::string::String;
+use core::sync::atomic::{AtomicU64, AtomicPtr, Ordering};
 use crate::elf::{LoadedElf, ElfError, ElfResult};
 use crate::memory::paging::{AddressSpace, PageFlags, UserMemoryRegion};
 use crate::memory::hhdm_offset;
 
 /// Stack size for user processes (1 MB)
 const USER_STACK_SIZE: usize = 1024 * 1024;
+
+// ── Current process context (for syscall / page-fault access) ──
+
+/// Raw pointer to the currently-executing user AddressSpace.
+/// Set before entering Ring 3, cleared on return.
+static CURRENT_USER_SPACE: AtomicPtr<AddressSpace> = AtomicPtr::new(core::ptr::null_mut());
+
+/// Current user program break (heap top virtual address)
+static CURRENT_USER_BRK: AtomicU64 = AtomicU64::new(0);
+
+/// Current user stack bottom (lowest mapped stack page)
+static CURRENT_USER_STACK_BOTTOM: AtomicU64 = AtomicU64::new(0);
+
+/// Access the current user AddressSpace from within a syscall or page fault handler.
+/// Returns `None` if no user process is running.
+///
+/// # Safety
+/// The caller must not hold this reference across an address-space switch.
+pub fn with_current_address_space<F, R>(f: F) -> Option<R>
+where
+    F: FnOnce(&mut AddressSpace) -> R,
+{
+    let ptr = CURRENT_USER_SPACE.load(Ordering::Acquire);
+    if ptr.is_null() {
+        return None;
+    }
+    // Safety: pointer is valid while a user process is executing, and we are in a
+    // syscall / exception handler on the same (only) CPU.
+    Some(f(unsafe { &mut *ptr }))
+}
+
+/// Get current user program break
+pub fn current_brk() -> u64 {
+    CURRENT_USER_BRK.load(Ordering::Relaxed)
+}
+
+/// Set current user program break
+pub fn set_current_brk(brk: u64) {
+    CURRENT_USER_BRK.store(brk, Ordering::SeqCst);
+}
+
+/// Get current user stack bottom (lowest valid stack address)
+pub fn current_stack_bottom() -> u64 {
+    CURRENT_USER_STACK_BOTTOM.load(Ordering::Relaxed)
+}
 
 /// Result of program execution
 #[derive(Debug)]
@@ -239,6 +285,11 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
         let kernel_cr3: u64;
         core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         
+        // Publish process context for syscall / page-fault handlers
+        CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
+        CURRENT_USER_STACK_BOTTOM.store(stack_base, Ordering::SeqCst);
+        
         // Activate user address space
         address_space.activate();
         
@@ -246,6 +297,9 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
         
         // Jump to Ring 3 — returns when user process calls exit()
         let exit_code = crate::userland::exec_ring3_process(elf.entry_point, sp);
+        
+        // Clear process context
+        CURRENT_USER_SPACE.store(core::ptr::null_mut(), Ordering::Release);
         
         // Restore kernel CR3 (safety — return_from_ring3 already does this)
         core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
@@ -368,9 +422,18 @@ pub fn exec_test_program() -> ExecResult {
         let kernel_cr3: u64;
         core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         
+        // Publish process context
+        CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
+        let test_stack_bottom = stack_top - (stack_pages as u64 * 4096);
+        CURRENT_USER_STACK_BOTTOM.store(test_stack_bottom, Ordering::SeqCst);
+        
         address_space.activate();
         
         let exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
+        
+        // Clear process context
+        CURRENT_USER_SPACE.store(core::ptr::null_mut(), Ordering::Release);
         
         // Restore kernel CR3
         core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
@@ -491,25 +554,7 @@ pub fn exec_hello_elf() -> ExecResult {
 
 /// Allocate a physical page (returns page-aligned physical address)
 fn alloc_physical_page() -> Option<u64> {
-    // Allocate 2 pages worth of memory, then align manually.
-    // This wastes up to 4095 bytes but guarantees page alignment.
-    let buf: Vec<u8> = alloc::vec![0u8; 4096 + 4096];
-    let virt = buf.as_ptr() as u64;
-    let aligned_virt = (virt + 4095) & !4095; // round up to 4096 boundary
-    let hhdm = hhdm_offset();
-    
-    // Zero the aligned page
-    unsafe {
-        core::ptr::write_bytes(aligned_virt as *mut u8, 0, 4096);
-    }
-    
-    // Convert to physical (subtract HHDM)
-    let phys = aligned_virt.checked_sub(hhdm)?;
-    
-    // Leak so it persists
-    core::mem::forget(buf);
-    
-    Some(phys)
+    crate::memory::frame::alloc_frame_zeroed()
 }
 
 /// Check if a file is an executable ELF

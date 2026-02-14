@@ -341,74 +341,89 @@ pub mod prot_flags {
 use spin::Mutex;
 use core::sync::atomic::{AtomicU64, Ordering};
 
-/// Current program break (heap end)
+/// Current program break (heap end) — legacy, kept for fallback only
 static PROGRAM_BREAK: AtomicU64 = AtomicU64::new(0);
 
-/// Next available mmap address
-static NEXT_MMAP_ADDR: AtomicU64 = AtomicU64::new(0x7000_0000_0000);
+/// Next available mmap address (user region)
+static NEXT_MMAP_ADDR: AtomicU64 = AtomicU64::new(0x4000_0000); // 1 GB, well inside user space
 
 /// sys_mmap - Map memory
 /// 
-/// Arguments:
-/// - addr: Suggested address (or 0 for kernel to choose)
-/// - length: Size of mapping
-/// - prot: Protection flags (PROT_READ, PROT_WRITE, PROT_EXEC)
-/// - flags: Mapping flags (MAP_PRIVATE, MAP_ANONYMOUS, etc.)
-/// - fd: File descriptor (or -1 for anonymous)
-/// - offset: Offset into file
-pub fn sys_mmap(addr: u64, length: u64, prot: u64, flags: u64, fd: i64, offset: u64) -> i64 {
+/// Allocates physical frames via the frame allocator and maps them
+/// into the current user address space at proper user-space addresses.
+pub fn sys_mmap(addr: u64, length: u64, prot: u64, flags: u64, fd: i64, _offset: u64) -> i64 {
     use mmap_flags::*;
     use prot_flags::*;
+    use crate::memory::paging::PageFlags;
     
     if length == 0 {
         return errno::EINVAL;
     }
     
-    // Page-align the length
     let page_size = 4096u64;
     let aligned_length = (length + page_size - 1) & !(page_size - 1);
+    let num_pages = (aligned_length / page_size) as usize;
     
-    // Determine the address
+    // Determine the mapping address
     let map_addr = if addr != 0 && (flags & MAP_FIXED) != 0 {
-        // Use exact address
-        addr
-    } else if addr != 0 {
-        // Try suggested address, fall back to kernel choice
-        addr
+        addr & !(page_size - 1) // page-align
     } else {
         // Kernel chooses address
         NEXT_MMAP_ADDR.fetch_add(aligned_length, Ordering::SeqCst)
     };
     
-    // Check if it's an anonymous mapping
+    // Only anonymous mappings for now
     let is_anonymous = (flags & MAP_ANONYMOUS) != 0 || fd < 0;
-    
-    if is_anonymous {
-        // Anonymous mapping - just allocate zeroed memory
-        // In a real implementation, we'd update page tables
-        // For now, we'll use the heap allocator
-        
-        let layout = core::alloc::Layout::from_size_align(aligned_length as usize, page_size as usize)
-            .unwrap_or(core::alloc::Layout::new::<u8>());
-        
-        let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) };
-        if ptr.is_null() {
-            return errno::ENOMEM;
-        }
-        
-        // In a real OS, we'd map this into the process address space
-        // For now, return the actual pointer
-        crate::log_debug!("[MMAP] Anonymous mapping at {:#x}, size {:#x}", ptr as u64, aligned_length);
-        ptr as i64
-    } else {
-        // File-backed mapping
-        // TODO: Implement file-backed mmap
+    if !is_anonymous {
         crate::log_debug!("[MMAP] File-backed mmap not yet implemented");
-        errno::ENOSYS
+        return errno::ENOSYS;
+    }
+    
+    // Determine page flags from protection bits
+    let page_flags = {
+        let mut f = PageFlags::USER_DATA; // default: present + user + writable + NX
+        if (prot & PROT_EXEC) != 0 {
+            f = PageFlags::USER_CODE; // present + user (no NX)
+        }
+        f
+    };
+    
+    // Allocate frames and map them
+    let mapped = crate::exec::with_current_address_space(|space| {
+        for i in 0..num_pages {
+            let virt = map_addr + (i as u64 * page_size);
+            let phys = match crate::memory::frame::alloc_frame_zeroed() {
+                Some(p) => p,
+                None => return false,
+            };
+            if space.map_page(virt, phys, page_flags).is_none() {
+                return false;
+            }
+        }
+        true
+    });
+    
+    match mapped {
+        Some(true) => {
+            crate::log_debug!("[MMAP] Mapped {} pages at {:#x}", num_pages, map_addr);
+            map_addr as i64
+        }
+        _ => {
+            // Fallback for calls without an active user address space
+            // (e.g. kernel-internal mmap during init — return heap allocation)
+            let layout = core::alloc::Layout::from_size_align(aligned_length as usize, page_size as usize)
+                .unwrap_or(core::alloc::Layout::new::<u8>());
+            let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) };
+            if ptr.is_null() {
+                return errno::ENOMEM;
+            }
+            crate::log_debug!("[MMAP] Fallback heap alloc at {:#x}", ptr as u64);
+            ptr as i64
+        }
     }
 }
 
-/// sys_munmap - Unmap memory
+/// sys_munmap - Unmap memory and free frames
 pub fn sys_munmap(addr: u64, length: u64) -> i64 {
     if addr == 0 || length == 0 {
         return errno::EINVAL;
@@ -416,10 +431,21 @@ pub fn sys_munmap(addr: u64, length: u64) -> i64 {
     
     let page_size = 4096u64;
     let aligned_length = (length + page_size - 1) & !(page_size - 1);
+    let num_pages = (aligned_length / page_size) as usize;
     
-    // In a real implementation, we'd update page tables and free memory
-    // For now, we just pretend it worked
-    crate::log_debug!("[MUNMAP] Unmap at {:#x}, size {:#x}", addr, aligned_length);
+    crate::exec::with_current_address_space(|space| {
+        for i in 0..num_pages {
+            let virt = (addr & !(page_size - 1)) + (i as u64 * page_size);
+            // Translate to get physical address before unmapping
+            if let Some(phys) = space.translate(virt) {
+                let phys_page = phys & !0xFFF;
+                space.unmap_page(virt);
+                crate::memory::frame::free_frame(phys_page);
+            }
+        }
+    });
+    
+    crate::log_debug!("[MUNMAP] Unmapped {} pages at {:#x}", num_pages, addr);
     0
 }
 
@@ -429,33 +455,67 @@ pub fn sys_mprotect(addr: u64, length: u64, prot: u64) -> i64 {
         return errno::EINVAL;
     }
     
-    // In a real implementation, we'd update page table permissions
+    // TODO: walk pages and update flags
     crate::log_debug!("[MPROTECT] addr={:#x} len={:#x} prot={:#x}", addr, length, prot);
     0
 }
 
 /// sys_brk - Change program break (heap end)
+///
+/// Eagerly allocates and maps physical frames when the break is extended.
 pub fn sys_brk(addr: u64) -> i64 {
-    let current = PROGRAM_BREAK.load(Ordering::SeqCst);
+    use crate::memory::paging::{PageFlags, UserMemoryRegion};
     
-    if addr == 0 {
-        // Query current break
-        return current as i64;
+    let current_brk = crate::exec::current_brk();
+    
+    if addr == 0 || current_brk == 0 {
+        // Query / initialize — return current break
+        if current_brk == 0 {
+            return UserMemoryRegion::HEAP_START as i64;
+        }
+        return current_brk as i64;
     }
     
-    // Initialize if not set
-    if current == 0 {
-        PROGRAM_BREAK.store(0x0040_0000, Ordering::SeqCst); // 4MB initial
+    // Validate range
+    if addr < UserMemoryRegion::HEAP_START || addr >= UserMemoryRegion::HEAP_END {
+        return current_brk as i64;
     }
     
-    // Try to set new break
-    if addr >= 0x0010_0000 && addr < 0x8000_0000_0000 {
-        PROGRAM_BREAK.store(addr, Ordering::SeqCst);
-        crate::log_debug!("[BRK] Set program break to {:#x}", addr);
-        addr as i64
-    } else {
-        current as i64
+    let page_size = 4096u64;
+    
+    if addr > current_brk {
+        // Extending the heap — allocate and map new pages
+        let old_page = (current_brk + page_size - 1) & !(page_size - 1); // first unmapped page
+        let new_page = (addr + page_size - 1) & !(page_size - 1);        // last page to map (exclusive)
+        
+        if new_page > old_page {
+            let pages_needed = ((new_page - old_page) / page_size) as usize;
+            
+            let ok = crate::exec::with_current_address_space(|space| {
+                for i in 0..pages_needed {
+                    let virt = old_page + (i as u64 * page_size);
+                    let phys = match crate::memory::frame::alloc_frame_zeroed() {
+                        Some(p) => p,
+                        None => return false,
+                    };
+                    if space.map_page(virt, phys, PageFlags::USER_DATA).is_none() {
+                        return false;
+                    }
+                }
+                true
+            });
+            
+            if ok != Some(true) {
+                return current_brk as i64; // OOM — don't move break
+            }
+        }
     }
+    // Note: shrinking the heap (addr < current_brk) — we just move the break
+    // without freeing pages for now (matches many real OS behaviours).
+    
+    crate::exec::set_current_brk(addr);
+    crate::log_debug!("[BRK] Set program break to {:#x}", addr);
+    addr as i64
 }
 
 // ============================================================================

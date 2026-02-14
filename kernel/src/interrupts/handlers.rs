@@ -19,31 +19,81 @@ pub extern "x86-interrupt" fn double_fault_handler(
     panic!("EXCEPTION: DOUBLE FAULT\n{:#?}", stack_frame);
 }
 
-/// Page fault handler
+/// Page fault handler — implements demand paging for user processes
+///
+/// If the faulting address belongs to a valid user region (heap or stack)
+/// and the page is simply not yet mapped, we allocate a frame and map it.
+/// Otherwise we kill the process (or panic if in kernel mode).
 pub extern "x86-interrupt" fn page_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: PageFaultErrorCode,
 ) {
     use x86_64::registers::control::Cr2;
+    use crate::memory::paging::{PageFlags, UserMemoryRegion};
     
-    let addr = Cr2::read();
+    let fault_addr = Cr2::read().as_u64();
     
+    // Record in trace
+    crate::trace::record_event(crate::trace::EventType::PageFault, fault_addr);
+    
+    // ── Demand paging: only for user-mode faults on non-present pages ──
+    let is_user_fault = error_code.contains(PageFaultErrorCode::USER_MODE);
+    let is_protection = error_code.contains(PageFaultErrorCode::PROTECTION_VIOLATION);
+    
+    if is_user_fault && !is_protection {
+        // Fault on a non-present page from Ring 3 — try to service it
+        let page_addr = fault_addr & !0xFFF;
+        
+        // Check if address is in a valid user region
+        let in_heap = fault_addr >= UserMemoryRegion::HEAP_START
+            && fault_addr < crate::exec::current_brk();
+        
+        let stack_bottom = crate::exec::current_stack_bottom();
+        let in_stack = stack_bottom > 0
+            && fault_addr >= stack_bottom.saturating_sub(4096 * 16) // allow 16 pages of stack growth
+            && fault_addr < UserMemoryRegion::STACK_TOP;
+        
+        if in_heap || in_stack {
+            // Allocate a physical frame and map it
+            if let Some(phys) = crate::memory::frame::alloc_frame_zeroed() {
+                let mapped = crate::exec::with_current_address_space(|space| {
+                    space.map_page(page_addr, phys, PageFlags::USER_DATA)
+                });
+                
+                if mapped == Some(Some(())) {
+                    crate::serial_println!("[PF] Demand-paged {:#x} (phys {:#x})", page_addr, phys);
+                    return; // Resume user process — IRET back to the faulting instruction
+                }
+                
+                // Mapping failed — free the frame
+                crate::memory::frame::free_frame(phys);
+            }
+            
+            // OOM or mapping failure — kill process
+            crate::serial_println!("[PF] OOM for demand page at {:#x}, killing user process", fault_addr);
+            unsafe { crate::userland::return_from_ring3(-11); } // SIGSEGV
+        }
+        
+        // Invalid user address — segfault
+        crate::serial_println!(
+            "[PF] SEGFAULT: user accessed invalid addr {:#x} (brk={:#x}, stack_bottom={:#x})",
+            fault_addr, crate::exec::current_brk(), stack_bottom
+        );
+        unsafe { crate::userland::return_from_ring3(-11); } // SIGSEGV
+    }
+    
+    // ── Kernel page fault or protection violation — fatal ──
     crate::log_error!(
         "EXCEPTION: PAGE FAULT\n\
-        Accessed Address: {:?}\n\
+        Accessed Address: {:#x}\n\
         Error Code: {:?}\n\
         {:#?}",
-        addr,
+        fault_addr,
         error_code,
         stack_frame
     );
     
-    // Record in trace
-    crate::trace::record_event(crate::trace::EventType::PageFault, addr.as_u64());
-    
-    // For now, panic on page fault
-    // TODO: Implement proper page fault handling
-    panic!("Page fault at {:?}", addr);
+    panic!("Page fault at {:#x}", fault_addr);
 }
 
 /// General protection fault handler
