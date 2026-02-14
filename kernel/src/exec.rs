@@ -188,34 +188,30 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
         // Activate user address space
         address_space.activate();
         
-        // For now, we run in kernel mode to test
-        // TODO: Actually jump to Ring 3 with proper exception handling
+        crate::log!("[EXEC] Entering Ring 3 at {:#x}...", elf.entry_point);
         
-        // Call entry point (simulated - runs in kernel mode for now)
-        let entry_fn: extern "C" fn(u64, u64) -> i32 = 
-            core::mem::transmute(elf.entry_point);
+        // Jump to Ring 3 — returns when user process calls exit()
+        let exit_code = crate::userland::exec_ring3_process(elf.entry_point, user_stack_top);
         
-        // This will crash if the ELF isn't set up correctly
-        // In a real implementation, we'd use IRETQ to Ring 3
+        // Restore kernel CR3 (safety — return_from_ring3 already does this)
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
         
-        // Restore kernel CR3 first
-        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3);
+        crate::log!("[EXEC] Process exited with code {}", exit_code);
         
-        crate::log!("[EXEC] Would execute at {:#x} (Ring 3 not implemented yet)", elf.entry_point);
+        ExecResult::Exited(exit_code)
     }
-    
-    // For now, simulate success
-    ExecResult::Exited(0)
 }
 
-/// Execute a simple bytecode program (for testing)
+/// Execute a Ring 3 hello world test program
+///
+/// Runs a small program in Ring 3 that:
+/// 1. Calls write(1, "Hello from Ring 3!\n", 19) via syscall
+/// 2. Calls exit(0) via syscall
+/// 3. Returns to kernel with exit code 0
 pub fn exec_test_program() -> ExecResult {
-    crate::log!("[EXEC] Running Ring 3 test program (simulated)...");
+    crate::log!("[EXEC] Running Ring 3 hello world test...");
     
-    // For now, we just test that we CAN set up user space correctly
-    // without actually jumping to Ring 3 (which would block)
-    
-    // Create user address space
+    // Create user address space (includes kernel mappings)
     let mut address_space = match AddressSpace::new_with_kernel() {
         Some(a) => a,
         None => {
@@ -226,13 +222,45 @@ pub fn exec_test_program() -> ExecResult {
     
     let hhdm = hhdm_offset();
     
-    // Test code
-    let test_code: [u8; 22] = [
-        0x48, 0xC7, 0xC0, 0x3C, 0x00, 0x00, 0x00, // mov rax, 60 (SYS_EXIT)
-        0x48, 0xC7, 0xC7, 0x2A, 0x00, 0x00, 0x00, // mov rdi, 42 (exit code)
-        0x0F, 0x05,                               // syscall
-        0xEB, 0xFE,                               // jmp $ (infinite loop if syscall returns)
-        0x90, 0x90, 0x90, 0x90,                   // nops for alignment
+    // Machine code for Ring 3 hello world:
+    //
+    //   _start:                        ; offset 0x00
+    //     mov rax, 1                   ; SYS_WRITE
+    //     mov rdi, 1                   ; fd = stdout
+    //     lea rsi, [rip + msg]         ; buf = &msg (RIP-relative)
+    //     mov rdx, 19                  ; count = 19
+    //     syscall
+    //     mov rax, 60                  ; SYS_EXIT
+    //     xor rdi, rdi                 ; code = 0
+    //     syscall
+    //     jmp $                        ; safety: infinite loop
+    //   msg:
+    //     db "Hello from Ring 3!", 10  ; 19 bytes with newline
+    //
+    // LEA displacement: msg is at offset 44, next instruction after LEA is at offset 21
+    // displacement = 44 - 21 = 23 = 0x17
+    let test_code: [u8; 63] = [
+        // mov rax, 1 (SYS_WRITE)
+        0x48, 0xC7, 0xC0, 0x01, 0x00, 0x00, 0x00,
+        // mov rdi, 1 (stdout)
+        0x48, 0xC7, 0xC7, 0x01, 0x00, 0x00, 0x00,
+        // lea rsi, [rip + 0x17] (msg)
+        0x48, 0x8D, 0x35, 0x17, 0x00, 0x00, 0x00,
+        // mov rdx, 19 (count)
+        0x48, 0xC7, 0xC2, 0x13, 0x00, 0x00, 0x00,
+        // syscall
+        0x0F, 0x05,
+        // mov rax, 60 (SYS_EXIT)
+        0x48, 0xC7, 0xC0, 0x3C, 0x00, 0x00, 0x00,
+        // xor rdi, rdi (exit code 0)
+        0x48, 0x31, 0xFF,
+        // syscall
+        0x0F, 0x05,
+        // jmp $ (safety loop)
+        0xEB, 0xFE,
+        // "Hello from Ring 3!\n" (19 bytes)
+        b'H', b'e', b'l', b'l', b'o', b' ', b'f', b'r', b'o', b'm',
+        b' ', b'R', b'i', b'n', b'g', b' ', b'3', b'!', b'\n',
     ];
     
     // Allocate and map code page at 0x400000
@@ -242,7 +270,7 @@ pub fn exec_test_program() -> ExecResult {
         None => return ExecResult::MemoryError,
     };
     
-    crate::log!("[EXEC] Code page: phys={:#x}, virt={:#x}", code_phys, code_vaddr);
+    crate::log!("[EXEC] Code page: phys={:#x}, vaddr={:#x}", code_phys, code_vaddr);
     
     // Copy code to physical page
     unsafe {
@@ -257,9 +285,9 @@ pub fn exec_test_program() -> ExecResult {
         return ExecResult::MemoryError;
     }
     
-    // Allocate and map stack
+    // Allocate and map stack (16 KB)
     let stack_top: u64 = 0x7FFFFFFF0000;
-    let stack_pages = 4; // 16 KB stack
+    let stack_pages = 4;
     
     for i in 0..stack_pages {
         let vaddr = stack_top - (i as u64 + 1) * 4096;
@@ -267,11 +295,7 @@ pub fn exec_test_program() -> ExecResult {
             Some(p) => p,
             None => return ExecResult::MemoryError,
         };
-        
-        // Zero the stack
-        unsafe {
-            core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096);
-        }
+        unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
         
         if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
             crate::log_error!("[EXEC] Failed to map stack page");
@@ -279,94 +303,155 @@ pub fn exec_test_program() -> ExecResult {
         }
     }
     
-    crate::log!("[EXEC] Stack mapped: {:#x} - {:#x}", stack_top - stack_pages as u64 * 4096, stack_top);
-    crate::log!("[EXEC] User address space CR3: {:#x}", address_space.cr3());
-    crate::log!("[EXEC] Test passed - userland setup successful!");
-    crate::log!("[EXEC] To actually run in Ring 3, use 'exec ring3' (WARNING: will block)");
+    let user_stack = stack_top - 8; // Align
     
-    ExecResult::Exited(42)
-}
-
-/// Actually jump to Ring 3 (WARNING: This blocks until the process exits!)
-pub fn exec_ring3_test() -> ! {
-    use crate::userland::jump_to_ring3;
+    crate::log!("[EXEC] Jumping to Ring 3 at {:#x}, stack at {:#x}", code_vaddr, user_stack);
     
-    crate::log!("[EXEC] Preparing Ring 3 execution...");
-    
-    // Create user address space
-    let mut address_space = match AddressSpace::new_with_kernel() {
-        Some(a) => a,
-        None => {
-            crate::log_error!("[EXEC] Failed to create address space");
-            loop { core::hint::spin_loop(); }
-        }
-    };
-    
-    let hhdm = hhdm_offset();
-    
-    // Simple test: just do a syscall to print and exit
-    // Note: After exit syscall, we'll be stuck since exit just marks zombie
-    let test_code: [u8; 32] = [
-        // mov rax, 0x1000 (SYS_DEBUG_PRINT)
-        0x48, 0xC7, 0xC0, 0x00, 0x10, 0x00, 0x00,
-        // mov rdi, 0x400020 (ptr to message, we'll put it there)
-        0x48, 0xBF, 0x20, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
-        // mov rsi, 12 (length)
-        0x48, 0xC7, 0xC6, 0x0C, 0x00, 0x00, 0x00,
-        // syscall
-        0x0F, 0x05,
-        // jmp $ (loop forever after print)
-        0xEB, 0xFE,
-        0x90, 0x90, 0x90, 0x90,
-    ];
-    
-    let message = b"Hello Ring3!";
-    
-    // Allocate code page
-    let code_vaddr: u64 = 0x400000;
-    let code_phys = alloc_physical_page().expect("OOM");
-    
+    // Switch to user address space and execute in Ring 3
     unsafe {
-        let dest = (code_phys + hhdm) as *mut u8;
-        core::ptr::write_bytes(dest, 0, 4096);
-        core::ptr::copy_nonoverlapping(test_code.as_ptr(), dest, test_code.len());
-        // Put message at offset 0x20
-        core::ptr::copy_nonoverlapping(message.as_ptr(), dest.add(0x20), message.len());
-    }
-    
-    address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE);
-    
-    // Map stack
-    let stack_top: u64 = 0x7FFFFFFF0000;
-    for i in 0..4 {
-        let vaddr = stack_top - (i as u64 + 1) * 4096;
-        let phys = alloc_physical_page().expect("OOM");
-        unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
-        address_space.map_page(vaddr, phys, PageFlags::USER_DATA);
-    }
-    
-    let user_stack = stack_top - 8;
-    
-    crate::log!("[EXEC] Jumping to Ring 3 at {:#x}...", code_vaddr);
-    
-    unsafe {
+        let kernel_cr3: u64;
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
+        
         address_space.activate();
-        jump_to_ring3(code_vaddr, user_stack);
+        
+        let exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
+        
+        // Restore kernel CR3
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
+        
+        crate::log!("[EXEC] Ring 3 test exited with code {}", exit_code);
+        ExecResult::Exited(exit_code)
     }
 }
 
-/// Allocate a physical page (returns physical address)
+/// Embedded minimal ELF64 binary: "Hello from Ring 3!"
+///
+/// This is a complete, standalone ELF64 static executable that:
+/// 1. Writes "Hello from Ring 3!\n" to stdout (fd 1) via write() syscall
+/// 2. Exits with code 0 via exit() syscall
+///
+/// Can be loaded with exec_bytes() for a full ELF parse + Ring 3 execution test.
+pub static HELLO_ELF: &[u8] = &{
+    // ── ELF64 Header (64 bytes) ──
+    let mut elf = [0u8; 183];
+    
+    // e_ident
+    elf[0] = 0x7F; elf[1] = b'E'; elf[2] = b'L'; elf[3] = b'F'; // magic
+    elf[4] = 2;    // ELFCLASS64
+    elf[5] = 1;    // ELFDATA2LSB
+    elf[6] = 1;    // EV_CURRENT
+    // elf[7..16] = 0 (padding)
+    
+    // e_type = ET_EXEC (2)
+    elf[16] = 2; elf[17] = 0;
+    // e_machine = EM_X86_64 (62 = 0x3E)
+    elf[18] = 0x3E; elf[19] = 0;
+    // e_version = 1
+    elf[20] = 1; elf[21] = 0; elf[22] = 0; elf[23] = 0;
+    // e_entry = 0x400078 (code starts after headers)
+    elf[24] = 0x78; elf[25] = 0x00; elf[26] = 0x40; elf[27] = 0x00;
+    elf[28] = 0; elf[29] = 0; elf[30] = 0; elf[31] = 0;
+    // e_phoff = 64 (program header right after ELF header)
+    elf[32] = 64; elf[33] = 0; elf[34] = 0; elf[35] = 0;
+    elf[36] = 0; elf[37] = 0; elf[38] = 0; elf[39] = 0;
+    // e_shoff = 0
+    // elf[40..48] = 0
+    // e_flags = 0
+    // elf[48..52] = 0
+    // e_ehsize = 64
+    elf[52] = 64; elf[53] = 0;
+    // e_phentsize = 56
+    elf[54] = 56; elf[55] = 0;
+    // e_phnum = 1
+    elf[56] = 1; elf[57] = 0;
+    // e_shentsize = 64
+    elf[58] = 64; elf[59] = 0;
+    // e_shnum = 0, e_shstrndx = 0
+    // elf[60..64] = 0
+    
+    // ── Program Header (56 bytes, offset 64) ──
+    // p_type = PT_LOAD (1)
+    elf[64] = 1; elf[65] = 0; elf[66] = 0; elf[67] = 0;
+    // p_flags = PF_R | PF_X (5)
+    elf[68] = 5; elf[69] = 0; elf[70] = 0; elf[71] = 0;
+    // p_offset = 0
+    // elf[72..80] = 0
+    // p_vaddr = 0x400000
+    elf[80] = 0x00; elf[81] = 0x00; elf[82] = 0x40; elf[83] = 0x00;
+    elf[84] = 0; elf[85] = 0; elf[86] = 0; elf[87] = 0;
+    // p_paddr = 0x400000
+    elf[88] = 0x00; elf[89] = 0x00; elf[90] = 0x40; elf[91] = 0x00;
+    elf[92] = 0; elf[93] = 0; elf[94] = 0; elf[95] = 0;
+    // p_filesz = 183 (total file)
+    elf[96] = 183; elf[97] = 0; elf[98] = 0; elf[99] = 0;
+    elf[100] = 0; elf[101] = 0; elf[102] = 0; elf[103] = 0;
+    // p_memsz = 183
+    elf[104] = 183; elf[105] = 0; elf[106] = 0; elf[107] = 0;
+    elf[108] = 0; elf[109] = 0; elf[110] = 0; elf[111] = 0;
+    // p_align = 0x1000 (4096)
+    elf[112] = 0x00; elf[113] = 0x10; elf[114] = 0; elf[115] = 0;
+    elf[116] = 0; elf[117] = 0; elf[118] = 0; elf[119] = 0;
+    
+    // ── Code (starts at offset 120 = 0x78, vaddr 0x400078) ──
+    // mov rax, 1 (SYS_WRITE)
+    elf[120] = 0x48; elf[121] = 0xC7; elf[122] = 0xC0;
+    elf[123] = 0x01; elf[124] = 0x00; elf[125] = 0x00; elf[126] = 0x00;
+    // mov rdi, 1 (stdout)
+    elf[127] = 0x48; elf[128] = 0xC7; elf[129] = 0xC7;
+    elf[130] = 0x01; elf[131] = 0x00; elf[132] = 0x00; elf[133] = 0x00;
+    // lea rsi, [rip + 0x17] → points to message at offset 164 (vaddr 0x4000A4)
+    // Next instr at offset 141, message at 164, disp = 164 - 141 = 23 = 0x17
+    elf[134] = 0x48; elf[135] = 0x8D; elf[136] = 0x35;
+    elf[137] = 0x17; elf[138] = 0x00; elf[139] = 0x00; elf[140] = 0x00;
+    // mov rdx, 19 (count)
+    elf[141] = 0x48; elf[142] = 0xC7; elf[143] = 0xC2;
+    elf[144] = 0x13; elf[145] = 0x00; elf[146] = 0x00; elf[147] = 0x00;
+    // syscall
+    elf[148] = 0x0F; elf[149] = 0x05;
+    // mov rax, 60 (SYS_EXIT)
+    elf[150] = 0x48; elf[151] = 0xC7; elf[152] = 0xC0;
+    elf[153] = 0x3C; elf[154] = 0x00; elf[155] = 0x00; elf[156] = 0x00;
+    // xor rdi, rdi (exit code 0)
+    elf[157] = 0x48; elf[158] = 0x31; elf[159] = 0xFF;
+    // syscall
+    elf[160] = 0x0F; elf[161] = 0x05;
+    // jmp $ (safety loop)
+    elf[162] = 0xEB; elf[163] = 0xFE;
+    // "Hello from Ring 3!\n" (19 bytes, offset 164 = 0xA4)
+    elf[164] = b'H'; elf[165] = b'e'; elf[166] = b'l'; elf[167] = b'l';
+    elf[168] = b'o'; elf[169] = b' '; elf[170] = b'f'; elf[171] = b'r';
+    elf[172] = b'o'; elf[173] = b'm'; elf[174] = b' '; elf[175] = b'R';
+    elf[176] = b'i'; elf[177] = b'n'; elf[178] = b'g'; elf[179] = b' ';
+    elf[180] = b'3'; elf[181] = b'!'; elf[182] = b'\n';
+    
+    elf
+};
+
+/// Execute the embedded hello world ELF binary
+pub fn exec_hello_elf() -> ExecResult {
+    crate::log!("[EXEC] Running embedded hello world ELF...");
+    exec_bytes(HELLO_ELF, &[])
+}
+
+/// Allocate a physical page (returns page-aligned physical address)
 fn alloc_physical_page() -> Option<u64> {
-    // Allocate from heap and convert to physical
-    let page: Vec<u8> = alloc::vec![0u8; 4096];
-    let virt = page.as_ptr() as u64;
+    // Allocate 2 pages worth of memory, then align manually.
+    // This wastes up to 4095 bytes but guarantees page alignment.
+    let buf: Vec<u8> = alloc::vec![0u8; 4096 + 4096];
+    let virt = buf.as_ptr() as u64;
+    let aligned_virt = (virt + 4095) & !4095; // round up to 4096 boundary
     let hhdm = hhdm_offset();
+    
+    // Zero the aligned page
+    unsafe {
+        core::ptr::write_bytes(aligned_virt as *mut u8, 0, 4096);
+    }
     
     // Convert to physical (subtract HHDM)
-    let phys = virt.checked_sub(hhdm)?;
+    let phys = aligned_virt.checked_sub(hhdm)?;
     
     // Leak so it persists
-    core::mem::forget(page);
+    core::mem::forget(buf);
     
     Some(phys)
 }

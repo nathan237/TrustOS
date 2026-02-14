@@ -247,12 +247,6 @@ extern "C" fn syscall_entry() {
         // We're still on user stack! Need to switch to kernel stack.
         // But we need to save RSP first...
         
-        // Use SWAPGS to get kernel GS base (points to per-CPU data)
-        // For simplicity, we'll use a different approach: save to scratch register
-        // and load kernel stack from TSS
-        
-        // For now, use a simpler approach: the user RSP is saved, we switch stacks
-        
         // Save user RSP in R12 (we'll push it later)
         "mov r12, rsp",
         
@@ -333,6 +327,160 @@ pub fn init_syscall_stack() {
 
 // Note: syscall_handler_rust is defined in interrupts/syscall.rs
 // The syscall_entry function above references it via sym
+
+// ───────────────────────────────────────────────────────
+// Ring 3 Process Execution with Return-to-Kernel Support
+// ───────────────────────────────────────────────────────
+
+/// Saved kernel RSP for returning from Ring 3
+static mut KERNEL_RETURN_RSP: u64 = 0;
+/// Saved kernel return point (RIP) for returning from Ring 3
+static mut KERNEL_RETURN_RIP: u64 = 0;
+/// Whether a Ring 3 process is currently executing
+static mut USERLAND_PROCESS_ACTIVE: bool = false;
+
+/// Execute a user process in Ring 3, returning when it calls exit()
+///
+/// This uses a setjmp/longjmp-style mechanism:
+/// 1. Saves kernel context (callee-saved regs + RSP) to statics
+/// 2. IRETQ to Ring 3 user code
+/// 3. When user calls exit(), `return_from_ring3()` restores kernel context
+/// 4. Returns the exit code to the caller
+///
+/// # Safety
+/// The caller must ensure:
+/// - User address space is activated (CR3 set)
+/// - `entry_point` is mapped and executable in user space
+/// - `user_stack` is mapped and writable in user space
+/// - Kernel mappings are present in the user page tables
+#[inline(never)]
+pub unsafe fn exec_ring3_process(entry_point: u64, user_stack: u64) -> i32 {
+    const USER_CS: u64 = 0x20 | 3;  // 0x23
+    const USER_SS: u64 = 0x18 | 3;  // 0x1B
+    const USER_RFLAGS: u64 = 0x202; // IF=1, reserved=1
+
+    let exit_code: i64;
+    USERLAND_PROCESS_ACTIVE = true;
+
+    // Compiler barrier: ensure entry_point and user_stack are materialized
+    // before the asm block (prevents misoptimization of the inline asm inputs)
+    let entry_point = core::hint::black_box(entry_point);
+    let user_stack = core::hint::black_box(user_stack);
+
+    core::arch::asm!(
+        // Save return point address (label 2f) so return_from_ring3 can jump back
+        "lea rax, [rip + 2f]",
+        "mov [{return_rip}], rax",
+
+        // Save callee-saved registers on kernel stack
+        "push rbx",
+        "push rbp",
+        "push r12",
+        "push r13",
+        "push r14",
+        "push r15",
+
+        // Save kernel RSP (points to saved callee-saved regs)
+        "mov [{return_rsp}], rsp",
+
+        // ── IRETQ frame: SS, RSP, RFLAGS, CS, RIP ──
+        "push {ss}",
+        "push {user_rsp}",
+        "push {rflags}",
+        "push {cs}",
+        "push {entry}",
+
+        // Clear all GPRs for clean Ring 3 entry
+        "xor rax, rax",
+        "xor rbx, rbx",
+        "xor rcx, rcx",
+        "xor rdx, rdx",
+        "xor rsi, rsi",
+        "xor rdi, rdi",
+        "xor rbp, rbp",
+        "xor r8, r8",
+        "xor r9, r9",
+        "xor r10, r10",
+        "xor r11, r11",
+        "xor r12, r12",
+        "xor r13, r13",
+        "xor r14, r14",
+        "xor r15, r15",
+
+        // ── Enter Ring 3! ──
+        "iretq",
+
+        // ╔══════════════════════════════════════════╗
+        // ║  Return point — reached via              ║
+        // ║  return_from_ring3() on exit() syscall   ║
+        // ╚══════════════════════════════════════════╝
+        "2:",
+
+        // Restore callee-saved registers (pushed above)
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbp",
+        "pop rbx",
+
+        // RAX already contains exit code (set by return_from_ring3)
+
+        entry = in(reg) entry_point,
+        user_rsp = in(reg) user_stack,
+        ss = in(reg) USER_SS,
+        cs = in(reg) USER_CS,
+        rflags = in(reg) USER_RFLAGS,
+        return_rsp = sym KERNEL_RETURN_RSP,
+        return_rip = sym KERNEL_RETURN_RIP,
+        // rax is written early (lea rax) and holds exit code at return
+        out("rax") exit_code,
+        // Caller-saved regs clobbered by XOR (after inputs consumed)
+        lateout("rcx") _,
+        lateout("rdx") _,
+        lateout("rsi") _,
+        lateout("rdi") _,
+        lateout("r8") _,
+        lateout("r9") _,
+        lateout("r10") _,
+        lateout("r11") _,
+    );
+
+    USERLAND_PROCESS_ACTIVE = false;
+    exit_code as i32
+}
+
+/// Return from Ring 3 to the kernel.
+///
+/// Called from the EXIT syscall handler. Restores the kernel context
+/// saved by `exec_ring3_process` and jumps back to the return point.
+///
+/// # Safety
+/// Must only be called when `USERLAND_PROCESS_ACTIVE` is true.
+pub unsafe fn return_from_ring3(exit_code: i32) -> ! {
+    // Restore kernel CR3 (switch back from user address space)
+    core::arch::asm!(
+        "mov cr3, {cr3}",
+        cr3 = in(reg) crate::memory::paging::kernel_cr3(),
+        options(nostack, preserves_flags)
+    );
+
+    // Restore kernel RSP and jump to the return point in exec_ring3_process
+    core::arch::asm!(
+        "mov rax, {code}",
+        "mov rsp, [{return_rsp}]",
+        "jmp [{return_rip}]",
+        code = in(reg) exit_code as i64,
+        return_rsp = sym KERNEL_RETURN_RSP,
+        return_rip = sym KERNEL_RETURN_RIP,
+        options(noreturn)
+    );
+}
+
+/// Check if a Ring 3 process is currently executing
+pub fn is_process_active() -> bool {
+    unsafe { USERLAND_PROCESS_ACTIVE }
+}
 
 /// Test userland by running a simple program
 #[allow(dead_code)]

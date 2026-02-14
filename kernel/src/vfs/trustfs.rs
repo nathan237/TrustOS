@@ -348,6 +348,57 @@ impl TrustFsInner {
         Err(VfsError::NoSpace)
     }
     
+    /// Free a data block (clear its bitmap bit)
+    fn free_block(&self, block: u32) -> VfsResult<()> {
+        let mut sb = self.superblock.write();
+        
+        let bitmap_sector = block as u64 / (SECTOR_SIZE as u64 * 8);
+        let byte_idx = (block as usize / 8) % SECTOR_SIZE;
+        let bit = block as usize % 8;
+        
+        if bitmap_sector >= BITMAP_SECTORS {
+            return Err(VfsError::InvalidData);
+        }
+        
+        let mut buf = [0u8; SECTOR_SIZE];
+        self.read_sector(BITMAP_START_SECTOR + bitmap_sector, &mut buf)?;
+        
+        // Clear the bit
+        buf[byte_idx] &= !(1 << bit);
+        self.write_sector(BITMAP_START_SECTOR + bitmap_sector, &buf)?;
+        
+        sb.free_blocks += 1;
+        Ok(())
+    }
+    
+    /// Free all data blocks held by an inode (direct + indirect)
+    fn free_inode_blocks(&self, inode: &DiskInode) -> VfsResult<()> {
+        // Free direct blocks
+        for i in 0..DIRECT_BLOCKS {
+            if inode.direct[i] != 0 {
+                self.free_block(inode.direct[i])?;
+            }
+        }
+        
+        // Free indirect block entries + the indirect block itself
+        if inode.indirect != 0 {
+            let mut ind_buf = [0u8; SECTOR_SIZE];
+            self.read_sector(DATA_START_SECTOR + inode.indirect as u64, &mut ind_buf)?;
+            let ptrs = unsafe { &*(ind_buf.as_ptr() as *const [u32; INDIRECT_PTRS]) };
+            
+            for &ptr in ptrs.iter() {
+                if ptr != 0 {
+                    self.free_block(ptr)?;
+                }
+            }
+            
+            // Free the indirect block itself
+            self.free_block(inode.indirect)?;
+        }
+        
+        Ok(())
+    }
+    
     /// Resolve logical block index to physical block number
     fn resolve_block(&self, inode: &DiskInode, block_idx: usize) -> VfsResult<u32> {
         if block_idx < DIRECT_BLOCKS {
@@ -582,10 +633,22 @@ impl TrustFsInner {
                 inode.nlink = inode.nlink.saturating_sub(1);
                 
                 if inode.nlink == 0 {
+                    // Free all data blocks held by this inode
+                    if let Err(e) = self.free_inode_blocks(&inode) {
+                        crate::log_warn!("[TRUSTFS] Warning: failed to free blocks for inode {}: {:?}", entry.ino, e);
+                    }
                     // Free the inode (mark as unused)
                     inode.mode = 0;
                     inode.size = 0;
-                    // TODO: free data blocks
+                    inode.blocks = 0;
+                    inode.direct = [0; DIRECT_BLOCKS];
+                    inode.indirect = 0;
+                    
+                    // Update superblock free inode count
+                    {
+                        let mut sb = self.superblock.write();
+                        sb.free_inodes += 1;
+                    }
                 }
                 
                 self.write_inode(entry.ino, &inode)?;
@@ -614,9 +677,46 @@ impl TrustFsInner {
     /// Truncate file to size
     fn truncate(&self, ino: Ino, size: u64) -> VfsResult<()> {
         let mut inode = self.read_inode(ino)?;
-        inode.size = size as u32;
+        let old_size = inode.size as u64;
+        let new_size = size;
+        
+        if new_size < old_size {
+            // Shrinking: free blocks beyond the new size
+            let old_blocks = ((old_size + SECTOR_SIZE as u64 - 1) / SECTOR_SIZE as u64) as usize;
+            let new_blocks = ((new_size + SECTOR_SIZE as u64 - 1) / SECTOR_SIZE as u64) as usize;
+            
+            for block_idx in new_blocks..old_blocks {
+                if block_idx < DIRECT_BLOCKS {
+                    if inode.direct[block_idx] != 0 {
+                        let _ = self.free_block(inode.direct[block_idx]);
+                        inode.direct[block_idx] = 0;
+                        inode.blocks = inode.blocks.saturating_sub(1);
+                    }
+                } else if block_idx < DIRECT_BLOCKS + INDIRECT_PTRS {
+                    if inode.indirect != 0 {
+                        let mut ind_buf = [0u8; SECTOR_SIZE];
+                        self.read_sector(DATA_START_SECTOR + inode.indirect as u64, &mut ind_buf)?;
+                        let ptrs = unsafe { &mut *(ind_buf.as_mut_ptr() as *mut [u32; INDIRECT_PTRS]) };
+                        let idx = block_idx - DIRECT_BLOCKS;
+                        if ptrs[idx] != 0 {
+                            let _ = self.free_block(ptrs[idx]);
+                            ptrs[idx] = 0;
+                            inode.blocks = inode.blocks.saturating_sub(1);
+                            self.write_sector(DATA_START_SECTOR + inode.indirect as u64, &ind_buf)?;
+                        }
+                    }
+                }
+            }
+            
+            // If no more indirect blocks used, free the indirect block itself
+            if new_blocks <= DIRECT_BLOCKS && inode.indirect != 0 {
+                let _ = self.free_block(inode.indirect);
+                inode.indirect = 0;
+            }
+        }
+        
+        inode.size = new_size as u32;
         inode.mtime = (crate::logger::get_ticks() / 100) as u32;
-        // TODO: free blocks if shrinking
         self.write_inode(ino, &inode)
     }
     

@@ -119,8 +119,8 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         VFORK => sys_fork(),
         CLONE => sys_clone(a1, a2, a3),
         EXECVE => sys_execve(a1, a2, a3),
-        EXIT => { crate::process::exit(a1 as i32); 0 }
-        EXIT_GROUP => linux::sys_exit_group(a1 as i32),
+        EXIT => { crate::process::exit(a1 as i32); if crate::userland::is_process_active() { unsafe { crate::userland::return_from_ring3(a1 as i32); } } 0 }
+        EXIT_GROUP => { crate::process::exit(a1 as i32); if crate::userland::is_process_active() { unsafe { crate::userland::return_from_ring3(a1 as i32); } } 0 }
         WAIT4 => sys_wait4(a1 as i32, a2, a3 as u32),
         KILL => sys_kill(a1 as i32, a2 as i32),
         SET_TID_ADDRESS => linux::sys_set_tid_address(a1),

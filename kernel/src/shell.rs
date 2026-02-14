@@ -12133,18 +12133,46 @@ fn cmd_exec(args: &[&str], command: &str) {
         (args[0], &args[1..])
     };
     
-    // Special case: "exec test" runs built-in test
+    // Special case: "exec test" runs built-in Ring 3 test (raw machine code)
     if program == "test" || program == "./test" {
-        crate::println_color!(COLOR_CYAN, "Running ELF loader test...");
+        crate::println_color!(COLOR_CYAN, "Running Ring 3 test program...");
         match crate::exec::exec_test_program() {
             crate::exec::ExecResult::Exited(code) => {
-                crate::println_color!(COLOR_GREEN, "Test exited with code: {}", code);
+                if code == 0 {
+                    crate::println_color!(COLOR_GREEN, "Ring 3 test passed (exit code 0)");
+                } else {
+                    crate::println_color!(COLOR_YELLOW, "Ring 3 test exited with code: {}", code);
+                }
             }
             crate::exec::ExecResult::Faulted(reason) => {
                 crate::println_color!(COLOR_RED, "Test faulted: {}", reason);
             }
             crate::exec::ExecResult::LoadError(e) => {
                 crate::println_color!(COLOR_RED, "Load error: {:?}", e);
+            }
+            crate::exec::ExecResult::MemoryError => {
+                crate::println_color!(COLOR_RED, "Memory allocation failed");
+            }
+        }
+        return;
+    }
+    
+    // Special case: "exec hello" runs embedded hello world ELF
+    if program == "hello" || program == "./hello" {
+        crate::println_color!(COLOR_CYAN, "Running embedded hello world ELF in Ring 3...");
+        match crate::exec::exec_hello_elf() {
+            crate::exec::ExecResult::Exited(code) => {
+                if code == 0 {
+                    crate::println_color!(COLOR_GREEN, "Program exited successfully");
+                } else {
+                    crate::println_color!(COLOR_YELLOW, "Program exited with code: {}", code);
+                }
+            }
+            crate::exec::ExecResult::Faulted(reason) => {
+                crate::println_color!(COLOR_RED, "Program faulted: {}", reason);
+            }
+            crate::exec::ExecResult::LoadError(e) => {
+                crate::println_color!(COLOR_RED, "Failed to load ELF: {:?}", e);
             }
             crate::exec::ExecResult::MemoryError => {
                 crate::println_color!(COLOR_RED, "Memory allocation failed");
