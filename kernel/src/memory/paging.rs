@@ -247,6 +247,11 @@ impl AddressSpace {
         // Map the page
         unsafe { (*pt).entries[pt_idx].set(phys, flags); }
         
+        // Invalidate TLB for this virtual address
+        unsafe {
+            core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
+        }
+        
         Some(())
     }
     
@@ -356,6 +361,31 @@ impl AddressSpace {
         Some(())
     }
     
+    /// Translate a virtual address to its physical address by walking the page tables.
+    /// Returns `Some(phys)` with the physical address of the start of the 4K page + page offset,
+    /// or `None` if the page is not mapped.
+    pub fn translate(&self, virt: u64) -> Option<u64> {
+        let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
+        let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
+        let pd_idx = ((virt >> 21) & 0x1FF) as usize;
+        let pt_idx = ((virt >> 12) & 0x1FF) as usize;
+        let page_offset = virt & 0xFFF;
+        
+        let pml4 = unsafe { &*((self.pml4_phys + self.hhdm_offset) as *const PageTable) };
+        if !pml4.entries[pml4_idx].is_present() { return None; }
+        
+        let pdpt = unsafe { &*((pml4.entries[pml4_idx].phys_addr() + self.hhdm_offset) as *const PageTable) };
+        if !pdpt.entries[pdpt_idx].is_present() { return None; }
+        
+        let pd = unsafe { &*((pdpt.entries[pdpt_idx].phys_addr() + self.hhdm_offset) as *const PageTable) };
+        if !pd.entries[pd_idx].is_present() { return None; }
+        
+        let pt = unsafe { &*((pd.entries[pd_idx].phys_addr() + self.hhdm_offset) as *const PageTable) };
+        if !pt.entries[pt_idx].is_present() { return None; }
+        
+        Some(pt.entries[pt_idx].phys_addr() + page_offset)
+    }
+    
     /// Switch to this address space
     pub unsafe fn activate(&self) {
         core::arch::asm!(
@@ -433,10 +463,10 @@ pub fn init() {
     }
     KERNEL_CR3.store(cr3, Ordering::SeqCst);
     
-    // Enable NX bit (disabled for now - can cause issues on some QEMU configs)
-    // enable_nx();
+    // Enable NX bit so page table NX flags are enforced
+    enable_nx();
     
-    crate::log_debug!("Paging initialized, kernel CR3: {:#x}", cr3);
+    crate::log_debug!("Paging initialized, kernel CR3: {:#x}, NX enabled", cr3);
 }
 
 /// Enable NX (No-Execute) bit via EFER MSR

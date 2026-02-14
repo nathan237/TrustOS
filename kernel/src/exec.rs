@@ -143,11 +143,15 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
         }
     }
     
-    // Allocate and map user stack
+    // Allocate and map user stack with guard page
     let stack_pages = USER_STACK_SIZE / 4096;
     let stack_base = UserMemoryRegion::STACK_TOP - (stack_pages as u64 * 4096);
+    let guard_page = stack_base - 4096;
     
-    crate::log_debug!("[EXEC] Mapping stack: {:#x} - {:#x}", stack_base, UserMemoryRegion::STACK_TOP);
+    crate::log_debug!("[EXEC] Guard page at {:#x}, stack: {:#x} - {:#x}", guard_page, stack_base, UserMemoryRegion::STACK_TOP);
+    
+    // Guard page: intentionally left unmapped — any access triggers a page fault
+    // (no map_page call for guard_page address)
     
     for i in 0..stack_pages {
         let virt_addr = stack_base + (i as u64 * 4096);
@@ -172,12 +176,62 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
         }
     }
     
-    // Set up initial stack with argc/argv
-    let user_stack_top = UserMemoryRegion::STACK_TOP - 8; // Align
-    let argc = args.len() as u64;
+    // Set up initial stack with argc/argv (System V ABI: argc at RSP, then argv pointers, then strings)
+    let mut sp = UserMemoryRegion::STACK_TOP;
     
-    crate::log!("[EXEC] Ready to execute at {:#x}, stack at {:#x}", 
-        elf.entry_point, user_stack_top);
+    // Step 1: Copy argument strings onto the stack (at the top, above the pointers)
+    let mut arg_addrs: Vec<u64> = Vec::new();
+    for arg in args.iter().rev() {
+        let bytes = arg.as_bytes();
+        sp -= (bytes.len() as u64) + 1; // +1 for null terminator
+        // Write string to user stack via HHDM
+        let stack_page_base = sp & !0xFFF;
+        let page_offset = (sp - stack_base) as usize;
+        let page_idx = page_offset / 4096;
+        if page_idx < stack_pages {
+            // Find physical page backing this stack address
+            // We write via the HHDM mapping — find the PTE
+            if let Some(phys) = address_space.translate(sp) {
+                let dest = (phys + hhdm) as *mut u8;
+                unsafe {
+                    core::ptr::copy_nonoverlapping(bytes.as_ptr(), dest, bytes.len());
+                    *dest.add(bytes.len()) = 0; // null terminator
+                }
+            }
+        }
+        arg_addrs.push(sp);
+    }
+    arg_addrs.reverse(); // Now arg_addrs[0] = first arg address
+    
+    // Step 2: Align SP to 8 bytes
+    sp &= !7;
+    
+    // Step 3: Push null terminator for argv array
+    sp -= 8;
+    if let Some(phys) = address_space.translate(sp) {
+        unsafe { *((phys + hhdm) as *mut u64) = 0; }
+    }
+    
+    // Step 4: Push argv pointers (in reverse)
+    for addr in arg_addrs.iter().rev() {
+        sp -= 8;
+        if let Some(phys) = address_space.translate(sp) {
+            unsafe { *((phys + hhdm) as *mut u64) = *addr; }
+        }
+    }
+    let argv_ptr = sp; // argv points to first pointer
+    
+    // Step 5: Push argc
+    sp -= 8;
+    if let Some(phys) = address_space.translate(sp) {
+        unsafe { *((phys + hhdm) as *mut u64) = args.len() as u64; }
+    }
+    
+    // Ensure 16-byte alignment (ABI requirement before call)
+    sp &= !0xF;
+    
+    crate::log!("[EXEC] Ready to execute at {:#x}, stack at {:#x} (argc={}, argv={:#x})", 
+        elf.entry_point, sp, args.len(), argv_ptr);
     
     // Switch to user address space and jump to Ring 3
     unsafe {
@@ -191,7 +245,7 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
         crate::log!("[EXEC] Entering Ring 3 at {:#x}...", elf.entry_point);
         
         // Jump to Ring 3 — returns when user process calls exit()
-        let exit_code = crate::userland::exec_ring3_process(elf.entry_point, user_stack_top);
+        let exit_code = crate::userland::exec_ring3_process(elf.entry_point, sp);
         
         // Restore kernel CR3 (safety — return_from_ring3 already does this)
         core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
@@ -285,9 +339,11 @@ pub fn exec_test_program() -> ExecResult {
         return ExecResult::MemoryError;
     }
     
-    // Allocate and map stack (16 KB)
+    // Allocate and map stack (16 KB) with guard page below
     let stack_top: u64 = 0x7FFFFFFF0000;
     let stack_pages = 4;
+    let guard_page_addr = stack_top - (stack_pages as u64 + 1) * 4096;
+    // Guard page at guard_page_addr: left unmapped — access triggers page fault
     
     for i in 0..stack_pages {
         let vaddr = stack_top - (i as u64 + 1) * 4096;
