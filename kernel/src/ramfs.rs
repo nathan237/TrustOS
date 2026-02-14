@@ -90,7 +90,7 @@ impl RamFs {
         
         // Create /etc/version
         self.touch("/etc/version").ok();
-        self.write_file("/etc/version", b"T-RustOs v0.1.0\n").ok();
+        self.write_file("/etc/version", b"T-RustOs v0.2.0\n").ok();
     }
     
     /// Get current directory

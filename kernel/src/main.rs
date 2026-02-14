@@ -220,7 +220,7 @@ pub unsafe extern "C" fn kmain() -> ! {
 
     // Phase 1: Early init - serial port for debug output
     serial::init();
-    serial_println!("T-RustOs Kernel v0.1.0");
+    serial_println!("T-RustOs Kernel v0.2.0");
     serial_println!("Limine protocol supported");
 
     // Phase 2: Initialize framebuffer console
@@ -795,7 +795,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     println!();
     framebuffer::draw_separator(framebuffer::get_cursor().1 as u32 * 16, framebuffer::COLOR_GREEN);
     println!();
-    println_color!(framebuffer::COLOR_BRIGHT_GREEN, "  System ready - TRust-OS v0.1.0");
+    println_color!(framebuffer::COLOR_BRIGHT_GREEN, "  System ready - TRust-OS v0.2.0");
     println_color!(framebuffer::COLOR_GREEN, "  Type 'desktop' to launch the desktop, or use shell commands.");
     println!();
 

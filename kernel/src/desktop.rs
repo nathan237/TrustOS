@@ -1410,7 +1410,7 @@ struct AppConfig {
             WindowType::SystemInfo => {
                 window.content.push(String::from("=== System Information ==="));
                 window.content.push(String::from(""));
-                window.content.push(format!("OS: TrustOS v0.1.0"));
+                window.content.push(format!("OS: TrustOS v0.2.0"));
                 window.content.push(format!("Arch: x86_64"));
                 window.content.push(format!("Display: {}x{}", self.width, self.height));
                 window.content.push(String::from("Kernel: trustos_kernel"));
@@ -2185,7 +2185,7 @@ struct AppConfig {
                     window.content.push(format!("Desktop icons: {}", icon_count));
                     window.content.push(String::new());
                     window.content.push(String::from("Theme: GitHub Dark"));
-                    window.content.push(String::from("OS: TrustOS v0.1.0"));
+                    window.content.push(String::from("OS: TrustOS v0.2.0"));
                 }
             },
             ContextAction::Cut => {
@@ -4642,7 +4642,7 @@ struct AppConfig {
         // Bottom: version info
         let ver_y = menu_y + menu_h as i32 - 20;
         framebuffer::draw_hline((menu_x + 4) as u32, ver_y as u32, menu_w - 8, GREEN_GHOST);
-        self.draw_text(menu_x + 10, ver_y + 6, "TrustOS v0.1.0", GREEN_SUBTLE);
+        self.draw_text(menu_x + 10, ver_y + 6, "TrustOS v0.2.0", GREEN_SUBTLE);
     }
     
     fn draw_window(&self, window: &Window) {

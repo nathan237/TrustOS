@@ -10,9 +10,9 @@
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-136%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-130%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![ISO](https://img.shields.io/badge/ISO-8.19%20MB-purple?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.1.9-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.2.0-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -30,6 +30,7 @@
 
 | Date | Changes |
 |------|----------|
+| **2026-02-14** | **v0.2.0 — Ring 3 Userspace Execution** — Real CPL-3 process execution via IRETQ with clean kernel return. Embedded ELF64 binary loader. `exec test` and `exec hello` shell commands. TrustFS block freeing fixes (unlink, truncate). 130K+ lines. |
 | **2026-02-14** | **TrustLab v3 — UX Overhaul** — Full mouse/click support on all 7 panels, structured syscall tracing (50+ syscall names, args, return values in Kernel Trace), event detail panel, in-kernel UX auto-test suite (9 tests via `labtest` command). 136K+ lines. |
 | **2026-02-13** | **TrustLab v2 — Demo Mode** — Cinematic 27-second narrated demo with Matrix-themed Morpheus intro, 23 slides with panel-targeted narration, glitch transitions, red text overlay, progress bar, space-to-skip. PIT-based timing (100Hz). |
 | **2026-02-13** | **TrustLab — 7-Panel Introspection Laboratory** — Added Hex Editor panel (7th panel), execution pipeline visualizer, zero-cost trace bus with 512-slot ring buffer. The **first bare-metal OS with real-time kernel introspection**. |
@@ -563,6 +564,11 @@ kernel/src/
 ---
 
 ## 📋 Changelog
+
+### v0.2.0 — February 2026
+- **Ring 3 Userspace Execution** — Real CPL-3 process execution via `IRETQ` with setjmp/longjmp-style kernel return (`exec_ring3_process` / `return_from_ring3`). Page-aligned physical memory allocation. SYSCALL/SYSRET for fast system calls. EXIT/EXIT_GROUP handlers for clean process termination.
+- **Embedded ELF64 Binary** — 183-byte static ELF64 hello-world binary embedded in kernel. Full ELF loader maps LOAD segments to user address space at `0x400000`. Shell commands: `exec test` (raw machine code) and `exec hello` (ELF parse + load).
+- **TrustFS Reliability** — `free_block()` clears bitmap + increments free count. `free_inode_blocks()` frees all direct + indirect blocks. `unlink()` properly reclaims storage when nlink=0. `truncate()` frees blocks beyond new size.
 
 ### v0.1.9 — February 2026
 - **TrustLab v3 — UX Overhaul** — Full mouse/click interaction on all 7 panels. Previously only 3 panels handled clicks; now Hardware Status (scroll stats), Kernel Trace (filter toggles, event selection), Command Guide (category tabs, row selection), Pipeline (stage flash, flow scroll), File Tree, TrustLang Editor, and Hex Editor all respond to mouse input.

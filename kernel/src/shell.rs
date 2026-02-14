@@ -642,7 +642,7 @@ fn print_banner() {
     crate::println_color!(COLOR_GREEN,        r"  | | |  _ <| |_| \__ \ |_| |_| \__ \");
     crate::println_color!(COLOR_DARK_GREEN,   r"  |_| |_| \_\\__,_|___/\__\\___/|___/");
     crate::println!();
-    crate::println_color!(COLOR_CYAN, "  T-RustOs v0.1.0 - Type 'help' for commands");
+    crate::println_color!(COLOR_CYAN, "  T-RustOs v0.2.0 - Type 'help' for commands");
     crate::println!();
 }
 
@@ -2236,14 +2236,14 @@ fn cmd_info() {
 }
 
 fn cmd_version() {
-    crate::println!("T-RustOs v0.1.0 (Rust + Limine)");
+    crate::println!("T-RustOs v0.2.0 (Rust + Limine)");
 }
 
 fn cmd_uname(args: &[&str]) {
     let all = args.contains(&"-a");
     if args.is_empty() || all { crate::print!("T-RustOs "); }
     if args.contains(&"-n") || all { crate::print!("trustos "); }
-    if args.contains(&"-r") || all { crate::print!("0.1.0 "); }
+    if args.contains(&"-r") || all { crate::print!("0.2.0 "); }
     if args.contains(&"-m") || all { crate::print!("x86_64"); }
     crate::println!();
 }
@@ -8723,7 +8723,7 @@ fn cmd_cosmic_desktop() {
         "   | || |  | |_| \\__ \\ |_| |_| |___) |",
         "   |_||_|   \\__,_|___/\\__|\\___/|____/ ",
         "",
-        "  OS: TrustOS v0.1.0",
+        "  OS: TrustOS v0.2.0",
         "  Kernel: Custom Rust Kernel",
         "  Shell: TrustOS Shell",
         "  Resolution: 1280x800",
