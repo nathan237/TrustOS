@@ -79,6 +79,7 @@ pub extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptSta
     }
     // Update tick counter
     crate::logger::tick();
+    crate::time::tick();
     
     // Record timer event
     crate::trace::record_event(crate::trace::EventType::TimerTick, 0);

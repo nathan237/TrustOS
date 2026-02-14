@@ -1895,6 +1895,19 @@ struct AppConfig {
                         }
                     }
                     
+                    // Handle lab mode panel clicks
+                    if self.windows[i].window_type == WindowType::LabMode {
+                        let win = &self.windows[i];
+                        let rel_x = x - win.x;
+                        let rel_y = y - win.y;
+                        let win_id = win.id;
+                        let ww = win.width;
+                        let wh = win.height;
+                        if let Some(lab) = self.lab_states.get_mut(&win_id) {
+                            lab.handle_click(rel_x, rel_y, ww, wh);
+                        }
+                    }
+
                     // Handle binary viewer clicks
                     if self.windows[i].window_type == WindowType::BinaryViewer {
                         let win = &self.windows[i];
@@ -5725,6 +5738,20 @@ struct AppConfig {
     /// Open TrustLab mode window
     pub fn open_lab_mode(&mut self) -> u32 {
         let id = self.create_window("TrustLab \u{2014} OS Introspection", 30, 30, 1200, 700, WindowType::LabMode);
+        // Force fullscreen (maximized)
+        let sw = crate::framebuffer::width() as u32;
+        let sh = crate::framebuffer::height() as u32;
+        if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
+            w.saved_x = w.x;
+            w.saved_y = w.y;
+            w.saved_width = w.width;
+            w.saved_height = w.height;
+            w.x = 0;
+            w.y = 0;
+            w.width = sw;
+            w.height = sh - TASKBAR_HEIGHT;
+            w.maximized = true;
+        }
         self.focus_window(id);
         id
     }

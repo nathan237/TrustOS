@@ -4,9 +4,12 @@
 //!   ┌──────────────┬──────────────┬──────────────┐
 //!   │  Hardware    │  Live Kernel │   Command    │
 //!   │  Status      │  Trace       │   Guide      │
+//!   │              ├──────────────┤              │
+//!   │              │  Pipeline    │              │
+//!   │              │  View        │              │
 //!   ├──────────────┼──────────────┼──────────────┤
-//!   │  File System │  TrustLang   │  Live Kernel │
-//!   │  Tree        │  Editor      │  Trace (6)   │
+//!   │  File System │  TrustLang   │  Hex Editor  │
+//!   │  Tree        │  Editor      │              │
 //!   └──────────────┴──────────────┴──────────────┘
 //!
 //! No other bare-metal OS has a feature like this.
@@ -19,9 +22,13 @@ pub mod guide;
 pub mod filetree;
 pub mod editor;
 pub mod kernel_trace;
+pub mod pipeline;
+pub mod hex_editor;
+pub mod demo;
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use alloc::format;
 use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use crate::keyboard::{KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_PGUP, KEY_PGDOWN};
@@ -65,7 +72,8 @@ pub enum PanelId {
     CommandGuide = 2,
     FileTree = 3,
     TrustLangEditor = 4,
-    LiveTrace = 5,
+    Pipeline = 5,
+    HexEditor = 6,
 }
 
 impl PanelId {
@@ -76,7 +84,8 @@ impl PanelId {
             2 => PanelId::CommandGuide,
             3 => PanelId::FileTree,
             4 => PanelId::TrustLangEditor,
-            _ => PanelId::LiveTrace,
+            5 => PanelId::Pipeline,
+            _ => PanelId::HexEditor,
         }
     }
     
@@ -87,7 +96,8 @@ impl PanelId {
             PanelId::CommandGuide => "📖 Command Guide",
             PanelId::FileTree => "📁 File System Tree",
             PanelId::TrustLangEditor => "⌨ TrustLang Editor",
-            PanelId::LiveTrace => "⚡ Event Stream",
+            PanelId::Pipeline => "⚙ Pipeline View",
+            PanelId::HexEditor => "🔍 Hex Editor",
         }
     }
     
@@ -98,7 +108,8 @@ impl PanelId {
             PanelId::CommandGuide => COL_ACCENT,
             PanelId::FileTree => COL_CYAN,
             PanelId::TrustLangEditor => COL_PURPLE,
-            PanelId::LiveTrace => COL_YELLOW,
+            PanelId::Pipeline => COL_YELLOW,
+            PanelId::HexEditor => COL_RED,
         }
     }
 }
@@ -117,7 +128,9 @@ pub struct LabState {
     pub guide_state: guide::GuideState,
     pub tree_state: filetree::FileTreeState,
     pub editor_state: editor::EditorState,
-    pub live_trace_state: kernel_trace::KernelTraceState,
+    pub pipeline_state: pipeline::PipelineState,
+    pub hex_state: hex_editor::HexEditorState,
+    pub demo_state: demo::DemoState,
     /// Frame counter
     pub frame: u64,
     /// Whether to auto-scroll trace panels
@@ -136,7 +149,9 @@ impl LabState {
             guide_state: guide::GuideState::new(),
             tree_state: filetree::FileTreeState::new(),
             editor_state: editor::EditorState::new(),
-            live_trace_state: kernel_trace::KernelTraceState::new_live(),
+            pipeline_state: pipeline::PipelineState::new(),
+            hex_state: hex_editor::HexEditorState::new(),
+            demo_state: demo::DemoState::new(),
             frame: 0,
             auto_scroll: true,
         }
@@ -144,18 +159,49 @@ impl LabState {
     
     /// Handle keyboard input
     pub fn handle_key(&mut self, key: u8) {
-        // Tab = cycle focused panel
+        // If demo is running, intercept keys
+        if self.demo_state.active {
+            self.demo_state.handle_key(key);
+            return;
+        }
+
+        // Tab = cycle focused panel (skip Pipeline — it's embedded in Trace)
         if key == 0x09 {
-            let next = ((self.focused_panel as usize) + 1) % 6;
+            let mut next = ((self.focused_panel as usize) + 1) % 7;
+            if next == 5 { next = 6; } // skip Pipeline (embedded)
             self.focused_panel = PanelId::from_index(next);
             return;
         }
         
-        // Backtab (Shift+Tab) — previous panel  
-        if key == 0x0F {
-            let cur = self.focused_panel as usize;
-            let prev = if cur == 0 { 5 } else { cur - 1 };
-            self.focused_panel = PanelId::from_index(prev);
+        // Enter in shell bar → execute command 
+        // (but if editor or filetree is focused, let them handle Enter)
+        if key == 0x0D || key == 0x0A {
+            if self.focused_panel == PanelId::TrustLangEditor {
+                self.editor_state.handle_key(key);
+                return;
+            }
+            if self.focused_panel == PanelId::FileTree {
+                self.tree_state.handle_key(key);
+                return;
+            }
+            if !self.shell_input.is_empty() {
+                self.execute_shell_command();
+                return;
+            }
+        }
+        
+        // Backspace in shell bar 
+        if key == 0x08 {
+            // If focused on editor, let it handle backspace
+            if self.focused_panel == PanelId::TrustLangEditor {
+                self.editor_state.handle_key(key);
+                return;
+            }
+            // Otherwise treat as shell bar backspace
+            if self.shell_cursor > 0 {
+                self.shell_cursor -= 1;
+                self.shell_input.remove(self.shell_cursor);
+            }
             return;
         }
         
@@ -166,25 +212,163 @@ impl LabState {
             PanelId::CommandGuide => self.guide_state.handle_key(key),
             PanelId::FileTree => self.tree_state.handle_key(key),
             PanelId::TrustLangEditor => self.editor_state.handle_key(key),
-            PanelId::LiveTrace => self.live_trace_state.handle_key(key),
+            PanelId::Pipeline => self.pipeline_state.handle_key(key),
+            PanelId::HexEditor => self.hex_state.handle_key(key),
         }
     }
     
     /// Handle character input (printable)
     pub fn handle_char(&mut self, ch: char) {
+        if self.demo_state.active {
+            // Forward space to demo as key skip
+            if ch == ' ' {
+                self.demo_state.handle_key(0x20);
+            }
+            return;
+        }
+
         match self.focused_panel {
             PanelId::TrustLangEditor => self.editor_state.handle_char(ch),
             PanelId::CommandGuide => self.guide_state.handle_char(ch),
-            _ => {}
+            _ => {
+                // Route to shell bar for all other panels
+                self.shell_input.insert(self.shell_cursor, ch);
+                self.shell_cursor += 1;
+            }
         }
     }
     
+    /// Execute a shell bar command
+    fn execute_shell_command(&mut self) {
+        let raw: String = self.shell_input.trim().chars().collect();
+        let cmd: String = raw.chars().map(|c| c.to_ascii_lowercase()).collect();
+        self.shell_input.clear();
+        self.shell_cursor = 0;
+        
+        match cmd.as_str() {
+            "hw" | "hardware" | "cpu" => {
+                self.focused_panel = PanelId::HardwareStatus;
+            }
+            "trace" | "log" | "events" => {
+                self.focused_panel = PanelId::KernelTrace;
+            }
+            "help" | "guide" | "commands" | "cmd" => {
+                self.focused_panel = PanelId::CommandGuide;
+            }
+            "fs" | "files" | "tree" | "ls" => {
+                self.focused_panel = PanelId::FileTree;
+                self.tree_state.dirty = true;
+                self.tree_state.handle_key(b'R'); // force refresh
+            }
+            "edit" | "editor" | "code" | "trustlang" => {
+                self.focused_panel = PanelId::TrustLangEditor;
+            }
+            "live" | "stream" | "bus" | "pipeline" | "pipe" => {
+                self.focused_panel = PanelId::Pipeline;
+            }
+            "hex" | "hexedit" | "hexdump" => {
+                self.focused_panel = PanelId::HexEditor;
+            }
+            _ if cmd.starts_with("hex ") => {
+                let path = raw[4..].trim();
+                if !path.is_empty() {
+                    self.hex_state.load_file(path);
+                    self.focused_panel = PanelId::HexEditor;
+                }
+            }
+            "clear" | "cls" => {
+                self.trace_state.events.clear();
+                self.pipeline_state.flows.clear();
+            }
+            "demo" | "showcase" | "present" => {
+                self.demo_state.start();
+            }
+            "refresh" | "r" => {
+                self.tree_state.handle_key(b'R');
+                self.hw_state.force_refresh();
+            }
+            "run" | "f5" => {
+                self.editor_state.run_code();
+                self.focused_panel = PanelId::TrustLangEditor;
+            }
+            _ => {
+                // Unknown command — show in trace
+                trace_bus::emit_static(
+                    trace_bus::EventCategory::Custom,
+                    "lab> unknown command",
+                    0,
+                );
+            }
+        }
+    }
+    
+    /// Handle mouse click (coordinates relative to window content area)
+    pub fn handle_click(&mut self, rx: i32, ry: i32, ww: u32, wh: u32) {
+        let cx = 2i32;
+        let cy = TITLE_BAR_HEIGHT as i32 + 2;
+        let cw = ww.saturating_sub(4);
+        let ch = wh.saturating_sub(TITLE_BAR_HEIGHT + 4);
+        if cw < 200 || ch < 100 { return; }
+
+        let panels = compute_panels(cx, cy, cw, ch);
+
+        // Check if click is inside a panel
+        for (i, pr) in panels.iter().enumerate() {
+            if rx >= pr.x && rx < pr.x + pr.w as i32
+                && ry >= pr.y && ry < pr.y + pr.h as i32
+            {
+                let pid = PanelId::from_index(i);
+                self.focused_panel = pid;
+
+                // Content area coordinates (same as draw_lab)
+                let content_x = pr.x + PANEL_PADDING as i32;
+                let content_y = pr.y + PANEL_HEADER_H as i32 + PANEL_PADDING as i32;
+                let content_w = pr.w.saturating_sub(PANEL_PADDING * 2);
+                let content_h = pr.h.saturating_sub(PANEL_HEADER_H + PANEL_PADDING * 2);
+                let local_x = rx - content_x;
+                let local_y = ry - content_y;
+
+                // Dispatch click to panel
+                match pid {
+                    PanelId::FileTree => {
+                        self.tree_state.handle_click(local_x, local_y, content_w, content_h);
+                    }
+                    PanelId::TrustLangEditor => {
+                        self.editor_state.handle_click(local_x, local_y, content_w, content_h);
+                    }
+                    PanelId::HexEditor => {
+                        self.hex_state.handle_click(local_x, local_y, content_w, content_h);
+                    }
+                    _ => {}
+                }
+                return;
+            }
+        }
+
+        // Click on shell bar — focus stays, position cursor
+        let gap = 4u32;
+        let shell_y = cy + (ch - SHELL_BAR_H) as i32;
+        if ry >= shell_y && ry < shell_y + SHELL_BAR_H as i32 {
+            let cw_px = char_w();
+            if cw_px > 0 {
+                let prompt_len = 5; // "lab> "
+                let input_x = cx + 8 + prompt_len * cw_px;
+                let click_col = ((rx - input_x) / cw_px).max(0) as usize;
+                self.shell_cursor = click_col.min(self.shell_input.len());
+            }
+        }
+    }
+
     /// Update per-frame state
     pub fn tick(&mut self) {
         self.frame += 1;
         self.hw_state.update();
         self.trace_state.update();
-        self.live_trace_state.update();
+        self.pipeline_state.update();
+        // Demo tick: auto-focus panels
+        if let Some(panel_idx) = self.demo_state.tick() {
+            self.focused_panel = PanelId::from_index(panel_idx);
+        }
     }
 }
 
@@ -205,7 +389,7 @@ struct PanelRect {
     h: u32,
 }
 
-fn compute_panels(cx: i32, cy: i32, cw: u32, ch: u32) -> [PanelRect; 6] {
+fn compute_panels(cx: i32, cy: i32, cw: u32, ch: u32) -> [PanelRect; 7] {
     let gap = 4u32;
     // Reserve bottom for shell bar
     let content_h = ch.saturating_sub(SHELL_BAR_H + gap);
@@ -219,13 +403,22 @@ fn compute_panels(cx: i32, cy: i32, cw: u32, ch: u32) -> [PanelRect; 6] {
     let y0 = cy;
     let y1 = cy + row_h as i32 + gap as i32;
     
+    // Right column: clamp width so it doesn't overflow the window
+    let col2_w = (cw as i32 - (x2 - cx)).max(40) as u32;
+    
+    // Top-middle is split in half vertically: Trace (top) + Pipeline (bottom)
+    let trace_h = row_h.saturating_sub(gap) / 2;
+    let pipe_h = row_h.saturating_sub(trace_h + gap);
+    let pipe_y = y0 + trace_h as i32 + gap as i32;
+    
     [
-        PanelRect { x: x0, y: y0, w: col_w, h: row_h }, // Hardware Status
-        PanelRect { x: x1, y: y0, w: col_w, h: row_h }, // Kernel Trace
-        PanelRect { x: x2, y: y0, w: col_w, h: row_h }, // Command Guide
-        PanelRect { x: x0, y: y1, w: col_w, h: row_h }, // File Tree
-        PanelRect { x: x1, y: y1, w: col_w, h: row_h }, // TrustLang Editor
-        PanelRect { x: x2, y: y1, w: col_w, h: row_h }, // Live Trace
+        PanelRect { x: x0, y: y0, w: col_w, h: row_h },          // 0: Hardware Status
+        PanelRect { x: x1, y: y0, w: col_w, h: trace_h },        // 1: Kernel Trace (top half)
+        PanelRect { x: x2, y: y0, w: col2_w, h: row_h },         // 2: Command Guide
+        PanelRect { x: x0, y: y1, w: col_w, h: row_h },          // 3: File Tree
+        PanelRect { x: x1, y: y1, w: col_w, h: row_h },          // 4: TrustLang Editor
+        PanelRect { x: x1, y: pipe_y, w: col_w, h: pipe_h },     // 5: Pipeline View (bottom half)
+        PanelRect { x: x2, y: y1, w: col2_w, h: row_h },         // 6: Hex Editor
     ]
 }
 
@@ -274,8 +467,11 @@ pub fn draw_lab(state: &LabState, wx: i32, wy: i32, ww: u32, wh: u32) {
             PanelId::TrustLangEditor => {
                 editor::draw(&state.editor_state, content_x, content_y, content_w, content_h);
             }
-            PanelId::LiveTrace => {
-                kernel_trace::draw(&state.live_trace_state, content_x, content_y, content_w, content_h);
+            PanelId::Pipeline => {
+                pipeline::draw(&state.pipeline_state, content_x, content_y, content_w, content_h);
+            }
+            PanelId::HexEditor => {
+                hex_editor::draw(&state.hex_state, content_x, content_y, content_w, content_h);
             }
         }
     }
@@ -284,6 +480,11 @@ pub fn draw_lab(state: &LabState, wx: i32, wy: i32, ww: u32, wh: u32) {
     let gap = 4u32;
     let shell_y = cy + (ch - SHELL_BAR_H) as i32;
     draw_shell_bar(state, cx, shell_y, cw, SHELL_BAR_H);
+
+    // Demo overlay (drawn on top of everything)
+    if state.demo_state.active {
+        demo::draw_overlay(&state.demo_state, wx, wy, ww, wh);
+    }
 }
 
 /// Draw a panel frame (border + header + title)
@@ -327,7 +528,11 @@ fn draw_shell_bar(state: &LabState, x: i32, y: i32, w: u32, h: u32) {
     
     // Input
     let input_x = x + 8 + (prompt.len() as i32 * char_w());
-    draw_lab_text(input_x, y + 7, &state.shell_input, COL_TEXT);
+    if state.shell_input.is_empty() {
+        draw_lab_text(input_x, y + 7, "hw|trace|fs|edit|hex|pipe|help|run", COL_DIM);
+    } else {
+        draw_lab_text(input_x, y + 7, &state.shell_input, COL_TEXT);
+    }
     
     // Cursor blink
     if (state.frame / 30) % 2 == 0 {
@@ -335,10 +540,11 @@ fn draw_shell_bar(state: &LabState, x: i32, y: i32, w: u32, h: u32) {
         crate::framebuffer::fill_rect(cursor_x as u32, (y + 6) as u32, 2, 14, COL_ACCENT);
     }
     
-    // Tab hint on right side
-    let hint = "[Tab] cycle panels";
+    // Tab hint + active panel on right side
+    let panel_name = state.focused_panel.title();
+    let hint = format!("[Tab] cycle | Active: {}", panel_name);
     let hint_x = x + w as i32 - (hint.len() as i32 * char_w()) - 8;
-    draw_lab_text(hint_x, y + 7, hint, COL_DIM);
+    draw_lab_text(hint_x, y + 7, &hint, COL_DIM);
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────

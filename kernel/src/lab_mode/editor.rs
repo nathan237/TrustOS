@@ -49,7 +49,7 @@ impl EditorState {
             cursor_line: 1,
             cursor_col: 0,
             scroll: 0,
-            output: alloc::vec![String::from("Press F5 to run")],
+            output: alloc::vec![String::from("Press Ctrl+R to run")],
             output_focused: false,
             output_scroll: 0,
             frame: 0,
@@ -108,8 +108,8 @@ impl EditorState {
                     self.clamp_col();
                 }
             }
-            // F5 = run
-            0x3F => {
+            // Ctrl+R = run code
+            0x12 => {
                 self.run_code();
             }
             // Enter
@@ -167,6 +167,38 @@ impl EditorState {
         self.cursor_col += 1;
     }
     
+    /// Handle mouse click at (x, y) relative to content area
+    pub fn handle_click(&mut self, x: i32, y: i32, w: u32, h: u32) {
+        let cw = super::char_w();
+        let lh = super::char_h() + 1;
+        if lh <= 0 || cw <= 0 { return; }
+
+        // Same layout as draw(): 60% editor, 40% output
+        let editor_h = (h as i32 * 60 / 100).max(lh * 3);
+        let output_y = editor_h + 2;
+
+        if y >= output_y {
+            // Clicked in output area
+            self.output_focused = true;
+        } else {
+            // Clicked in editor area
+            self.output_focused = false;
+
+            // Code starts after header line
+            let code_y = lh;
+            if y < code_y { return; } // header
+
+            let gutter_w = 4 * cw;
+            let row = ((y - code_y) / lh) as usize;
+            let col = ((x - gutter_w).max(0) / cw) as usize;
+
+            self.cursor_line = (self.scroll + row).min(self.lines.len().saturating_sub(1));
+            let line_len = self.lines.get(self.cursor_line).map(|l| l.len()).unwrap_or(0);
+            self.cursor_col = col.min(line_len);
+            self.frame += 1; // reset blink
+        }
+    }
+
     fn clamp_col(&mut self) {
         let line_len = self.lines.get(self.cursor_line)
             .map(|l| l.len()).unwrap_or(0);
@@ -176,7 +208,7 @@ impl EditorState {
     }
     
     /// Execute the code (using TrustLang VM if available)
-    fn run_code(&mut self) {
+    pub fn run_code(&mut self) {
         self.output.clear();
         self.output.push(String::from("=== Running ==="));
         
@@ -222,7 +254,7 @@ pub fn draw(state: &EditorState, x: i32, y: i32, w: u32, h: u32) {
     draw_lab_text(x, y, header, header_color);
     
     // F5 hint
-    let hint = "[F5] run";
+    let hint = "[Ctrl+R] run";
     let hint_x = x + w as i32 - (hint.len() as i32 * cw) - 2;
     draw_lab_text(hint_x, y, hint, COL_GREEN);
     

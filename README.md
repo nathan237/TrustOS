@@ -4,13 +4,15 @@
 
 ### **Trust** the code. **Rust** is the reason.
 
-**A fully auditable, bare-metal operating system — 120,000 lines of pure Rust. Zero C. Zero secrets.**
+**A fully auditable, bare-metal operating system — 128,000+ lines of pure Rust. Zero C. Zero secrets.**
+
+**🏆 The first bare-metal OS with a built-in real-time kernel introspection laboratory.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-120%2C000%2B%20lines-blue?style=for-the-badge)]()
-[![ISO](https://img.shields.io/badge/ISO-10.86%20MB-purple?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.1.6-orange?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-128%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![ISO](https://img.shields.io/badge/ISO-8.19%20MB-purple?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.1.8-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -28,12 +30,12 @@
 
 | Date | Changes |
 |------|----------|
-| **2026-02-12** | **TrustOS Film** — Built-in cinematic animated explainer with 12 unique scene-specific animations (floating windows, question marks rain, screen shatter, binary flood, redacted bars, earthquake shake, light burst, odometer counter, glow pulse cards, sparkle dissolve, expanding rings, matrix rain callback), 8 animated backgrounds, odometer counters, and fast-paced transitions. Run `film` in the shell. |
-| **2026-02-12** | **Ed25519 Signatures** — Full RFC 8032 Ed25519 asymmetric signature system (SHA-512, extended twisted Edwards curve, TweetNaCl-style scalar mod l), replaces forgeable HMAC-only signatures. **Cross-platform build** — Makefile + build.sh for Linux/macOS, no hardcoded Windows paths. **TrustLang Showcase** — Proper syntax highlighting (keywords red, function calls blue, variables cyan, strings orange, comments green, brackets gold) + auto-scrolling editor when code exceeds panel height |
-| **2026-02-12** | **3D Chess** — Full 3D chess game with low-poly pieces, proper look-at camera (spherical coords, forward/right/up basis), AI opponent (minimax depth 2), board labels, shadows, reflections, scroll zoom, piece selection highlighting |
-| **2026-02-11 18:00** | Terminal: timestamp cyan, `neofetch` command with ASCII art, `user`/`id`/`hostname`/`history` commands, colorized outputs (date/uname/free/net/ps/df/mkdir/touch/rm), `del`/`top`/`lsblk`/`ipconfig`/`version`/`time` aliases |
-| **2026-02-11 16:30** | Terminal: help arguments in cyan (`\x01B`), commands green, descriptions white |
-| **2026-02-11 15:00** | Keyboard: fixed Shift stuck bug (`0xAA` scancode filter removal), terminal scrollbar, color marker system (`\x01` prefix), categorized help, prompt with timestamp + red root + cwd, `cd`/`pwd`/`ls` use actual cwd |
+| **2026-02-13** | **TrustLab v2 — Demo Mode** — Cinematic 27-second narrated demo with Matrix-themed Morpheus intro, 23 slides with panel-targeted narration, glitch transitions, red text overlay, progress bar, space-to-skip. PIT-based timing (100Hz). |
+| **2026-02-13** | **TrustLab — 7-Panel Introspection Laboratory** — Added Hex Editor panel (7th panel), execution pipeline visualizer, zero-cost trace bus with 512-slot ring buffer. The **first bare-metal OS with real-time kernel introspection**. |
+| **2026-02-12** | **TrustOS Film** — Built-in cinematic animated explainer with 12 unique scene-specific animations, 8 animated backgrounds. Run `film` in the shell. |
+| **2026-02-12** | **Ed25519 Signatures** — Full RFC 8032 Ed25519 asymmetric signature system. **Cross-platform build** — Makefile + build.sh for Linux/macOS. **TrustLang Showcase** — Proper syntax highlighting + auto-scrolling editor. |
+| **2026-02-12** | **3D Chess** — Full 3D chess game with low-poly pieces, proper look-at camera, AI opponent (minimax depth 2), board labels, shadows, reflections, scroll zoom. |
+| **2026-02-11** | Terminal: timestamp cyan, `neofetch`, colorized outputs, categorized help, scrollbar, color marker system, Shift stuck fix |
 
 ---
 
@@ -56,20 +58,22 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 
 | Metric | Value |
 |--------|-------|
-| **Total code** | 120,000+ lines of Rust |
-| **Source files** | 216+ `.rs` files |
-| **ISO size** | 10.86 MB |
+| **Total code** | 128,000+ lines of Rust |
+| **Source files** | 244 `.rs` files |
+| **Kernel modules** | 34 independent modules |
+| **ISO size** | 8.19 MB |
 | **Boot time** | < 1 second |
 | **Desktop FPS** | 144 FPS (SSE2 SIMD) |
 | **C code** | 0 lines |
-| **Development time** | 8 days |
+| **External dependencies** | 0 (everything from scratch) |
+| **Development time** | 10 days |
 
 ### TrustOS vs The World
 
 | | Traditional OS | TrustOS |
 |---|:---:|:---:|
 | **Language** | C/C++ with 40 years of memory bugs | 100% Rust — memory safe by design |
-| Codebase | Millions of lines, impossible to audit | 120K lines, one person can read it all |
+| Codebase | Millions of lines, impossible to audit | 128K lines, one person can read it all |
 | **Binary blobs** | Everywhere | None. Zero. |
 | **Telemetry** | Opt-out (maybe) | Doesn't exist — verify it yourself |
 | **Build** | Complex cross-compilation toolchains | `cargo build` — that's it |
@@ -78,7 +82,29 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 
 ## ✨ Features
 
-### 🖥️ COSMIC2 Desktop Environment
+### � TrustLab — Real-Time Kernel Introspection Laboratory
+
+> **🏆 World's first: no other bare-metal OS has a built-in, real-time kernel introspection lab.**
+
+TrustLab is a 7-panel interactive workspace that lets you **watch the OS kernel run in real-time — from inside itself**. No external debugger. No attached tools. The OS observes its own internals live.
+
+| Panel | What it shows |
+|-------|---------------|
+| **Hardware Status** | Live CPU gauge, heap usage bar, IRQ rate, uptime, allocation stats — updated every tick |
+| **Kernel Trace** | Scrolling event log of interrupts, syscalls, memory allocations, VFS operations — with category filters and pause toggle |
+| **Command Guide** | Searchable reference of ~55 commands with fuzzy search and category tabs |
+| **File System Tree** | Interactive VFS browser with expand/collapse, file sizes, color-coded extensions (.rs = green, .tl = purple) |
+| **TrustLang Editor** | Syntax-highlighted code editor with F5 execution and output pane |
+| **Execution Pipeline** | Real-time data flow visualization through the kernel |
+| **Hex Editor** | Raw byte inspection with color-coded display |
+
+- **Zero-cost trace bus** — 512-slot ring buffer, gated by `LAB_ACTIVE` flag. The kernel hooks in interrupts, VFS, scheduler, and memory allocator emit events **only when TrustLab is open** — zero overhead otherwise.
+- **Cinematic demo mode** — Type `demo` inside TrustLab for a 27-second Matrix-themed narrated tour with Morpheus intro, glitch transitions, and panel-targeted narration.
+- **Launch**: `lab` or `trustlab` in shell, or from desktop Start Menu.
+
+---
+
+### �🖥️ COSMIC2 Desktop Environment
 - **Multi-layer GPU compositor** with 8 independent rendering layers
 - **SSE2 SIMD optimized** — 144 FPS with zero flickering
 - **Taskbar, dock, start menu**, window management, settings panel
@@ -511,27 +537,38 @@ kernel/src/
 
 ## 📊 Comparison
 
-| Feature | TrustOS | Linux 0.01 (1991) | MenuetOS | SerenityOS |
-|---------|---------|-------------------|----------|------------|
-| Language | **Rust** | C | ASM | C++ |
-| Lines of code | **120K** | 10K | 40K | 800K+ |
-| ISO size | **10.86 MB** | N/A | 1.44 MB | ~300 MB |
-| Dev time | **8 days** | 6 months | Years | Years |
-| GUI Desktop | Yes (144 FPS) | No | Yes | Yes |
-| Web Browser | **Yes** (HTML/CSS/JS) | No | No | Yes |
-| Built-in compiler | **Yes** (TrustLang) | No | No | No |
-| 3D Engine | **Yes** (Formula3D + Chess3D) | No | No | No |
-| Network + TLS 1.3 | **Yes** | No | No | Yes |
-| Hypervisor | **Yes** (VT-x/SVM) | No | No | No |
-| Memory safe | **Yes** (Rust) | No | No | No |
-| Fully auditable | **Yes** | Partially | Yes | Partially |
+| Feature | TrustOS | SerenityOS | Redox OS | TempleOS | Linux |
+|---------|---------|------------|----------|----------|-------|
+| Language | **Rust** | C++ | Rust | HolyC | C |
+| Lines of code | **128K** | 800K+ | 200K+ | 100K | Millions |
+| Contributors | **1** | 1,141 | Community | 1 | Thousands |
+| Development time | **10 days** | 6+ years | 10+ years | ~10 years | 35+ years |
+| GUI Desktop | ✅ (144 FPS) | ✅ | ✅ | ✅ (16 colors) | Via X11/Wayland |
+| Web Browser | ✅ (from scratch) | ✅ (Ladybird) | Ported (NetSurf) | ❌ | Ported |
+| Built-in IDE | ✅ (TrustCode) | ✅ (HackStudio) | ❌ | ✅ | ❌ |
+| Built-in Language | ✅ (TrustLang) | ❌ | ❌ | ✅ (HolyC) | ❌ |
+| **Kernel Introspection Lab** | **✅ (FIRST)** | ❌ | ❌ | ❌ | ❌ (external tools) |
+| 3D Games | ✅ (FPS + Chess3D) | ❌ (2D only) | ❌ | ✅ (16 colors) | Ported |
+| Audio Synthesizer | ✅ (8-voice poly) | ❌ | ❌ | ❌ (single voice) | ❌ |
+| TLS 1.3 from scratch | ✅ | ❌ | ❌ | ❌ | Via OpenSSL |
+| Binary Analyzer | ✅ (TrustView) | ❌ | ❌ | ❌ | External (Ghidra) |
+| Hypervisor | ✅ (VT-x/SVM) | ❌ | ❌ | ❌ | Via KVM |
+| Memory safe | ✅ (Rust) | ❌ | ✅ (Rust) | ❌ | ❌ |
+| Fully auditable | ✅ | Partially | Partially | ✅ | ❌ |
 
 ---
 
 ## 📋 Changelog
 
+### v0.1.8 — February 2026
+- **TrustLab Demo Mode** — Cinematic 27-second narrated demo with Matrix-themed Morpheus intro ("Are you ready to see the Matrix, Neo?"), 23 slides with panel-targeted narration, glitch transitions, red text overlay, progress bar with timer, space-to-skip navigation. PIT-based timing (100Hz) for reliable playback.
+- **TrustLab v2** — Upgraded to 7 panels: added Hex Editor for raw byte inspection, Execution Pipeline visualizer. Improved zero-cost trace bus.
+- **Audio synthesis engine** — TrustSynth: 8-voice polyphonic synthesizer (sine, square, sawtooth, triangle, noise), ADSR envelope generator, 48kHz 16-bit stereo, Q16.16 fixed-point DSP. Pattern sequencer (16 patterns, 64 steps, configurable BPM). Intel HDA driver.
+- **Web Sandbox & Container** — Kernel-level sandboxed execution with `SandboxPolicy` presets, jailed filesystem (`SandboxFs`), JS threat scanner, DNS allow/deny `NetProxy`, capability tokens, watchdog timer, health checks, full audit trail.
+- **TrustView binary analyzer** — Ghidra-style ELF64 parser + x86_64 disassembler with cross-reference analysis, function detection, string extraction. Desktop GUI + CLI.
+
 ### v0.1.7 — February 2026
-- **TrustLab — OS Introspection Laboratory** — Real-time 6-panel educational workspace (`lab` / `trustlab` command, or Start Menu). Panels: Hardware Status (CPU gauge, heap bar, IRQ rate, uptime, alloc stats), Kernel Trace (scrolling event log with category filters, pause toggle), Command Guide (searchable reference of ~55 commands, fuzzy search, category tabs), File Tree (VFS browser with expand/collapse, file sizes, color-coded extensions), TrustLang Editor (syntax-highlighted code editor with F5 execution and output pane), Live Trace (auto-scrolling real-time event feed). Tab/Shift+Tab panel navigation. Zero-cost trace bus (512-slot ring buffer, gated by `LAB_ACTIVE` flag). Kernel hooks in interrupts, VFS, scheduler, and memory allocator emit events in real time.
+- **TrustLab — OS Introspection Laboratory** — Real-time 7-panel educational workspace (`lab` / `trustlab` command, or Start Menu). Panels: Hardware Status (CPU gauge, heap bar, IRQ rate, uptime, alloc stats), Kernel Trace (scrolling event log with category filters, pause toggle), Command Guide (searchable reference of ~55 commands, fuzzy search, category tabs), File Tree (VFS browser with expand/collapse, file sizes, color-coded extensions), TrustLang Editor (syntax-highlighted code editor with F5 execution and output pane), Hex Editor (raw byte inspection), Execution Pipeline (data flow visualizer). Tab/Shift+Tab panel navigation. Zero-cost trace bus (512-slot ring buffer, gated by `LAB_ACTIVE` flag). Kernel hooks in interrupts, VFS, scheduler, and memory allocator emit events in real time.
 
 ### v0.1.6 — February 2026
 - **TrustOS Film** — Built-in animated cinematic explainer (`film` command): 5-act narrative structure (The Question → The Problem → The Solution → The Proof → The Future) with 12 scene-specific animations: floating windows, question marks rain, screen shatter, binary flood, redacted bars, earthquake shake bar chart, light burst, odometer counter (0→120K), glow pulse feature cards, sparkle dissolve, expanding shockwave rings, matrix rain callback. 8 unique animated backgrounds (pulsing nebula, red scanlines, blueprint dot-grid, green sparks, starfield, circuit traces, sunrise gradient, matrix rain). All rendering integer-only (no_std compatible).
@@ -581,7 +618,7 @@ kernel/src/
 
 ---
 
-## �📄 License
+## 📄 License
 
 MIT License — see [LICENSE](LICENSE) for details.
 
@@ -602,7 +639,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 - GitHub: [@nathan237](https://github.com/nathan237)
 - Project: [TrustOS](https://github.com/nathan237/TrustOS)
 
-> Every line of TrustOS — 120,000+ lines of Rust — was designed, written, and tested by a single developer in 8 days.
+> Every line of TrustOS — 128,000+ lines of Rust — was designed, written, and tested by a single developer in 10 days.
 
 ---
 

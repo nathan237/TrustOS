@@ -1,7 +1,7 @@
 //! File System Tree Panel — Live VFS tree browser
 //!
 //! Shows the virtual file system as an expandable tree.
-//! Directories can be expanded/collapsed. Highlights open files.
+//! Directories can be expanded/collapsed. Uses ramfs (the actual filesystem).
 
 extern crate alloc;
 
@@ -37,9 +37,7 @@ pub struct FileTreeState {
     /// Scroll offset
     pub scroll: usize,
     /// Whether tree needs rebuild
-    dirty: bool,
-    /// Refresh counter
-    refresh_counter: u64,
+    pub dirty: bool,
 }
 
 impl FileTreeState {
@@ -49,83 +47,85 @@ impl FileTreeState {
             selected: 0,
             scroll: 0,
             dirty: true,
-            refresh_counter: 0,
         };
         s.rebuild_tree();
         s
     }
     
-    /// Rebuild the flattened tree from VFS
+    /// Rebuild the flattened tree from ramfs
     fn rebuild_tree(&mut self) {
         self.nodes.clear();
-        self.add_directory("/", 0);
+        // Add root as first node
+        self.nodes.push(TreeNode {
+            name: String::from("/"),
+            path: String::from("/"),
+            is_dir: true,
+            depth: 0,
+            expanded: true,
+            size: 0,
+        });
+        self.add_directory_children("/", 0);
         self.dirty = false;
     }
     
-    /// Recursively add directory contents
-    fn add_directory(&mut self, path: &str, depth: usize) {
-        // Add the directory node itself (except root)
-        if depth > 0 {
-            let name = path.rsplit('/').find(|s| !s.is_empty())
-                .unwrap_or(path);
+    /// Add children of a directory from ramfs
+    fn add_directory_children(&mut self, path: &str, depth: usize) {
+        if depth > 6 { return; }
+        
+        // Read from ramfs (the actual filesystem used by TrustOS)
+        let entries = crate::ramfs::with_fs(|fs| {
+            fs.ls(Some(path)).unwrap_or_default()
+        });
+        
+        if entries.is_empty() { return; }
+        
+        // Sort: directories first, then alphabetical
+        let mut dirs: Vec<_> = entries.iter()
+            .filter(|(_, ft, _)| *ft == crate::ramfs::FileType::Directory)
+            .collect();
+        let mut files: Vec<_> = entries.iter()
+            .filter(|(_, ft, _)| *ft != crate::ramfs::FileType::Directory)
+            .collect();
+        dirs.sort_by(|a, b| a.0.cmp(&b.0));
+        files.sort_by(|a, b| a.0.cmp(&b.0));
+        
+        // Add subdirectories
+        for (name, _, _) in &dirs {
+            let child_path = if path == "/" {
+                format!("/{}", name)
+            } else {
+                format!("{}/{}", path, name)
+            };
+            // Check if this dir was expanded
+            let is_expanded = depth < 1; // auto-expand first level
             self.nodes.push(TreeNode {
-                name: String::from(name),
-                path: String::from(path),
+                name: name.clone(),
+                path: child_path.clone(),
                 is_dir: true,
-                depth,
-                expanded: depth <= 1, // Auto-expand first 2 levels
+                depth: depth + 1,
+                expanded: is_expanded,
                 size: 0,
             });
+            if is_expanded {
+                self.add_directory_children(&child_path, depth + 1);
+            }
         }
         
-        // Only enumerate if expanded (or root)
-        let should_expand = depth == 0 || self.nodes.last()
-            .map(|n| n.expanded).unwrap_or(false);
-        
-        if !should_expand || depth > 6 {
-            return;
-        }
-        
-        // Read directory entries from VFS
-        if let Ok(entries) = crate::vfs::readdir(path) {
-            // Sort: directories first, then alphabetical
-            let mut dirs: Vec<_> = entries.iter()
-                .filter(|e| e.file_type == crate::vfs::FileType::Directory)
-                .collect();
-            let mut files: Vec<_> = entries.iter()
-                .filter(|e| e.file_type != crate::vfs::FileType::Directory)
-                .collect();
-            dirs.sort_by(|a, b| a.name.cmp(&b.name));
-            files.sort_by(|a, b| a.name.cmp(&b.name));
-            
-            // Add subdirectories
-            for entry in &dirs {
-                let child_path = if path == "/" {
-                    format!("/{}", entry.name)
-                } else {
-                    format!("{}/{}", path, entry.name)
-                };
-                self.add_directory(&child_path, depth + 1);
-            }
-            
-            // Add files
-            for entry in &files {
-                // Get file size via stat
-                let fpath = if path == "/" {
-                    format!("/{}", entry.name)
-                } else {
-                    format!("{}/{}", path, entry.name)
-                };
-                let fsize = crate::vfs::stat(&fpath).map(|s| s.size).unwrap_or(0);
-                self.nodes.push(TreeNode {
-                    name: entry.name.clone(),
-                    path: fpath,
-                    is_dir: false,
-                    depth: depth + 1,
-                    expanded: false,
-                    size: fsize,
-                });
-            }
+        // Add files
+        for (name, _, size) in &files {
+            let fpath = if path == "/" {
+                format!("/{}", name)
+            } else {
+                format!("{}/{}", path, name)
+            };
+            self.nodes.push(TreeNode {
+                name: name.clone(),
+                path: fpath,
+                is_dir: false,
+                depth: depth + 1,
+                expanded: false,
+                size: *size as u64,
+            });
         }
     }
     
@@ -148,10 +148,7 @@ impl FileTreeState {
             }
             // Enter = toggle expand/collapse
             0x0D | 0x0A => {
-                if self.selected < self.nodes.len() && self.nodes[self.selected].is_dir {
-                    self.nodes[self.selected].expanded = !self.nodes[self.selected].expanded;
-                    self.dirty = true;
-                }
+                self.toggle_selected();
             }
             // 'r' = refresh
             b'r' | b'R' => {
@@ -161,85 +158,123 @@ impl FileTreeState {
         }
         
         if self.dirty {
-            // Save expanded state
-            let expanded_paths: Vec<String> = self.nodes.iter()
-                .filter(|n| n.is_dir && n.expanded)
-                .map(|n| n.path.clone())
-                .collect();
-            
-            self.nodes.clear();
-            self.add_directory_with_state("/", 0, &expanded_paths);
-            self.dirty = false;
-            
-            // Clamp selection
-            if self.selected >= self.nodes.len() && !self.nodes.is_empty() {
-                self.selected = self.nodes.len() - 1;
-            }
+            self.rebuild_with_state();
         }
     }
     
+    /// Handle mouse click at (x, y) relative to content area
+    pub fn handle_click(&mut self, x: i32, y: i32, w: u32, h: u32) {
+        let lh = super::char_h() + 1;
+        if lh <= 0 { return; }
+
+        // Same layout as draw(): header line then list
+        let list_y = lh + 2;
+        if y < list_y { return; } // clicked on header
+
+        let row = ((y - list_y) / lh) as usize;
+        let target = self.scroll + row;
+        if target < self.nodes.len() {
+            self.selected = target;
+            // If it's a directory, toggle expand/collapse
+            if self.nodes[target].is_dir {
+                self.toggle_selected();
+            }
+        }
+    }
+
+    /// Toggle expand/collapse on the selected directory
+    fn toggle_selected(&mut self) {
+        if self.selected >= self.nodes.len() { return; }
+        if !self.nodes[self.selected].is_dir { return; }
+        
+        self.nodes[self.selected].expanded = !self.nodes[self.selected].expanded;
+        self.dirty = true;
+    }
+    
     /// Rebuild tree preserving expanded state
-    fn add_directory_with_state(&mut self, path: &str, depth: usize, expanded: &[String]) {
-        if depth > 0 {
-            let name = path.rsplit('/').find(|s| !s.is_empty())
-                .unwrap_or(path);
-            let is_expanded = expanded.iter().any(|p| p == path);
+    fn rebuild_with_state(&mut self) {
+        // Save expanded paths
+        let expanded_paths: Vec<String> = self.nodes.iter()
+            .filter(|n| n.is_dir && n.expanded)
+            .map(|n| n.path.clone())
+            .collect();
+        
+        let old_selected = self.selected;
+        self.nodes.clear();
+        
+        // Root
+        let root_expanded = expanded_paths.iter().any(|p| p == "/");
+        self.nodes.push(TreeNode {
+            name: String::from("/"),
+            path: String::from("/"),
+            is_dir: true,
+            depth: 0,
+            expanded: root_expanded,
+            size: 0,
+        });
+        
+        if root_expanded {
+            self.add_directory_children_with_state("/", 0, &expanded_paths);
+        }
+        
+        self.dirty = false;
+        
+        // Clamp selection
+        if self.selected >= self.nodes.len() && !self.nodes.is_empty() {
+            self.selected = self.nodes.len() - 1;
+        }
+    }
+    
+    fn add_directory_children_with_state(&mut self, path: &str, depth: usize, expanded: &[String]) {
+        if depth > 6 { return; }
+        
+        let entries = crate::ramfs::with_fs(|fs| {
+            fs.ls(Some(path)).unwrap_or_default()
+        });
+        
+        let mut dirs: Vec<_> = entries.iter()
+            .filter(|(_, ft, _)| *ft == crate::ramfs::FileType::Directory)
+            .collect();
+        let mut files: Vec<_> = entries.iter()
+            .filter(|(_, ft, _)| *ft != crate::ramfs::FileType::Directory)
+            .collect();
+        dirs.sort_by(|a, b| a.0.cmp(&b.0));
+        files.sort_by(|a, b| a.0.cmp(&b.0));
+        
+        for (name, _, _) in &dirs {
+            let child_path = if path == "/" {
+                format!("/{}", name)
+            } else {
+                format!("{}/{}", path, name)
+            };
+            let is_expanded = expanded.iter().any(|p| p == &child_path);
             self.nodes.push(TreeNode {
-                name: String::from(name),
-                path: String::from(path),
+                name: name.clone(),
+                path: child_path.clone(),
                 is_dir: true,
-                depth,
+                depth: depth + 1,
                 expanded: is_expanded,
                 size: 0,
             });
-            
-            if !is_expanded || depth > 6 {
-                return;
+            if is_expanded {
+                self.add_directory_children_with_state(&child_path, depth + 1, expanded);
             }
         }
         
-        let should_expand = depth == 0 || self.nodes.last()
-            .map(|n| n.expanded).unwrap_or(true);
-        
-        if !should_expand {
-            return;
-        }
-        
-        if let Ok(entries) = crate::vfs::readdir(path) {
-            let mut dirs: Vec<_> = entries.iter()
-                .filter(|e| e.file_type == crate::vfs::FileType::Directory)
-                .collect();
-            let mut files: Vec<_> = entries.iter()
-                .filter(|e| e.file_type != crate::vfs::FileType::Directory)
-                .collect();
-            dirs.sort_by(|a, b| a.name.cmp(&b.name));
-            files.sort_by(|a, b| a.name.cmp(&b.name));
-            
-            for entry in &dirs {
-                let child_path = if path == "/" {
-                    format!("/{}", entry.name)
-                } else {
-                    format!("{}/{}", path, entry.name)
-                };
-                self.add_directory_with_state(&child_path, depth + 1, expanded);
-            }
-            
-            for entry in &files {
-                let fpath = if path == "/" {
-                    format!("/{}", entry.name)
-                } else {
-                    format!("{}/{}", path, entry.name)
-                };
-                let fsize = crate::vfs::stat(&fpath).map(|s| s.size).unwrap_or(0);
-                self.nodes.push(TreeNode {
-                    name: entry.name.clone(),
-                    path: fpath,
-                    is_dir: false,
-                    depth: depth + 1,
-                    expanded: false,
-                    size: fsize,
-                });
-            }
+        for (name, _, size) in &files {
+            let fpath = if path == "/" {
+                format!("/{}", name)
+            } else {
+                format!("{}/{}", path, name)
+            };
+            self.nodes.push(TreeNode {
+                name: name.clone(),
+                path: fpath,
+                is_dir: false,
+                depth: depth + 1,
+                expanded: false,
+                size: *size as u64,
+            });
         }
     }
 }

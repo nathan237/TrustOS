@@ -98,6 +98,11 @@ impl HardwareState {
         self.task_count = crate::scheduler::stats().ready_count;
     }
     
+    /// Force an immediate refresh next tick
+    pub fn force_refresh(&mut self) {
+        self.refresh_counter = 14;
+    }
+    
     pub fn handle_key(&mut self, key: u8) {
         use crate::keyboard::{KEY_UP, KEY_DOWN};
         match key {
