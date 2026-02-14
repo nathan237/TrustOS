@@ -198,3 +198,109 @@ pub fn alloc_frame_zeroed() -> Option<u64> {
 pub fn stats() -> (u64, u64) {
     (TOTAL_FRAMES.load(Ordering::Relaxed), USED_FRAMES.load(Ordering::Relaxed))
 }
+
+/// Run self-tests on the frame allocator. Returns (passed, failed).
+pub fn self_test() -> (usize, usize) {
+    let mut passed = 0usize;
+    let mut failed = 0usize;
+
+    // Test 1: Basic allocation returns page-aligned address
+    match alloc_frame() {
+        Some(phys) => {
+            if phys & 0xFFF == 0 {
+                crate::serial_println!("[FRAME-TEST] alloc page-aligned: PASS");
+                passed += 1;
+            } else {
+                crate::serial_println!("[FRAME-TEST] alloc NOT page-aligned ({:#x}): FAIL", phys);
+                failed += 1;
+            }
+            free_frame(phys);
+        }
+        None => {
+            crate::serial_println!("[FRAME-TEST] alloc returned None: FAIL");
+            failed += 1;
+        }
+    }
+
+    // Test 2: Zeroed allocation
+    match alloc_frame_zeroed() {
+        Some(phys) => {
+            let hhdm = crate::memory::hhdm_offset();
+            let page = unsafe { core::slice::from_raw_parts((phys + hhdm) as *const u8, 4096) };
+            if page.iter().all(|&b| b == 0) {
+                crate::serial_println!("[FRAME-TEST] alloc_zeroed all zeros: PASS");
+                passed += 1;
+            } else {
+                crate::serial_println!("[FRAME-TEST] alloc_zeroed NOT zeroed: FAIL");
+                failed += 1;
+            }
+            free_frame(phys);
+        }
+        None => {
+            crate::serial_println!("[FRAME-TEST] alloc_zeroed returned None: FAIL");
+            failed += 1;
+        }
+    }
+
+    // Test 3: Free then re-alloc succeeds
+    if let Some(frame1) = alloc_frame() {
+        free_frame(frame1);
+        if alloc_frame().is_some() {
+            crate::serial_println!("[FRAME-TEST] free + realloc: PASS");
+            passed += 1;
+            // Note: we leak frame2 intentionally — test only
+        } else {
+            crate::serial_println!("[FRAME-TEST] realloc after free: FAIL");
+            failed += 1;
+        }
+    }
+
+    // Test 4: 16 consecutive allocs produce unique, non-overlapping frames
+    let mut frames = alloc::vec::Vec::new();
+    let mut test4_ok = true;
+    for _ in 0..16 {
+        match alloc_frame() {
+            Some(f) => {
+                if frames.contains(&f) {
+                    crate::serial_println!("[FRAME-TEST] duplicate frame {:#x}: FAIL", f);
+                    test4_ok = false;
+                    break;
+                }
+                frames.push(f);
+            }
+            None => {
+                crate::serial_println!("[FRAME-TEST] OOM during multi-alloc: FAIL");
+                test4_ok = false;
+                break;
+            }
+        }
+    }
+    for f in &frames {
+        free_frame(*f);
+    }
+    if test4_ok {
+        crate::serial_println!("[FRAME-TEST] 16 unique frames: PASS");
+        passed += 1;
+    } else {
+        failed += 1;
+    }
+
+    // Test 5: Stats tracking is consistent
+    let (_, used_before) = stats();
+    if let Some(f) = alloc_frame() {
+        let (_, used_after) = stats();
+        if used_after == used_before + 1 {
+            crate::serial_println!("[FRAME-TEST] stats consistent: PASS");
+            passed += 1;
+        } else {
+            crate::serial_println!("[FRAME-TEST] stats before={} after={}: FAIL", used_before, used_after);
+            failed += 1;
+        }
+        free_frame(f);
+    } else {
+        crate::serial_println!("[FRAME-TEST] stats test alloc failed: FAIL");
+        failed += 1;
+    }
+
+    (passed, failed)
+}

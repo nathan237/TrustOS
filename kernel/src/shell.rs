@@ -768,6 +768,7 @@ fn execute_command(cmd: &str) {
         
         // Test and debug
         "test" => cmd_test(),
+        "memtest" => cmd_memtest(),
         "keytest" => cmd_keytest(),
         "hexdump" | "xxd" => cmd_hexdump(args),
         "panic" => cmd_panic(),
@@ -2327,6 +2328,75 @@ fn cmd_test() {
     
     crate::println!();
     crate::println_color!(COLOR_BRIGHT_GREEN, "Done!");
+}
+
+/// Comprehensive v0.3 memory-management test suite
+fn cmd_memtest() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "=== TrustOS v0.3 Memory Test Suite ===");
+    crate::println!();
+
+    let mut passed = 0usize;
+    let mut failed = 0usize;
+
+    // ── 1. Kernel-side frame allocator ──────────────────────────────
+    crate::println_color!(COLOR_CYAN, "[1/4] Frame allocator self-test");
+    let (p, f) = crate::memory::frame::self_test();
+    passed += p;
+    failed += f;
+    crate::println!();
+
+    // ── 2. Ring 3 basic execution ───────────────────────────────────
+    crate::println_color!(COLOR_CYAN, "[2/4] Ring 3 basic exec (test)");
+    crate::print!("  exec test... ");
+    match crate::exec::exec_test_program() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
+            failed += 1;
+        }
+    }
+
+    // ── 3. Ring 3 ELF execution ─────────────────────────────────────
+    crate::println_color!(COLOR_CYAN, "[3/4] Ring 3 ELF exec (hello)");
+    crate::print!("  exec hello... ");
+    match crate::exec::exec_hello_elf() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
+            failed += 1;
+        }
+    }
+
+    // ── 4. Ring 3 brk + mmap test ───────────────────────────────────
+    crate::println_color!(COLOR_CYAN, "[4/4] Ring 3 brk/mmap test");
+    crate::print!("  exec memtest... ");
+    match crate::exec::exec_memtest() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
+            failed += 1;
+        }
+    }
+
+    // ── Summary ─────────────────────────────────────────────────────
+    crate::println!();
+    let total = passed + failed;
+    if failed == 0 {
+        crate::println_color!(COLOR_BRIGHT_GREEN,
+            "All {}/{} tests passed ✓", passed, total);
+    } else {
+        crate::println_color!(COLOR_RED,
+            "{}/{} passed, {} FAILED", passed, total, failed);
+    }
 }
 
 fn cmd_keytest() {

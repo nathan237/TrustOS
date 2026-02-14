@@ -58,27 +58,33 @@ unsafe extern "C" fn syscall_entry() {
         "push r14",
         "push r15",
         
-        // Call Rust syscall handler
-        // Arguments already in correct registers: rdi, rsi, rdx, r10, r8, r9
-        // Move r10 to rcx for C calling convention
-        "mov rcx, r10",
-        // rax = syscall number, becomes first arg after shift
-        // We need: handler(syscall_num, arg1, arg2, arg3, arg4, arg5, arg6)
-        // So: rdi=num, rsi=arg1, rdx=arg2, rcx=arg3, r8=arg4, r9=arg5
-        // But we have: rax=num, rdi=arg1, rsi=arg2, rdx=arg3, r10=arg4, r8=arg5, r9=arg6
-        
-        // Shuffle: move args, put syscall num in rdi
-        "mov r12, rdi",      // Save arg1
-        "mov rdi, rax",      // syscall_num -> rdi (first arg)
-        "mov r13, rsi",      // Save arg2
-        "mov rsi, r12",      // arg1 -> rsi (second arg)
-        "mov r14, rdx",      // Save arg3
-        "mov rdx, r13",      // arg2 -> rdx (third arg)
-        "mov rcx, r14",      // arg3 -> rcx (fourth arg)
-        // r8 and r9 are already in position for 5th and 6th args
+        // Shuffle Linux syscall ABI → C calling convention
+        //
+        // Linux:  rax=num, rdi=a1, rsi=a2, rdx=a3, r10=a4, r8=a5, r9=a6
+        // C call: rdi=num, rsi=a1, rdx=a2, rcx=a3, r8=a4, r9=a5, [rsp]=a6
+        //
+        // Push a6 (r9) onto the stack as the 7th C argument, then
+        // reshuffle the remaining six registers without clobbering.
+
+        "push r9",                // 7th C arg = a6 (on stack)
+
+        "mov r15, r8",            // save a5 (r8 is both source & dest)
+        "mov r12, rdi",           // save a1
+        "mov r13, rsi",           // save a2
+        "mov r14, rdx",           // save a3
+
+        "mov rdi, rax",           // num  → rdi (1st)
+        "mov rsi, r12",           // a1   → rsi (2nd)
+        "mov rdx, r13",           // a2   → rdx (3rd)
+        "mov rcx, r14",           // a3   → rcx (4th)
+        "mov r8,  r10",           // a4   → r8  (5th)
+        "mov r9,  r15",           // a5   → r9  (6th)
         
         // Call the Rust handler
         "call {handler}",
+        
+        // Clean up pushed a6
+        "add rsp, 8",
         
         // Result is in RAX - will be returned to user
         
@@ -102,15 +108,25 @@ unsafe extern "C" fn syscall_entry() {
 }
 
 /// Rust syscall handler - called from assembly entry point
+///
+/// Receives all 7 values: syscall number + 6 Linux arguments.
+/// The first six arrive in registers (C convention), the seventh
+/// (arg6) is passed on the stack by the assembly trampoline.
 #[no_mangle]
 pub extern "C" fn syscall_handler_rust(
     num: u64,
     arg1: u64,
     arg2: u64,
     arg3: u64,
-    _arg4: u64,
-    _arg5: u64,
+    arg4: u64,
+    arg5: u64,
+    arg6: u64,
 ) -> u64 {
-    // Forward to the syscall module
-    crate::syscall::handle(num, arg1, arg2, arg3)
+    // Forward all arguments to the full handler
+    let ret = crate::syscall::handle_full(num, arg1, arg2, arg3, arg4, arg5, arg6);
+
+    // Emit structured syscall event to TrustLab trace bus
+    crate::lab_mode::trace_bus::emit_syscall(num, [arg1, arg2, arg3], ret);
+
+    ret as u64
 }

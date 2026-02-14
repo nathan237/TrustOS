@@ -552,6 +552,161 @@ pub fn exec_hello_elf() -> ExecResult {
     exec_bytes(HELLO_ELF, &[])
 }
 
+/// Execute a Ring 3 memory-management test program
+///
+/// Tests from user-space:
+/// 1. brk(0) to query current break
+/// 2. brk(break + 0x1000) to extend heap by one page
+/// 3. Write / read-back on newly mapped heap page
+/// 4. mmap(0, 4096, PROT_RW, MAP_PRIVATE|MAP_ANON, -1, 0)
+/// 5. Write / read-back on mmap'd page
+/// 6. Prints "v0.3 OK\n" and exit(0) on success, "FAIL\n" and exit(1) on failure
+pub fn exec_memtest() -> ExecResult {
+    crate::log!("[EXEC] Running v0.3 memory test in Ring 3...");
+
+    // Hand-assembled x86-64 machine code (194 bytes)
+    //
+    // Layout (all offsets from code start at vaddr 0x400000):
+    //   0..29   — brk(0), save break in r12, brk(r12+0x1000)
+    //  29..45   — write 0x42 to [r12], verify, jne fail
+    //  45..80   — mmap(0, 0x1000, 3, 0x22, -1, 0)
+    //  80..108  — check result, write 0x99 to [mmap'd], verify, jne fail
+    // 108..143  — success: write "v0.3 OK\n", exit(0), jmp $
+    // 143..181  — fail:   write "FAIL\n", exit(1), jmp $
+    // 181..189  — "v0.3 OK\n"
+    // 189..194  — "FAIL\n"
+    let memtest_code: [u8; 194] = [
+        // === brk(0) → r12 ===
+        0xB8, 0x0C, 0x00, 0x00, 0x00,                     // mov eax, 12  (SYS_BRK)
+        0x31, 0xFF,                                         // xor edi, edi
+        0x0F, 0x05,                                         // syscall
+        0x49, 0x89, 0xC4,                                   // mov r12, rax
+
+        // === brk(r12 + 0x1000) ===
+        0x4C, 0x89, 0xE7,                                   // mov rdi, r12
+        0x48, 0x81, 0xC7, 0x00, 0x10, 0x00, 0x00,         // add rdi, 0x1000
+        0xB8, 0x0C, 0x00, 0x00, 0x00,                     // mov eax, 12
+        0x0F, 0x05,                                         // syscall
+
+        // === Heap write / verify ===
+        0x41, 0xC6, 0x04, 0x24, 0x42,                     // mov byte [r12], 0x42
+        0x41, 0x80, 0x3C, 0x24, 0x42,                     // cmp byte [r12], 0x42
+        0x0F, 0x85, 0x62, 0x00, 0x00, 0x00,               // jne fail (+98)
+
+        // === mmap(0, 0x1000, PROT_RW=3, MAP_PRIV|ANON=0x22, fd=-1, off=0) ===
+        0xB8, 0x09, 0x00, 0x00, 0x00,                     // mov eax, 9  (SYS_MMAP)
+        0x31, 0xFF,                                         // xor edi, edi
+        0xBE, 0x00, 0x10, 0x00, 0x00,                     // mov esi, 0x1000
+        0xBA, 0x03, 0x00, 0x00, 0x00,                     // mov edx, 3
+        0x41, 0xBA, 0x22, 0x00, 0x00, 0x00,               // mov r10d, 0x22
+        0x49, 0xC7, 0xC0, 0xFF, 0xFF, 0xFF, 0xFF,         // mov r8, -1
+        0x45, 0x31, 0xC9,                                   // xor r9d, r9d
+        0x0F, 0x05,                                         // syscall
+
+        // === Check mmap result ===
+        0x48, 0x85, 0xC0,                                   // test rax, rax
+        0x0F, 0x88, 0x36, 0x00, 0x00, 0x00,               // js fail (+54)
+
+        // === Mmap write / verify ===
+        0x49, 0x89, 0xC5,                                   // mov r13, rax
+        0x41, 0xC6, 0x45, 0x00, 0x99,                     // mov byte [r13+0], 0x99
+        0x41, 0x80, 0x7D, 0x00, 0x99,                     // cmp byte [r13+0], 0x99
+        0x0F, 0x85, 0x23, 0x00, 0x00, 0x00,               // jne fail (+35)
+
+        // === Success path ===
+        0xB8, 0x01, 0x00, 0x00, 0x00,                     // mov eax, 1  (SYS_WRITE)
+        0xBF, 0x01, 0x00, 0x00, 0x00,                     // mov edi, 1  (stdout)
+        0x48, 0x8D, 0x35, 0x38, 0x00, 0x00, 0x00,         // lea rsi, [rip+56] → msg_ok
+        0xBA, 0x08, 0x00, 0x00, 0x00,                     // mov edx, 8
+        0x0F, 0x05,                                         // syscall
+        0xB8, 0x3C, 0x00, 0x00, 0x00,                     // mov eax, 60 (SYS_EXIT)
+        0x31, 0xFF,                                         // xor edi, edi
+        0x0F, 0x05,                                         // syscall
+        0xEB, 0xFE,                                         // jmp $
+
+        // === Fail path (offset 143) ===
+        0xB8, 0x01, 0x00, 0x00, 0x00,                     // mov eax, 1
+        0xBF, 0x01, 0x00, 0x00, 0x00,                     // mov edi, 1
+        0x48, 0x8D, 0x35, 0x1D, 0x00, 0x00, 0x00,         // lea rsi, [rip+29] → msg_fail
+        0xBA, 0x05, 0x00, 0x00, 0x00,                     // mov edx, 5
+        0x0F, 0x05,                                         // syscall
+        0xB8, 0x3C, 0x00, 0x00, 0x00,                     // mov eax, 60
+        0xBF, 0x01, 0x00, 0x00, 0x00,                     // mov edi, 1
+        0x0F, 0x05,                                         // syscall
+        0xEB, 0xFE,                                         // jmp $
+
+        // === Data (offset 181) ===
+        b'v', b'0', b'.', b'3', b' ', b'O', b'K', b'\n', // "v0.3 OK\n" (8)
+        b'F', b'A', b'I', b'L', b'\n',                     // "FAIL\n"   (5)
+    ];
+
+    // Use the same approach as exec_test_program — map code at 0x400000
+
+    let mut address_space = match AddressSpace::new_with_kernel() {
+        Some(a) => a,
+        None => {
+            crate::log_error!("[EXEC] Failed to create address space");
+            return ExecResult::MemoryError;
+        }
+    };
+
+    let hhdm = hhdm_offset();
+
+    // Map code page at 0x400000
+    let code_vaddr: u64 = 0x400000;
+    let code_phys = match alloc_physical_page() {
+        Some(p) => p,
+        None => return ExecResult::MemoryError,
+    };
+    unsafe {
+        let dest = (code_phys + hhdm) as *mut u8;
+        core::ptr::write_bytes(dest, 0, 4096);
+        core::ptr::copy_nonoverlapping(memtest_code.as_ptr(), dest, memtest_code.len());
+    }
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
+        return ExecResult::MemoryError;
+    }
+
+    // Allocate stack (4 pages + guard)
+    let stack_top: u64 = 0x7FFFFFFF0000;
+    let stack_pages = 4;
+    for i in 0..stack_pages {
+        let vaddr = stack_top - (i as u64 + 1) * 4096;
+        let phys = match alloc_physical_page() {
+            Some(p) => p,
+            None => return ExecResult::MemoryError,
+        };
+        unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
+            return ExecResult::MemoryError;
+        }
+    }
+
+    let user_stack = stack_top - 8;
+
+    crate::log!("[EXEC] memtest: code at {:#x}, stack at {:#x}", code_vaddr, user_stack);
+
+    unsafe {
+        let kernel_cr3: u64;
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
+
+        // Publish process context
+        CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
+        let stack_bottom = stack_top - (stack_pages as u64 * 4096);
+        CURRENT_USER_STACK_BOTTOM.store(stack_bottom, Ordering::SeqCst);
+
+        address_space.activate();
+        let exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
+
+        CURRENT_USER_SPACE.store(core::ptr::null_mut(), Ordering::Release);
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
+
+        crate::log!("[EXEC] memtest exited with code {}", exit_code);
+        ExecResult::Exited(exit_code)
+    }
+}
+
 /// Allocate a physical page (returns page-aligned physical address)
 fn alloc_physical_page() -> Option<u64> {
     crate::memory::frame::alloc_frame_zeroed()
