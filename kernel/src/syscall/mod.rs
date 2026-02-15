@@ -176,6 +176,9 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         SENDMSG => errno::ENOSYS, // TODO
         RECVMSG => errno::ENOSYS, // TODO
         
+        // ====== Pipes ======
+        PIPE2 => sys_pipe2(a1, a2 as u32),
+        
         // ====== Misc ======
         PRCTL => linux::sys_prctl(a1 as u32, a2, a3, a4, a5),
         
@@ -209,6 +212,12 @@ fn sys_read(fd: i32, buf_ptr: u64, count: usize) -> i64 {
         return errno::EFAULT;
     }
     
+    // Pipe fd?
+    if crate::pipe::is_pipe_fd(fd) {
+        let buffer = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, count) };
+        return crate::pipe::read(fd, buffer);
+    }
+    
     let buffer = unsafe { core::slice::from_raw_parts_mut(buf_ptr as *mut u8, count) };
     match crate::vfs::read(fd, buffer) {
         Ok(n) => n as i64,
@@ -235,6 +244,11 @@ fn sys_write(fd: i32, buf_ptr: u64, count: usize) -> i64 {
         return count as i64;
     }
     
+    // Pipe fd?
+    if crate::pipe::is_pipe_fd(fd) {
+        return crate::pipe::write(fd, buffer);
+    }
+    
     match crate::vfs::write(fd, buffer) {
         Ok(n) => n as i64,
         Err(_) => errno::EIO,
@@ -253,10 +267,29 @@ fn sys_open(path_ptr: u64, flags: u32) -> i64 {
 }
 
 fn sys_close(fd: i32) -> i64 {
+    // Pipe fd?
+    if crate::pipe::is_pipe_fd(fd) {
+        return crate::pipe::close(fd);
+    }
     match crate::vfs::close(fd) {
         Ok(()) => 0,
         Err(_) => errno::EBADF,
     }
+}
+
+/// pipe2(pipefd, flags) — create a pipe, write [read_fd, write_fd] to user buffer
+fn sys_pipe2(pipefd_ptr: u64, _flags: u32) -> i64 {
+    if !validate_user_ptr(pipefd_ptr, 8, true) {
+        return errno::EFAULT;
+    }
+    let (read_fd, write_fd) = crate::pipe::create();
+    unsafe {
+        let ptr = pipefd_ptr as *mut i32;
+        *ptr = read_fd;
+        *ptr.add(1) = write_fd;
+    }
+    crate::log_debug!("[SYSCALL] pipe2: read_fd={}, write_fd={}", read_fd, write_fd);
+    0
 }
 
 fn sys_mkdir(path_ptr: u64) -> i64 {

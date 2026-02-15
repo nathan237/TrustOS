@@ -58,6 +58,7 @@ mod process;
 mod elf;
 mod exec;
 mod init;
+mod pipe;
 mod gdt;
 mod userland;
 mod thread;

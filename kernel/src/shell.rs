@@ -2339,14 +2339,14 @@ fn cmd_memtest() {
     let mut failed = 0usize;
 
     // ── 1. Kernel-side frame allocator ──────────────────────────────
-    crate::println_color!(COLOR_CYAN, "[1/5] Frame allocator self-test");
+    crate::println_color!(COLOR_CYAN, "[1/6] Frame allocator self-test");
     let (p, f) = crate::memory::frame::self_test();
     passed += p;
     failed += f;
     crate::println!();
 
     // ── 2. Ring 3 basic execution ───────────────────────────────────
-    crate::println_color!(COLOR_CYAN, "[2/5] Ring 3 basic exec (test)");
+    crate::println_color!(COLOR_CYAN, "[2/6] Ring 3 basic exec (test)");
     crate::print!("  exec test... ");
     match crate::exec::exec_test_program() {
         crate::exec::ExecResult::Exited(0) => {
@@ -2360,7 +2360,7 @@ fn cmd_memtest() {
     }
 
     // ── 3. Ring 3 ELF execution ─────────────────────────────────────
-    crate::println_color!(COLOR_CYAN, "[3/5] Ring 3 ELF exec (hello)");
+    crate::println_color!(COLOR_CYAN, "[3/6] Ring 3 ELF exec (hello)");
     crate::print!("  exec hello... ");
     match crate::exec::exec_hello_elf() {
         crate::exec::ExecResult::Exited(0) => {
@@ -2374,7 +2374,7 @@ fn cmd_memtest() {
     }
 
     // ── 4. Ring 3 brk + mmap test ───────────────────────────────────
-    crate::println_color!(COLOR_CYAN, "[4/5] Ring 3 brk/mmap test");
+    crate::println_color!(COLOR_CYAN, "[4/6] Ring 3 brk/mmap test");
     crate::print!("  exec memtest... ");
     match crate::exec::exec_memtest() {
         crate::exec::ExecResult::Exited(0) => {
@@ -2388,7 +2388,7 @@ fn cmd_memtest() {
     }
 
     // ── 5. Frame leak test ──────────────────────────────────────────
-    crate::println_color!(COLOR_CYAN, "[5/5] Frame leak test (run exec, check frames returned)");
+    crate::println_color!(COLOR_CYAN, "[5/6] Frame leak test (run exec, check frames returned)");
     crate::print!("  alloc before... ");
     let (total_before, used_before) = crate::memory::frame::stats();
     let free_before = total_before - used_before;
@@ -2410,6 +2410,20 @@ fn cmd_memtest() {
         let leaked = free_before - free_after;
         crate::println_color!(COLOR_RED, "[FAIL] leaked {} frames ({} KB)", leaked, leaked * 4);
         failed += 1;
+    }
+
+    // ── 6. IPC pipe test ────────────────────────────────────────────
+    crate::println_color!(COLOR_CYAN, "[6/6] Ring 3 IPC pipe test (pipe2 + write + read)");
+    crate::print!("  exec pipe_test... ");
+    match crate::exec::exec_pipe_test() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
+            failed += 1;
+        }
     }
 
     // ── Summary ─────────────────────────────────────────────────────

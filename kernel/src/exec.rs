@@ -738,6 +738,171 @@ fn alloc_physical_page() -> Option<u64> {
     crate::memory::frame::alloc_frame_zeroed()
 }
 
+/// Execute a Ring 3 IPC pipe test
+///
+/// Creates a pipe via pipe2(), writes "PIPE" to it, reads it back,
+/// and verifies the data matches. Prints "IPC OK\n" on success.
+/// Returns exit code 0 on success, 1 on failure.
+pub fn exec_pipe_test() -> ExecResult {
+    crate::log!("[EXEC] Running Ring 3 IPC pipe test...");
+
+    let mut address_space = match AddressSpace::new_with_kernel() {
+        Some(a) => a,
+        None => {
+            crate::log_error!("[EXEC] Failed to create address space");
+            return ExecResult::MemoryError;
+        }
+    };
+
+    let hhdm = hhdm_offset();
+
+    // Machine code for the pipe test (138 bytes):
+    //
+    //   sub rsp, 16                       ; stack: [rsp+0]=fds, [rsp+8]=data, [rsp+12]=readbuf
+    //   mov dword [rsp+8], "PIPE"         ; test payload
+    //
+    //   ; pipe2(rsp, 0)
+    //   mov rdi, rsp
+    //   xor esi, esi
+    //   mov eax, 293
+    //   syscall
+    //   test eax, eax
+    //   jnz fail
+    //
+    //   ; write(write_fd, &"PIPE", 4)
+    //   mov edi, [rsp+4]
+    //   lea rsi, [rsp+8]
+    //   mov edx, 4
+    //   mov eax, 1
+    //   syscall
+    //   cmp eax, 4
+    //   jne fail
+    //
+    //   ; read(read_fd, buf, 4)
+    //   mov edi, [rsp]
+    //   lea rsi, [rsp+12]
+    //   mov edx, 4
+    //   xor eax, eax
+    //   syscall
+    //   cmp eax, 4
+    //   jne fail
+    //
+    //   ; compare read data with original
+    //   mov eax, [rsp+12]
+    //   cmp eax, [rsp+8]
+    //   jne fail
+    //
+    //   ; write(1, "IPC OK\n", 7) then exit(0)
+    //   ; fail: exit(1)
+    //
+    let pipe_test_code: [u8; 138] = [
+        // sub rsp, 16
+        0x48, 0x83, 0xEC, 0x10,
+        // mov dword [rsp+8], 0x45504950 ("PIPE")
+        0xC7, 0x44, 0x24, 0x08, 0x50, 0x49, 0x50, 0x45,
+        // pipe2(rsp, 0) — syscall 293
+        0x48, 0x89, 0xE7,                               // mov rdi, rsp
+        0x31, 0xF6,                                     // xor esi, esi
+        0xB8, 0x25, 0x01, 0x00, 0x00,                   // mov eax, 293
+        0x0F, 0x05,                                     // syscall
+        // test eax, eax / jnz fail
+        0x85, 0xC0,
+        0x75, 0x5B,
+        // write(fd_write=[rsp+4], &[rsp+8], 4)
+        0x8B, 0x7C, 0x24, 0x04,                         // mov edi, [rsp+4]
+        0x48, 0x8D, 0x74, 0x24, 0x08,                   // lea rsi, [rsp+8]
+        0xBA, 0x04, 0x00, 0x00, 0x00,                   // mov edx, 4
+        0xB8, 0x01, 0x00, 0x00, 0x00,                   // mov eax, 1
+        0x0F, 0x05,                                     // syscall
+        // cmp eax, 4 / jne fail
+        0x83, 0xF8, 0x04,
+        0x75, 0x41,
+        // read(fd_read=[rsp+0], &[rsp+12], 4)
+        0x8B, 0x3C, 0x24,                               // mov edi, [rsp]
+        0x48, 0x8D, 0x74, 0x24, 0x0C,                   // lea rsi, [rsp+12]
+        0xBA, 0x04, 0x00, 0x00, 0x00,                   // mov edx, 4
+        0x31, 0xC0,                                     // xor eax, eax
+        0x0F, 0x05,                                     // syscall
+        // cmp eax, 4 / jne fail
+        0x83, 0xF8, 0x04,
+        0x75, 0x2B,
+        // compare [rsp+12] with [rsp+8]
+        0x8B, 0x44, 0x24, 0x0C,                         // mov eax, [rsp+12]
+        0x3B, 0x44, 0x24, 0x08,                         // cmp eax, [rsp+8]
+        // jne fail
+        0x75, 0x21,
+        // write(1, "IPC OK\n", 7)
+        0xB8, 0x01, 0x00, 0x00, 0x00,                   // mov eax, 1 (SYS_WRITE)
+        0xBF, 0x01, 0x00, 0x00, 0x00,                   // mov edi, 1 (stdout)
+        0x48, 0x8D, 0x35, 0x1C, 0x00, 0x00, 0x00,       // lea rsi, [rip+0x1C]
+        0xBA, 0x07, 0x00, 0x00, 0x00,                   // mov edx, 7
+        0x0F, 0x05,                                     // syscall
+        // exit(0)
+        0x31, 0xFF,                                     // xor edi, edi
+        0xB8, 0x3C, 0x00, 0x00, 0x00,                   // mov eax, 60
+        0x0F, 0x05,                                     // syscall
+        // .fail: exit(1)
+        0xBF, 0x01, 0x00, 0x00, 0x00,                   // mov edi, 1
+        0xB8, 0x3C, 0x00, 0x00, 0x00,                   // mov eax, 60
+        0x0F, 0x05,                                     // syscall
+        // "IPC OK\n"
+        b'I', b'P', b'C', b' ', b'O', b'K', b'\n',
+    ];
+
+    // Map code page at 0x400000
+    let code_vaddr: u64 = 0x400000;
+    let code_phys = match alloc_physical_page() {
+        Some(p) => p,
+        None => return ExecResult::MemoryError,
+    };
+    unsafe {
+        let dest = (code_phys + hhdm) as *mut u8;
+        core::ptr::write_bytes(dest, 0, 4096);
+        core::ptr::copy_nonoverlapping(pipe_test_code.as_ptr(), dest, pipe_test_code.len());
+    }
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
+        return ExecResult::MemoryError;
+    }
+
+    // Allocate stack (4 pages + guard)
+    let stack_top: u64 = 0x7FFFFFFF0000;
+    let stack_pages = 4;
+    for i in 0..stack_pages {
+        let vaddr = stack_top - (i as u64 + 1) * 4096;
+        let phys = match alloc_physical_page() {
+            Some(p) => p,
+            None => return ExecResult::MemoryError,
+        };
+        unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
+            return ExecResult::MemoryError;
+        }
+    }
+
+    let user_stack = stack_top - 8;
+
+    crate::log!("[EXEC] pipe_test: code at {:#x}, stack at {:#x}", code_vaddr, user_stack);
+
+    unsafe {
+        let kernel_cr3: u64;
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
+
+        CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
+        let stack_bottom = stack_top - (stack_pages as u64 * 4096);
+        CURRENT_USER_STACK_BOTTOM.store(stack_bottom, Ordering::SeqCst);
+
+        address_space.activate();
+        let exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
+
+        CURRENT_USER_SPACE.store(core::ptr::null_mut(), Ordering::Release);
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
+
+        crate::log!("[EXEC] pipe_test exited with code {}", exit_code);
+        ExecResult::Exited(exit_code)
+    }
+}
+
 /// Check if a file is an executable ELF
 pub fn is_executable(path: &str) -> bool {
     let fd = match crate::vfs::open(path, crate::vfs::OpenFlags(0)) {
