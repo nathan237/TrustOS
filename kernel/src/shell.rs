@@ -2339,14 +2339,14 @@ fn cmd_memtest() {
     let mut failed = 0usize;
 
     // ── 1. Kernel-side frame allocator ──────────────────────────────
-    crate::println_color!(COLOR_CYAN, "[1/4] Frame allocator self-test");
+    crate::println_color!(COLOR_CYAN, "[1/5] Frame allocator self-test");
     let (p, f) = crate::memory::frame::self_test();
     passed += p;
     failed += f;
     crate::println!();
 
     // ── 2. Ring 3 basic execution ───────────────────────────────────
-    crate::println_color!(COLOR_CYAN, "[2/4] Ring 3 basic exec (test)");
+    crate::println_color!(COLOR_CYAN, "[2/5] Ring 3 basic exec (test)");
     crate::print!("  exec test... ");
     match crate::exec::exec_test_program() {
         crate::exec::ExecResult::Exited(0) => {
@@ -2360,7 +2360,7 @@ fn cmd_memtest() {
     }
 
     // ── 3. Ring 3 ELF execution ─────────────────────────────────────
-    crate::println_color!(COLOR_CYAN, "[3/4] Ring 3 ELF exec (hello)");
+    crate::println_color!(COLOR_CYAN, "[3/5] Ring 3 ELF exec (hello)");
     crate::print!("  exec hello... ");
     match crate::exec::exec_hello_elf() {
         crate::exec::ExecResult::Exited(0) => {
@@ -2374,7 +2374,7 @@ fn cmd_memtest() {
     }
 
     // ── 4. Ring 3 brk + mmap test ───────────────────────────────────
-    crate::println_color!(COLOR_CYAN, "[4/4] Ring 3 brk/mmap test");
+    crate::println_color!(COLOR_CYAN, "[4/5] Ring 3 brk/mmap test");
     crate::print!("  exec memtest... ");
     match crate::exec::exec_memtest() {
         crate::exec::ExecResult::Exited(0) => {
@@ -2385,6 +2385,31 @@ fn cmd_memtest() {
             crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
             failed += 1;
         }
+    }
+
+    // ── 5. Frame leak test ──────────────────────────────────────────
+    crate::println_color!(COLOR_CYAN, "[5/5] Frame leak test (run exec, check frames returned)");
+    crate::print!("  alloc before... ");
+    let (total_before, used_before) = crate::memory::frame::stats();
+    let free_before = total_before - used_before;
+    crate::println!("free={}", free_before);
+
+    // Run a process — its frames should be freed on exit
+    let _ = crate::exec::exec_test_program();
+
+    let (total_after, used_after) = crate::memory::frame::stats();
+    let free_after = total_after - used_after;
+    crate::print!("  alloc after... ");
+    crate::println!("free={}", free_after);
+
+    crate::print!("  no leak... ");
+    if free_after >= free_before {
+        crate::println_color!(COLOR_GREEN, "[OK] (freed {} frames)", free_after - free_before + (free_before - free_after).max(0));
+        passed += 1;
+    } else {
+        let leaked = free_before - free_after;
+        crate::println_color!(COLOR_RED, "[FAIL] leaked {} frames ({} KB)", leaked, leaked * 4);
+        failed += 1;
     }
 
     // ── Summary ─────────────────────────────────────────────────────

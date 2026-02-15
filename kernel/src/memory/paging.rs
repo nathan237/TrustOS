@@ -444,10 +444,54 @@ impl AddressSpace {
     }
 }
 
+impl AddressSpace {
+    /// Walk the lower-half page tables (user space, PML4 entries 0–255) and
+    /// return every physical frame backing a leaf 4 KB page to the frame
+    /// allocator.  Intermediate page-table pages are owned by
+    /// `self.page_tables` and will be freed via `Box::drop` as usual.
+    pub fn release_user_frames(&self) -> usize {
+        let hhdm = self.hhdm_offset;
+        let pml4 = unsafe { &*((self.pml4_phys + hhdm) as *const PageTable) };
+        let mut freed = 0usize;
+
+        for pml4_idx in 0..256 {
+            if !pml4.entries[pml4_idx].is_present() { continue; }
+            let pdpt = unsafe { &*((pml4.entries[pml4_idx].phys_addr() + hhdm) as *const PageTable) };
+
+            for pdpt_idx in 0..ENTRIES_PER_TABLE {
+                if !pdpt.entries[pdpt_idx].is_present() { continue; }
+                // Skip huge 1 GB pages (unlikely, but guard)
+                if pdpt.entries[pdpt_idx].flags().0 & PageFlags::HUGE_PAGE != 0 { continue; }
+                let pd = unsafe { &*((pdpt.entries[pdpt_idx].phys_addr() + hhdm) as *const PageTable) };
+
+                for pd_idx in 0..ENTRIES_PER_TABLE {
+                    if !pd.entries[pd_idx].is_present() { continue; }
+                    // Skip huge 2 MB pages
+                    if pd.entries[pd_idx].flags().0 & PageFlags::HUGE_PAGE != 0 { continue; }
+                    let pt = unsafe { &*((pd.entries[pd_idx].phys_addr() + hhdm) as *const PageTable) };
+
+                    for pt_idx in 0..ENTRIES_PER_TABLE {
+                        if !pt.entries[pt_idx].is_present() { continue; }
+                        let phys = pt.entries[pt_idx].phys_addr();
+                        crate::memory::frame::free_frame(phys);
+                        freed += 1;
+                    }
+                }
+            }
+        }
+        freed
+    }
+}
+
 impl Drop for AddressSpace {
     fn drop(&mut self) {
-        // Page tables are automatically cleaned up via Vec<Box<PageTable>>
-        // No manual cleanup needed
+        // Free all physical frames backing user-space pages
+        let freed = self.release_user_frames();
+        if freed > 0 {
+            crate::log_debug!("[PAGING] Dropped address space: freed {} user frames ({} KB)",
+                freed, freed * 4);
+        }
+        // Page table structures (Vec<Box<PageTable>>) are freed automatically
     }
 }
 
