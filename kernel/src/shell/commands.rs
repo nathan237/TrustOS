@@ -1577,7 +1577,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 10. Frame leak check -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[10/10] Frame leak test");
+    crate::println_color!(COLOR_CYAN, "[10/11] Frame leak test");
     crate::print!("  alloc before... ");
     let (total_before, used_before) = crate::memory::frame::stats();
     let free_before = total_before - used_before;
@@ -1593,6 +1593,60 @@ pub(super) fn cmd_inttest() {
         let leaked = free_before - free_after;
         crate::println_color!(COLOR_RED, "[FAIL] leaked {} frames", leaked);
         failed += 1;
+    }
+
+    // -- 11. SMP multi-core -------------------------------------------
+    crate::println_color!(COLOR_CYAN, "[11/11] SMP multi-core");
+    {
+        let ready = crate::cpu::smp::ready_cpu_count();
+        let total = crate::cpu::smp::cpu_count();
+        crate::print!("  cores online... ");
+        if ready > 1 {
+            crate::println_color!(COLOR_GREEN, "[OK] {}/{} cores", ready, total);
+            passed += 1;
+        } else if total > 1 {
+            // Multiple cores detected but only BSP ready — SMP boot failed
+            crate::println_color!(COLOR_RED, "[FAIL] only BSP ready ({} detected)", total);
+            failed += 1;
+        } else {
+            // Single CPU system (qemu -smp 1) — skip, not a failure
+            crate::println_color!(COLOR_GREEN, "[OK] single CPU (skip)");
+            passed += 1;
+        }
+        
+        // Test: spawn kernel threads and verify they complete
+        if ready > 1 {
+            use core::sync::atomic::{AtomicU32, Ordering};
+            static SMP_COUNTER: AtomicU32 = AtomicU32::new(0);
+            SMP_COUNTER.store(0, Ordering::SeqCst);
+            
+            crate::print!("  thread dispatch... ");
+            // Spawn 4 kernel threads
+            for i in 0..4u64 {
+                crate::thread::spawn_kernel("smp_test", |_arg| {
+                    SMP_COUNTER.fetch_add(1, Ordering::SeqCst);
+                    0
+                }, i);
+            }
+            
+            // Yield to let scheduler run our threads
+            // (timer-driven: wait up to ~500ms)
+            for _ in 0..500 {
+                if SMP_COUNTER.load(Ordering::SeqCst) >= 4 {
+                    break;
+                }
+                for _ in 0..100_000 { core::hint::spin_loop(); }
+            }
+            
+            let count = SMP_COUNTER.load(Ordering::SeqCst);
+            if count >= 4 {
+                crate::println_color!(COLOR_GREEN, "[OK] {}/4 threads completed", count);
+                passed += 1;
+            } else {
+                crate::println_color!(COLOR_RED, "[FAIL] only {}/4 completed", count);
+                failed += 1;
+            }
+        }
     }
 
     // -- Summary -------------------------------------------------------

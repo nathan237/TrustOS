@@ -314,3 +314,10 @@ pub extern "x86-interrupt" fn smp_ipi_handler(_stack_frame: InterruptStackFrame)
         }
     }
 }
+
+/// SMP reschedule IPI handler (vector 0xFD)
+/// Triggers a scheduling pass on the receiving CPU.
+pub extern "x86-interrupt" fn reschedule_ipi_handler(_stack_frame: InterruptStackFrame) {
+    crate::apic::lapic_eoi();
+    crate::thread::schedule();
+}

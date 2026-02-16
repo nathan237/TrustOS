@@ -247,6 +247,10 @@ impl Thread {
 #[unsafe(naked)]
 extern "C" fn thread_entry_wrapper() {
     core::arch::naked_asm!(
+        // New threads start with IF=0 (from context switch inside timer handler).
+        // Enable interrupts so the thread can be preempted.
+        "sti",
+        
         // Entry point is in R12, argument is in R13
         "mov rdi, r13",      // arg -> first parameter
         "call r12",          // Call entry point
@@ -312,17 +316,40 @@ lazy_static::lazy_static! {
     static ref THREADS: RwLock<BTreeMap<Tid, Thread>> = RwLock::new(BTreeMap::new());
 }
 
-/// Current thread ID per CPU (single CPU for now)
-static CURRENT_TID: AtomicU64 = AtomicU64::new(TID_INVALID);
+/// Current thread ID per CPU — SMP: each CPU has its own slot
+const MAX_CPUS_SCHED: usize = 64;
+static CURRENT_TIDS: [AtomicU64; MAX_CPUS_SCHED] = {
+    const INIT: AtomicU64 = AtomicU64::new(TID_INVALID);
+    [INIT; MAX_CPUS_SCHED]
+};
+
+/// Idle thread TID base for APs (BSP uses TID 0)
+const IDLE_TID_AP_BASE: Tid = 0x8000_0000_0000_0000;
+
+/// Get idle thread TID for a given CPU
+fn idle_tid_for(cpu_id: usize) -> Tid {
+    if cpu_id == 0 { 0 } else { IDLE_TID_AP_BASE + cpu_id as u64 }
+}
+
+/// Check if a TID is an idle thread (should never be enqueued)
+fn is_idle_tid(tid: Tid) -> bool {
+    tid == 0 || tid >= IDLE_TID_AP_BASE
+}
+
+/// Get current CPU ID for scheduler (uses CPUID-based lookup)
+#[inline]
+fn sched_cpu_id() -> usize {
+    (crate::cpu::smp::current_cpu_id() as usize).min(MAX_CPUS_SCHED - 1)
+}
 
 /// Get current thread ID
 pub fn current_tid() -> Tid {
-    CURRENT_TID.load(Ordering::Relaxed)
+    CURRENT_TIDS[sched_cpu_id()].load(Ordering::Relaxed)
 }
 
 /// Set current thread ID
 pub fn set_current_tid(tid: Tid) {
-    CURRENT_TID.store(tid, Ordering::SeqCst);
+    CURRENT_TIDS[sched_cpu_id()].store(tid, Ordering::SeqCst);
 }
 
 /// Create a new kernel thread
@@ -391,9 +418,9 @@ lazy_static::lazy_static! {
     static ref READY_QUEUE: Mutex<VecDeque<Tid>> = Mutex::new(VecDeque::new());
 }
 
-/// Initialize thread subsystem
+/// Initialize thread subsystem (BSP only)
 pub fn init() {
-    // Create idle thread (TID 0)
+    // Create idle thread (TID 0) for BSP
     let idle_thread = Thread {
         tid: 0,
         pid: 0,
@@ -412,9 +439,38 @@ pub fn init() {
     };
     
     THREADS.write().insert(0, idle_thread);
-    CURRENT_TID.store(0, Ordering::SeqCst);
+    CURRENT_TIDS[0].store(0, Ordering::SeqCst);
     
     crate::log!("[THREAD] Thread subsystem initialized");
+}
+
+/// Initialize scheduler for an Application Processor.
+/// Creates an idle thread so the AP has a valid current_tid.
+pub fn init_ap_scheduler(cpu_id: u32) {
+    let idx = cpu_id as usize;
+    let idle_tid = idle_tid_for(idx);
+    
+    let idle = Thread {
+        tid: idle_tid,
+        pid: 0,
+        name: String::from("idle-ap"),
+        state: ThreadState::Running,
+        flags: ThreadFlags(ThreadFlags::KERNEL),
+        context: ThreadContext::default(),
+        kernel_stack: None,
+        kernel_stack_top: 0,
+        user_stack_top: 0,
+        entry_point: 0,
+        entry_arg: 0,
+        exit_code: 0,
+        cpu_time: 0,
+        joiner: None,
+    };
+    
+    THREADS.write().insert(idle_tid, idle);
+    CURRENT_TIDS[idx].store(idle_tid, Ordering::SeqCst);
+    
+    crate::serial_println!("[THREAD] AP {} idle thread created (TID={:#x})", cpu_id, idle_tid);
 }
 
 /// Called on timer tick - preemptive scheduling
@@ -426,7 +482,7 @@ pub fn on_timer_tick() {
         thread.cpu_time += 1;
     }
     
-    // Check if we should preempt (every 10 ticks)
+    // Check if we should preempt (every 10 ticks = 100ms at 100Hz)
     static TICK_COUNT: AtomicU64 = AtomicU64::new(0);
     let ticks = TICK_COUNT.fetch_add(1, Ordering::Relaxed);
     
@@ -435,19 +491,21 @@ pub fn on_timer_tick() {
     }
 }
 
-/// Schedule next thread
+/// Schedule next thread (SMP-safe: uses per-CPU current_tid)
 pub fn schedule() {
+    let cpu_id = sched_cpu_id();
     let current = current_tid();
+    let idle = idle_tid_for(cpu_id);
     
-    // Get next thread from ready queue
+    // Get next thread from shared ready queue
     let next_tid = {
         let mut queue = READY_QUEUE.lock();
         
         // Put current thread back if still runnable
-        if current != TID_INVALID {
+        // NEVER enqueue idle threads — they belong to their CPU
+        if current != TID_INVALID && !is_idle_tid(current) {
             if let Some(thread) = THREADS.read().get(&current) {
                 if thread.state == ThreadState::Running {
-                    // Mark as ready and add to queue
                     drop(queue);
                     if let Some(t) = THREADS.write().get_mut(&current) {
                         t.state = ThreadState::Ready;
@@ -484,8 +542,12 @@ pub fn schedule() {
             // Perform context switch
             context_switch(current, next);
         }
+        None if !is_idle_tid(current) && current != TID_INVALID => {
+            // Current thread is done/blocked, fall back to this CPU's idle thread
+            context_switch(current, idle);
+        }
         _ => {
-            // No other thread to run, continue with current
+            // Already on idle or same thread, continue
         }
     }
 }
@@ -524,8 +586,8 @@ fn context_switch(from: Tid, to: Tid) {
         crate::gdt::set_kernel_stack(to_kernel_stack);
     }
     
-    // Update current thread
-    CURRENT_TID.store(to, Ordering::SeqCst);
+    // Update current thread (per-CPU)
+    set_current_tid(to);
     
     // Do the actual context switch
     unsafe {

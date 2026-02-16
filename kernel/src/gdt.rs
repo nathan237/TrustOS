@@ -198,9 +198,20 @@ pub struct GdtPtr {
     pub base: u64,
 }
 
-// Static GDT and TSS
+// Static GDT and TSS (BSP)
 static mut GDT: Gdt = Gdt::new();
 static mut TSS: TaskStateSegment = TaskStateSegment::new();
+
+// Per-CPU GDT and TSS (APs) — each AP needs its own TSS for distinct RSP0
+const MAX_CPUS: usize = 64;
+static mut PER_CPU_GDT: [Gdt; MAX_CPUS] = {
+    const INIT: Gdt = Gdt::new();
+    [INIT; MAX_CPUS]
+};
+static mut PER_CPU_TSS: [TaskStateSegment; MAX_CPUS] = {
+    const INIT: TaskStateSegment = TaskStateSegment::new();
+    [INIT; MAX_CPUS]
+};
 
 /// Initialize GDT with Ring 0/3 support
 pub fn init() {
@@ -279,10 +290,80 @@ fn alloc_kernel_stack() -> u64 {
 }
 
 /// Update RSP0 in TSS (called during context switch)
+/// Automatically selects the correct per-CPU TSS.
 pub fn set_kernel_stack(stack_top: u64) {
+    let cpu_id = crate::cpu::smp::current_cpu_id() as usize;
     unsafe {
-        TSS.rsp[0] = stack_top;
+        if cpu_id == 0 {
+            TSS.rsp[0] = stack_top;
+        } else if cpu_id < MAX_CPUS {
+            PER_CPU_TSS[cpu_id].rsp[0] = stack_top;
+        }
     }
+}
+
+/// Initialize GDT/TSS for an Application Processor (AP)
+/// Creates a per-CPU GDT+TSS so each core has its own kernel stack (RSP0).
+pub fn init_ap(cpu_id: u32) {
+    let idx = cpu_id as usize;
+    if idx == 0 || idx >= MAX_CPUS { return; }
+    
+    unsafe {
+        // Allocate kernel stack for this AP
+        let kernel_stack = alloc_kernel_stack();
+        PER_CPU_TSS[idx].rsp[0] = kernel_stack;
+        
+        // IST1 for double fault handler
+        let ist1 = alloc_kernel_stack();
+        PER_CPU_TSS[idx].ist[0] = ist1;
+        
+        // Set up GDT with TSS entry pointing to this AP's TSS
+        PER_CPU_GDT[idx] = Gdt::new();
+        let tss_addr = core::ptr::addr_of!(PER_CPU_TSS[idx]) as u64;
+        PER_CPU_GDT[idx].tss = TssEntry::new(tss_addr);
+        
+        // Load this AP's GDT
+        let gdt_ptr = GdtPtr {
+            limit: (size_of::<Gdt>() - 1) as u16,
+            base: core::ptr::addr_of!(PER_CPU_GDT[idx]) as u64,
+        };
+        
+        core::arch::asm!(
+            "lgdt [{}]",
+            in(reg) &gdt_ptr,
+            options(readonly, nostack, preserves_flags)
+        );
+        
+        // Reload code segment (far return)
+        core::arch::asm!(
+            "push {sel}",
+            "lea {tmp}, [rip + 2f]",
+            "push {tmp}",
+            "retfq",
+            "2:",
+            sel = in(reg) KERNEL_CODE_SELECTOR as u64,
+            tmp = lateout(reg) _,
+            options(preserves_flags)
+        );
+        
+        // Reload data segments
+        core::arch::asm!(
+            "mov ds, {0:x}",
+            "mov es, {0:x}",
+            "mov ss, {0:x}",
+            in(reg) KERNEL_DATA_SELECTOR,
+            options(nostack, preserves_flags)
+        );
+        
+        // Load TSS
+        core::arch::asm!(
+            "ltr {0:x}",
+            in(reg) TSS_SELECTOR,
+            options(nostack, preserves_flags)
+        );
+    }
+    
+    crate::serial_println!("[GDT] AP {} GDT/TSS initialized", cpu_id);
 }
 
 /// Get current privilege level

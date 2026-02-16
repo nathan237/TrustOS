@@ -12,10 +12,16 @@ use alloc::boxed::Box;
 pub const MAX_CPUS: usize = 256;
 
 /// Per-CPU block - contains all per-CPU data for one CPU
+///
+/// IMPORTANT: `gs_base` MUST be the first field (offset 0) so that
+/// `mov reg, gs:[0]` reads the self-pointer for PercpuBlock::current().
 #[repr(C, align(64))] // Cache line aligned
 pub struct PercpuBlock {
-    /// CPU ID (APIC ID or sequential)
+    /// Self-pointer — MUST be at offset 0 for fast gs:[0] access
+    pub gs_base: u64,
+    /// CPU ID (sequential: 0 = BSP)
     pub cpu_id: u32,
+    _pad0: u32,
     /// Current running thread ID
     pub current_tid: AtomicU64,
     /// Whether CPU is currently inside a syscall
@@ -40,8 +46,6 @@ pub struct PercpuBlock {
     pub last_tick_tsc: AtomicU64,
     /// CPU-local scratch space (for syscall handler, etc.)
     pub scratch: [u64; 8],
-    /// GS base value for this CPU
-    pub gs_base: u64,
     /// Kernel stack pointer for this CPU
     pub kernel_stack: u64,
     /// User stack pointer (saved during syscall)
@@ -51,7 +55,9 @@ pub struct PercpuBlock {
 impl PercpuBlock {
     pub const fn new(cpu_id: u32) -> Self {
         Self {
+            gs_base: 0, // Set during init_bsp/init_ap
             cpu_id,
+            _pad0: 0,
             current_tid: AtomicU64::new(0),
             inside_syscall: AtomicBool::new(false),
             in_interrupt: AtomicBool::new(false),
@@ -64,31 +70,31 @@ impl PercpuBlock {
             interrupt_count: AtomicU64::new(0),
             last_tick_tsc: AtomicU64::new(0),
             scratch: [0; 8],
-            gs_base: 0,
             kernel_stack: 0,
             user_stack: 0,
         }
     }
     
     /// Get current per-CPU block (via GS segment)
+    ///
+    /// gs_base (offset 0) holds a self-pointer set by init_bsp/init_ap.
+    /// Reading gs:[0] gives us the PercpuBlock address directly.
     #[inline]
     pub fn current() -> &'static Self {
-        // Read from GS:0 which points to PercpuBlock
-        // In kernel mode, KERNEL_GS_BASE should be set to our PercpuBlock
         unsafe {
-            let ptr: *const Self;
+            let self_ptr: u64;
             core::arch::asm!(
                 "mov {}, gs:[0]",
-                out(reg) ptr,
+                out(reg) self_ptr,
                 options(pure, nomem, nostack)
             );
             
-            // Fallback if GS not set up
-            if ptr.is_null() {
+            // Fallback if GS not set up yet (early boot)
+            if self_ptr == 0 {
                 return &PERCPU_BLOCKS[0];
             }
             
-            &*ptr
+            &*(self_ptr as *const Self)
         }
     }
     

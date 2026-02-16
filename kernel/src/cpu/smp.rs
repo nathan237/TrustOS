@@ -28,28 +28,17 @@ const ICR_LOW: u64 = 0x300;
 const ICR_HIGH: u64 = 0x310;
 
 /// Send a fixed IPI to a specific APIC ID
-/// Vector 0xFE = a "wake-up" interrupt that does nothing except resume from HLT
-unsafe fn send_ipi(target_apic_id: u32) {
-    let lapic_phys = crate::acpi::local_apic_address();
-    // CRITICAL: translate physical LAPIC address to virtual via HHDM
-    // (no identity mapping exists in this kernel)
-    let base = crate::memory::phys_to_virt(lapic_phys) as *mut u32;
-    // Write destination APIC ID to ICR_HIGH[31:24]
-    let high = base.byte_add(ICR_HIGH as usize);
-    core::ptr::write_volatile(high, target_apic_id << 24);
-    // Write ICR_LOW: Fixed delivery, vector 0xFE, edge-triggered, assert
-    let low = base.byte_add(ICR_LOW as usize);
-    core::ptr::write_volatile(low, 0x0000_40FE); // Fixed | Assert | Edge | Vector 0xFE
+/// Uses the correctly mapped LAPIC from the apic module.
+fn send_ipi_direct(target_apic_id: u32, vector: u8) {
+    if crate::apic::is_enabled() {
+        crate::apic::send_ipi(target_apic_id, vector);
+    }
 }
 
 /// Send IPI to all APs to wake them from HLT
 pub fn wake_all_aps() {
-    let cpus = cpu_count() as usize;
-    for i in 1..cpus.min(MAX_CPUS) {
-        if is_cpu_ready(i as u32) {
-            let apic_id = unsafe { PER_CPU[i].apic_id };
-            unsafe { send_ipi(apic_id); }
-        }
+    if crate::apic::is_enabled() {
+        crate::apic::send_ipi_all_others(0xFE);
     }
 }
 
@@ -409,45 +398,69 @@ fn check_and_execute_work(cpu_id: usize) {
 }
 
 // ============================================================================
-// Future: AP (Application Processor) startup code
+// AP (Application Processor) entry point — FULL INITIALIZATION
 // ============================================================================
 
 /// AP entry point (called by Limine for each AP)
-/// This function will be called with a unique stack for each AP
+/// This function will be called with a unique stack for each AP.
+///
+/// Full initialization sequence:
+/// 1. Per-CPU GDT/TSS (own kernel stack for Ring 3→0 transitions)
+/// 2. Load shared IDT (for interrupt/exception handling)
+/// 3. Per-CPU GS base (PercpuBlock self-pointer via WRMSR)
+/// 4. Idle thread creation (scheduler needs a current thread)
+/// 5. LAPIC initialization (enable local APIC + start periodic timer)
+/// 6. Mark CPU as ready
+/// 7. Enable interrupts + idle loop
 pub unsafe extern "C" fn ap_entry(smp_info: &limine::smp::Cpu) -> ! {
-    // Read AP info
+    // Read AP info from Limine
     let processor_id = smp_info.id as usize;
     let lapic_id = smp_info.lapic_id;
     
-    // Initialize per-CPU data
+    // Initialize per-CPU data (raw array, no lock needed — each AP writes its own slot)
     if processor_id < MAX_CPUS {
         PER_CPU[processor_id].cpu_id = processor_id as u32;
         PER_CPU[processor_id].apic_id = lapic_id;
         PER_CPU[processor_id].work_completed = 0;
-        
-        // SSE is already enabled by Limine on all x86_64 CPUs.
-        
-        // NOTE: We do NOT mark AP as ready because without a loaded IDT
-        // and Local APIC timer, APs cannot safely handle interrupts and
-        // will be parked in cli;hlt. parallel_for checks ready_cpu_count
-        // and will run BSP-only when count is 1.
     }
     
-    // AP idle loop: interrupts disabled + halt.
-    // APs are registered as online but currently idle.
-    // Without a per-AP IDT and Local APIC timer, APs cannot safely
-    // receive interrupts, so we keep them halted with CLI.
-    // parallel_for uses BSP-only mode (safety net re-blits all rows).
+    // ── Step 1: Per-CPU GDT + TSS ──
+    // Each AP needs its own TSS with a unique RSP0 (kernel stack)
+    crate::gdt::init_ap(processor_id as u32);
+    
+    // ── Step 2: Load shared IDT ──
+    // The IDT is shared (read-only), but each CPU must execute LIDT
+    crate::interrupts::load_idt_on_ap();
+    
+    // ── Step 3: Per-CPU GS base ──
+    // Set GS_BASE and KERNEL_GS_BASE to this CPU's PercpuBlock
+    // so PercpuBlock::current() works via gs:[0]
+    crate::sync::percpu::init_ap(processor_id as u32);
+    
+    // ── Step 4: Create idle thread for this AP ──
+    // The scheduler requires a "current thread" per CPU
+    crate::thread::init_ap_scheduler(processor_id as u32);
+    
+    // ── Step 5: Enable LAPIC + start periodic timer ──
+    // Uses BSP's calibrated timer rate (TICKS_PER_MS)
+    crate::apic::init_ap();
+    
+    // ── Step 6: Mark this CPU as ready ──
+    CPU_READY[processor_id].store(true, Ordering::Release);
+    READY_COUNT.fetch_add(1, Ordering::Release);
+    
+    crate::serial_println!("[SMP] AP {} fully online (LAPIC ID: {})", processor_id, lapic_id);
+    
+    // ── Step 7: Enable interrupts and enter idle loop ──
+    // Timer interrupts will drive scheduling on this AP.
+    // The AP's idle thread will be preempted when threads are available.
     loop {
-        // Check for work before halting (in case BSP posted work
-        // between our last check and the HLT instruction)
+        // Check for parallel work items (legacy parallel_for support)
         check_and_execute_work(processor_id);
         
-        // CLI + HLT: sleep with no interrupts (safe, won't triple-fault)
-        // The only way to wake is via NMI or INIT, which we don't send.
-        // This effectively parks the AP.
-        unsafe {
-            core::arch::asm!("cli; hlt", options(nomem, nostack));
-        }
+        // STI + HLT: sleep until next interrupt (timer, IPI, etc.)
+        // On wakeup, the interrupt handler runs (e.g., timer → schedule),
+        // then we loop back to HLT.
+        core::arch::asm!("sti; hlt", options(nomem, nostack));
     }
 }

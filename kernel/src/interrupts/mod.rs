@@ -43,6 +43,9 @@ lazy_static! {
         // SMP IPI wakeup vector (0xFE = 254) - wakes APs from HLT
         idt[0xFE].set_handler_fn(handlers::smp_ipi_handler);
         
+        // SMP reschedule IPI vector (0xFD = 253) - trigger schedule on target CPU
+        idt[0xFD].set_handler_fn(handlers::reschedule_ipi_handler);
+        
         idt
     };
 }
