@@ -246,6 +246,25 @@ pub fn get_state() -> MouseState {
     }
 }
 
+/// Inject mouse movement/buttons from USB HID mouse driver
+pub fn inject_usb_mouse(dx: i32, dy: i32, left: bool, right: bool, middle: bool, scroll: i8) {
+    let w = SCREEN_WIDTH.load(Ordering::Relaxed);
+    let h = SCREEN_HEIGHT.load(Ordering::Relaxed);
+
+    // Atomic fetch_add for relative movement
+    let new_x = MOUSE_X.load(Ordering::Relaxed) + dx;
+    let new_y = MOUSE_Y.load(Ordering::Relaxed) + dy;
+    MOUSE_X.store(new_x.max(0).min(w - 1), Ordering::Relaxed);
+    MOUSE_Y.store(new_y.max(0).min(h - 1), Ordering::Relaxed);
+
+    LEFT_BUTTON.store(left, Ordering::Relaxed);
+    RIGHT_BUTTON.store(right, Ordering::Relaxed);
+    MIDDLE_BUTTON.store(middle, Ordering::Relaxed);
+    if scroll != 0 {
+        SCROLL_DELTA.store(scroll, Ordering::Relaxed);
+    }
+}
+
 /// Get and consume scroll delta
 pub fn get_scroll_delta() -> i8 {
     SCROLL_DELTA.swap(0, Ordering::Relaxed)

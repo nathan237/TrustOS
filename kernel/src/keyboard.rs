@@ -472,6 +472,13 @@ pub fn read_char() -> Option<u8> {
     serial::read_byte()
 }
 
+/// Push a key from USB HID keyboard (or any external source)
+pub fn push_key(ascii: u8) {
+    if ascii != 0 {
+        KEYBOARD_BUFFER.lock().push(ascii);
+    }
+}
+
 /// Check if there's input available
 pub fn has_input() -> bool {
     !KEYBOARD_BUFFER.lock().is_empty()

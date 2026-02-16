@@ -259,7 +259,7 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    benchmark [test]    Run performance benchmarks");
     crate::println!("    keytest             Interactive keyboard scancode tester");
     crate::println!("    test                Run internal kernel test suite");
-    crate::println!("    inttest             Integration test (12 tests, Gaps 1-5 + SMP + NVMe)");
+    crate::println!("    inttest             Integration test (13 tests, Gaps 1-5 + SMP + NVMe + xHCI)");
     crate::println!("    panic               Trigger kernel panic (debug only)");
     crate::println!();
     
@@ -1435,7 +1435,7 @@ pub(super) fn cmd_inttest() {
     let mut failed = 0usize;
 
     // -- 1. Kernel self-test (heap, string, interrupts) ---------------
-    crate::println_color!(COLOR_CYAN, "[ 1/12] Kernel self-test");
+    crate::println_color!(COLOR_CYAN, "[ 1/13] Kernel self-test");
     {
         let mut ok = true;
         crate::print!("  heap+string... ");
@@ -1462,14 +1462,14 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 2. Frame allocator -------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 2/12] Frame allocator self-test");
+    crate::println_color!(COLOR_CYAN, "[ 2/13] Frame allocator self-test");
     let (p, f) = crate::memory::frame::self_test();
     passed += p;
     failed += f;
     crate::println!();
 
     // -- 3. Ring 3 basic exec -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 3/12] Ring 3 basic exec");
+    crate::println_color!(COLOR_CYAN, "[ 3/13] Ring 3 basic exec");
     crate::print!("  hello world... ");
     match crate::exec::exec_test_program() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1483,7 +1483,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 4. Ring 3 ELF loader -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 4/12] Ring 3 ELF exec");
+    crate::println_color!(COLOR_CYAN, "[ 4/13] Ring 3 ELF exec");
     crate::print!("  ELF hello... ");
     match crate::exec::exec_hello_elf() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1497,7 +1497,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 5. Ring 3 brk + mmap -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 5/12] Ring 3 brk/mmap");
+    crate::println_color!(COLOR_CYAN, "[ 5/13] Ring 3 brk/mmap");
     crate::print!("  memory mgmt... ");
     match crate::exec::exec_memtest() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1511,7 +1511,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 6. Ring 3 IPC pipe -------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 6/12] Ring 3 IPC pipe");
+    crate::println_color!(COLOR_CYAN, "[ 6/13] Ring 3 IPC pipe");
     crate::print!("  pipe2+rw... ");
     match crate::exec::exec_pipe_test() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1525,7 +1525,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 7. Exception safety (Gap #4) ---------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 7/12] Exception safety (UD2 in Ring 3)");
+    crate::println_color!(COLOR_CYAN, "[ 7/13] Exception safety (UD2 in Ring 3)");
     crate::print!("  invalid opcode... ");
     match crate::exec::exec_exception_safety_test() {
         crate::exec::ExecResult::Exited(code) if code != 0 => {
@@ -1549,7 +1549,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 8. Signal syscalls (Gap #4) ----------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 8/12] Signal syscalls (sigprocmask + kill)");
+    crate::println_color!(COLOR_CYAN, "[ 8/13] Signal syscalls (sigprocmask + kill)");
     crate::print!("  signal test... ");
     match crate::exec::exec_signal_test() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1563,7 +1563,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 9. Stdio + time (Gap #4) ------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 9/12] Stdio + getpid + clock_gettime");
+    crate::println_color!(COLOR_CYAN, "[ 9/13] Stdio + getpid + clock_gettime");
     crate::print!("  io test... ");
     match crate::exec::exec_stdio_test() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1577,7 +1577,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 10. Frame leak check -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[10/12] Frame leak test");
+    crate::println_color!(COLOR_CYAN, "[10/13] Frame leak test");
     crate::print!("  alloc before... ");
     let (total_before, used_before) = crate::memory::frame::stats();
     let free_before = total_before - used_before;
@@ -1596,7 +1596,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 11. SMP multi-core -------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[11/12] SMP multi-core");
+    crate::println_color!(COLOR_CYAN, "[11/13] SMP multi-core");
     {
         let ready = crate::cpu::smp::ready_cpu_count();
         let total = crate::cpu::smp::cpu_count();
@@ -1650,7 +1650,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 12. NVMe storage read/write -----------------------------------
-    crate::println_color!(COLOR_CYAN, "[12/12] NVMe storage");
+    crate::println_color!(COLOR_CYAN, "[12/13] NVMe storage");
     {
         if crate::nvme::is_initialized() {
             // Test read
@@ -1711,6 +1711,30 @@ pub(super) fn cmd_inttest() {
         } else {
             crate::print!("  NVMe available... ");
             crate::println_color!(COLOR_GREEN, "[SKIP] no NVMe device");
+            passed += 2; // Count as pass (device optional)
+        }
+    }
+
+    // -- 13. xHCI USB 3.0 ---------------------------------------------
+    crate::println_color!(COLOR_CYAN, "[13/13] xHCI USB 3.0");
+    {
+        if crate::drivers::xhci::is_initialized() {
+            crate::print!("  controller init... ");
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+
+            let count = crate::drivers::xhci::device_count();
+            crate::print!("  USB devices found: {}... ", count);
+            if count > 0 {
+                crate::println_color!(COLOR_GREEN, "[OK]");
+                passed += 1;
+            } else {
+                crate::println_color!(COLOR_RED, "[FAIL] no devices");
+                failed += 1;
+            }
+        } else {
+            crate::print!("  xHCI available... ");
+            crate::println_color!(COLOR_GREEN, "[SKIP] no xHCI controller");
             passed += 2; // Count as pass (device optional)
         }
     }

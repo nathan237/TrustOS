@@ -1,15 +1,15 @@
 ﻿==================================================================
   TrustOS Automated Test Report (QEMU)
-  Generated: 2026-02-13 14:44:00
-  Boot time: 6.3s  |  Test duration: 197.9s
+  Generated: 2026-02-16 11:23:57
+  Boot time: 12.8s  |  Test duration: 150.9s
   QEMU: q35, 256M RAM, 2 CPUs, virtio-net, serial TCP
 ==================================================================
 
 SUMMARY
-  Total:   95
-  Passed:  86
-  Failed:  9
-  Rate:    90.5%
+  Total:   96
+  Passed:  96
+  Failed:  0
+  Rate:    100%
 
 ==================================================================
 DETAILED RESULTS
@@ -42,8 +42,8 @@ DETAILED RESULTS
   [OK]   lsblk
   [OK]   vmstat
   [OK]   iostat
-  [OK]   dmesg
   [OK]   neofetch
+  [OK]   dmesg
 
 -- FS --
   [OK]   mkdir test_dir
@@ -83,6 +83,9 @@ DETAILED RESULTS
 -- SELFTEST --
   [OK]   builtin self-test
 
+-- INTTEST --
+  [OK]   integration test suite
+
 -- TRUSTLANG --
   [OK]   eval println
   [OK]   eval 2+3
@@ -92,14 +95,31 @@ DETAILED RESULTS
   [OK]   eval 17 mod 5
   [OK]   eval bool
   [OK]   eval let var
-  [FAIL] eval if-else
-         Cmd:    trustlang eval if 10 > 5 { println("yes"); } else { println("no"); }
-         Output: [31mError:[0m L1:19: expected LBrace, got RBrace
+  [OK]   eval if-else
   [OK]   eval loop
 
 -- USERS --
   [OK]   id
   [OK]   users
+
+-- STUBS --
+  [OK]   bc stub
+  [OK]   base64 stub
+  [OK]   md5sum stub
+  [OK]   sha256sum stub
+
+-- PROC --
+  [OK]   sleep 0
+  [OK]   tty
+
+-- DISK --
+  [OK]   disk info
+  [OK]   fdisk
+  [OK]   blkid
+
+-- AUDIO --
+  [OK]   beep
+  [OK]   audio status
 
 -- NET --
   [OK]   ifconfig
@@ -109,46 +129,6 @@ DETAILED RESULTS
   [OK]   ping gateway
   [OK]   nslookup
 
--- SECURITY --
-  [OK]   create sig file
-  [OK]   sig sign
-  [OK]   sig verify
-
--- STUBS --
-  [FAIL] bc stub
-         Cmd:    bc
-         Output: 
-  [FAIL] base64 stub
-         Cmd:    base64
-         Output: 
-  [FAIL] md5sum stub
-         Cmd:    md5sum
-         Output: 
-  [FAIL] sha256sum stub
-         Cmd:    sha256sum
-         Output: 
-
--- PROC --
-  [OK]   sleep 0
-  [FAIL] tty
-         Cmd:    tty
-         Output: 
-
--- DISK --
-  [FAIL] disk info
-         Cmd:    disk
-         Output: 
-  [FAIL] fdisk
-         Cmd:    fdisk
-         Output: 
-  [FAIL] blkid
-         Cmd:    blkid
-         Output: 
-
--- AUDIO --
-  [OK]   beep
-  [OK]   audio status
-
 -- DEBUG --
   [OK]   irqstat
   [OK]   smpstatus
@@ -156,45 +136,14 @@ DETAILED RESULTS
   [OK]   memdbg
   [OK]   regs
 
+-- SECURITY --
+  [OK]   create sig file
+  [OK]   sig sign
+  [OK]   sig verify
+
 ==================================================================
 FAILURES REQUIRING ACTION
 ==================================================================
-  [TRUSTLANG] eval if-else
-    Command: trustlang eval if 10 > 5 { println("yes"); } else { println("no"); }
-    Output:  [31mError:[0m L1:19: expected LBrace, got RBrace
-
-  [STUBS] bc stub
-    Command: bc
-    Output:  
-
-  [STUBS] base64 stub
-    Command: base64
-    Output:  
-
-  [STUBS] md5sum stub
-    Command: md5sum
-    Output:  
-
-  [STUBS] sha256sum stub
-    Command: sha256sum
-    Output:  
-
-  [PROC] tty
-    Command: tty
-    Output:  
-
-  [DISK] disk info
-    Command: disk
-    Output:  
-
-  [DISK] fdisk
-    Command: fdisk
-    Output:  
-
-  [DISK] blkid
-    Command: blkid
-    Output:  
-
 ==================================================================
 KNOWN BUGS (manual observation)
 ==================================================================
@@ -213,16 +162,7 @@ STUBS (declared but not yet implemented)
 ==================================================================
 CATEGORY BREAKDOWN
 ==================================================================
-                86 / 95
-    -> FAIL: eval if-else
-    -> FAIL: bc stub
-    -> FAIL: base64 stub
-    -> FAIL: md5sum stub
-    -> FAIL: sha256sum stub
-    -> FAIL: tty
-    -> FAIL: disk info
-    -> FAIL: fdisk
-    -> FAIL: blkid
+                96 / 96
 
 ==================================================================
   End of report

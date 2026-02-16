@@ -342,6 +342,9 @@ $qemuArgs = @(
     "-device", "hda-duplex",
     "-drive", "file=`"$PSScriptRoot\trustos_nvme.img`",format=raw,if=none,id=nvme0",
     "-device", "nvme,serial=TRUSTNVME001,drive=nvme0",
+    "-device", "qemu-xhci,id=xhci",
+    "-device", "usb-kbd,bus=xhci.0",
+    "-device", "usb-mouse,bus=xhci.0",
     "-serial", $serialArg,
     "-no-reboot"
 )

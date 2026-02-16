@@ -208,7 +208,10 @@ pub fn probe_storage() {
             
             // Initialize xHCI controller (USB 3.0)
             if dev.prog_if == 0x30 {
-                let bar0 = dev.bar[0] as u64;
+                // Use proper 64-bit BAR decoding
+                let bar0 = dev.bar_address(0).unwrap_or(dev.bar[0] as u64);
+                crate::pci::enable_bus_master(dev);
+                crate::pci::enable_memory_space(dev);
                 if xhci::init(bar0) {
                     crate::serial_println!("[DRIVERS] xHCI controller initialized with {} devices", 
                         xhci::device_count());
