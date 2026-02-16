@@ -13,6 +13,72 @@ use alloc::vec;
 use alloc::format;
 use crate::framebuffer::{COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_CYAN, COLOR_WHITE, COLOR_BLUE, COLOR_MAGENTA, COLOR_GRAY};
 
+// ============================================================================
+// Stub commands — table-driven "not implemented" for POSIX commands
+// ============================================================================
+
+const STUBS: &[(&str, &str)] = &[
+    ("chmod",      "permission system"),
+    ("chown",      "ownership"),
+    ("ln",         "symbolic links"),
+    ("readlink",   "readlink"),
+    ("cut",        "cut"),
+    ("tr",         "tr"),
+    ("tee",        "tee"),
+    ("xargs",      "xargs"),
+    ("killall",    "process name matching"),
+    ("nice",       "priority"),
+    ("nohup",      "background execution"),
+    ("bg",         "job control"),
+    ("fg",         "job control"),
+    ("iostat",     "I/O statistics"),
+    ("strace",     "syscall tracing"),
+    ("tar",        "archive support"),
+    ("gzip",       "compression"),
+    ("gunzip",     "decompression"),
+    ("zip",        "archive support"),
+    ("unzip",      "archive support"),
+    ("umount",     "unmounting"),
+    ("mkfs",       "filesystem creation"),
+    ("fsck",       "filesystem check"),
+    ("unset",      "environment variables"),
+    ("alias",      "aliases"),
+    ("unalias",    "aliases"),
+    ("read",       "variable input"),
+    ("bc",         "calculator"),
+    ("diff",       "diff"),
+    ("patch",      "patch"),
+    ("md5sum",     "MD5"),
+    ("sha256sum",  "SHA256"),
+    ("base64",     "encoding"),
+    ("watch",      "periodic execution"),
+    ("timeout",    "timeout"),
+    ("time_cmd",   "command timing"),
+    ("script",     "terminal recording"),
+    ("loadkeys",   "keymap"),
+    ("setfont",    "font loading"),
+    ("dmidecode",  "DMI/SMBIOS"),
+    ("hdparm",     "disk parameters"),
+    ("modprobe",   "kernel modules"),
+    ("insmod",     "module loading"),
+    ("rmmod",      "module unloading"),
+    ("service",    "init system"),
+    ("systemctl",  "systemd"),
+    ("crontab",    "scheduled tasks"),
+    ("at",         "scheduled execution"),
+];
+
+/// Try to handle a stubbed command. Returns true if matched.
+pub(super) fn try_stub(cmd: &str) -> bool {
+    for &(name, desc) in STUBS {
+        if cmd == name {
+            crate::println_color!(COLOR_YELLOW, "{}: {} not implemented", name, desc);
+            return true;
+        }
+    }
+    false
+}
+
 pub(super) fn cmd_which(args: &[&str]) {
     if args.is_empty() {
         crate::println!("Usage: which <command>");
@@ -88,27 +154,6 @@ pub(super) fn cmd_file(args: &[&str]) {
             }
         }
     }
-}
-
-pub(super) fn cmd_chmod(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "chmod: permission system not implemented yet");
-    crate::println!("(TrustOS currently has no file permission support)");
-}
-
-pub(super) fn cmd_chown(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "chown: ownership not implemented yet");
-}
-
-pub(super) fn cmd_ln(args: &[&str]) {
-    if args.len() < 2 {
-        crate::println!("Usage: ln [-s] <target> <link_name>");
-        return;
-    }
-    crate::println_color!(COLOR_YELLOW, "ln: symbolic links not implemented yet");
-}
-
-pub(super) fn cmd_readlink(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "readlink: not implemented");
 }
 
 pub(super) fn cmd_basename(args: &[&str]) {
@@ -187,22 +232,6 @@ pub(super) fn cmd_uniq(args: &[&str]) {
     }
 }
 
-pub(super) fn cmd_cut(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "cut: not implemented yet");
-}
-
-pub(super) fn cmd_tr(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "tr: not implemented yet");
-}
-
-pub(super) fn cmd_tee(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "tee: not implemented yet");
-}
-
-pub(super) fn cmd_xargs(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "xargs: not implemented yet");
-}
-
 pub(super) fn cmd_yes(args: &[&str]) {
     let text = if args.is_empty() { "y" } else { args[0] };
     // Print 10 times (would be infinite in real implementation)
@@ -270,30 +299,6 @@ pub(super) fn cmd_kill(args: &[&str]) {
     }
 }
 
-pub(super) fn cmd_killall(args: &[&str]) {
-    if args.is_empty() {
-        crate::println!("Usage: killall <name>");
-        return;
-    }
-    crate::println_color!(COLOR_YELLOW, "killall: process name matching not implemented");
-}
-
-pub(super) fn cmd_nice(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "nice: priority not implemented");
-}
-
-pub(super) fn cmd_nohup(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "nohup: background execution not implemented");
-}
-
-pub(super) fn cmd_bg(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "bg: job control not implemented");
-}
-
-pub(super) fn cmd_fg(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "fg: job control not implemented");
-}
-
 pub(super) fn cmd_top() {
     crate::println_color!(COLOR_BRIGHT_GREEN, "TrustOS Process Monitor");
     crate::println!("-----------------------------------------------------------");
@@ -348,12 +353,6 @@ pub(super) fn cmd_vmstat() {
     crate::println!("  Heap Total:  {} KB", heap_total / 1024);
     crate::println!("  Heap Used:   {} KB", heap_used / 1024);
     crate::println!("  Heap Free:   {} KB", (heap_total - heap_used) / 1024);
-}
-
-pub(super) fn cmd_iostat() {
-    crate::println_color!(COLOR_BRIGHT_GREEN, "I/O Statistics");
-    crate::println!("-------------------------------");
-    crate::println!("(I/O statistics not implemented)");
 }
 
 pub(super) fn cmd_dmesg(args: &[&str]) {
@@ -567,10 +566,6 @@ pub(super) fn cmd_lsof(_args: &[&str]) {
     crate::println!("shell     1     2    CHR    /dev/stderr");
 }
 
-pub(super) fn cmd_strace(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "strace: syscall tracing not implemented");
-}
-
 pub(super) fn cmd_strings(args: &[&str]) {
     if args.is_empty() {
         crate::println!("Usage: strings <file>");
@@ -598,26 +593,6 @@ pub(super) fn cmd_strings(args: &[&str]) {
     }
 }
 
-pub(super) fn cmd_tar(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "tar: archive support not implemented");
-}
-
-pub(super) fn cmd_gzip(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "gzip: compression not implemented");
-}
-
-pub(super) fn cmd_gunzip(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "gunzip: decompression not implemented");
-}
-
-pub(super) fn cmd_zip(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "zip: archive support not implemented");
-}
-
-pub(super) fn cmd_unzip(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "unzip: archive support not implemented");
-}
-
 pub(super) fn cmd_mount(args: &[&str]) {
     if args.is_empty() {
         // Show mounted filesystems
@@ -632,14 +607,6 @@ pub(super) fn cmd_mount(args: &[&str]) {
     }
     
     crate::println_color!(COLOR_YELLOW, "mount: dynamic mounting not implemented");
-}
-
-pub(super) fn cmd_umount(args: &[&str]) {
-    if args.is_empty() {
-        crate::println!("Usage: umount <mountpoint>");
-        return;
-    }
-    crate::println_color!(COLOR_YELLOW, "umount: unmounting not implemented");
 }
 
 pub(super) fn cmd_sync() {
@@ -661,14 +628,6 @@ pub(super) fn cmd_blkid() {
     crate::println!("/dev/ram0: TYPE=\"ramfs\"");
 }
 
-pub(super) fn cmd_mkfs(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "mkfs: filesystem creation not implemented");
-}
-
-pub(super) fn cmd_fsck(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "fsck: filesystem check not implemented");
-}
-
 pub(super) fn cmd_export(args: &[&str]) {
     if args.is_empty() {
         crate::println!("PATH=/bin:/usr/bin");
@@ -678,18 +637,6 @@ pub(super) fn cmd_export(args: &[&str]) {
         return;
     }
     crate::println_color!(COLOR_YELLOW, "export: environment variables stored in memory only");
-}
-
-pub(super) fn cmd_unset(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "unset: environment variables not fully implemented");
-}
-
-pub(super) fn cmd_alias(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "alias: aliases not implemented");
-}
-
-pub(super) fn cmd_unalias(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "unalias: aliases not implemented");
 }
 
 pub(super) fn cmd_source(args: &[&str]) {
@@ -717,10 +664,6 @@ pub(super) fn cmd_set(_args: &[&str]) {
     crate::println!("PWD={}", crate::ramfs::with_fs(|fs| String::from(fs.pwd())));
     crate::println!("USER=root");
     crate::println!("HOME=/");
-}
-
-pub(super) fn cmd_read(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "read: variable input not implemented");
 }
 
 pub(super) fn cmd_printf(args: &[&str]) {
@@ -786,10 +729,6 @@ pub(super) fn cmd_expr(args: &[&str]) {
     crate::println!("{}", result);
 }
 
-pub(super) fn cmd_bc(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "bc: calculator not implemented");
-}
-
 pub(super) fn cmd_cal(_args: &[&str]) {
     crate::println_color!(COLOR_BRIGHT_GREEN, "   February 2026");
     crate::println!("Su Mo Tu We Th Fr Sa");
@@ -797,14 +736,6 @@ pub(super) fn cmd_cal(_args: &[&str]) {
     crate::println!(" 8  9 10 11 12 13 14");
     crate::println!("15 16 17 18 19 20 21");
     crate::println!("22 23 24 25 26 27 28");
-}
-
-pub(super) fn cmd_diff(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "diff: not implemented");
-}
-
-pub(super) fn cmd_patch(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "patch: not implemented");
 }
 
 pub(super) fn cmd_cmp(args: &[&str]) {
@@ -823,30 +754,6 @@ pub(super) fn cmd_cmp(args: &[&str]) {
         }
         _ => crate::println_color!(COLOR_RED, "cmp: cannot read files"),
     }
-}
-
-pub(super) fn cmd_md5sum(args: &[&str]) {
-    if args.is_empty() {
-        crate::println!("Usage: md5sum <file>");
-        return;
-    }
-    crate::println_color!(COLOR_YELLOW, "md5sum: MD5 not implemented");
-}
-
-pub(super) fn cmd_sha256sum(args: &[&str]) {
-    if args.is_empty() {
-        crate::println!("Usage: sha256sum <file>");
-        return;
-    }
-    crate::println_color!(COLOR_YELLOW, "sha256sum: SHA256 not implemented");
-}
-
-pub(super) fn cmd_base64(args: &[&str]) {
-    if args.is_empty() {
-        crate::println!("Usage: base64 [-d] <file>");
-        return;
-    }
-    crate::println_color!(COLOR_YELLOW, "base64: encoding not implemented");
 }
 
 pub(super) fn cmd_od(args: &[&str]) {
@@ -902,22 +809,6 @@ pub(super) fn cmd_factor(args: &[&str]) {
     crate::println!();
 }
 
-pub(super) fn cmd_watch(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "watch: periodic execution not implemented");
-}
-
-pub(super) fn cmd_timeout(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "timeout: not implemented");
-}
-
-pub(super) fn cmd_time_cmd(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "time: command timing not implemented");
-}
-
-pub(super) fn cmd_script(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "script: terminal recording not implemented");
-}
-
 pub(super) fn cmd_tty() {
     crate::println!("/dev/tty0");
 }
@@ -930,14 +821,6 @@ pub(super) fn cmd_stty(_args: &[&str]) {
 pub(super) fn cmd_reset() {
     super::commands::cmd_clear();
     crate::println!("Terminal reset.");
-}
-
-pub(super) fn cmd_loadkeys(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "loadkeys: keymap not implemented");
-}
-
-pub(super) fn cmd_setfont(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "setfont: font loading not implemented");
 }
 
 pub(super) fn cmd_lsusb() {
@@ -1118,19 +1001,6 @@ pub(super) fn cmd_lsmem() {
     crate::println!("Used:        {} KB", crate::memory::stats().heap_used / 1024);
 }
 
-pub(super) fn cmd_dmidecode() {
-    crate::println_color!(COLOR_YELLOW, "dmidecode: DMI/SMBIOS not implemented");
-}
-
-pub(super) fn cmd_hdparm(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "hdparm: disk parameters not implemented");
-}
-
-pub(super) fn cmd_modprobe(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "modprobe: kernel modules not implemented");
-    crate::println!("(TrustOS has builtin drivers)");
-}
-
 pub(super) fn cmd_lsmod() {
     crate::println_color!(COLOR_BRIGHT_GREEN, "Loaded Kernel Modules:");
     crate::println!("Module                  Size  Used by");
@@ -1140,33 +1010,10 @@ pub(super) fn cmd_lsmod() {
     crate::println!("ps2mouse                4000  1");
 }
 
-pub(super) fn cmd_insmod(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "insmod: module loading not implemented");
-}
-
-pub(super) fn cmd_rmmod(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "rmmod: module unloading not implemented");
-}
-
 pub(super) fn cmd_sysctl(_args: &[&str]) {
     crate::println!("kernel.ostype = TrustOS");
     crate::println!("kernel.osrelease = 0.1.0");
     crate::println!("kernel.version = #1 SMP TrustOS");
 }
 
-pub(super) fn cmd_service(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "service: init system not implemented");
-}
 
-pub(super) fn cmd_systemctl(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "systemctl: systemd not implemented");
-    crate::println!("(TrustOS uses simple init)");
-}
-
-pub(super) fn cmd_crontab(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "crontab: scheduled tasks not implemented");
-}
-
-pub(super) fn cmd_at(_args: &[&str]) {
-    crate::println_color!(COLOR_YELLOW, "at: scheduled execution not implemented");
-}

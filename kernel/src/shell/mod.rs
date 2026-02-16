@@ -893,89 +893,58 @@ pub(super) fn execute_command(cmd: &str) {
         "which" => unix::cmd_which(args),
         "whereis" => unix::cmd_whereis(args),
         "file" => unix::cmd_file(args),
-        "chmod" => unix::cmd_chmod(args),
-        "chown" => unix::cmd_chown(args),
-        "ln" => unix::cmd_ln(args),
-        "readlink" => unix::cmd_readlink(args),
         "basename" => unix::cmd_basename(args),
         "dirname" => unix::cmd_dirname(args),
         "realpath" => unix::cmd_realpath(args),
         "sort" => unix::cmd_sort(args),
         "uniq" => unix::cmd_uniq(args),
-        "cut" => unix::cmd_cut(args),
-        "tr" => unix::cmd_tr(args),
-        "tee" => unix::cmd_tee(args),
-        "xargs" => unix::cmd_xargs(args),
+
         "yes" => unix::cmd_yes(args),
         "seq" => unix::cmd_seq(args),
         "sleep" => unix::cmd_sleep(args),
         "kill" => unix::cmd_kill(args),
-        "killall" => unix::cmd_killall(args),
-        "nice" => unix::cmd_nice(args),
-        "nohup" => unix::cmd_nohup(args),
-        "bg" => unix::cmd_bg(args),
-        "fg" => unix::cmd_fg(args),
+
         "top" => unix::cmd_top(),
         "htop" => unix::cmd_top(),
         "vmstat" => unix::cmd_vmstat(),
-        "iostat" => unix::cmd_iostat(),
+
         "lsof" => unix::cmd_lsof(args),
-        "strace" => unix::cmd_strace(args),
+
         "strings" => unix::cmd_strings(args),
-        "tar" => unix::cmd_tar(args),
-        "gzip" => unix::cmd_gzip(args),
-        "gunzip" => unix::cmd_gunzip(args),
-        "zip" => unix::cmd_zip(args),
-        "unzip" => unix::cmd_unzip(args),
+
         "mount" => unix::cmd_mount(args),
-        "umount" => unix::cmd_umount(args),
+
         "sync" => unix::cmd_sync(),
         "lsblk" => unix::cmd_lsblk(),
         "blkid" => unix::cmd_blkid(),
-        "mkfs" => unix::cmd_mkfs(args),
-        "fsck" => unix::cmd_fsck(args),
+
         "export" => unix::cmd_export(args),
-        "unset" => unix::cmd_unset(args),
-        "alias" => unix::cmd_alias(args),
-        "unalias" => unix::cmd_unalias(args),
+
         "source" | "." => unix::cmd_source(args),
         "set" => unix::cmd_set(args),
-        "read" => unix::cmd_read(args),
+
         "printf" => unix::cmd_printf(args),
         "test" | "[" => unix::cmd_test_expr(args),
         "expr" => unix::cmd_expr(args),
-        "bc" => unix::cmd_bc(args),
+
         "cal" => unix::cmd_cal(args),
-        "diff" => unix::cmd_diff(args),
-        "patch" => unix::cmd_patch(args),
+
         "cmp" => unix::cmd_cmp(args),
-        "md5sum" => unix::cmd_md5sum(args),
-        "sha256sum" => unix::cmd_sha256sum(args),
-        "base64" => unix::cmd_base64(args),
+
         "od" => unix::cmd_od(args),
         "rev" => unix::cmd_rev(args),
         "factor" => unix::cmd_factor(args),
-        "watch" => unix::cmd_watch(args),
-        "timeout" => unix::cmd_timeout(args),
-        "time_cmd" => unix::cmd_time_cmd(args),
-        "script" => unix::cmd_script(args),
+
         "tty" => unix::cmd_tty(),
         "stty" => unix::cmd_stty(args),
         "reset" => unix::cmd_reset(),
-        "loadkeys" => unix::cmd_loadkeys(args),
-        "setfont" => unix::cmd_setfont(args),
+
         "lsmem" => unix::cmd_lsmem(),
-        "dmidecode" => unix::cmd_dmidecode(),
-        "hdparm" => unix::cmd_hdparm(args),
-        "modprobe" => unix::cmd_modprobe(args),
+
         "lsmod" => unix::cmd_lsmod(),
-        "insmod" => unix::cmd_insmod(args),
-        "rmmod" => unix::cmd_rmmod(args),
+
         "sysctl" => unix::cmd_sysctl(args),
-        "service" => unix::cmd_service(args),
-        "systemctl" => unix::cmd_systemctl(args),
-        "crontab" => unix::cmd_crontab(args),
-        "at" => unix::cmd_at(args),
+
         "dmesg" => unix::cmd_dmesg(args),
         "memdbg" | "heapdbg" => unix::cmd_memdbg(),
         "perf" | "perfstat" => unix::cmd_perfstat(),
@@ -1002,6 +971,7 @@ pub(super) fn execute_command(cmd: &str) {
         "jarvis" | "j" | "ai" | "assistant" => jarvis::cmd_jarvis(args),
 
         "" => {}
+        _ if unix::try_stub(command) => {}
         _ => {
             // Check if it's an executable file
             if vm::try_exec_file(command, args) {
