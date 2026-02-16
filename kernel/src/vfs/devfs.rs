@@ -30,7 +30,7 @@ struct DeviceFile {
 }
 
 impl FileOps for DeviceFile {
-    fn read(&self, _offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
+    fn read(&self, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
         match self.dev_type {
             DeviceType::Null => Ok(0), // EOF
             DeviceType::Zero => {
@@ -52,18 +52,33 @@ impl FileOps for DeviceFile {
             }
             DeviceType::Vda => {
                 // Block device read via virtio-blk
-                if crate::virtio_blk::is_initialized() {
-                    // Convert offset to sector
-                    // This is simplified - real impl would handle partial sectors
-                    Ok(0) // TODO: proper block read
-                } else {
-                    Err(VfsError::IoError)
+                if !crate::virtio_blk::is_initialized() {
+                    return Err(VfsError::IoError);
                 }
+                let sector_size = 512u64;
+                let start_sector = offset / sector_size;
+                let offset_in_sector = (offset % sector_size) as usize;
+                let mut total_read = 0usize;
+                let mut sect = start_sector;
+                let mut pos = offset_in_sector;
+                let mut sector_buf = [0u8; 512];
+                while total_read < buf.len() {
+                    if crate::virtio_blk::read_sector(sect, &mut sector_buf).is_err() {
+                        break;
+                    }
+                    let avail = 512 - pos;
+                    let to_copy = core::cmp::min(avail, buf.len() - total_read);
+                    buf[total_read..total_read + to_copy].copy_from_slice(&sector_buf[pos..pos + to_copy]);
+                    total_read += to_copy;
+                    sect += 1;
+                    pos = 0;
+                }
+                Ok(total_read)
             }
         }
     }
     
-    fn write(&self, _offset: u64, buf: &[u8]) -> VfsResult<usize> {
+    fn write(&self, offset: u64, buf: &[u8]) -> VfsResult<usize> {
         match self.dev_type {
             DeviceType::Null => Ok(buf.len()), // Discard
             DeviceType::Zero => Err(VfsError::ReadOnly),
@@ -76,11 +91,32 @@ impl FileOps for DeviceFile {
                 Ok(buf.len())
             }
             DeviceType::Vda => {
-                if crate::virtio_blk::is_initialized() {
-                    Ok(0) // TODO: proper block write
-                } else {
-                    Err(VfsError::IoError)
+                if !crate::virtio_blk::is_initialized() {
+                    return Err(VfsError::IoError);
                 }
+                let sector_size = 512u64;
+                let start_sector = offset / sector_size;
+                let offset_in_sector = (offset % sector_size) as usize;
+                let mut total_written = 0usize;
+                let mut sect = start_sector;
+                let mut pos = offset_in_sector;
+                let mut sector_buf = [0u8; 512];
+                while total_written < buf.len() {
+                    // Read-modify-write if partial sector
+                    if pos != 0 || (buf.len() - total_written) < 512 {
+                        let _ = crate::virtio_blk::read_sector(sect, &mut sector_buf);
+                    }
+                    let avail = 512 - pos;
+                    let to_copy = core::cmp::min(avail, buf.len() - total_written);
+                    sector_buf[pos..pos + to_copy].copy_from_slice(&buf[total_written..total_written + to_copy]);
+                    if crate::virtio_blk::write_sector(sect, &sector_buf).is_err() {
+                        break;
+                    }
+                    total_written += to_copy;
+                    sect += 1;
+                    pos = 0;
+                }
+                Ok(total_written)
             }
         }
     }

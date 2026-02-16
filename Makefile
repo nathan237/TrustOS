@@ -15,7 +15,7 @@
 #   - qemu-system-x86_64 (for running)
 #   - OVMF firmware (for UEFI boot in QEMU)
 
-.PHONY: build iso run run-bios clean help check-deps
+.PHONY: build iso run run-bios clean help check-deps disk
 
 # ── Configuration (override via environment) ──
 KERNEL_PKG    ?= trustos_kernel
@@ -25,6 +25,8 @@ ISO_NAME      ?= trustos.iso
 QEMU          ?= qemu-system-x86_64
 QEMU_MEMORY   ?= 512M
 QEMU_CPUS     ?= 4
+DATA_IMG      ?= trustos_data.img
+DATA_SIZE     ?= 64M
 
 # ── Derived paths (no hardcoded absolute paths) ──
 ROOT_DIR      := $(shell pwd)
@@ -97,8 +99,20 @@ iso: build
 		-o $(ISO_FILE) $(ISO_ROOT)
 	@echo "$(GREEN)✓ ISO created: $(ISO_FILE)$(RESET)"
 
+## Create a persistent data disk image (if it doesn't exist)
+disk:
+	@if [ ! -f "$(DATA_IMG)" ]; then \
+		echo "$(YELLOW)Creating $(DATA_SIZE) data disk: $(DATA_IMG)$(RESET)"; \
+		if command -v qemu-img >/dev/null 2>&1; then \
+			qemu-img create -f raw $(DATA_IMG) $(DATA_SIZE); \
+		else \
+			truncate -s $(DATA_SIZE) $(DATA_IMG); \
+		fi; \
+		echo "$(GREEN)✓ Data disk created$(RESET)"; \
+	fi
+
 ## Run in QEMU (UEFI mode)
-run: iso
+run: iso disk
 	@echo "$(CYAN)══ Starting QEMU (UEFI) ══$(RESET)"
 	@if [ "$(OVMF_CODE)" = "OVMF_NOT_FOUND" ]; then \
 		echo "$(RED)✗ OVMF firmware not found!$(RESET)"; \
@@ -122,6 +136,7 @@ run: iso
 		-device virtio-net-pci,netdev=net0 \
 		-netdev user,id=net0 \
 		-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
+		-drive file=$(DATA_IMG),format=raw,if=virtio,id=data0 \
 		-rtc base=utc,clock=vm \
 		-serial stdio \
 		-no-reboot

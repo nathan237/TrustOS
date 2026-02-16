@@ -18,6 +18,23 @@ if (-not (Test-Path $IsoPath)) {
 Write-Host "=== TRustOs - QEMU GUI ===" -ForegroundColor Cyan
 Write-Host "ISO: $IsoPath" -ForegroundColor Green
 
+# Create data disk for persistent storage (virtio-blk) if it doesn't exist
+$dataImg = "$PSScriptRoot\trustos_data.img"
+if (-not (Test-Path $dataImg)) {
+    Write-Host "Creating 64 MB data disk: $dataImg" -ForegroundColor Yellow
+    & $QemuExe -nographic -no-reboot 2>$null  # just to verify path
+    $qemuImg = Join-Path (Split-Path $QemuExe) "qemu-img.exe"
+    if (Test-Path $qemuImg) {
+        & $qemuImg create -f raw $dataImg 64M
+    } else {
+        # Fallback: create a sparse 64MB file
+        $fs = [System.IO.File]::Create($dataImg)
+        $fs.SetLength(64 * 1024 * 1024)
+        $fs.Close()
+    }
+    Write-Host "Data disk created" -ForegroundColor Green
+}
+
 # Capture serial output to file
 $serialFile = "$PSScriptRoot\serial_output.txt"
 
@@ -39,6 +56,7 @@ $qemuArgs = @(
     "-device", "intel-hda",
     "-device", "hda-duplex",
     "-drive", "if=pflash,format=raw,file=$PSScriptRoot\OVMF.fd",
+    "-drive", "file=$dataImg,format=raw,if=virtio,id=data0",
     "-rtc", "base=utc,clock=vm",
     "-serial", "file:$serialFile",
     "-no-reboot",
