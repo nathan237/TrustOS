@@ -975,20 +975,51 @@ pub fn sys_readlink(pathname: u64, buf: u64, bufsiz: u64) -> i64 {
 
 /// sys_rt_sigaction - Set signal handler
 pub fn sys_rt_sigaction(sig: u32, act: u64, oldact: u64, sigsetsize: u64) -> i64 {
-    // For now, just accept all signal actions
-    crate::log_debug!("[SIGACTION] sig={} act={:#x} oldact={:#x}", sig, act, oldact);
+    let pid = crate::process::current_pid();
+    crate::log_debug!("[SIGACTION] pid={} sig={} act={:#x} oldact={:#x}", pid, sig, act, oldact);
+
+    // Return old action if requested
+    if oldact != 0 && validate_user_ptr(oldact, core::mem::size_of::<crate::signals::SigAction>(), true) {
+        if let Ok(old) = crate::signals::get_action(pid, sig) {
+            unsafe {
+                core::ptr::write(oldact as *mut crate::signals::SigAction, old);
+            }
+        }
+    }
+
+    // Set new action if provided
+    if act != 0 && validate_user_ptr(act, core::mem::size_of::<crate::signals::SigAction>(), false) {
+        let new_action = unsafe { core::ptr::read(act as *const crate::signals::SigAction) };
+        if let Err(e) = crate::signals::set_action(pid, sig, new_action) {
+            return e as i64;
+        }
+    }
+
     0
 }
 
 /// sys_rt_sigprocmask - Change blocked signals
 pub fn sys_rt_sigprocmask(how: u32, set: u64, oldset: u64, sigsetsize: u64) -> i64 {
-    // For now, just accept all signal mask changes
+    let pid = crate::process::current_pid();
+
+    let mut old_mask: u64 = 0;
+    let new_set = if set != 0 && validate_user_ptr(set, 8, false) {
+        unsafe { core::ptr::read(set as *const u64) }
+    } else {
+        0
+    };
+
+    if let Err(e) = crate::signals::set_mask(pid, how, new_set, &mut old_mask) {
+        return e as i64;
+    }
+
+    // Write old mask if requested
     if oldset != 0 && validate_user_ptr(oldset, sigsetsize as usize, true) {
-        // Return empty signal mask
         unsafe {
-            core::ptr::write_bytes(oldset as *mut u8, 0, sigsetsize as usize);
+            core::ptr::write(oldset as *mut u64, old_mask);
         }
     }
+
     0
 }
 

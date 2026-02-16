@@ -101,6 +101,17 @@ pub extern "x86-interrupt" fn general_protection_fault_handler(
     stack_frame: InterruptStackFrame,
     error_code: u64,
 ) {
+    // Check if fault came from Ring 3 (user mode)
+    if stack_frame.code_segment & 3 == 3 {
+        crate::serial_println!(
+            "[GPF] User-mode GPF at RIP={:#x} error_code={}, killing process",
+            stack_frame.instruction_pointer.as_u64(),
+            error_code
+        );
+        unsafe { crate::userland::return_from_ring3(-11); } // SIGSEGV
+    }
+
+    // Kernel GPF — fatal
     panic!(
         "EXCEPTION: GENERAL PROTECTION FAULT\n\
         Error Code: {}\n\
@@ -111,11 +122,31 @@ pub extern "x86-interrupt" fn general_protection_fault_handler(
 
 /// Invalid opcode handler
 pub extern "x86-interrupt" fn invalid_opcode_handler(stack_frame: InterruptStackFrame) {
+    // Check if fault came from Ring 3 (user mode)
+    if stack_frame.code_segment & 3 == 3 {
+        crate::serial_println!(
+            "[UD] User-mode invalid opcode at RIP={:#x}, killing process",
+            stack_frame.instruction_pointer.as_u64()
+        );
+        unsafe { crate::userland::return_from_ring3(-4); } // SIGILL
+    }
+
+    // Kernel invalid opcode — fatal
     panic!("EXCEPTION: INVALID OPCODE\n{:#?}", stack_frame);
 }
 
 /// Divide by zero handler
 pub extern "x86-interrupt" fn divide_error_handler(stack_frame: InterruptStackFrame) {
+    // Check if fault came from Ring 3 (user mode)
+    if stack_frame.code_segment & 3 == 3 {
+        crate::serial_println!(
+            "[DE] User-mode divide error at RIP={:#x}, killing process",
+            stack_frame.instruction_pointer.as_u64()
+        );
+        unsafe { crate::userland::return_from_ring3(-8); } // SIGFPE
+    }
+
+    // Kernel divide error — fatal
     panic!("EXCEPTION: DIVIDE BY ZERO\n{:#?}", stack_frame);
 }
 

@@ -360,6 +360,13 @@ pub fn current() -> Option<Process> {
     get(current_pid())
 }
 
+/// Check if a process is in Running state
+pub fn is_running(pid: Pid) -> bool {
+    PROCESS_TABLE.read().processes.get(&pid)
+        .map(|p| p.state == ProcessState::Running)
+        .unwrap_or(false)
+}
+
 /// Set process state
 pub fn set_state(pid: Pid, state: ProcessState) {
     if let Some(proc) = PROCESS_TABLE.write().processes.get_mut(&pid) {
@@ -405,6 +412,9 @@ pub fn spawn(name: &str) -> Result<Pid, &'static str> {
     let ppid = current_pid();
     let pid = create(name, ppid)?;
     
+    // Initialize signal state for this process
+    crate::signals::init_process(pid);
+    
     crate::log!("[PROC] Spawned process {} ({}) under parent {}", pid, name, ppid);
     Ok(pid)
 }
@@ -440,6 +450,10 @@ pub fn reap(pid: Pid) {
     }
     
     table.processes.remove(&pid);
+    
+    // Clean up signal state
+    crate::signals::cleanup_process(pid);
+    
     crate::log_debug!("[PROC] Reaped process {}", pid);
 }
 

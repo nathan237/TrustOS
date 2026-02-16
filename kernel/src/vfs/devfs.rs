@@ -47,8 +47,35 @@ impl FileOps for DeviceFile {
                 Ok(buf.len())
             }
             DeviceType::Console => {
-                // Read from keyboard buffer
-                Ok(0) // TODO: implement keyboard buffer read
+                // Read from keyboard buffer (blocking, line-buffered)
+                // Spin until at least one byte is available
+                let mut total = 0usize;
+                let max_spins = 500_000_000u64; // Safety limit to avoid infinite loop
+                let mut spins = 0u64;
+                
+                while total == 0 && spins < max_spins {
+                    while total < buf.len() {
+                        if let Some(ch) = crate::keyboard::read_char() {
+                            buf[total] = ch;
+                            total += 1;
+                            // Line-buffered: return on newline
+                            if ch == b'\n' || ch == b'\r' {
+                                if ch == b'\r' {
+                                    buf[total - 1] = b'\n';
+                                }
+                                return Ok(total);
+                            }
+                        } else {
+                            break; // No more chars available right now
+                        }
+                    }
+                    if total == 0 {
+                        // Yield CPU to let keyboard interrupts fire
+                        core::hint::spin_loop();
+                        spins += 1;
+                    }
+                }
+                Ok(total)
             }
             DeviceType::Vda => {
                 // Block device read via virtio-blk

@@ -297,6 +297,10 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
     
     // Switch to user address space and jump to Ring 3
     let exit_code;
+    
+    // Open fd 0/1/2 (stdin/stdout/stderr) for the user process
+    crate::vfs::setup_stdio();
+    
     unsafe {
         // Save kernel CR3
         let kernel_cr3: u64;
@@ -328,6 +332,9 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
     // Record exit in process table and reap
     crate::process::finish(pid, exit_code);
     crate::process::reap(pid);
+    
+    // Clean up stdio descriptors
+    crate::vfs::cleanup_stdio();
     
     // Restore previous PID (shell/kernel)
     crate::process::set_current(prev_pid);

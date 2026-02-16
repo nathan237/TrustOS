@@ -76,6 +76,18 @@ pub fn handle(num: u64, a1: u64, a2: u64, a3: u64) -> u64 {
     // Emit structured syscall event to TrustLab trace bus
     crate::lab_mode::trace_bus::emit_syscall(num, [a1, a2, a3], ret);
 
+    // Check for pending signals before returning to userspace
+    let pid = crate::process::current_pid();
+    if pid > 0 {
+        if let Some(signo) = crate::signals::check_signals(pid) {
+            // Signal with default terminate action was handled inside check_signals.
+            // If process was terminated, return_from_ring3 if still active.
+            if !crate::process::is_running(pid) && crate::userland::is_process_active() {
+                unsafe { crate::userland::return_from_ring3(-(signo as i32)); }
+            }
+        }
+    }
+
     ret as u64
 }
 
@@ -501,13 +513,12 @@ fn sys_kill(pid: i32, sig: i32) -> i64 {
         return errno::EINVAL;
     }
     
-    if sig == 0 {
-        // Just check if process exists
-        return 0;
-    }
+    let sender_pid = crate::process::current_pid();
     
-    // TODO: Implement signals properly
-    0
+    match crate::signals::kill(pid as u32, sig as u32, sender_pid) {
+        Ok(()) => 0,
+        Err(e) => e as i64,
+    }
 }
 
 // ============================================================================

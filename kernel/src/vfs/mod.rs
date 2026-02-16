@@ -197,6 +197,50 @@ impl Vfs {
 
 static VFS: RwLock<Vfs> = RwLock::new(Vfs::new());
 
+/// Set up fd 0 (stdin), 1 (stdout), 2 (stderr) pointing to /dev/console.
+/// Called before entering Ring 3 so user processes can do read(0)/write(1)/write(2).
+pub fn setup_stdio() {
+    // Resolve /dev/console
+    let (mount_idx, ino) = match resolve_path("/dev/console") {
+        Ok(r) => r,
+        Err(_) => {
+            crate::serial_println!("[VFS] Warning: /dev/console not found, stdio unavailable");
+            return;
+        }
+    };
+
+    let mut vfs = VFS.write();
+    // fd 0 — stdin (read-only)
+    vfs.open_files.insert(0, OpenFile {
+        ino,
+        mount_idx,
+        offset: 0,
+        flags: OpenFlags(0), // O_RDONLY
+    });
+    // fd 1 — stdout (write-only)
+    vfs.open_files.insert(1, OpenFile {
+        ino,
+        mount_idx,
+        offset: 0,
+        flags: OpenFlags(1), // O_WRONLY
+    });
+    // fd 2 — stderr (write-only)
+    vfs.open_files.insert(2, OpenFile {
+        ino,
+        mount_idx,
+        offset: 0,
+        flags: OpenFlags(1), // O_WRONLY
+    });
+}
+
+/// Clean up stdio descriptors after user process exits.
+pub fn cleanup_stdio() {
+    let mut vfs = VFS.write();
+    vfs.open_files.remove(&0);
+    vfs.open_files.remove(&1);
+    vfs.open_files.remove(&2);
+}
+
 /// Initialize VFS with default mounts
 pub fn init() {
     crate::log!("[VFS] Initializing Virtual File System...");
