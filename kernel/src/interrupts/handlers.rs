@@ -48,6 +48,15 @@ pub extern "x86-interrupt" fn page_fault_handler(
         }
     }
     
+    // ── Swap: check if page was swapped out ──
+    if is_user_fault && !is_protection {
+        let cr3: u64;
+        unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
+        if crate::memory::swap::handle_swap_fault(cr3, fault_addr) {
+            return; // Page swapped back in — resume
+        }
+    }
+    
     if is_user_fault && !is_protection {
         // Fault on a non-present page from Ring 3 — try to service it
         let page_addr = fault_addr & !0xFFF;
@@ -63,12 +72,18 @@ pub extern "x86-interrupt" fn page_fault_handler(
         
         if in_heap || in_stack {
             // Allocate a physical frame and map it
-            if let Some(phys) = crate::memory::frame::alloc_frame_zeroed() {
+            let phys = crate::memory::frame::alloc_frame_zeroed()
+                .or_else(|| crate::memory::swap::try_evict_page()); // try swap eviction on OOM
+            if let Some(phys) = phys {
                 let mapped = crate::exec::with_current_address_space(|space| {
                     space.map_page(page_addr, phys, PageFlags::USER_DATA)
                 });
                 
                 if mapped == Some(Some(())) {
+                    // Track page for swap subsystem
+                    let cr3_val: u64;
+                    unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3_val, options(nostack, preserves_flags)); }
+                    crate::memory::swap::track_page(cr3_val, page_addr, phys);
                     crate::serial_println!("[PF] Demand-paged {:#x} (phys {:#x})", page_addr, phys);
                     return; // Resume user process — IRET back to the faulting instruction
                 }

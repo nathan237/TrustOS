@@ -189,6 +189,33 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
         }
     }
     
+    // ── Apply ELF relocations (PIE / dynamic) ──
+    if !elf.relocations.is_empty() {
+        crate::log_debug!("[EXEC] Applying {} relocations (base={:#x})", elf.relocations.len(), elf.base_addr);
+        for reloc in &elf.relocations {
+            let target_vaddr = reloc.offset + elf.base_addr;
+            match reloc.rel_type {
+                8 => {
+                    // R_X86_64_RELATIVE: *target = base + addend
+                    let value = elf.base_addr.wrapping_add(reloc.addend as u64);
+                    if let Some(phys) = address_space.translate(target_vaddr) {
+                        unsafe { *((phys + hhdm) as *mut u64) = value; }
+                    }
+                }
+                1 | 6 | 7 => {
+                    // R_X86_64_64, GLOB_DAT, JUMP_SLOT — resolve to base+addend for static-pie
+                    let value = elf.base_addr.wrapping_add(reloc.addend as u64);
+                    if let Some(phys) = address_space.translate(target_vaddr) {
+                        unsafe { *((phys + hhdm) as *mut u64) = value; }
+                    }
+                }
+                _ => {
+                    crate::log_debug!("[EXEC] Unsupported reloc type {}", reloc.rel_type);
+                }
+            }
+        }
+    }
+    
     // Allocate and map user stack with guard page
     let stack_pages = USER_STACK_SIZE / 4096;
     let stack_base = UserMemoryRegion::STACK_TOP - (stack_pages as u64 * 4096);

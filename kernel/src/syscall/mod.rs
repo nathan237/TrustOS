@@ -133,6 +133,16 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         GETTID => linux::sys_gettid(),
         GETUID | GETEUID => linux::sys_getuid(),
         GETGID | GETEGID => linux::sys_getgid(),
+        SETUID => linux::sys_setuid(a1 as u32),
+        SETGID => linux::sys_setgid(a1 as u32),
+        SETREUID => linux::sys_setreuid(a1 as u32, a2 as u32),
+        SETREGID => linux::sys_setregid(a1 as u32, a2 as u32),
+        UMASK => linux::sys_umask(a1 as u32),
+        CHMOD => linux::sys_chmod(a1, a2 as u32),
+        FCHMOD => linux::sys_fchmod(a1 as i32, a2 as u32),
+        CHOWN => linux::sys_chown(a1, a2 as u32, a3 as u32),
+        FCHOWN => linux::sys_fchown(a1 as i32, a2 as u32, a3 as u32),
+        LCHOWN => linux::sys_chown(a1, a2 as u32, a3 as u32),
         FORK => sys_fork(),
         VFORK => sys_fork(),
         CLONE => sys_clone(a1, a2, a3),
@@ -199,6 +209,8 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         
         // ====== Misc ======
         PRCTL => linux::sys_prctl(a1 as u32, a2, a3, a4, a5),
+        SWAPON => linux::sys_swapon(a1),
+        SWAPOFF => linux::sys_swapoff(a1),
         
         // ====== TrustOS-specific ======
         nr::SYS_DEBUG_PRINT => sys_debug_print(a1, a2 as usize),

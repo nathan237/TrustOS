@@ -398,6 +398,20 @@ pub fn open(path: &str, flags: OpenFlags) -> VfsResult<Fd> {
         Err(e) => return Err(e),
     };
     
+    // Permission check: verify caller has access
+    {
+        let vfs = VFS.read();
+        if let Ok(st) = vfs.mounts[mount_idx].fs.stat(ino) {
+            // Determine needed permission from flags
+            let want_read  = flags.readable();
+            let want_write = flags.writable();
+            let need = (if want_read { 4 } else { 0 }) | (if want_write { 2 } else { 0 });
+            if need > 0 && !check_permission(&st, need) {
+                return Err(VfsError::PermissionDenied);
+            }
+        }
+    }
+    
     let fd = {
         let vfs = VFS.read();
         vfs.alloc_fd()
@@ -783,3 +797,98 @@ pub fn fstat_fd(fd: Fd) -> VfsResult<Stat> {
     let fs = &vfs.mounts[mount_idx].fs;
     fs.stat(ino)
 }
+
+// ============================================================================
+// Permission checking
+// ============================================================================
+
+/// Check if current process has the requested permission on a file.
+/// `want` is a bitmask: 4=read, 2=write, 1=execute
+pub fn check_permission(st: &Stat, want: u32) -> bool {
+    let (uid, gid, euid, egid) = crate::process::current_credentials();
+    // Root can do anything
+    if euid == 0 { return true; }
+
+    let mode = st.mode;
+    let bits = if euid == st.uid {
+        (mode >> 6) & 7 // owner bits
+    } else if egid == st.gid {
+        (mode >> 3) & 7 // group bits
+    } else {
+        mode & 7 // other bits
+    };
+    (bits & want) == want
+}
+
+/// Change file mode bits
+pub fn chmod(path: &str, mode: u32) -> VfsResult<()> {
+    let (_, _, euid, _) = crate::process::current_credentials();
+    let st = stat(path)?;
+    // Only owner or root can chmod
+    if euid != 0 && euid != st.uid {
+        return Err(VfsError::PermissionDenied);
+    }
+    let (mount_idx, ino) = resolve_path(path)?;
+    let vfs = VFS.read();
+    let _ = set_file_mode(&*vfs.mounts[mount_idx].fs, ino, mode);
+    Ok(())
+}
+
+/// Change file mode by fd
+pub fn fchmod(fd: Fd, mode: u32) -> VfsResult<()> {
+    let (_, _, euid, _) = crate::process::current_credentials();
+    let vfs = VFS.read();
+    let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
+    let mount_idx = file.mount_idx;
+    let ino = file.ino;
+    let st = vfs.mounts[mount_idx].fs.stat(ino)?;
+    if euid != 0 && euid != st.uid {
+        return Err(VfsError::PermissionDenied);
+    }
+    let _ = set_file_mode(&*vfs.mounts[mount_idx].fs, ino, mode);
+    Ok(())
+}
+
+/// Change file owner/group
+pub fn chown(path: &str, uid: u32, gid: u32) -> VfsResult<()> {
+    let (mount_idx, ino) = resolve_path(path)?;
+    let vfs = VFS.read();
+    let _ = set_file_owner(&*vfs.mounts[mount_idx].fs, ino, uid, gid);
+    Ok(())
+}
+
+/// Change file owner/group by fd
+pub fn fchown(fd: Fd, uid: u32, gid: u32) -> VfsResult<()> {
+    let vfs = VFS.read();
+    let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
+    let _ = set_file_owner(&*vfs.mounts[file.mount_idx].fs, file.ino, uid, gid);
+    Ok(())
+}
+
+/// Helper: set mode bits in metadata overlay (works for ramfs/trustfs)
+fn set_file_mode(_fs: &dyn crate::vfs::FileSystem, ino: Ino, mode: u32) -> VfsResult<()> {
+    // For ramfs/trustfs we can modify the inode's mode directly via the metadata overlay
+    METADATA_OVERLAY.lock().insert(ino, MetadataOverride { mode: Some(mode), uid: None, gid: None });
+    Ok(())
+}
+
+/// Helper: set owner in metadata overlay
+fn set_file_owner(_fs: &dyn crate::vfs::FileSystem, ino: Ino, uid: u32, gid: u32) -> VfsResult<()> {
+    let mut overlay = METADATA_OVERLAY.lock();
+    let entry = overlay.entry(ino).or_insert(MetadataOverride { mode: None, uid: None, gid: None });
+    if uid != 0xFFFFFFFF { entry.uid = Some(uid); }
+    if gid != 0xFFFFFFFF { entry.gid = Some(gid); }
+    Ok(())
+}
+
+/// Metadata override storage (for chmod/chown on any FS)
+#[derive(Clone, Debug)]
+struct MetadataOverride {
+    mode: Option<u32>,
+    uid: Option<u32>,
+    gid: Option<u32>,
+}
+
+use spin::Mutex as SpinMutex;
+use alloc::collections::BTreeMap as OverlayMap;
+static METADATA_OVERLAY: SpinMutex<OverlayMap<Ino, MetadataOverride>> = SpinMutex::new(OverlayMap::new());

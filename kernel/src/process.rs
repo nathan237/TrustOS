@@ -136,6 +136,16 @@ pub struct Process {
     pub cr3: u64,
     /// Address space (None for kernel processes)
     pub address_space: Option<Arc<Mutex<AddressSpace>>>,
+    /// Real user ID
+    pub uid: u32,
+    /// Real group ID
+    pub gid: u32,
+    /// Effective user ID
+    pub euid: u32,
+    /// Effective group ID
+    pub egid: u32,
+    /// File creation mask
+    pub umask: u32,
 }
 
 impl Process {
@@ -184,6 +194,11 @@ impl Process {
             children: Vec::new(),
             cr3,
             address_space,
+            uid: crate::auth::current_uid(),
+            gid: crate::auth::current_gid(),
+            euid: crate::auth::current_uid(),
+            egid: crate::auth::current_gid(),
+            umask: 0o022,
         }
     }
     
@@ -235,8 +250,8 @@ impl Process {
 }
 
 /// Process table
-struct ProcessTable {
-    processes: BTreeMap<Pid, Process>,
+pub struct ProcessTable {
+    pub processes: BTreeMap<Pid, Process>,
     next_pid: AtomicU32,
 }
 
@@ -253,7 +268,7 @@ impl ProcessTable {
     }
 }
 
-static PROCESS_TABLE: RwLock<ProcessTable> = RwLock::new(ProcessTable::new());
+pub static PROCESS_TABLE: RwLock<ProcessTable> = RwLock::new(ProcessTable::new());
 static CURRENT_PID: AtomicU32 = AtomicU32::new(PID_KERNEL);
 
 /// Initialize the process manager
@@ -311,7 +326,7 @@ pub fn fork() -> Result<Pid, &'static str> {
     let current = current_pid();
     
     // Read parent data while holding read lock
-    let (name, cwd, env, fd_table, next_fd, parent_cr3, memory) = {
+    let (name, cwd, env, fd_table, next_fd, parent_cr3, memory, uid, gid, euid, egid, umask) = {
         let table = PROCESS_TABLE.read();
         let parent = table.processes.get(&current)
             .ok_or("Current process not found")?;
@@ -323,6 +338,11 @@ pub fn fork() -> Result<Pid, &'static str> {
             parent.next_fd,
             parent.cr3,
             parent.memory.clone(),
+            parent.uid,
+            parent.gid,
+            parent.euid,
+            parent.egid,
+            parent.umask,
         )
     };
     
@@ -370,6 +390,11 @@ pub fn fork() -> Result<Pid, &'static str> {
         children: Vec::new(),
         cr3,
         address_space,
+        uid,
+        gid,
+        euid,
+        egid,
+        umask,
     };
     
     if let Some(parent) = table.processes.get_mut(&current) {
@@ -434,6 +459,55 @@ pub fn current_pid() -> Pid {
 /// Set current process PID (called by scheduler)
 pub fn set_current(pid: Pid) {
     CURRENT_PID.store(pid, Ordering::SeqCst);
+}
+
+/// Get uid/gid/euid/egid for current process
+pub fn current_credentials() -> (u32, u32, u32, u32) {
+    let table = PROCESS_TABLE.read();
+    if let Some(p) = table.processes.get(&current_pid()) {
+        (p.uid, p.gid, p.euid, p.egid)
+    } else {
+        (0, 0, 0, 0) // kernel / init default
+    }
+}
+
+/// Set real and effective uid (setuid semantics)
+pub fn set_uid(pid: Pid, uid: u32) -> Result<(), &'static str> {
+    let mut table = PROCESS_TABLE.write();
+    let proc = table.processes.get_mut(&pid).ok_or("No such process")?;
+    // Root can set to any uid; non-root can only set to their real uid
+    if proc.euid == 0 || uid == proc.uid {
+        proc.uid = uid;
+        proc.euid = uid;
+        Ok(())
+    } else {
+        Err("EPERM")
+    }
+}
+
+/// Set real and effective gid (setgid semantics)
+pub fn set_gid(pid: Pid, gid: u32) -> Result<(), &'static str> {
+    let mut table = PROCESS_TABLE.write();
+    let proc = table.processes.get_mut(&pid).ok_or("No such process")?;
+    if proc.euid == 0 || gid == proc.gid {
+        proc.gid = gid;
+        proc.egid = gid;
+        Ok(())
+    } else {
+        Err("EPERM")
+    }
+}
+
+/// Set umask, returns previous umask
+pub fn set_umask(pid: Pid, mask: u32) -> u32 {
+    let mut table = PROCESS_TABLE.write();
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        let old = proc.umask;
+        proc.umask = mask & 0o777;
+        old
+    } else {
+        0o022
+    }
 }
 
 /// Get process by PID

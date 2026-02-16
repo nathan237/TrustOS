@@ -583,22 +583,135 @@ pub fn sys_gettid() -> i64 {
 
 /// sys_getuid - Get user ID
 pub fn sys_getuid() -> i64 {
-    0 // Always root for now
+    let (uid, _, _, _) = crate::process::current_credentials();
+    uid as i64
 }
 
 /// sys_getgid - Get group ID
 pub fn sys_getgid() -> i64 {
-    0 // Always root for now
+    let (_, gid, _, _) = crate::process::current_credentials();
+    gid as i64
 }
 
 /// sys_geteuid - Get effective user ID  
 pub fn sys_geteuid() -> i64 {
-    0
+    let (_, _, euid, _) = crate::process::current_credentials();
+    euid as i64
 }
 
 /// sys_getegid - Get effective group ID
 pub fn sys_getegid() -> i64 {
+    let (_, _, _, egid) = crate::process::current_credentials();
+    egid as i64
+}
+
+/// sys_setuid - Set user ID
+pub fn sys_setuid(uid: u32) -> i64 {
+    let pid = crate::process::current_pid();
+    match crate::process::set_uid(pid, uid) {
+        Ok(()) => 0,
+        Err(_) => -1, // EPERM
+    }
+}
+
+/// sys_setgid - Set group ID
+pub fn sys_setgid(gid: u32) -> i64 {
+    let pid = crate::process::current_pid();
+    match crate::process::set_gid(pid, gid) {
+        Ok(()) => 0,
+        Err(_) => -1, // EPERM
+    }
+}
+
+/// sys_setreuid - Set real and effective user IDs
+pub fn sys_setreuid(ruid: u32, euid: u32) -> i64 {
+    let pid = crate::process::current_pid();
+    // If -1 (0xFFFFFFFF), don't change
+    if ruid != 0xFFFFFFFF {
+        if crate::process::set_uid(pid, ruid).is_err() { return -1; }
+    }
+    if euid != 0xFFFFFFFF {
+        // set only euid
+        let mut table = crate::process::PROCESS_TABLE.write();
+        if let Some(p) = table.processes.get_mut(&pid) {
+            if p.euid == 0 || euid == p.uid || euid == p.euid {
+                p.euid = euid;
+            } else {
+                return -1;
+            }
+        }
+    }
     0
+}
+
+/// sys_setregid - Set real and effective group IDs
+pub fn sys_setregid(rgid: u32, egid: u32) -> i64 {
+    let pid = crate::process::current_pid();
+    if rgid != 0xFFFFFFFF {
+        if crate::process::set_gid(pid, rgid).is_err() { return -1; }
+    }
+    if egid != 0xFFFFFFFF {
+        let mut table = crate::process::PROCESS_TABLE.write();
+        if let Some(p) = table.processes.get_mut(&pid) {
+            if p.euid == 0 || egid == p.gid || egid == p.egid {
+                p.egid = egid;
+            } else {
+                return -1;
+            }
+        }
+    }
+    0
+}
+
+/// sys_umask - Set file creation mask
+pub fn sys_umask(mask: u32) -> i64 {
+    let pid = crate::process::current_pid();
+    crate::process::set_umask(pid, mask) as i64
+}
+
+/// sys_chmod - Change file mode
+pub fn sys_chmod(path_ptr: u64, mode: u32) -> i64 {
+    let path = match read_user_string(path_ptr, 256) {
+        Some(p) => p,
+        None => return -14, // EFAULT
+    };
+    match crate::vfs::chmod(&path, mode) {
+        Ok(()) => 0,
+        Err(_) => -1, // EPERM
+    }
+}
+
+/// sys_fchmod - Change file mode by fd
+pub fn sys_fchmod(fd: i32, mode: u32) -> i64 {
+    match crate::vfs::fchmod(fd, mode) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
+/// sys_chown - Change file owner
+pub fn sys_chown(path_ptr: u64, uid: u32, gid: u32) -> i64 {
+    let path = match read_user_string(path_ptr, 256) {
+        Some(p) => p,
+        None => return -14,
+    };
+    // Only root can chown
+    let (_, _, euid, _) = crate::process::current_credentials();
+    if euid != 0 { return -1; } // EPERM
+    match crate::vfs::chown(&path, uid, gid) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
+/// sys_fchown - Change file owner by fd
+pub fn sys_fchown(fd: i32, uid: u32, gid: u32) -> i64 {
+    let (_, _, euid, _) = crate::process::current_credentials();
+    if euid != 0 { return -1; }
+    match crate::vfs::fchown(fd, uid, gid) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
 }
 
 // ============================================================================
@@ -1520,5 +1633,33 @@ pub fn sys_openat(dirfd: i32, pathname: u64, flags: u32) -> i64 {
     match crate::vfs::open(&full_path, crate::vfs::OpenFlags(flags)) {
         Ok(fd) => fd as i64,
         Err(_) => errno::ENOENT,
+    }
+}
+
+/// sys_swapon — Enable swap on a file/partition
+pub fn sys_swapon(path_ptr: u64) -> i64 {
+    let (_, _, euid, _) = crate::process::current_credentials();
+    if euid != 0 { return -1; } // EPERM: must be root
+    let path = match read_user_string(path_ptr, 256) {
+        Some(p) => p,
+        None => return errno::EFAULT,
+    };
+    match crate::memory::swap::swapon(&path) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
+/// sys_swapoff — Disable swap
+pub fn sys_swapoff(path_ptr: u64) -> i64 {
+    let (_, _, euid, _) = crate::process::current_credentials();
+    if euid != 0 { return -1; }
+    let path = match read_user_string(path_ptr, 256) {
+        Some(p) => p,
+        None => return errno::EFAULT,
+    };
+    match crate::memory::swap::swapoff(&path) {
+        Ok(()) => 0,
+        Err(_) => -1,
     }
 }

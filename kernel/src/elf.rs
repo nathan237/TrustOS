@@ -28,11 +28,87 @@ const PT_DYNAMIC: u32 = 2;
 const PT_INTERP: u32 = 3;
 const PT_NOTE: u32 = 4;
 const PT_PHDR: u32 = 6;
+const PT_GNU_RELRO: u32 = 0x6474e552;
+const PT_GNU_STACK: u32 = 0x6474e551;
 
 /// Program header flags
 pub const PF_X: u32 = 1; // Execute
 pub const PF_W: u32 = 2; // Write
 pub const PF_R: u32 = 4; // Read
+
+/// Dynamic section tag types
+const DT_NULL: i64 = 0;
+const DT_NEEDED: i64 = 1;     // Name of needed library
+const DT_PLTRELSZ: i64 = 2;  // Bytes of PLT relocs
+const DT_PLTGOT: i64 = 3;
+const DT_HASH: i64 = 4;
+const DT_STRTAB: i64 = 5;     // String table offset
+const DT_SYMTAB: i64 = 6;    // Symbol table offset
+const DT_RELA: i64 = 7;      // Rela relocs
+const DT_RELASZ: i64 = 8;
+const DT_RELAENT: i64 = 9;
+const DT_STRSZ: i64 = 10;
+const DT_SYMENT: i64 = 11;
+const DT_INIT: i64 = 12;
+const DT_FINI: i64 = 13;
+const DT_SONAME: i64 = 14;
+const DT_RPATH: i64 = 15;
+const DT_SYMBOLIC: i64 = 16;
+const DT_REL: i64 = 17;
+const DT_RELSZ: i64 = 18;
+const DT_RELENT: i64 = 19;
+const DT_PLTREL: i64 = 20;
+const DT_DEBUG_DT: i64 = 21;
+const DT_TEXTREL: i64 = 22;
+const DT_JMPREL: i64 = 23;
+const DT_INIT_ARRAY: i64 = 25;
+const DT_FINI_ARRAY: i64 = 26;
+const DT_INIT_ARRAYSZ: i64 = 27;
+const DT_FINI_ARRAYSZ: i64 = 28;
+const DT_FLAGS: i64 = 30;
+const DT_FLAGS_1: i64 = 0x6ffffffb;
+
+/// Relocation types for x86_64
+const R_X86_64_NONE: u32 = 0;
+const R_X86_64_64: u32 = 1;        // S + A
+const R_X86_64_GLOB_DAT: u32 = 6;  // S
+const R_X86_64_JUMP_SLOT: u32 = 7; // S
+const R_X86_64_RELATIVE: u32 = 8;  // B + A
+const R_X86_64_IRELATIVE: u32 = 37;
+
+/// ELF64 dynamic section entry
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Elf64Dyn {
+    pub d_tag: i64,
+    pub d_val: u64,
+}
+
+/// ELF64 symbol table entry
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Elf64Sym {
+    pub st_name: u32,
+    pub st_info: u8,
+    pub st_other: u8,
+    pub st_shndx: u16,
+    pub st_value: u64,
+    pub st_size: u64,
+}
+
+/// ELF64 Rela relocation entry
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct Elf64Rela {
+    pub r_offset: u64,
+    pub r_info: u64,
+    pub r_addend: i64,
+}
+
+impl Elf64Rela {
+    pub fn sym_idx(&self) -> u32 { (self.r_info >> 32) as u32 }
+    pub fn rel_type(&self) -> u32 { (self.r_info & 0xFFFF_FFFF) as u32 }
+}
 
 /// ELF64 file header
 #[repr(C)]
@@ -157,6 +233,39 @@ pub struct LoadedSegment {
     pub data: Vec<u8>,
 }
 
+/// Dynamic linking info parsed from PT_DYNAMIC
+#[derive(Clone, Debug, Default)]
+pub struct DynamicInfo {
+    /// Interpreter path from PT_INTERP (e.g. "/lib/ld-linux-x86-64.so.2")
+    pub interp: Option<String>,
+    /// Needed shared libraries (DT_NEEDED)
+    pub needed_libs: Vec<String>,
+    /// Rela relocation table (file offset, count)
+    pub rela_offset: u64,
+    pub rela_count: usize,
+    /// JMPREL (PLT relocations)
+    pub jmprel_offset: u64,
+    pub jmprel_count: usize,
+    /// Symbol table file offset
+    pub symtab_offset: u64,
+    /// String table file offset + size
+    pub strtab_offset: u64,
+    pub strtab_size: usize,
+    /// INIT / FINI addresses (virtual)
+    pub init_addr: u64,
+    pub fini_addr: u64,
+    /// INIT_ARRAY / FINI_ARRAY
+    pub init_array_addr: u64,
+    pub init_array_size: usize,
+    pub fini_array_addr: u64,
+    pub fini_array_size: usize,
+    /// FLAGS
+    pub flags: u64,
+    pub flags_1: u64,
+    /// Has PT_DYNAMIC at all?
+    pub has_dynamic: bool,
+}
+
 /// Loaded ELF info
 #[derive(Clone, Debug)]
 pub struct LoadedElf {
@@ -164,6 +273,23 @@ pub struct LoadedElf {
     pub segments: Vec<LoadedSegment>,
     pub min_vaddr: u64,
     pub max_vaddr: u64,
+    /// Base address offset for PIE executables (ET_DYN)
+    pub base_addr: u64,
+    /// Whether this is a PIE/shared object
+    pub is_pie: bool,
+    /// Dynamic linking information
+    pub dynamic: DynamicInfo,
+    /// Relocation entries (already parsed)
+    pub relocations: Vec<RelocationEntry>,
+}
+
+/// A parsed relocation
+#[derive(Clone, Debug)]
+pub struct RelocationEntry {
+    pub offset: u64,
+    pub rel_type: u32,
+    pub sym_idx: u32,
+    pub addend: i64,
 }
 
 /// ELF loading errors
@@ -205,7 +331,7 @@ pub fn load_from_path(path: &str) -> ElfResult<LoadedElf> {
     load_from_bytes(&data)
 }
 
-/// Load an ELF from bytes
+/// Load an ELF from bytes — supports static, PIE, and dynamic executables
 pub fn load_from_bytes(data: &[u8]) -> ElfResult<LoadedElf> {
     // Parse header
     let header = Elf64Header::from_bytes(data)
@@ -215,11 +341,18 @@ pub fn load_from_bytes(data: &[u8]) -> ElfResult<LoadedElf> {
         return Err(ElfError::NotExecutable);
     }
     
-    crate::log_debug!("[ELF] Loading executable, entry: {:#x}", header.e_entry);
+    let is_pie = header.e_type == ET_DYN;
+    // PIE executables are loaded at a fixed base; static ELFs at their linked address
+    let base_addr: u64 = if is_pie { 0x0040_0000 } else { 0 };
+    
+    crate::log_debug!("[ELF] Loading {} executable, entry: {:#x}, base: {:#x}",
+        if is_pie { "PIE" } else { "static" }, header.e_entry, base_addr);
     
     let mut segments = Vec::new();
     let mut min_vaddr = u64::MAX;
     let mut max_vaddr = 0u64;
+    let mut dynamic_info = DynamicInfo::default();
+    let mut dynamic_phdr: Option<(u64, u64)> = None; // (offset, size)
     
     // Parse program headers
     let ph_offset = header.e_phoff as usize;
@@ -234,52 +367,178 @@ pub fn load_from_bytes(data: &[u8]) -> ElfResult<LoadedElf> {
         
         let phdr = unsafe { &*(data[offset..].as_ptr() as *const Elf64Phdr) };
         
-        if !phdr.is_load() {
-            continue;
+        match phdr.p_type {
+            PT_INTERP => {
+                // Extract interpreter path
+                let start = phdr.p_offset as usize;
+                let end = start + phdr.p_filesz as usize;
+                if end <= data.len() {
+                    let interp_bytes = &data[start..end];
+                    // Strip null terminator
+                    let len = interp_bytes.iter().position(|&b| b == 0).unwrap_or(interp_bytes.len());
+                    if let Ok(s) = core::str::from_utf8(&interp_bytes[..len]) {
+                        dynamic_info.interp = Some(String::from(s));
+                        crate::log_debug!("[ELF] PT_INTERP: {}", s);
+                    }
+                }
+            }
+            PT_DYNAMIC => {
+                dynamic_info.has_dynamic = true;
+                dynamic_phdr = Some((phdr.p_offset, phdr.p_filesz));
+            }
+            PT_LOAD => {
+                let vaddr = phdr.p_vaddr + base_addr;
+                crate::log_debug!("[ELF] LOAD segment: vaddr={:#x}, filesz={}, memsz={}, flags={:#x}",
+                    vaddr, phdr.p_filesz, phdr.p_memsz, phdr.p_flags);
+                
+                if vaddr < min_vaddr { min_vaddr = vaddr; }
+                if vaddr + phdr.p_memsz > max_vaddr { max_vaddr = vaddr + phdr.p_memsz; }
+                
+                let file_offset = phdr.p_offset as usize;
+                let file_size = phdr.p_filesz as usize;
+                let mem_size = phdr.p_memsz as usize;
+                
+                if file_offset + file_size > data.len() {
+                    return Err(ElfError::InvalidProgramHeader);
+                }
+                
+                let mut segment_data = alloc::vec![0u8; mem_size];
+                segment_data[..file_size].copy_from_slice(&data[file_offset..file_offset + file_size]);
+                
+                segments.push(LoadedSegment {
+                    vaddr,
+                    size: phdr.p_memsz,
+                    flags: phdr.p_flags,
+                    data: segment_data,
+                });
+            }
+            _ => {} // PT_NOTE, PT_GNU_STACK, PT_GNU_RELRO, etc.
         }
-        
-        crate::log_debug!("[ELF] LOAD segment: vaddr={:#x}, filesz={}, memsz={}, flags={:#x}",
-            phdr.p_vaddr, phdr.p_filesz, phdr.p_memsz, phdr.p_flags);
-        
-        // Track address range
-        if phdr.p_vaddr < min_vaddr {
-            min_vaddr = phdr.p_vaddr;
-        }
-        if phdr.p_vaddr + phdr.p_memsz > max_vaddr {
-            max_vaddr = phdr.p_vaddr + phdr.p_memsz;
-        }
-        
-        // Load segment data
-        let file_offset = phdr.p_offset as usize;
-        let file_size = phdr.p_filesz as usize;
-        let mem_size = phdr.p_memsz as usize;
-        
-        if file_offset + file_size > data.len() {
-            return Err(ElfError::InvalidProgramHeader);
-        }
-        
-        // Create segment buffer (zero-initialized for BSS)
-        let mut segment_data = alloc::vec![0u8; mem_size];
-        segment_data[..file_size].copy_from_slice(&data[file_offset..file_offset + file_size]);
-        
-        segments.push(LoadedSegment {
-            vaddr: phdr.p_vaddr,
-            size: phdr.p_memsz,
-            flags: phdr.p_flags,
-            data: segment_data,
-        });
     }
     
     if segments.is_empty() {
         return Err(ElfError::InvalidProgramHeader);
     }
     
+    // ── Parse PT_DYNAMIC section ──
+    let mut relocations = Vec::new();
+    if let Some((dyn_off, dyn_sz)) = dynamic_phdr {
+        let start = dyn_off as usize;
+        let end = start + dyn_sz as usize;
+        if end <= data.len() {
+            parse_dynamic(data, start, end, base_addr, &mut dynamic_info);
+        }
+        // Parse RELA relocations
+        if dynamic_info.rela_count > 0 && (dynamic_info.rela_offset as usize) < data.len() {
+            let rela_start = dynamic_info.rela_offset as usize;
+            for i in 0..dynamic_info.rela_count {
+                let off = rela_start + i * core::mem::size_of::<Elf64Rela>();
+                if off + core::mem::size_of::<Elf64Rela>() > data.len() { break; }
+                let rela = unsafe { &*(data[off..].as_ptr() as *const Elf64Rela) };
+                relocations.push(RelocationEntry {
+                    offset: rela.r_offset,
+                    rel_type: rela.rel_type(),
+                    sym_idx: rela.sym_idx(),
+                    addend: rela.r_addend,
+                });
+            }
+        }
+        // Parse JMPREL (PLT) relocations
+        if dynamic_info.jmprel_count > 0 && (dynamic_info.jmprel_offset as usize) < data.len() {
+            let jmp_start = dynamic_info.jmprel_offset as usize;
+            for i in 0..dynamic_info.jmprel_count {
+                let off = jmp_start + i * core::mem::size_of::<Elf64Rela>();
+                if off + core::mem::size_of::<Elf64Rela>() > data.len() { break; }
+                let rela = unsafe { &*(data[off..].as_ptr() as *const Elf64Rela) };
+                relocations.push(RelocationEntry {
+                    offset: rela.r_offset,
+                    rel_type: rela.rel_type(),
+                    sym_idx: rela.sym_idx(),
+                    addend: rela.r_addend,
+                });
+            }
+        }
+        crate::log_debug!("[ELF] Parsed {} relocations, {} needed libs",
+            relocations.len(), dynamic_info.needed_libs.len());
+    }
+    
     Ok(LoadedElf {
-        entry_point: header.e_entry,
+        entry_point: header.e_entry + base_addr,
         segments,
         min_vaddr,
         max_vaddr,
+        base_addr,
+        is_pie,
+        dynamic: dynamic_info,
+        relocations,
     })
+}
+
+/// Parse the .dynamic section entries
+fn parse_dynamic(data: &[u8], start: usize, end: usize, _base: u64, info: &mut DynamicInfo) {
+    let entry_size = core::mem::size_of::<Elf64Dyn>();
+    let mut rela_sz: u64 = 0;
+    let mut rela_ent: u64 = 0;
+    let mut plt_rel_sz: u64 = 0;
+    let mut strtab_file_off: u64 = 0;
+    let mut strtab_sz: u64 = 0;
+    let mut needed_offsets: Vec<u64> = Vec::new();
+    
+    let mut off = start;
+    while off + entry_size <= end {
+        let dyn_entry = unsafe { &*(data[off..].as_ptr() as *const Elf64Dyn) };
+        match dyn_entry.d_tag {
+            DT_NULL => break,
+            DT_NEEDED => { needed_offsets.push(dyn_entry.d_val); }
+            DT_STRTAB => { strtab_file_off = dyn_entry.d_val; }
+            DT_STRSZ => { strtab_sz = dyn_entry.d_val; }
+            DT_SYMTAB => { info.symtab_offset = dyn_entry.d_val; }
+            DT_RELA => { info.rela_offset = dyn_entry.d_val; }
+            DT_RELASZ => { rela_sz = dyn_entry.d_val; }
+            DT_RELAENT => { rela_ent = dyn_entry.d_val; }
+            DT_JMPREL => { info.jmprel_offset = dyn_entry.d_val; }
+            DT_PLTRELSZ => { plt_rel_sz = dyn_entry.d_val; }
+            DT_INIT => { info.init_addr = dyn_entry.d_val; }
+            DT_FINI => { info.fini_addr = dyn_entry.d_val; }
+            DT_INIT_ARRAY => { info.init_array_addr = dyn_entry.d_val; }
+            DT_INIT_ARRAYSZ => { info.init_array_size = dyn_entry.d_val as usize; }
+            DT_FINI_ARRAY => { info.fini_array_addr = dyn_entry.d_val; }
+            DT_FINI_ARRAYSZ => { info.fini_array_size = dyn_entry.d_val as usize; }
+            DT_FLAGS => { info.flags = dyn_entry.d_val; }
+            DT_FLAGS_1 => { info.flags_1 = dyn_entry.d_val; }
+            _ => {}
+        }
+        off += entry_size;
+    }
+    
+    // Calculate relocation counts
+    if rela_ent > 0 && rela_sz > 0 {
+        info.rela_count = (rela_sz / rela_ent) as usize;
+    }
+    if plt_rel_sz > 0 {
+        let ent = if rela_ent > 0 { rela_ent } else { core::mem::size_of::<Elf64Rela>() as u64 };
+        info.jmprel_count = (plt_rel_sz / ent) as usize;
+    }
+    
+    info.strtab_offset = strtab_file_off;
+    info.strtab_size = strtab_sz as usize;
+    
+    // Resolve needed library names from string table
+    // The strtab_file_off may be a virtual address; try to find it as a file offset
+    // by looking in loaded segments. For simplicity, if it's within data range, use directly.
+    let strtab_start = strtab_file_off as usize;
+    if strtab_start < data.len() {
+        for &name_off in &needed_offsets {
+            let name_start = strtab_start + name_off as usize;
+            if name_start < data.len() {
+                let end_pos = data[name_start..].iter().position(|&b| b == 0)
+                    .unwrap_or(data.len() - name_start);
+                if let Ok(name) = core::str::from_utf8(&data[name_start..name_start + end_pos]) {
+                    info.needed_libs.push(String::from(name));
+                }
+            }
+        }
+    }
 }
 
 /// Check if data is a valid ELF file
