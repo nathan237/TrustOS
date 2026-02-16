@@ -119,7 +119,7 @@ pub extern "x86-interrupt" fn divide_error_handler(stack_frame: InterruptStackFr
     panic!("EXCEPTION: DIVIDE BY ZERO\n{:#?}", stack_frame);
 }
 
-/// Timer interrupt handler
+/// Timer interrupt handler (legacy PIC — vector 32)
 pub extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     if !BOOTSTRAP_READY.load(Ordering::Relaxed) {
         unsafe {
@@ -127,6 +127,29 @@ pub extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptSta
         }
         return;
     }
+    // Update tick counter
+    crate::logger::tick();
+    crate::time::tick();
+    
+    // Record timer event
+    crate::trace::record_event(crate::trace::EventType::TimerTick, 0);
+    
+    // Notify thread scheduler (real context switch)
+    crate::thread::on_timer_tick();
+    
+    // Send EOI
+    unsafe {
+        PICS.lock().notify_end_of_interrupt(pic::InterruptIndex::Timer.as_u8());
+    }
+}
+
+/// APIC Timer interrupt handler (vector 48) — preemptive scheduling
+pub extern "x86-interrupt" fn apic_timer_handler(_stack_frame: InterruptStackFrame) {
+    if !BOOTSTRAP_READY.load(Ordering::Relaxed) {
+        crate::apic::lapic_eoi();
+        return;
+    }
+    
     // Update tick counter
     crate::logger::tick();
     crate::time::tick();
@@ -147,13 +170,46 @@ pub extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptSta
         }
     }
     
-    // Notify scheduler
-    crate::scheduler::on_timer_tick();
+    // Notify thread scheduler — this does real preemptive context switching!
+    crate::thread::on_timer_tick();
     
-    // Send EOI
-    unsafe {
-        PICS.lock().notify_end_of_interrupt(pic::InterruptIndex::Timer.as_u8());
+    // Send LAPIC EOI
+    crate::apic::lapic_eoi();
+}
+
+/// APIC-routed keyboard handler (vector 50)
+pub extern "x86-interrupt" fn apic_keyboard_handler(_stack_frame: InterruptStackFrame) {
+    use x86_64::instructions::port::Port;
+    
+    // Check if data is from mouse (bit 5 of status register)
+    let mut status_port = Port::<u8>::new(0x64);
+    let status: u8 = unsafe { status_port.read() };
+    
+    if status & 0x20 != 0 {
+        let mut data_port = Port::<u8>::new(0x60);
+        let _: u8 = unsafe { data_port.read() };
+        crate::apic::lapic_eoi();
+        return;
     }
+    
+    let mut port = Port::new(0x60);
+    let scancode: u8 = unsafe { port.read() };
+    
+    crate::keyboard::handle_scancode(scancode);
+    
+    crate::lab_mode::trace_bus::emit_static(
+        crate::lab_mode::trace_bus::EventCategory::Keyboard,
+        "key press",
+        scancode as u64,
+    );
+    
+    crate::apic::lapic_eoi();
+}
+
+/// APIC-routed mouse handler (vector 61)
+pub extern "x86-interrupt" fn apic_mouse_handler(_stack_frame: InterruptStackFrame) {
+    crate::mouse::handle_interrupt();
+    crate::apic::lapic_eoi();
 }
 
 /// Keyboard interrupt handler
@@ -216,11 +272,14 @@ pub extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptSta
 /// This interrupt does nothing except wake the AP from HLT.
 /// The actual work check happens in the AP loop after returning from HLT.
 pub extern "x86-interrupt" fn smp_ipi_handler(_stack_frame: InterruptStackFrame) {
-    // Send EOI to Local APIC (write 0 to LAPIC_BASE + 0xB0)
-    // CRITICAL: use HHDM virtual address, not raw physical address
-    unsafe {
-        let lapic_virt = crate::memory::phys_to_virt(crate::acpi::local_apic_address());
-        let lapic = lapic_virt as *mut u32;
-        core::ptr::write_volatile(lapic.byte_add(0xB0), 0);
+    // Send EOI via APIC module (or raw LAPIC write as fallback)
+    if crate::apic::is_enabled() {
+        crate::apic::lapic_eoi();
+    } else {
+        unsafe {
+            let lapic_virt = crate::memory::phys_to_virt(crate::acpi::local_apic_address());
+            let lapic = lapic_virt as *mut u32;
+            core::ptr::write_volatile(lapic.byte_add(0xB0), 0);
+        }
     }
 }

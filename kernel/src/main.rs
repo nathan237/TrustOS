@@ -51,6 +51,8 @@ mod tls13;
 mod cpu;
 // ACPI tables parsing (MADT, FADT, MCFG, HPET)
 mod acpi;
+// APIC driver (Local APIC + I/O APIC) — replaces legacy PIC for preemptive scheduling
+mod apic;
 
 // New OS infrastructure
 mod vfs;
@@ -462,6 +464,15 @@ pub unsafe extern "C" fn kmain() -> ! {
         framebuffer::print_boot_status("No RSDP from bootloader", BootStatus::Skip);
     }
     
+    // Phase 3.555b: APIC initialization — replaces legacy PIC
+    serial_println!("Initializing APIC...");
+    if apic::init() {
+        framebuffer::print_boot_status("APIC initialized (LAPIC + IOAPIC)", BootStatus::Ok);
+    } else {
+        serial_println!("[APIC] Not available, staying on legacy PIC");
+        framebuffer::print_boot_status("APIC not available (legacy PIC)", BootStatus::Skip);
+    }
+
     // Phase 3.56: SMP initialization - Start all CPU cores!
     serial_println!("Initializing SMP...");
     cpu::smp::init();

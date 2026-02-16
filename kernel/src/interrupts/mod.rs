@@ -24,13 +24,21 @@ lazy_static! {
         idt.invalid_opcode.set_handler_fn(handlers::invalid_opcode_handler);
         idt.divide_error.set_handler_fn(handlers::divide_error_handler);
         
-        // Hardware interrupts
+        // Hardware interrupts (legacy PIC vectors — used if APIC unavailable)
         idt[pic::InterruptIndex::Timer.as_usize()]
             .set_handler_fn(handlers::timer_interrupt_handler);
         idt[pic::InterruptIndex::Keyboard.as_usize()]
             .set_handler_fn(handlers::keyboard_interrupt_handler);
         idt[pic::InterruptIndex::Mouse.as_usize()]
             .set_handler_fn(handlers::mouse_interrupt_handler);
+        
+        // APIC vectors — used when APIC is enabled (replaces PIC)
+        idt[crate::apic::TIMER_VECTOR as usize]
+            .set_handler_fn(handlers::apic_timer_handler);
+        idt[crate::apic::KEYBOARD_VECTOR as usize]
+            .set_handler_fn(handlers::apic_keyboard_handler);
+        idt[crate::apic::MOUSE_VECTOR as usize]
+            .set_handler_fn(handlers::apic_mouse_handler);
         
         // SMP IPI wakeup vector (0xFE = 254) - wakes APs from HLT
         idt[0xFE].set_handler_fn(handlers::smp_ipi_handler);
