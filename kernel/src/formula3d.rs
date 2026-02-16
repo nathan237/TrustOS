@@ -31,32 +31,17 @@ fn wrap_angle(mut a: f32) -> f32 {
     a
 }
 
-/// sin(x) — 7th-order Taylor, error < 0.0002
+/// sin(x) — re-exports from shared math
 #[inline(always)]
-pub fn fast_sin(x: f32) -> f32 {
-    let x = wrap_angle(x);
-    let x2 = x * x;
-    let x3 = x * x2;
-    let x5 = x3 * x2;
-    let x7 = x5 * x2;
-    x - x3 / 6.0 + x5 / 120.0 - x7 / 5040.0
-}
+pub fn fast_sin(x: f32) -> f32 { crate::math::fast_sin(x) }
 
-/// cos(x) = sin(x + PI/2)
+/// cos(x) — re-exports from shared math
 #[inline(always)]
-pub fn fast_cos(x: f32) -> f32 {
-    fast_sin(x + 1.5707963)
-}
+pub fn fast_cos(x: f32) -> f32 { crate::math::fast_cos(x) }
 
-/// sqrt via Newton's method (3 iterations)
+/// sqrt — re-exports from shared math
 #[inline(always)]
-pub fn fast_sqrt(x: f32) -> f32 {
-    if x <= 0.0 { return 0.0; }
-    let mut g = x * 0.5;
-    g = 0.5 * (g + x / g);
-    g = 0.5 * (g + x / g);
-    0.5 * (g + x / g)
-}
+pub fn fast_sqrt(x: f32) -> f32 { crate::math::fast_sqrt(x) }
 
 /// Fast exp(x) approximation for x in [-4, 0] range (good for fog/falloff)
 /// Uses Padé-like: e^x ≈ (1 + x/4)^4 clamped

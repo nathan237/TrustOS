@@ -114,40 +114,16 @@ impl core::ops::Mul<Vec3> for Vec3 {
     }
 }
 
-/// Fast square root approximation
-fn sqrt_fast(x: f32) -> f32 {
-    if x <= 0.0 { return 0.0; }
-    let mut guess = x / 2.0;
-    for _ in 0..4 {
-        guess = (guess + x / guess) / 2.0;
-    }
-    guess
-}
+/// Fast square root (delegates to shared math)
+fn sqrt_fast(x: f32) -> f32 { crate::math::fast_sqrt(x) }
 
-/// Fast sine approximation
-fn sin_fast(x: f32) -> f32 {
-    let mut x = x % (2.0 * 3.14159);
-    if x > 3.14159 { x -= 2.0 * 3.14159; }
-    if x < -3.14159 { x += 2.0 * 3.14159; }
-    let abs_x = if x < 0.0 { -x } else { x };
-    let sign = if x < 0.0 { -1.0 } else { 1.0 };
-    sign * (1.27323954 * abs_x - 0.405284735 * abs_x * abs_x)
-}
+/// Fast sine (delegates to shared math)
+fn sin_fast(x: f32) -> f32 { crate::math::fast_sin(x) }
 
-fn cos_fast(x: f32) -> f32 {
-    sin_fast(x + 1.5707963)
-}
+fn cos_fast(x: f32) -> f32 { crate::math::fast_cos(x) }
 
-/// Fast tangent approximation
-fn tan_fast(x: f32) -> f32 {
-    let s = sin_fast(x);
-    let c = cos_fast(x);
-    if c.abs() < 0.0001 {
-        if s >= 0.0 { 1000.0 } else { -1000.0 }
-    } else {
-        s / c
-    }
-}
+/// Fast tangent (delegates to shared math)
+fn tan_fast(x: f32) -> f32 { crate::math::fast_tan(x) }
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // RAY PRIMITIVES

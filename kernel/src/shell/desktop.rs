@@ -1149,7 +1149,7 @@ pub(super) fn cmd_showcase(args: &[&str]) {
     pause(2);
 
     crate::println_color!(COLOR_CYAN, "$ cat /demo/hello.txt");
-    super::commands::cmd_cat(&["/demo/hello.txt"], None);
+    super::commands::cmd_cat(&["/demo/hello.txt"], None, None);
     pause(3);
 
     crate::println_color!(COLOR_CYAN, "$ tree /");

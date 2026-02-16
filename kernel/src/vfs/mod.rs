@@ -17,6 +17,7 @@ pub mod trustfs;
 pub mod fat32;
 pub mod block_cache;
 pub mod wal;
+pub mod ext4;
 
 /// File descriptor type
 pub type Fd = i32;
@@ -721,5 +722,16 @@ pub fn write_file(path: &str, data: &[u8]) -> VfsResult<()> {
         offset += n;
     }
     close(fd)?;
+    Ok(())
+}
+
+/// Sync all mounted filesystems to disk
+pub fn sync_all() -> VfsResult<()> {
+    let vfs = VFS.read();
+    for mount in vfs.mounts.iter() {
+        let _ = mount.fs.sync();
+    }
+    // Also flush block cache
+    let _ = block_cache::sync();
     Ok(())
 }

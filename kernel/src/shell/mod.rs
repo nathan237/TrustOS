@@ -8,8 +8,28 @@ use alloc::vec::Vec;
 use alloc::vec;
 use alloc::boxed::Box;
 use alloc::format;
+use core::sync::atomic::AtomicBool;
+use spin::Mutex as SpinMutex;
 use crate::framebuffer::{COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_CYAN, COLOR_WHITE, COLOR_BLUE, COLOR_MAGENTA, COLOR_GRAY};
 use crate::ramfs::FileType;
+
+/// Capture mode: when true, print output goes to CAPTURE_BUF instead of screen
+pub(crate) static CAPTURE_MODE: AtomicBool = AtomicBool::new(false);
+/// Buffer for captured output during pipe execution
+static CAPTURE_BUF: SpinMutex<String> = SpinMutex::new(String::new());
+
+/// Append text to the capture buffer (called from print macros when capture mode is on)
+pub fn capture_write(s: &str) {
+    if CAPTURE_MODE.load(core::sync::atomic::Ordering::Relaxed) {
+        let mut buf = CAPTURE_BUF.lock();
+        buf.push_str(s);
+    }
+}
+
+/// Check if we are in capture mode (for print macros to redirect output)
+pub fn is_capturing() -> bool {
+    CAPTURE_MODE.load(core::sync::atomic::Ordering::Relaxed)
+}
 
 /// Draw a solid block cursor at the current console position (no cursor movement).
 /// Uses fill_rect directly to avoid non-ASCII character encoding issues.
@@ -678,11 +698,88 @@ pub fn read_line() -> alloc::string::String {
     core::str::from_utf8(&buf[..len]).unwrap_or("").into()
 }
 
-/// Execute a shell command
+/// Execute a shell command (handles pipes and redirection)
 pub(super) fn execute_command(cmd: &str) {
     if cmd.is_empty() {
         return;
     }
+    
+    // ── Pipeline: split on | (outside quotes) ──────────────────────────
+    let pipe_segments = split_pipes(cmd);
+    if pipe_segments.len() > 1 {
+        execute_pipeline(&pipe_segments);
+        return;
+    }
+    
+    // ── Single command (no pipes) ──────────────────────────────────────
+    execute_single(cmd, None);
+}
+
+/// Split command on unquoted pipe characters
+fn split_pipes(cmd: &str) -> Vec<&str> {
+    let mut segments = Vec::new();
+    let mut start = 0;
+    let mut in_sq = false;
+    let mut in_dq = false;
+    let bytes = cmd.as_bytes();
+    
+    for i in 0..bytes.len() {
+        match bytes[i] {
+            b'\'' if !in_dq => in_sq = !in_sq,
+            b'"' if !in_sq => in_dq = !in_dq,
+            b'|' if !in_sq && !in_dq => {
+                // Make sure this isn't || (logical OR — not supported, but don't break on it)
+                if i + 1 < bytes.len() && bytes[i + 1] == b'|' {
+                    continue; // skip ||
+                }
+                segments.push(cmd[start..i].trim());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    segments.push(cmd[start..].trim());
+    segments
+}
+
+/// Execute a pipeline: cmd1 | cmd2 | cmd3
+fn execute_pipeline(segments: &[&str]) {
+    let mut piped_input: Option<String> = None;
+    
+    for (i, segment) in segments.iter().enumerate() {
+        let is_last = i == segments.len() - 1;
+        let input = piped_input.take();
+        
+        if is_last {
+            // Last stage: print output normally (or redirect)
+            execute_single(segment, input);
+        } else {
+            // Intermediate stage: capture output
+            piped_input = Some(capture_command(segment, input));
+        }
+    }
+}
+
+/// Capture a command's output as a string (for pipe intermediates)
+fn capture_command(cmd: &str, piped_input: Option<String>) -> String {
+    // Enable capture mode
+    CAPTURE_MODE.store(true, core::sync::atomic::Ordering::SeqCst);
+    {
+        let mut buf = CAPTURE_BUF.lock();
+        buf.clear();
+    }
+    
+    // Run the command (output goes to capture buffer via print macros)
+    execute_single(cmd, piped_input);
+    
+    // Disable capture mode and return captured output
+    CAPTURE_MODE.store(false, core::sync::atomic::Ordering::SeqCst);
+    let buf = CAPTURE_BUF.lock();
+    buf.clone()
+}
+
+/// Execute a single command, possibly with piped stdin
+fn execute_single(cmd: &str, piped_input: Option<String>) {
     
     // Handle output redirection (skip > inside parentheses or quotes)
     let (cmd_part, redirect) = {
@@ -747,15 +844,15 @@ pub(super) fn execute_command(cmd: &str) {
         "rm" | "del" => commands::cmd_rm(args),
         "cp" | "copy" => commands::cmd_cp(args),
         "mv" | "move" | "rename" => commands::cmd_mv(args),
-        "cat" | "type" => commands::cmd_cat(args, redirect),
-        "head" => commands::cmd_head(args),
-        "tail" => commands::cmd_tail(args),
-        "wc" => commands::cmd_wc(args),
+        "cat" | "type" => commands::cmd_cat(args, redirect, piped_input.as_deref()),
+        "head" => commands::cmd_head(args, piped_input.as_deref()),
+        "tail" => commands::cmd_tail(args, piped_input.as_deref()),
+        "wc" => commands::cmd_wc(args, piped_input.as_deref()),
         "stat" => commands::cmd_stat(args),
         "tree" => commands::cmd_tree(args),
         "find" => commands::cmd_find(args),
         "echo" => commands::cmd_echo(args, redirect),
-        "grep" => commands::cmd_grep(args),
+        "grep" => commands::cmd_grep(args, piped_input.as_deref()),
         "clear" | "cls" => commands::cmd_clear(),
         "time" | "uptime" => commands::cmd_time(),
         "date" => commands::cmd_date(),
@@ -903,8 +1000,8 @@ pub(super) fn execute_command(cmd: &str) {
         "basename" => unix::cmd_basename(args),
         "dirname" => unix::cmd_dirname(args),
         "realpath" => unix::cmd_realpath(args),
-        "sort" => unix::cmd_sort(args),
-        "uniq" => unix::cmd_uniq(args),
+        "sort" => unix::cmd_sort(args, piped_input.as_deref()),
+        "uniq" => unix::cmd_uniq(args, piped_input.as_deref()),
 
         "yes" => unix::cmd_yes(args),
         "seq" => unix::cmd_seq(args),

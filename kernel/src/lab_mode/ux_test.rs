@@ -31,28 +31,22 @@ struct TestResult {
 pub fn run_ux_tests(state: &mut LabState) {
     let mut results: Vec<TestResult> = Vec::new();
 
-    // ── Test 1: Tab cycling visits all panels ──────────────────────
+    // ── Test 1: Tab cycling visits all slots ──────────────────────
     {
-        state.focused_panel = PanelId::HardwareStatus;
-        let expected_order = [
-            PanelId::KernelTrace,     // Tab from 0
-            PanelId::CommandGuide,    // Tab from 1
-            PanelId::FileTree,        // Tab from 2
-            PanelId::TrustLangEditor, // Tab from 3
-            PanelId::HexEditor,       // Tab from 4 (skips Pipeline=5)
-            PanelId::HardwareStatus,  // Tab from 6 (wraps)
-        ];
+        state.focused_slot = 0; // Start at slot 0
+        // All 7 slots are now cycled (no skip)
+        let expected_slots: [usize; 7] = [1, 2, 3, 4, 5, 6, 0];
         let mut ok = true;
         let mut detail = String::new();
-        for (i, exp) in expected_order.iter().enumerate() {
+        for (i, exp) in expected_slots.iter().enumerate() {
             state.handle_key(0x09); // Tab
-            if state.focused_panel != *exp {
+            if state.focused_slot != *exp {
                 ok = false;
-                detail = format!("step {}: expected {:?}, got {:?}", i, exp, state.focused_panel);
+                detail = format!("step {}: expected slot {}, got slot {}", i, exp, state.focused_slot);
                 break;
             }
         }
-        if ok { detail = String::from("6 tab presses cycle all panels correctly"); }
+        if ok { detail = String::from("7 tab presses cycle all slots correctly"); }
         results.push(TestResult { name: "Tab cycle", passed: ok, detail });
     }
 
@@ -73,9 +67,9 @@ pub fn run_ux_tests(state: &mut LabState) {
             state.shell_input = String::from(*cmd);
             state.shell_cursor = cmd.len();
             state.execute_shell_command();
-            if state.focused_panel != *expected {
+            if state.focused_module() != *expected {
                 ok = false;
-                detail = format!("'{}' => {:?}, expected {:?}", cmd, state.focused_panel, expected);
+                detail = format!("'{}' => {:?}, expected {:?}", cmd, state.focused_module(), expected);
                 break;
             }
         }
@@ -101,14 +95,13 @@ pub fn run_ux_tests(state: &mut LabState) {
             let click_x = pr.x + pr.w as i32 / 2;
             let click_y = pr.y + pr.h as i32 / 2;
             state.handle_click(click_x, click_y, ww, wh);
-            let expected = PanelId::from_index(i);
-            if state.focused_panel != expected {
+            if state.focused_slot != i {
                 ok = false;
-                detail = format!("click panel {} => {:?}, expected {:?}", i, state.focused_panel, expected);
+                detail = format!("click slot {} => focused_slot {}, expected {}", i, state.focused_slot, i);
                 break;
             }
         }
-        if ok { detail = String::from("clicks on all 7 panel areas set focus correctly"); }
+        if ok { detail = String::from("clicks on all 7 slot areas set focus correctly"); }
         results.push(TestResult { name: "Click focus", passed: ok, detail });
     }
 
@@ -224,6 +217,6 @@ pub fn run_ux_tests(state: &mut LabState) {
     }
 
     // Focus Kernel Trace to show results
-    state.focused_panel = PanelId::KernelTrace;
+    state.focus_module(PanelId::KernelTrace);
     state.trace_state.scroll = 0;
 }

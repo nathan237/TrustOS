@@ -736,28 +736,15 @@ impl BrailleMatrix {
     
     /// Fast sin approximation
     #[inline(always)]
-    fn fast_sin(x: f32) -> f32 {
-        let x = x % 6.28318;
-        let x = if x > 3.14159 { x - 6.28318 } else if x < -3.14159 { x + 6.28318 } else { x };
-        let x2 = x * x;
-        x * (1.0 - x2 / 6.0 + x2 * x2 / 120.0)
-    }
+    fn fast_sin(x: f32) -> f32 { crate::math::fast_sin(x) }
     
     /// Fast cos approximation
     #[inline(always)]
-    fn fast_cos(x: f32) -> f32 {
-        Self::fast_sin(x + 1.5708)
-    }
+    fn fast_cos(x: f32) -> f32 { crate::math::fast_cos(x) }
     
-    /// Fast square root approximation (Newton-Raphson)
+    /// Fast square root approximation
     #[inline(always)]
-    fn fast_sqrt(x: f32) -> f32 {
-        if x <= 0.0 { return 0.0; }
-        let mut guess = x * 0.5;
-        guess = 0.5 * (guess + x / guess);
-        guess = 0.5 * (guess + x / guess);
-        guess
-    }
+    fn fast_sqrt(x: f32) -> f32 { crate::math::fast_sqrt(x) }
     
     /// Fast floor - works for both positive and negative values
     #[inline(always)]
@@ -2113,22 +2100,13 @@ impl Matrix3D {
         }
     }
     
-    /// Fast approximate sin (Taylor series, no libm)
+    /// Fast approximate sin (delegates to shared math)
     #[inline(always)]
-    fn fast_sin(x: f32) -> f32 {
-        // Normalize to -π to π
-        let x = x % 6.28318;
-        let x = if x > 3.14159 { x - 6.28318 } else if x < -3.14159 { x + 6.28318 } else { x };
-        // Taylor series approximation
-        let x2 = x * x;
-        x * (1.0 - x2 / 6.0 + x2 * x2 / 120.0)
-    }
+    fn fast_sin(x: f32) -> f32 { crate::math::fast_sin(x) }
     
     /// Fast approximate cos
     #[inline(always)]
-    fn fast_cos(x: f32) -> f32 {
-        Self::fast_sin(x + 1.5708)
-    }
+    fn fast_cos(x: f32) -> f32 { crate::math::fast_cos(x) }
     
     /// Check if point is inside a shape, return (is_inside, surface_normal)
     fn check_collision_static(shapes: &[Option<Shape3D>; 4], x: f32, y: f32, z: f32) -> Option<(f32, f32, f32)> {
@@ -2210,14 +2188,7 @@ impl Matrix3D {
     
     /// Fast square root approximation
     #[inline(always)]
-    fn fast_sqrt(x: f32) -> f32 {
-        if x <= 0.0 { return 0.0; }
-        // Newton-Raphson iteration
-        let mut guess = x * 0.5;
-        guess = 0.5 * (guess + x / guess);
-        guess = 0.5 * (guess + x / guess);
-        guess
-    }
+    fn fast_sqrt(x: f32) -> f32 { crate::math::fast_sqrt(x) }
     
     /// Update all drops
     pub fn update(&mut self) {

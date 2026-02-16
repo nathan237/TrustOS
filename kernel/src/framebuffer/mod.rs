@@ -14,16 +14,9 @@ use alloc::boxed::Box;
 use alloc::format;
 use core::sync::atomic::{AtomicPtr, AtomicU64, AtomicBool, Ordering};
 
-/// Fast approximate square root (Newton-Raphson, 5 iterations)
+/// Fast approximate square root (delegates to shared math)
 #[inline]
-fn fast_sqrt(x: f32) -> f32 {
-    if x <= 0.0 { return 0.0; }
-    let mut guess = x * 0.5;
-    for _ in 0..5 {
-        guess = (guess + x / guess) * 0.5;
-    }
-    guess
-}
+fn fast_sqrt(x: f32) -> f32 { crate::math::fast_sqrt(x) }
 
 /// Framebuffer info stored after initialization
 struct FramebufferInfo {
@@ -1111,6 +1104,13 @@ impl fmt::Write for Writer {
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
     use core::fmt::Write;
+    // When pipe capture mode is active, redirect output to capture buffer
+    if crate::shell::is_capturing() {
+        let mut s = alloc::string::String::new();
+        let _ = core::fmt::write(&mut s, args);
+        crate::shell::capture_write(&s);
+        return;
+    }
     Writer.write_fmt(args).unwrap();
     crate::serial::_print(args);
 }

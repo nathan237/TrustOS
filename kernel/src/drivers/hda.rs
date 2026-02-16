@@ -1205,3 +1205,477 @@ pub fn write_samples_and_play(samples: &[i16], duration_ms: u32) -> Result<(), &
     ctrl.play(false);
     Ok(())
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Volume Control
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Current volume level (0-100)
+static VOLUME: Mutex<u8> = Mutex::new(80);
+
+/// Set master volume (0-100)
+pub fn set_volume(level: u8) -> Result<(), &'static str> {
+    let level = level.min(100);
+    *VOLUME.lock() = level;
+    
+    let mut hda = HDA.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    
+    if ctrl.codecs.is_empty() || ctrl.output_paths.is_empty() {
+        return Ok(());
+    }
+    
+    let codec = ctrl.codecs[0];
+    let path = ctrl.output_paths[0].clone();
+    
+    // Convert 0-100 to 0-127 amp gain
+    let gain = ((level as u32) * 127 / 100) as u16;
+    
+    // Set amp gain on all widgets in the output path that have output amps
+    for &nid in &path.path {
+        if let Some(w) = ctrl.widgets.iter().find(|w| w.nid == nid) {
+            if w.caps & (1 << 1) != 0 {
+                // Left channel
+                let amp_data_l: u16 = (1 << 15) | (1 << 13) | (1 << 12) | gain;
+                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data_l);
+                // Right channel
+                let amp_data_r: u16 = (1 << 15) | (1 << 14) | (1 << 12) | gain;
+                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data_r);
+            }
+        }
+    }
+    
+    crate::serial_println!("[HDA] Volume set to {}% (gain={})", level, gain);
+    Ok(())
+}
+
+/// Get current volume level (0-100)
+pub fn get_volume() -> u8 {
+    *VOLUME.lock()
+}
+
+/// Mute audio (set amp gain to 0 without changing stored level)
+pub fn mute() -> Result<(), &'static str> {
+    let mut hda = HDA.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    
+    if ctrl.codecs.is_empty() || ctrl.output_paths.is_empty() {
+        return Ok(());
+    }
+    
+    let codec = ctrl.codecs[0];
+    let path = ctrl.output_paths[0].clone();
+    
+    for &nid in &path.path {
+        if let Some(w) = ctrl.widgets.iter().find(|w| w.nid == nid) {
+            if w.caps & (1 << 1) != 0 {
+                // Clear unmute flag (bit 12) → muted
+                let amp_mute_l: u16 = (1 << 15) | (1 << 13) | 0;
+                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_mute_l);
+                let amp_mute_r: u16 = (1 << 15) | (1 << 14) | 0;
+                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_mute_r);
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// Unmute audio (restore stored volume level)
+pub fn unmute() -> Result<(), &'static str> {
+    let level = *VOLUME.lock();
+    set_volume(level)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Proper Sine Wave Generation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Generate a sine wave tone at the given frequency and amplitude.
+/// Returns stereo interleaved i16 samples at 48 kHz with fade-in/out.
+pub fn generate_sine(freq_hz: u32, duration_ms: u32, amplitude: i16) -> Vec<i16> {
+    let sample_rate = 48000u32;
+    let num_samples = (sample_rate as u64 * duration_ms as u64 / 1000) as usize;
+    let mut samples = Vec::with_capacity(num_samples * 2);
+    
+    let vol = *VOLUME.lock() as i32;
+    let scaled_amp = (amplitude as i32 * vol / 100) as i16;
+    
+    for i in 0..num_samples {
+        // Phase in 0-255 range (one cycle = 256 steps)
+        let phase_fixed = ((freq_hz as u64 * i as u64 * 256) / sample_rate as u64) as u32;
+        let phase_byte = (phase_fixed & 0xFF) as u8;
+        
+        let sample = sine_approx(phase_byte, scaled_amp);
+        samples.push(sample); // Left
+        samples.push(sample); // Right
+    }
+    
+    // Fade-in and fade-out (5 ms each) to avoid clicks
+    let fade_samples = (sample_rate as usize * 5 / 1000).min(num_samples / 2);
+    for i in 0..fade_samples {
+        let factor = i as i32 * 256 / fade_samples as i32;
+        samples[i * 2] = (samples[i * 2] as i32 * factor / 256) as i16;
+        samples[i * 2 + 1] = (samples[i * 2 + 1] as i32 * factor / 256) as i16;
+    }
+    for i in 0..fade_samples {
+        let idx = num_samples - 1 - i;
+        let factor = i as i32 * 256 / fade_samples as i32;
+        if idx * 2 + 1 < samples.len() {
+            samples[idx * 2] = (samples[idx * 2] as i32 * factor / 256) as i16;
+            samples[idx * 2 + 1] = (samples[idx * 2 + 1] as i32 * factor / 256) as i16;
+        }
+    }
+    
+    samples
+}
+
+/// Fast sine approximation for a byte phase (0-255 ≈ 0-2π).
+/// Uses quadrant-based parabolic approximation — no float/libm needed.
+fn sine_approx(phase: u8, amplitude: i16) -> i16 {
+    let x = phase as i32;
+    
+    let half_wave = if x < 128 {
+        let t = x - 64; // -64 to 63
+        let raw = -(t * t) + 64 * 64;
+        raw * 127 / (64 * 64)
+    } else {
+        let t = (x - 128) - 64;
+        let raw = (t * t) - 64 * 64;
+        raw * 127 / (64 * 64)
+    };
+    
+    (half_wave as i32 * amplitude as i32 / 127) as i16
+}
+
+/// Play a sine tone (better quality than the triangle-based play_tone)
+pub fn play_sine(freq_hz: u32, duration_ms: u32) -> Result<(), &'static str> {
+    let samples = generate_sine(freq_hz, duration_ms, 24000);
+    write_samples_and_play(&samples, duration_ms)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WAV File Playback
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// WAV file header info
+#[derive(Debug, Clone)]
+pub struct WavInfo {
+    pub channels: u16,
+    pub sample_rate: u32,
+    pub bits_per_sample: u16,
+    pub data_offset: usize,
+    pub data_size: usize,
+}
+
+/// Parse a WAV file header, returning format info
+pub fn parse_wav(data: &[u8]) -> Result<WavInfo, &'static str> {
+    if data.len() < 44 { return Err("WAV: too short"); }
+    if &data[0..4] != b"RIFF" { return Err("WAV: missing RIFF"); }
+    if &data[8..12] != b"WAVE" { return Err("WAV: missing WAVE"); }
+    
+    let mut offset = 12;
+    let mut channels = 0u16;
+    let mut sample_rate = 0u32;
+    let mut bits_per_sample = 0u16;
+    let mut data_offset = 0usize;
+    let mut data_size = 0usize;
+    
+    while offset + 8 <= data.len() {
+        let chunk_id = &data[offset..offset+4];
+        let chunk_size = u32::from_le_bytes([
+            data[offset+4], data[offset+5], data[offset+6], data[offset+7]
+        ]) as usize;
+        
+        if chunk_id == b"fmt " && chunk_size >= 16 {
+            let audio_format = u16::from_le_bytes([data[offset+8], data[offset+9]]);
+            if audio_format != 1 { return Err("WAV: not PCM format"); }
+            channels = u16::from_le_bytes([data[offset+10], data[offset+11]]);
+            sample_rate = u32::from_le_bytes([
+                data[offset+12], data[offset+13], data[offset+14], data[offset+15]
+            ]);
+            bits_per_sample = u16::from_le_bytes([data[offset+22], data[offset+23]]);
+        } else if chunk_id == b"data" {
+            data_offset = offset + 8;
+            data_size = chunk_size.min(data.len() - data_offset);
+            break;
+        }
+        
+        offset += 8 + chunk_size;
+        if offset % 2 != 0 { offset += 1; } // Word alignment
+    }
+    
+    if data_offset == 0 || channels == 0 {
+        return Err("WAV: missing fmt or data chunk");
+    }
+    
+    Ok(WavInfo { channels, sample_rate, bits_per_sample, data_offset, data_size })
+}
+
+/// Play a WAV file from raw bytes (PCM 16-bit only, resamples to 48 kHz)
+pub fn play_wav(data: &[u8]) -> Result<(), &'static str> {
+    let info = parse_wav(data)?;
+    
+    if info.bits_per_sample != 16 {
+        return Err("WAV: only 16-bit PCM supported");
+    }
+    
+    let pcm_data = &data[info.data_offset..info.data_offset + info.data_size];
+    let num_src_frames = info.data_size / (2 * info.channels as usize);
+    
+    let target_rate = 48000u32;
+    let num_dst_frames = (num_src_frames as u64 * target_rate as u64
+        / info.sample_rate as u64) as usize;
+    let mut output = Vec::with_capacity(num_dst_frames * 2);
+    
+    let vol = *VOLUME.lock() as i32;
+    
+    for dst_frame in 0..num_dst_frames {
+        let src_frame = (dst_frame as u64 * info.sample_rate as u64
+            / target_rate as u64) as usize;
+        
+        if src_frame >= num_src_frames { break; }
+        
+        let idx = src_frame * info.channels as usize;
+        let byte_idx = idx * 2;
+        
+        let left = if byte_idx + 1 < pcm_data.len() {
+            i16::from_le_bytes([pcm_data[byte_idx], pcm_data[byte_idx + 1]])
+        } else { 0 };
+        
+        let right = if info.channels >= 2 {
+            let byte_idx_r = (idx + 1) * 2;
+            if byte_idx_r + 1 < pcm_data.len() {
+                i16::from_le_bytes([pcm_data[byte_idx_r], pcm_data[byte_idx_r + 1]])
+            } else { left }
+        } else { left };
+        
+        output.push((left as i32 * vol / 100) as i16);
+        output.push((right as i32 * vol / 100) as i16);
+    }
+    
+    let duration_ms = (num_dst_frames as u64 * 1000 / target_rate as u64) as u32;
+    write_samples_and_play(&output, duration_ms + 100)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Sound Effects
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Pre-defined sound effect types
+#[derive(Clone, Copy, Debug)]
+pub enum SoundEffect {
+    /// Short boot chime (pleasant ascending triad)
+    BootChime,
+    /// UI click sound (very short tick)
+    Click,
+    /// Error beep (harsh double beep)
+    Error,
+    /// Notification (gentle ascending notes)
+    Notification,
+    /// Warning (descending tone)
+    Warning,
+    /// Success (bright ascending major third)
+    Success,
+    /// Keypress tick (very short, subtle)
+    Keypress,
+}
+
+/// Play a pre-defined sound effect
+pub fn play_effect(effect: SoundEffect) -> Result<(), &'static str> {
+    let tones: Vec<(u32, u32, i16)> = match effect {
+        SoundEffect::BootChime => vec![
+            (523, 150, 20000),  // C5
+            (659, 150, 20000),  // E5
+            (784, 250, 22000),  // G5
+        ],
+        SoundEffect::Click => vec![(1000, 15, 16000)],
+        SoundEffect::Error => vec![
+            (400, 120, 22000),
+            (0, 60, 0),    // silence gap
+            (400, 120, 22000),
+        ],
+        SoundEffect::Notification => vec![
+            (880, 100, 18000),   // A5
+            (1109, 100, 18000),  // C#6
+            (1319, 200, 20000),  // E6
+        ],
+        SoundEffect::Warning => vec![
+            (880, 200, 20000),
+            (660, 300, 18000),
+        ],
+        SoundEffect::Success => vec![
+            (523, 100, 18000),  // C5
+            (659, 200, 20000),  // E5
+        ],
+        SoundEffect::Keypress => vec![(2000, 8, 8000)],
+    };
+    
+    let mut all_samples: Vec<i16> = Vec::new();
+    let mut total_ms = 0u32;
+    
+    for (freq, dur_ms, amp) in &tones {
+        if *freq == 0 {
+            let silence_count = (48000u32 * *dur_ms / 1000) as usize;
+            all_samples.extend(core::iter::repeat(0i16).take(silence_count * 2));
+        } else {
+            let tone = generate_sine(*freq, *dur_ms, *amp);
+            all_samples.extend_from_slice(&tone);
+        }
+        total_ms += dur_ms;
+    }
+    
+    write_samples_and_play(&all_samples, total_ms + 50)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Music Sequencer
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Musical note for the sequencer
+#[derive(Clone, Copy, Debug)]
+pub struct Note {
+    /// MIDI note number (60 = C4, 69 = A4 = 440 Hz), 0 = rest
+    pub midi_note: u8,
+    /// Duration in 16th notes (1=sixteenth, 4=quarter, 16=whole)
+    pub duration_16th: u8,
+    /// Velocity (volume) 0-127
+    pub velocity: u8,
+}
+
+impl Note {
+    pub fn new(midi: u8, dur: u8, vel: u8) -> Self {
+        Self { midi_note: midi, duration_16th: dur, velocity: vel }
+    }
+    
+    pub fn rest(dur: u8) -> Self {
+        Self { midi_note: 0, duration_16th: dur, velocity: 0 }
+    }
+    
+    /// Convert MIDI note number to frequency in Hz.
+    /// Uses integer arithmetic with a semitone ratio lookup table.
+    pub fn freq_hz(&self) -> u32 {
+        if self.midi_note == 0 { return 0; }
+        let semitone_offset = self.midi_note as i32 - 69;
+        let octave_offset = semitone_offset.div_euclid(12);
+        let semi = semitone_offset.rem_euclid(12) as usize;
+        
+        // Frequency ratios × 1000 for each semitone above A
+        const SEMI_RATIO: [u32; 12] = [
+            1000, 1059, 1122, 1189, 1260, 1335, 1414, 1498, 1587, 1682, 1782, 1888
+        ];
+        
+        let base_freq = SEMI_RATIO[semi] * 440 / 1000;
+        
+        if octave_offset >= 0 {
+            base_freq << octave_offset as u32
+        } else {
+            base_freq >> (-octave_offset) as u32
+        }
+    }
+}
+
+/// Play a sequence of notes at given tempo (BPM)
+pub fn play_sequence(notes: &[Note], bpm: u32) -> Result<(), &'static str> {
+    if notes.is_empty() { return Ok(()); }
+    
+    let sixteenth_ms = 60_000 / (bpm * 4);
+    
+    let mut all_samples: Vec<i16> = Vec::new();
+    let mut total_ms = 0u32;
+    
+    for note in notes {
+        let dur_ms = sixteenth_ms * note.duration_16th as u32;
+        let freq = note.freq_hz();
+        
+        if freq == 0 || note.velocity == 0 {
+            let silence = (48000u32 * dur_ms / 1000) as usize;
+            all_samples.extend(core::iter::repeat(0i16).take(silence * 2));
+        } else {
+            let amp = (note.velocity as i32 * 24000 / 127) as i16;
+            let tone = generate_sine(freq, dur_ms, amp);
+            all_samples.extend_from_slice(&tone);
+        }
+        total_ms += dur_ms;
+    }
+    
+    write_samples_and_play(&all_samples, total_ms + 50)
+}
+
+/// Play a simple melody from a text string.
+///
+/// Format: space-separated tokens, each is `NoteOctaveDuration`
+///   Notes: C D E F G A B (with optional `#` for sharp)
+///   Octave: 0-9 (default 4)
+///   Duration: w=whole h=half q=quarter e=eighth s=sixteenth
+///   Rests: R + duration (e.g. `Rq`)
+///
+/// Example: `"C4q D4q E4q F4q G4h"`
+pub fn play_melody(melody: &str, bpm: u32) -> Result<(), &'static str> {
+    let mut notes = Vec::new();
+    
+    for token in melody.split_whitespace() {
+        if token.is_empty() { continue; }
+        
+        let bytes = token.as_bytes();
+        if bytes[0] == b'R' || bytes[0] == b'r' {
+            notes.push(Note::rest(parse_duration(&bytes[1..])));
+            continue;
+        }
+        
+        let (note_base, rest) = parse_note_name(bytes);
+        if note_base == 255 { continue; }
+        
+        let (octave, rest2) = if !rest.is_empty() && rest[0] >= b'0' && rest[0] <= b'9' {
+            (rest[0] - b'0', &rest[1..])
+        } else {
+            (4, rest)
+        };
+        
+        let dur = parse_duration(rest2);
+        let midi = 12 * (octave + 1) + note_base;
+        notes.push(Note::new(midi, dur, 100));
+    }
+    
+    play_sequence(&notes, bpm)
+}
+
+/// Parse note name → (semitone 0-11, remaining bytes)
+fn parse_note_name(bytes: &[u8]) -> (u8, &[u8]) {
+    if bytes.is_empty() { return (255, bytes); }
+    
+    let base = match bytes[0] {
+        b'C' | b'c' => 0,
+        b'D' | b'd' => 2,
+        b'E' | b'e' => 4,
+        b'F' | b'f' => 5,
+        b'G' | b'g' => 7,
+        b'A' | b'a' => 9,
+        b'B' | b'b' => 11,
+        _ => return (255, bytes),
+    };
+    
+    if bytes.len() > 1 && bytes[1] == b'#' {
+        return ((base + 1) % 12, &bytes[2..]);
+    }
+    
+    (base, &bytes[1..])
+}
+
+/// Parse duration character → 16th note count
+fn parse_duration(bytes: &[u8]) -> u8 {
+    if bytes.is_empty() { return 4; }
+    match bytes[0] {
+        b'w' => 16,
+        b'h' => 8,
+        b'q' => 4,
+        b'e' => 2,
+        b's' => 1,
+        _ => 4,
+    }
+}
+
+/// Play a built-in demo melody (Ode to Joy excerpt)
+pub fn play_demo() -> Result<(), &'static str> {
+    play_melody("E4q E4q F4q G4q G4q F4q E4q D4q C4q C4q D4q E4q E4q D4h", 120)
+}

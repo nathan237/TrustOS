@@ -32,7 +32,8 @@ const INODE_START_SECTOR: u64 = 1;
 const INODE_SECTORS: u64 = 16;
 const BITMAP_START_SECTOR: u64 = 17;
 const BITMAP_SECTORS: u64 = 16;
-const DATA_START_SECTOR: u64 = 33;
+/// Data starts after WAL area (sectors 33-96 reserved for WAL journal)
+const DATA_START_SECTOR: u64 = 97;
 
 const MAX_INODES: usize = 256;
 const INODES_PER_SECTOR: usize = SECTOR_SIZE / core::mem::size_of::<DiskInode>();
@@ -241,6 +242,22 @@ impl TrustFsInner {
         }
         self.backend.write_sector(sector, buf)
             .map_err(|_| VfsError::IoError)
+    }
+
+    /// Write a sector through the WAL for crash safety
+    fn write_sector_wal(&self, sector: u64, buf: &[u8; SECTOR_SIZE]) -> VfsResult<()> {
+        // Log in WAL, then write through to cache/disk
+        let _ = super::wal::log_write(sector, buf);
+        self.write_sector(sector, buf)
+    }
+
+    /// Flush any pending WAL transaction to disk
+    fn flush_wal(&self) -> VfsResult<()> {
+        let backend = &self.backend;
+        let write_fn = |sector: u64, data: &[u8; SECTOR_SIZE]| -> Result<(), ()> {
+            backend.write_sector(sector, data)
+        };
+        super::wal::commit(&write_fn).map_err(|_| VfsError::IoError)
     }
     
     /// Read an inode from disk
@@ -740,9 +757,11 @@ impl TrustFsInner {
         })
     }
     
-    /// Sync filesystem to disk (flush cache + superblock)
+    /// Sync filesystem to disk (flush WAL + cache + superblock)
     fn sync(&self) -> VfsResult<()> {
-        // Flush block cache first
+        // Flush WAL first
+        self.flush_wal()?;
+        // Then flush block cache
         let _ = super::block_cache::sync();
         // Write superblock
         let sb = self.superblock.read();
@@ -752,6 +771,7 @@ impl TrustFsInner {
         self.write_sector(SUPERBLOCK_SECTOR, &buf)?;
         
         *self.dirty.write() = false;
+        crate::log_debug!("[TrustFS] sync complete");
         Ok(())
     }
 }
@@ -780,6 +800,20 @@ impl TrustFs {
             Self::format_with(&*backend, capacity)?
         };
         
+        // Replay WAL if previous shutdown was unclean
+        let backend_ref = &*backend;
+        let replay_read = |sector: u64, buf: &mut [u8; SECTOR_SIZE]| -> Result<(), ()> {
+            backend_ref.read_sector(sector, buf).map_err(|_| ())
+        };
+        let replay_write = |sector: u64, data: &[u8; SECTOR_SIZE]| -> Result<(), ()> {
+            backend_ref.write_sector(sector, data).map_err(|_| ())
+        };
+        match super::wal::replay_if_needed(&replay_read, &replay_write) {
+            Ok(0) => {},
+            Ok(n) => crate::log!("[TrustFS] WAL replay: {} writes recovered", n),
+            Err(_) => crate::log_warn!("[TrustFS] WAL replay failed"),
+        }
+
         let inner = Arc::new(TrustFsInner {
             superblock: RwLock::new(superblock),
             inode_cache: RwLock::new(InodeCache::new()),

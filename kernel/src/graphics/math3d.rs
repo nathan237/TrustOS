@@ -35,10 +35,6 @@ impl Vec3 {
         (self.x * self.x + self.y * self.y + self.z * self.z).sqrt()
     }
 
-    #[inline]
-    pub fn length_squared(&self) -> f32 {
-        self.x * self.x + self.y * self.y + self.z * self.z
-    }
 
     #[inline]
     pub fn normalize(&self) -> Self {
@@ -237,19 +233,6 @@ impl Mat4 {
         }
     }
 
-    /// Create rotation matrix around Z axis
-    pub fn rotation_z(angle: f32) -> Self {
-        let c = angle.cos();
-        let s = angle.sin();
-        Self {
-            m: [
-                [c,   s,   0.0, 0.0],
-                [-s,  c,   0.0, 0.0],
-                [0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 1.0],
-            ],
-        }
-    }
 
     /// Create rotation matrix around an arbitrary axis (Rodrigues' rotation formula)
     pub fn rotation(axis: Vec3, angle: f32) -> Self {
@@ -378,76 +361,9 @@ impl Mat4 {
         v4.to_vec3()
     }
 
-    /// Transform a Vec3 as a direction (w=0)
-    pub fn transform_direction(&self, v: Vec3) -> Vec3 {
-        let v4 = self.transform_vec4(Vec4::from_vec3(v, 0.0));
-        Vec3::new(v4.x, v4.y, v4.z)
-    }
 }
 
 impl Default for Mat4 {
-    fn default() -> Self {
-        Self::IDENTITY
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// TRANSFORM
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/// 3D Transform combining position, rotation, and scale
-#[derive(Clone, Copy, Debug)]
-pub struct Transform {
-    pub position: Vec3,
-    pub rotation: Vec3, // Euler angles (radians)
-    pub scale: Vec3,
-}
-
-impl Transform {
-    pub const IDENTITY: Transform = Transform {
-        position: Vec3::ZERO,
-        rotation: Vec3::ZERO,
-        scale: Vec3::ONE,
-    };
-
-    pub fn new() -> Self {
-        Self::IDENTITY
-    }
-
-    pub fn with_position(mut self, x: f32, y: f32, z: f32) -> Self {
-        self.position = Vec3::new(x, y, z);
-        self
-    }
-
-    pub fn with_rotation(mut self, x: f32, y: f32, z: f32) -> Self {
-        self.rotation = Vec3::new(x, y, z);
-        self
-    }
-
-    pub fn with_scale(mut self, x: f32, y: f32, z: f32) -> Self {
-        self.scale = Vec3::new(x, y, z);
-        self
-    }
-
-    pub fn with_uniform_scale(mut self, s: f32) -> Self {
-        self.scale = Vec3::new(s, s, s);
-        self
-    }
-
-    /// Get the transformation matrix
-    pub fn matrix(&self) -> Mat4 {
-        let t = Mat4::translation(self.position.x, self.position.y, self.position.z);
-        let rx = Mat4::rotation_x(self.rotation.x);
-        let ry = Mat4::rotation_y(self.rotation.y);
-        let rz = Mat4::rotation_z(self.rotation.z);
-        let s = Mat4::scale(self.scale.x, self.scale.y, self.scale.z);
-
-        // Scale -> Rotate -> Translate
-        t.mul(&rz.mul(&ry.mul(&rx.mul(&s))))
-    }
-}
-
-impl Default for Transform {
     fn default() -> Self {
         Self::IDENTITY
     }
@@ -461,24 +377,4 @@ impl Default for Transform {
 #[inline]
 pub fn deg_to_rad(degrees: f32) -> f32 {
     degrees * core::f32::consts::PI / 180.0
-}
-
-/// Convert radians to degrees
-#[inline]
-pub fn rad_to_deg(radians: f32) -> f32 {
-    radians * 180.0 / core::f32::consts::PI
-}
-
-/// Linear interpolation
-#[inline]
-pub fn lerp(a: f32, b: f32, t: f32) -> f32 {
-    a + (b - a) * t
-}
-
-/// Clamp value between min and max
-#[inline]
-pub fn clamp(value: f32, min: f32, max: f32) -> f32 {
-    if value < min { min }
-    else if value > max { max }
-    else { value }
 }

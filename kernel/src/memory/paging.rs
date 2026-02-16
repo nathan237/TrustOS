@@ -279,34 +279,6 @@ impl AddressSpace {
         }
     }
     
-    /// Get or create a page table at the given entry (for read operations)
-    #[allow(dead_code)]
-    fn get_or_create_table(&mut self, entry: &mut PageTableEntry) -> Option<*mut PageTable> {
-        if entry.is_present() {
-            // Table exists, return pointer
-            let table_phys = entry.phys_addr();
-            let table_virt = table_phys + self.hhdm_offset;
-            Some(table_virt as *mut PageTable)
-        } else {
-            // Create new table
-            let mut new_table = Box::new(PageTable::new());
-            new_table.zero();
-            
-            let table_virt = &*new_table as *const PageTable as u64;
-            let table_phys = table_virt.checked_sub(self.hhdm_offset)?;
-            
-            // Set entry with present + writable + user (so lower levels can set restrictions)
-            entry.set(table_phys, PageFlags::new(
-                PageFlags::PRESENT | PageFlags::WRITABLE | PageFlags::USER
-            ));
-            
-            // Keep ownership
-            self.page_tables.push(new_table);
-            
-            // Return pointer to the new table
-            Some(table_virt as *mut PageTable)
-        }
-    }
     
     /// Map a range of pages
     pub fn map_range(&mut self, virt_start: u64, phys_start: u64, size: usize, flags: PageFlags) -> Option<()> {

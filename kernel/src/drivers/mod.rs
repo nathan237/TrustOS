@@ -7,6 +7,7 @@ pub mod net;
 pub mod ahci;
 pub mod ata;
 pub mod usb;
+pub mod usb_storage;
 pub mod xhci;
 pub mod input;
 pub mod pci_ids;

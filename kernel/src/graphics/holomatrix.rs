@@ -131,48 +131,21 @@ impl Point3D {
 }
 
 /// Fast approximate sine (internal)
-fn sin_approx(x: f32) -> f32 {
-    sin_approx_pub(x)
-}
+fn sin_approx(x: f32) -> f32 { crate::math::fast_sin(x) }
 
 /// Fast approximate cosine (internal)
-fn cos_approx(x: f32) -> f32 {
-    cos_approx_pub(x)
-}
+fn cos_approx(x: f32) -> f32 { crate::math::fast_cos(x) }
 
 /// Fast approximate sine (public for shell.rs)
 #[inline]
-pub fn sin_approx_pub(x: f32) -> f32 {
-    // Normalize to -PI..PI
-    let mut x = x % (2.0 * 3.14159);
-    if x > 3.14159 { x -= 2.0 * 3.14159; }
-    if x < -3.14159 { x += 2.0 * 3.14159; }
-    
-    // Parabolic approximation
-    let abs_x = if x < 0.0 { -x } else { x };
-    let sign = if x < 0.0 { -1.0 } else { 1.0 };
-    
-    // sin(x) ≈ (4/π)x - (4/π²)x²  for 0 <= x <= π
-    let y = 1.27323954 * abs_x - 0.405284735 * abs_x * abs_x;
-    
-    sign * y
-}
+pub fn sin_approx_pub(x: f32) -> f32 { crate::math::fast_sin(x) }
 
 /// Fast approximate cosine (public for shell.rs)
 #[inline]
-pub fn cos_approx_pub(x: f32) -> f32 {
-    sin_approx_pub(x + 1.5707963) // cos(x) = sin(x + π/2)
-}
+pub fn cos_approx_pub(x: f32) -> f32 { crate::math::fast_cos(x) }
 
 /// Fast approximate square root
-fn sqrt_approx(x: f32) -> f32 {
-    if x <= 0.0 { return 0.0; }
-    let mut guess = x / 2.0;
-    for _ in 0..4 {
-        guess = (guess + x / guess) / 2.0;
-    }
-    guess
-}
+fn sqrt_approx(x: f32) -> f32 { crate::math::fast_sqrt(x) }
 
 impl HoloMatrix {
     /// Create a new holographic matrix

@@ -1230,26 +1230,3 @@ pub fn is_executable(path: &str) -> bool {
     crate::vfs::close(fd).ok();
     result
 }
-
-/// List executable files in a directory
-pub fn list_executables(dir: &str) -> Vec<String> {
-    let mut execs = Vec::new();
-    
-    crate::ramfs::with_fs(|fs| {
-        if let Ok(entries) = fs.ls(Some(dir)) {
-            for entry in entries {
-                let full_path = if dir == "/" {
-                    alloc::format!("/{}", entry.0)
-                } else {
-                    alloc::format!("{}/{}", dir, entry.0)
-                };
-                
-                if is_executable(&full_path) {
-                    execs.push(full_path);
-                }
-            }
-        }
-    });
-    
-    execs
-}

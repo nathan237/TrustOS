@@ -250,13 +250,6 @@ unsafe fn ioapic_route_irq(irq: u8, vector: u8, dest_apic: u8, flags: u64) {
     ioapic_write(reg_hi, entry_hi as u32);
 }
 
-/// Mask (disable) an IRQ in the I/O APIC
-#[allow(dead_code)]
-unsafe fn ioapic_mask_irq(irq: u8) {
-    let reg_lo = IOAPIC_REG_REDTBL + (irq as u32) * 2;
-    let lo = ioapic_read(reg_lo);
-    ioapic_write(reg_lo, lo | IOAPIC_MASKED as u32);
-}
 
 /// Get max redirection entries from I/O APIC
 unsafe fn ioapic_max_entries() -> u8 {

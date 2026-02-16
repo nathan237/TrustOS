@@ -138,3 +138,5 @@ serial.log
 tools/config/
 tools/tokens/
 tools/trustlangdemo_temp.mp4
+
+docs/DEVELOPER_GUIDE.md

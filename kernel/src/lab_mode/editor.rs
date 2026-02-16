@@ -112,6 +112,10 @@ impl EditorState {
             0x12 => {
                 self.run_code();
             }
+            // Ctrl+S = save file to TrustFS
+            0x13 => {
+                self.save_file();
+            }
             // Enter
             0x0D | 0x0A => {
                 if !self.output_focused {
@@ -207,6 +211,35 @@ impl EditorState {
         }
     }
     
+    /// Save file to TrustFS (/mnt/trustfs/editor.tl)
+    pub fn save_file(&mut self) {
+        let source: String = self.lines.iter()
+            .map(|l| l.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        
+        match crate::vfs::write_file("/mnt/trustfs/editor.tl", source.as_bytes()) {
+            Ok(()) => {
+                // Sync to disk for persistence
+                let _ = crate::vfs::sync_all();
+                self.output.clear();
+                self.output.push(String::from("=== Saved ==="));
+                self.output.push(format!("Wrote {} bytes to /mnt/trustfs/editor.tl", source.len()));
+                self.output.push(String::from("File persisted to disk (WAL protected)"));
+            }
+            Err(e) => {
+                self.output.clear();
+                self.output.push(format!("Save error: {:?}", e));
+                self.output.push(String::from("Try: file saved to ramfs as fallback"));
+                // Fallback: save to ramfs
+                let _ = crate::ramfs::with_fs(|fs| {
+                    if !fs.exists("editor.tl") { let _ = fs.touch("editor.tl"); }
+                    fs.write_file("editor.tl", source.as_bytes())
+                });
+            }
+        }
+    }
+
     /// Execute the code (using TrustLang VM if available)
     pub fn run_code(&mut self) {
         self.output.clear();
@@ -254,7 +287,7 @@ pub fn draw(state: &EditorState, x: i32, y: i32, w: u32, h: u32) {
     draw_lab_text(x, y, header, header_color);
     
     // F5 hint
-    let hint = "[Ctrl+R] run";
+    let hint = "[Ctrl+S] save [Ctrl+R] run";
     let hint_x = x + w as i32 - (hint.len() as i32 * cw) - 2;
     draw_lab_text(hint_x, y, hint, COL_GREEN);
     

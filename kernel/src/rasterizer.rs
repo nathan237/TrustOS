@@ -30,32 +30,13 @@ fn clamp_f32(x: f32, min: f32, max: f32) -> f32 {
     if x < min { min } else if x > max { max } else { x }
 }
 
-fn sqrt_f32(x: f32) -> f32 {
-    if x <= 0.0 { return 0.0; }
-    // Newton-Raphson approximation
-    let mut guess = x / 2.0;
-    for _ in 0..10 {
-        guess = (guess + x / guess) / 2.0;
-    }
-    guess
-}
+fn sqrt_f32(x: f32) -> f32 { crate::math::fast_sqrt(x) }
 
-fn sin_f32(x: f32) -> f32 {
-    // Taylor series approximation
-    let x = x % (2.0 * 3.14159265);
-    let x3 = x * x * x;
-    let x5 = x3 * x * x;
-    let x7 = x5 * x * x;
-    x - x3 / 6.0 + x5 / 120.0 - x7 / 5040.0
-}
+fn sin_f32(x: f32) -> f32 { crate::math::fast_sin(x) }
 
-fn cos_f32(x: f32) -> f32 {
-    sin_f32(x + 3.14159265 / 2.0)
-}
+fn cos_f32(x: f32) -> f32 { crate::math::fast_cos(x) }
 
-fn tan_f32(x: f32) -> f32 {
-    sin_f32(x) / cos_f32(x)
-}
+fn tan_f32(x: f32) -> f32 { crate::math::fast_tan(x) }
 
 /// RGBA color with alpha channel
 #[derive(Clone, Copy, Debug)]

@@ -753,26 +753,7 @@ fn tunnel_grid_lines(wall_x: f32, z: f32, t: f32) -> f32 {
 
 /// Fast atan2 approximation for angle calculation
 #[inline(always)]
-fn fast_atan2(y: f32, x: f32) -> f32 {
-    let abs_x = fast_abs(x);
-    let abs_y = fast_abs(y);
-    let max_val = if abs_x > abs_y { abs_x } else { abs_y };
-    let min_val = if abs_x < abs_y { abs_x } else { abs_y };
-    
-    if max_val < 0.0001 {
-        return 0.0;
-    }
-    
-    let a = min_val / max_val;
-    let s = a * a;
-    let r = ((-0.0464964749 * s + 0.15931422) * s - 0.327622764) * s * a + a;
-    
-    let r = if abs_y > abs_x { 1.5707963 - r } else { r };
-    let r = if x < 0.0 { 3.14159265 - r } else { r };
-    let r = if y < 0.0 { -r } else { r };
-    
-    r
-}
+fn fast_atan2(y: f32, x: f32) -> f32 { crate::math::fast_atan2(y, x) }
 
 // ════════════════════════════════════════════════════════════════════════════════
 // HOLOMATRIX DEPTH LAYERS - Multiple parallax layers of falling glyphs
@@ -881,20 +862,9 @@ fn parallax_layer(x: u32, y: u32, t: f32, h: u32, speed: f32, brightness: f32,
 // ============================================================================
 
 /// Fast sine approximation (Taylor series, accurate to ~0.001)
-/// Fast square root (Newton-Raphson approximation)
+/// Fast square root (delegates to shared math)
 #[inline]
-fn fast_sqrt(x: f32) -> f32 {
-    if x <= 0.0 { return 0.0; }
-    // Quake-style fast inverse sqrt then multiply
-    let xhalf = 0.5 * x;
-    let i = unsafe { core::mem::transmute::<f32, u32>(x) };
-    let i = 0x5f375a86u32.wrapping_sub(i >> 1);
-    let y = unsafe { core::mem::transmute::<u32, f32>(i) };
-    // 2 Newton-Raphson iterations for 1/sqrt(x)
-    let y = y * (1.5 - xhalf * y * y);
-    let y = y * (1.5 - xhalf * y * y);
-    x * y // x * (1/sqrt(x)) = sqrt(x)
-}
+fn fast_sqrt(x: f32) -> f32 { crate::math::fast_sqrt(x) }
 
 /// Fast absolute value
 #[inline(always)]
@@ -1168,28 +1138,13 @@ fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
     ((a as f32) * (1.0 - t) + (b as f32) * t) as u8
 }
 
-/// Fast sine approximation (Bhaskara, ~0.1% error)
+/// Fast sine approximation (delegates to shared math)
 #[inline(always)]
-fn fast_sin(x: f32) -> f32 {
-    // Normalize to [-PI, PI] without expensive modulo (use subtract loop)
-    let mut x = x;
-    while x > 3.14159265 { x -= 6.28318530; }
-    while x < -3.14159265 { x += 6.28318530; }
-    
-    // Bhaskara approximation (very fast, ~0.1% error)
-    let abs_x = if x < 0.0 { -x } else { x };
-    let sign = if x < 0.0 { -1.0 } else { 1.0 };
-    let diff = 3.14159265 - abs_x;
-    
-    sign * (16.0 * abs_x * diff) / 
-           (49.348022 - 4.0 * abs_x * diff)
-}
+fn fast_sin(x: f32) -> f32 { crate::math::fast_sin(x) }
 
-/// Fast cosine (sin shifted by PI/2)
+/// Fast cosine (delegates to shared math)
 #[inline(always)]
-fn fast_cos(x: f32) -> f32 {
-    fast_sin(x + 1.5707963)
-}
+fn fast_cos(x: f32) -> f32 { crate::math::fast_cos(x) }
 
 // ============================================================================
 // GLOBAL VIRTUAL GPU INSTANCE

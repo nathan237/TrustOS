@@ -113,17 +113,90 @@ impl PanelId {
             PanelId::HexEditor => COL_RED,
         }
     }
+
+    /// All module types in order
+    pub fn all() -> [PanelId; 7] {
+        [
+            PanelId::HardwareStatus, PanelId::KernelTrace, PanelId::CommandGuide,
+            PanelId::FileTree, PanelId::TrustLangEditor, PanelId::Pipeline, PanelId::HexEditor,
+        ]
+    }
+
+    /// Short display name for switcher UI
+    pub fn short_name(&self) -> &'static str {
+        match self {
+            PanelId::HardwareStatus => "Hardware",
+            PanelId::KernelTrace => "Kernel Trace",
+            PanelId::CommandGuide => "Cmd Guide",
+            PanelId::FileTree => "File Tree",
+            PanelId::TrustLangEditor => "TrustLang",
+            PanelId::Pipeline => "Pipeline",
+            PanelId::HexEditor => "Hex Editor",
+        }
+    }
+
+    /// Category label for switcher UI
+    pub fn category(&self) -> &'static str {
+        "Core"
+    }
 }
+
+// ── Module Switcher ────────────────────────────────────────────────────────
+
+/// Module switcher overlay (appears when user wants to swap a module in a slot)
+pub struct ModuleSwitcher {
+    /// Whether the switcher is currently visible
+    pub open: bool,
+    /// Which slot position we're swapping
+    pub target_slot: usize,
+    /// Currently highlighted entry in the module list
+    pub selected: usize,
+}
+
+impl ModuleSwitcher {
+    pub fn new() -> Self {
+        Self { open: false, target_slot: 0, selected: 0 }
+    }
+}
+
+// ── Layout Presets ─────────────────────────────────────────────────────────
+
+/// Default layout (original TrustLab arrangement)
+pub const LAYOUT_DEFAULT: [PanelId; 7] = [
+    PanelId::HardwareStatus, PanelId::KernelTrace, PanelId::CommandGuide,
+    PanelId::FileTree, PanelId::TrustLangEditor, PanelId::Pipeline, PanelId::HexEditor,
+];
+
+/// Developer-focused layout
+const LAYOUT_DEV: [PanelId; 7] = [
+    PanelId::KernelTrace, PanelId::TrustLangEditor, PanelId::CommandGuide,
+    PanelId::FileTree, PanelId::HexEditor, PanelId::Pipeline, PanelId::HardwareStatus,
+];
+
+/// Monitoring-focused layout
+const LAYOUT_MONITOR: [PanelId; 7] = [
+    PanelId::HardwareStatus, PanelId::KernelTrace, PanelId::Pipeline,
+    PanelId::HexEditor, PanelId::FileTree, PanelId::KernelTrace, PanelId::CommandGuide,
+];
+
+/// Slot position names (for user reference)
+const SLOT_NAMES: [&str; 7] = [
+    "Top-Left", "Mid-Top", "Top-Right", "Bot-Left", "Mid-Bot", "Mid-Embed", "Bot-Right",
+];
 
 /// TrustLab state (one per window)
 pub struct LabState {
-    /// Which panel is focused
-    pub focused_panel: PanelId,
+    /// Which slot position is currently focused (0-6)
+    pub focused_slot: usize,
+    /// Module assignment: which module type is loaded in each slot
+    pub slot_assignment: [PanelId; 7],
+    /// Module switcher overlay state
+    pub switcher: ModuleSwitcher,
     /// Shell command input buffer
     pub shell_input: String,
     /// Shell cursor position
     pub shell_cursor: usize,
-    /// Sub-states per panel
+    /// Sub-states per module type (all always alive, slots just select which to display)
     pub hw_state: hardware::HardwareState,
     pub trace_state: kernel_trace::KernelTraceState,
     pub guide_state: guide::GuideState,
@@ -142,7 +215,9 @@ impl LabState {
     pub fn new() -> Self {
         LAB_ACTIVE.store(true, Ordering::SeqCst);
         Self {
-            focused_panel: PanelId::HardwareStatus,
+            focused_slot: 0,
+            slot_assignment: LAYOUT_DEFAULT,
+            switcher: ModuleSwitcher::new(),
             shell_input: String::new(),
             shell_cursor: 0,
             hw_state: hardware::HardwareState::new(),
@@ -160,28 +235,32 @@ impl LabState {
     
     /// Handle keyboard input
     pub fn handle_key(&mut self, key: u8) {
+        // Module switcher intercepts all keys when open
+        if self.switcher.open {
+            self.handle_switcher_key(key);
+            return;
+        }
+
         // If demo is running, intercept keys
         if self.demo_state.active {
             self.demo_state.handle_key(key);
             return;
         }
 
-        // Tab = cycle focused panel (skip Pipeline — it's embedded in Trace)
+        // Tab = cycle focused slot (all 7 slots are now independent)
         if key == 0x09 {
-            let mut next = ((self.focused_panel as usize) + 1) % 7;
-            if next == 5 { next = 6; } // skip Pipeline (embedded)
-            self.focused_panel = PanelId::from_index(next);
+            self.focused_slot = (self.focused_slot + 1) % 7;
             return;
         }
         
         // Enter in shell bar → execute command 
         // (but if editor or filetree is focused, let them handle Enter)
         if key == 0x0D || key == 0x0A {
-            if self.focused_panel == PanelId::TrustLangEditor {
+            if self.focused_module() == PanelId::TrustLangEditor {
                 self.editor_state.handle_key(key);
                 return;
             }
-            if self.focused_panel == PanelId::FileTree {
+            if self.focused_module() == PanelId::FileTree {
                 self.tree_state.handle_key(key);
                 return;
             }
@@ -194,7 +273,7 @@ impl LabState {
         // Backspace in shell bar 
         if key == 0x08 {
             // If focused on editor, let it handle backspace
-            if self.focused_panel == PanelId::TrustLangEditor {
+            if self.focused_module() == PanelId::TrustLangEditor {
                 self.editor_state.handle_key(key);
                 return;
             }
@@ -206,8 +285,13 @@ impl LabState {
             return;
         }
         
-        // Dispatch to focused panel
-        match self.focused_panel {
+        // Dispatch to focused module
+        self.dispatch_key(key);
+    }
+
+    /// Dispatch a key press to the currently focused module
+    fn dispatch_key(&mut self, key: u8) {
+        match self.focused_module() {
             PanelId::HardwareStatus => self.hw_state.handle_key(key),
             PanelId::KernelTrace => self.trace_state.handle_key(key),
             PanelId::CommandGuide => self.guide_state.handle_key(key),
@@ -220,6 +304,8 @@ impl LabState {
     
     /// Handle character input (printable)
     pub fn handle_char(&mut self, ch: char) {
+        if self.switcher.open { return; }
+
         if self.demo_state.active {
             // Forward space to demo as key skip
             if ch == ' ' {
@@ -228,7 +314,7 @@ impl LabState {
             return;
         }
 
-        match self.focused_panel {
+        match self.focused_module() {
             PanelId::TrustLangEditor => self.editor_state.handle_char(ch),
             PanelId::CommandGuide => self.guide_state.handle_char(ch),
             _ => {
@@ -248,33 +334,33 @@ impl LabState {
         
         match cmd.as_str() {
             "hw" | "hardware" | "cpu" => {
-                self.focused_panel = PanelId::HardwareStatus;
+                self.focus_module(PanelId::HardwareStatus);
             }
             "trace" | "log" | "events" => {
-                self.focused_panel = PanelId::KernelTrace;
+                self.focus_module(PanelId::KernelTrace);
             }
             "help" | "guide" | "commands" | "cmd" => {
-                self.focused_panel = PanelId::CommandGuide;
+                self.focus_module(PanelId::CommandGuide);
             }
             "fs" | "files" | "tree" | "ls" => {
-                self.focused_panel = PanelId::FileTree;
+                self.focus_module(PanelId::FileTree);
                 self.tree_state.dirty = true;
                 self.tree_state.handle_key(b'R'); // force refresh
             }
             "edit" | "editor" | "code" | "trustlang" => {
-                self.focused_panel = PanelId::TrustLangEditor;
+                self.focus_module(PanelId::TrustLangEditor);
             }
             "live" | "stream" | "bus" | "pipeline" | "pipe" => {
-                self.focused_panel = PanelId::Pipeline;
+                self.focus_module(PanelId::Pipeline);
             }
             "hex" | "hexedit" | "hexdump" => {
-                self.focused_panel = PanelId::HexEditor;
+                self.focus_module(PanelId::HexEditor);
             }
             _ if cmd.starts_with("hex ") => {
                 let path = raw[4..].trim();
                 if !path.is_empty() {
                     self.hex_state.load_file(path);
-                    self.focused_panel = PanelId::HexEditor;
+                    self.focus_module(PanelId::HexEditor);
                 }
             }
             "clear" | "cls" => {
@@ -290,10 +376,43 @@ impl LabState {
             }
             "run" | "f5" => {
                 self.editor_state.run_code();
-                self.focused_panel = PanelId::TrustLangEditor;
+                self.focus_module(PanelId::TrustLangEditor);
             }
             "test" | "labtest" | "uxtest" => {
                 ux_test::run_ux_tests(self);
+            }
+            // ── Module Switcher commands ────────────────────────────
+            "swap" | "module" | "switch" => {
+                self.open_switcher(self.focused_slot);
+            }
+            // ── Layout preset commands ──────────────────────────────
+            _ if cmd.starts_with("layout ") => {
+                let preset = cmd[7..].trim();
+                match preset {
+                    "default" | "reset" => {
+                        self.slot_assignment = LAYOUT_DEFAULT;
+                        trace_bus::emit_static(trace_bus::EventCategory::Custom, "Layout: default", 0);
+                    }
+                    "dev" | "developer" => {
+                        self.slot_assignment = LAYOUT_DEV;
+                        trace_bus::emit_static(trace_bus::EventCategory::Custom, "Layout: developer", 0);
+                    }
+                    "monitor" | "mon" => {
+                        self.slot_assignment = LAYOUT_MONITOR;
+                        trace_bus::emit_static(trace_bus::EventCategory::Custom, "Layout: monitor", 0);
+                    }
+                    _ => {
+                        trace_bus::emit_static(trace_bus::EventCategory::Custom, "Unknown layout (try: default, dev, monitor)", 0);
+                    }
+                }
+            }
+            "slots" | "layout" => {
+                // Show current slot assignment in trace
+                for (i, module) in self.slot_assignment.iter().enumerate() {
+                    let msg = format!("Slot {} [{}]: {}", i, SLOT_NAMES[i], module.short_name());
+                    trace_bus::emit(trace_bus::EventCategory::Custom, msg, i as u64);
+                }
+                self.focus_module(PanelId::KernelTrace);
             }
             _ => {
                 // Unknown command — show in trace
@@ -308,6 +427,12 @@ impl LabState {
     
     /// Handle mouse click (coordinates relative to window content area)
     pub fn handle_click(&mut self, rx: i32, ry: i32, ww: u32, wh: u32) {
+        // If switcher is open, handle click on switcher or close it
+        if self.switcher.open {
+            self.handle_switcher_click(rx, ry, ww, wh);
+            return;
+        }
+
         let cx = 2i32;
         let cy = TITLE_BAR_HEIGHT as i32 + 2;
         let cw = ww.saturating_sub(4);
@@ -321,8 +446,15 @@ impl LabState {
             if rx >= pr.x && rx < pr.x + pr.w as i32
                 && ry >= pr.y && ry < pr.y + pr.h as i32
             {
-                let pid = PanelId::from_index(i);
-                self.focused_panel = pid;
+                self.focused_slot = i;
+                let pid = self.slot_assignment[i];
+
+                // Check if click is on the ▼ swap button in header
+                let swap_btn_x = pr.x + pr.w as i32 - 24;
+                if ry < pr.y + PANEL_HEADER_H as i32 && rx >= swap_btn_x {
+                    self.open_switcher(i);
+                    return;
+                }
 
                 // Content area coordinates (same as draw_lab)
                 let content_x = pr.x + PANEL_PADDING as i32;
@@ -332,30 +464,8 @@ impl LabState {
                 let local_x = rx - content_x;
                 let local_y = ry - content_y;
 
-                // Dispatch click to panel
-                match pid {
-                    PanelId::HardwareStatus => {
-                        self.hw_state.handle_click(local_x, local_y, content_w, content_h);
-                    }
-                    PanelId::KernelTrace => {
-                        self.trace_state.handle_click(local_x, local_y, content_w, content_h);
-                    }
-                    PanelId::CommandGuide => {
-                        self.guide_state.handle_click(local_x, local_y, content_w, content_h);
-                    }
-                    PanelId::FileTree => {
-                        self.tree_state.handle_click(local_x, local_y, content_w, content_h);
-                    }
-                    PanelId::TrustLangEditor => {
-                        self.editor_state.handle_click(local_x, local_y, content_w, content_h);
-                    }
-                    PanelId::Pipeline => {
-                        self.pipeline_state.handle_click(local_x, local_y, content_w, content_h);
-                    }
-                    PanelId::HexEditor => {
-                        self.hex_state.handle_click(local_x, local_y, content_w, content_h);
-                    }
-                }
+                // Dispatch click to the module loaded in this slot
+                self.dispatch_click(pid, local_x, local_y, content_w, content_h);
                 return;
             }
         }
@@ -374,6 +484,19 @@ impl LabState {
         }
     }
 
+    /// Dispatch a click to the appropriate module state
+    fn dispatch_click(&mut self, pid: PanelId, lx: i32, ly: i32, w: u32, h: u32) {
+        match pid {
+            PanelId::HardwareStatus => self.hw_state.handle_click(lx, ly, w, h),
+            PanelId::KernelTrace => self.trace_state.handle_click(lx, ly, w, h),
+            PanelId::CommandGuide => self.guide_state.handle_click(lx, ly, w, h),
+            PanelId::FileTree => self.tree_state.handle_click(lx, ly, w, h),
+            PanelId::TrustLangEditor => self.editor_state.handle_click(lx, ly, w, h),
+            PanelId::Pipeline => self.pipeline_state.handle_click(lx, ly, w, h),
+            PanelId::HexEditor => self.hex_state.handle_click(lx, ly, w, h),
+        }
+    }
+
     /// Update per-frame state
     pub fn tick(&mut self) {
         self.frame += 1;
@@ -382,7 +505,114 @@ impl LabState {
         self.pipeline_state.update();
         // Demo tick: auto-focus panels
         if let Some(panel_idx) = self.demo_state.tick() {
-            self.focused_panel = PanelId::from_index(panel_idx);
+            // Demo uses original slot indices
+            self.focused_slot = panel_idx.min(6);
+        }
+    }
+
+    // ── Slot helpers ───────────────────────────────────────────────────
+
+    /// Get the module type loaded in the currently focused slot
+    pub fn focused_module(&self) -> PanelId {
+        self.slot_assignment[self.focused_slot]
+    }
+
+    /// Find the first slot containing a given module type
+    pub fn slot_of(&self, module: PanelId) -> Option<usize> {
+        self.slot_assignment.iter().position(|m| *m == module)
+    }
+
+    /// Focus on a specific module type (finds its slot)
+    pub fn focus_module(&mut self, module: PanelId) {
+        if let Some(slot) = self.slot_of(module) {
+            self.focused_slot = slot;
+        }
+    }
+
+    /// Open the module switcher for a given slot
+    pub fn open_switcher(&mut self, slot: usize) {
+        self.switcher.open = true;
+        self.switcher.target_slot = slot;
+        let current = self.slot_assignment[slot];
+        self.switcher.selected = PanelId::all().iter().position(|p| *p == current).unwrap_or(0);
+    }
+
+    /// Handle keyboard input when the module switcher is open
+    fn handle_switcher_key(&mut self, key: u8) {
+        match key {
+            0x1B => {
+                // Esc: close switcher
+                self.switcher.open = false;
+            }
+            0x0D | 0x0A => {
+                // Enter: apply selection
+                let all = PanelId::all();
+                if self.switcher.selected < all.len() {
+                    let module = all[self.switcher.selected];
+                    let slot = self.switcher.target_slot;
+                    self.slot_assignment[slot] = module;
+                    let msg = format!("Slot {} [{}] -> {}",
+                        slot, SLOT_NAMES[slot], module.short_name());
+                    trace_bus::emit(trace_bus::EventCategory::Custom, msg, 0);
+                }
+                self.switcher.open = false;
+            }
+            k if k == KEY_UP => {
+                if self.switcher.selected > 0 {
+                    self.switcher.selected -= 1;
+                }
+            }
+            k if k == KEY_DOWN => {
+                let max = PanelId::all().len() - 1;
+                if self.switcher.selected < max {
+                    self.switcher.selected += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Handle click on module switcher overlay
+    fn handle_switcher_click(&mut self, rx: i32, ry: i32, ww: u32, wh: u32) {
+        let cx = 2i32;
+        let cy = TITLE_BAR_HEIGHT as i32 + 2;
+        let cw = ww.saturating_sub(4);
+        let ch = wh.saturating_sub(TITLE_BAR_HEIGHT + 4);
+        if cw < 200 || ch < 100 { self.switcher.open = false; return; }
+
+        let panels = compute_panels(cx, cy, cw, ch);
+        let slot = self.switcher.target_slot;
+        if slot >= panels.len() { self.switcher.open = false; return; }
+        let pr = &panels[slot];
+
+        // Check if click is inside the switcher overlay area
+        let pad = 4i32;
+        let ox = pr.x + pad;
+        let oy = pr.y + pad;
+        let ow = pr.w.saturating_sub(8);
+        let oh = pr.h.saturating_sub(8);
+
+        if rx >= ox && rx < ox + ow as i32 && ry >= oy && ry < oy + oh as i32 {
+            // Calculate which entry was clicked
+            let list_y_start = oy + 24; // after title + separator
+            let row_h = char_h();
+            if row_h > 0 && ry >= list_y_start {
+                let entry = ((ry - list_y_start) / row_h) as usize;
+                if entry < PanelId::all().len() {
+                    self.switcher.selected = entry;
+                    // Double-click = select (single click just highlights)
+                    // For simplicity, single click selects and applies
+                    let module = PanelId::all()[entry];
+                    self.slot_assignment[slot] = module;
+                    let msg = format!("Slot {} [{}] -> {}",
+                        slot, SLOT_NAMES[slot], module.short_name());
+                    trace_bus::emit(trace_bus::EventCategory::Custom, msg, 0);
+                    self.switcher.open = false;
+                }
+            }
+        } else {
+            // Click outside overlay = close
+            self.switcher.open = false;
         }
     }
 }
@@ -454,10 +684,10 @@ pub fn draw_lab(state: &LabState, wx: i32, wy: i32, ww: u32, wh: u32) {
     // Compute panel layout
     let panels = compute_panels(cx, cy, cw, ch);
     
-    // Draw each panel
+    // Draw each panel (module type comes from slot_assignment)
     for (i, pr) in panels.iter().enumerate() {
-        let pid = PanelId::from_index(i);
-        let focused = pid == state.focused_panel;
+        let pid = state.slot_assignment[i];
+        let focused = i == state.focused_slot;
         draw_panel_frame(pr, pid, focused);
         
         // Content area inside panel
@@ -466,29 +696,7 @@ pub fn draw_lab(state: &LabState, wx: i32, wy: i32, ww: u32, wh: u32) {
         let content_w = pr.w.saturating_sub(PANEL_PADDING * 2);
         let content_h = pr.h.saturating_sub(PANEL_HEADER_H + PANEL_PADDING * 2);
         
-        match pid {
-            PanelId::HardwareStatus => {
-                hardware::draw(&state.hw_state, content_x, content_y, content_w, content_h);
-            }
-            PanelId::KernelTrace => {
-                kernel_trace::draw(&state.trace_state, content_x, content_y, content_w, content_h);
-            }
-            PanelId::CommandGuide => {
-                guide::draw(&state.guide_state, content_x, content_y, content_w, content_h);
-            }
-            PanelId::FileTree => {
-                filetree::draw(&state.tree_state, content_x, content_y, content_w, content_h);
-            }
-            PanelId::TrustLangEditor => {
-                editor::draw(&state.editor_state, content_x, content_y, content_w, content_h);
-            }
-            PanelId::Pipeline => {
-                pipeline::draw(&state.pipeline_state, content_x, content_y, content_w, content_h);
-            }
-            PanelId::HexEditor => {
-                hex_editor::draw(&state.hex_state, content_x, content_y, content_w, content_h);
-            }
-        }
+        draw_module_content(state, pid, content_x, content_y, content_w, content_h);
     }
     
     // Draw shell bar at bottom
@@ -496,13 +704,18 @@ pub fn draw_lab(state: &LabState, wx: i32, wy: i32, ww: u32, wh: u32) {
     let shell_y = cy + (ch - SHELL_BAR_H) as i32;
     draw_shell_bar(state, cx, shell_y, cw, SHELL_BAR_H);
 
+    // Module switcher overlay (drawn on top of panels)
+    if state.switcher.open {
+        draw_module_switcher(state, &panels);
+    }
+
     // Demo overlay (drawn on top of everything)
     if state.demo_state.active {
         demo::draw_overlay(&state.demo_state, wx, wy, ww, wh);
     }
 }
 
-/// Draw a panel frame (border + header + title)
+/// Draw a panel frame (border + header + title + swap button)
 fn draw_panel_frame(pr: &PanelRect, pid: PanelId, focused: bool) {
     // Background
     crate::framebuffer::fill_rect(pr.x as u32, pr.y as u32, pr.w, pr.h, COL_PANEL_BG);
@@ -529,6 +742,89 @@ fn draw_panel_frame(pr: &PanelRect, pid: PanelId, focused: bool) {
     // Title
     let title = pid.title();
     draw_lab_text(pr.x + 8, pr.y + 6, title, COL_TEXT);
+    
+    // Swap button (v) at right side of header
+    let btn_x = pr.x + pr.w as i32 - 22;
+    let btn_color = if focused { COL_ACCENT } else { COL_DIM };
+    draw_lab_text(btn_x, pr.y + 6, "\u{25BC}", btn_color);
+}
+
+/// Draw the content of a module into a given area
+fn draw_module_content(state: &LabState, pid: PanelId, x: i32, y: i32, w: u32, h: u32) {
+    match pid {
+        PanelId::HardwareStatus => hardware::draw(&state.hw_state, x, y, w, h),
+        PanelId::KernelTrace => kernel_trace::draw(&state.trace_state, x, y, w, h),
+        PanelId::CommandGuide => guide::draw(&state.guide_state, x, y, w, h),
+        PanelId::FileTree => filetree::draw(&state.tree_state, x, y, w, h),
+        PanelId::TrustLangEditor => editor::draw(&state.editor_state, x, y, w, h),
+        PanelId::Pipeline => pipeline::draw(&state.pipeline_state, x, y, w, h),
+        PanelId::HexEditor => hex_editor::draw(&state.hex_state, x, y, w, h),
+    }
+}
+
+/// Draw the module switcher overlay on top of the target slot
+fn draw_module_switcher(state: &LabState, panels: &[PanelRect; 7]) {
+    let slot = state.switcher.target_slot;
+    if slot >= panels.len() { return; }
+    let pr = &panels[slot];
+
+    // Dark overlay background
+    let pad = 2;
+    let ox = pr.x + pad;
+    let oy = pr.y + pad;
+    let ow = pr.w.saturating_sub(4);
+    let oh = pr.h.saturating_sub(4);
+    crate::framebuffer::fill_rect(ox as u32, oy as u32, ow, oh, 0xFF0D1117);
+    draw_rect_border(ox, oy, ow, oh, COL_ACCENT);
+
+    // Title
+    let title = format!("Select Module (Slot {})", slot);
+    draw_lab_text(ox + 8, oy + 4, &title, COL_ACCENT);
+
+    // Separator
+    let sep_y = oy + 22;
+    crate::framebuffer::fill_rect((ox + 1) as u32, sep_y as u32, ow.saturating_sub(2), 1, COL_PANEL_BORDER);
+
+    // Module list
+    let ch = char_h();
+    let all = PanelId::all();
+    let current = state.slot_assignment[slot];
+    let mut row_y = sep_y + 4;
+
+    for (i, module) in all.iter().enumerate() {
+        if row_y + ch > oy + oh as i32 - ch { break; } // don't overflow
+
+        let is_selected = i == state.switcher.selected;
+        let is_current = *module == current;
+
+        // Highlight selected row
+        if is_selected {
+            crate::framebuffer::fill_rect(
+                (ox + 2) as u32, row_y as u32,
+                ow.saturating_sub(4), ch as u32,
+                0xFF1F6FEB,
+            );
+        }
+
+        // Icon + label
+        let icon = if is_current { "*" } else { " " };
+        let suffix = if is_current { " [active]" } else { "" };
+        let label = format!("{} {} {}{}", icon, module.short_name(), module.category(), suffix);
+        let color = if is_selected { COL_TEXT } else if is_current { COL_GREEN } else { COL_DIM };
+        draw_lab_text(ox + 8, row_y + 2, &label, color);
+
+        // Color dot for module
+        crate::framebuffer::fill_rect(
+            (ox + ow as i32 - 16) as u32, (row_y + 4) as u32,
+            8, 8, module.icon_color(),
+        );
+
+        row_y += ch;
+    }
+
+    // Bottom hint
+    let hint_y = oy + oh as i32 - ch;
+    draw_lab_text(ox + 8, hint_y, "Up/Down Enter Esc", COL_DIM);
 }
 
 /// Draw the bottom shell bar
@@ -544,7 +840,7 @@ fn draw_shell_bar(state: &LabState, x: i32, y: i32, w: u32, h: u32) {
     // Input
     let input_x = x + 8 + (prompt.len() as i32 * char_w());
     if state.shell_input.is_empty() {
-        draw_lab_text(input_x, y + 7, "hw|trace|fs|edit|hex|pipe|help|run|test", COL_DIM);
+        draw_lab_text(input_x, y + 7, "hw|trace|fs|edit|hex|swap|layout|run|test", COL_DIM);
     } else {
         draw_lab_text(input_x, y + 7, &state.shell_input, COL_TEXT);
     }
@@ -555,9 +851,9 @@ fn draw_shell_bar(state: &LabState, x: i32, y: i32, w: u32, h: u32) {
         crate::framebuffer::fill_rect(cursor_x as u32, (y + 6) as u32, 2, 14, COL_ACCENT);
     }
     
-    // Tab hint + active panel on right side
-    let panel_name = state.focused_panel.title();
-    let hint = format!("[Tab] cycle | Active: {}", panel_name);
+    // Tab hint + active module on right side
+    let panel_name = state.focused_module().title();
+    let hint = format!("[Tab] cycle | swap | layout | {}", panel_name);
     let hint_x = x + w as i32 - (hint.len() as i32 * char_w()) - 8;
     draw_lab_text(hint_x, y + 7, &hint, COL_DIM);
 }

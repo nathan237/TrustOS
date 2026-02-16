@@ -303,7 +303,7 @@ fn virt_to_phys(virt: u64) -> u64 {
     virt.wrapping_sub(hhdm)
 }
 
-fn phys_to_virt(phys: u64) -> u64 {
+pub fn phys_to_virt(phys: u64) -> u64 {
     let hhdm = crate::memory::hhdm_offset();
     phys.wrapping_add(hhdm)
 }
@@ -759,6 +759,10 @@ struct SlotRings {
     ep0: TransferRing,         // Control endpoint (DCI 1)
     interrupt_in: Option<TransferRing>, // HID interrupt IN endpoint
     interrupt_dci: u8,         // DCI of the interrupt IN endpoint
+    bulk_in: Option<TransferRing>,    // Bulk IN endpoint (mass storage)
+    bulk_in_dci: u8,
+    bulk_out: Option<TransferRing>,   // Bulk OUT endpoint (mass storage)
+    bulk_out_dci: u8,
 }
 
 // ============================================================================
@@ -908,6 +912,10 @@ fn address_device(controller: &mut XhciController, slot_id: u8, port_num: u8, sp
                 ep0: ep0_ring,
                 interrupt_in: None,
                 interrupt_dci: 0,
+                bulk_in: None,
+                bulk_in_dci: 0,
+                bulk_out: None,
+                bulk_out_dci: 0,
             });
         }
     }
@@ -1109,7 +1117,7 @@ fn get_device_descriptor(controller: &mut XhciController, slot_id: u8, dev: &mut
 /// Get Configuration Descriptor and find HID interfaces
 /// Returns: Vec of (interface_num, subclass, protocol, endpoint_addr, max_packet, interval)
 fn get_config_descriptor(controller: &mut XhciController, slot_id: u8) 
-    -> Option<Vec<(u8, u8, u8, u8, u16, u8)>> 
+    -> Option<Vec<(u8, u8, u8, u8, u8, u16, u8)>> 
 {
     let buf_phys = match crate::memory::frame::alloc_frame_zeroed() {
         Some(p) => p,
@@ -1143,8 +1151,7 @@ fn get_config_descriptor(controller: &mut XhciController, slot_id: u8)
     
     // Parse descriptors
     let mut offset = 0usize;
-    let mut current_iface = (0u8, 0u8, 0u8); // (interface_num, subclass, protocol)
-    let mut is_hid = false;
+    let mut current_iface = (0u8, 0u8, 0u8, 0u8); // (class, interface_num, subclass, protocol)
     
     while offset + 1 < read_len as usize {
         let len = unsafe { *buf_virt.add(offset) } as usize;
@@ -1159,25 +1166,35 @@ fn get_config_descriptor(controller: &mut XhciController, slot_id: u8)
                 let iface_subclass = unsafe { *buf_virt.add(offset + 6) };
                 let iface_protocol = unsafe { *buf_virt.add(offset + 7) };
                 
-                current_iface = (iface_num, iface_subclass, iface_protocol);
-                is_hid = iface_class == 0x03; // HID class
+                current_iface = (iface_class, iface_num, iface_subclass, iface_protocol);
                 
-                if is_hid {
+                if iface_class == 0x03 {
                     crate::serial_println!("[xHCI]   HID interface {}: subclass={} protocol={} ({})",
                         iface_num, iface_subclass, iface_protocol,
                         match iface_protocol { 1 => "keyboard", 2 => "mouse", _ => "other" });
+                } else if iface_class == 0x08 {
+                    crate::serial_println!("[xHCI]   Mass Storage interface {}: subclass={:#x} protocol={:#x}",
+                        iface_num, iface_subclass, iface_protocol);
                 }
             }
-            USB_DT_ENDPOINT if len >= 7 && is_hid => {
+            USB_DT_ENDPOINT if len >= 7 => {
                 let ep_addr = unsafe { *buf_virt.add(offset + 2) };
-                let _ep_attrs = unsafe { *buf_virt.add(offset + 3) };
+                let ep_attrs = unsafe { *buf_virt.add(offset + 3) };
                 let ep_max_packet = unsafe { ptr::read_unaligned(buf_virt.add(offset + 4) as *const u16) };
                 let ep_interval = unsafe { *buf_virt.add(offset + 6) };
+                let ep_type_bits = ep_attrs & 0x03;
                 
-                // Only care about IN endpoints (bit 7 = 1)
-                if ep_addr & 0x80 != 0 {
+                let iface_class = current_iface.0;
+                if iface_class == 0x03 && ep_type_bits == 3 && (ep_addr & 0x80 != 0) {
+                    // HID: interrupt IN endpoints only
                     interfaces.push((
-                        current_iface.0, current_iface.1, current_iface.2,
+                        iface_class, current_iface.1, current_iface.2, current_iface.3,
+                        ep_addr, ep_max_packet & 0x7FF, ep_interval,
+                    ));
+                } else if iface_class == 0x08 && ep_type_bits == 2 {
+                    // Mass storage: bulk IN and OUT endpoints
+                    interfaces.push((
+                        iface_class, current_iface.1, current_iface.2, current_iface.3,
                         ep_addr, ep_max_packet & 0x7FF, ep_interval,
                     ));
                 }
@@ -1298,6 +1315,110 @@ fn configure_hid_endpoint(
             true
         } else {
             crate::serial_println!("[xHCI] Configure Endpoint failed: cc={}", cc);
+            false
+        }
+    } else {
+        false
+    };
+    
+    crate::memory::frame::free_frame(input_phys);
+    success
+}
+
+/// Configure bulk IN and OUT endpoints for a mass storage device
+fn configure_bulk_endpoints(
+    controller: &mut XhciController,
+    slot_id: u8,
+    port_num: u8,
+    speed: u8,
+    ep_in_addr: u8,
+    ep_out_addr: u8,
+    max_packet_in: u16,
+    max_packet_out: u16,
+) -> bool {
+    let ep_in_num = ep_in_addr & 0x0F;
+    let dci_in = (ep_in_num * 2 + 1) as u8;  // IN endpoint DCI
+    let ep_out_num = ep_out_addr & 0x0F;
+    let dci_out = (ep_out_num * 2) as u8;     // OUT endpoint DCI
+    let max_dci = dci_in.max(dci_out);
+    
+    // Allocate transfer rings
+    let bulk_in_ring = match TransferRing::new() {
+        Some(r) => r,
+        None => return false,
+    };
+    let bulk_out_ring = match TransferRing::new() {
+        Some(r) => r,
+        None => return false,
+    };
+    let in_ring_phys = bulk_in_ring.phys;
+    let out_ring_phys = bulk_out_ring.phys;
+    
+    // Build input context for Configure Endpoint
+    let input_phys = match crate::memory::frame::alloc_frame_zeroed() {
+        Some(p) => p,
+        None => return false,
+    };
+    let input_virt = phys_to_virt(input_phys);
+    let ctx_size = controller.context_size;
+    
+    unsafe {
+        let icc = input_virt as *mut u32;
+        // Add Slot + both bulk endpoints
+        ptr::write_volatile(icc.add(1), 1 | (1u32 << dci_in) | (1u32 << dci_out));
+        
+        // Slot Context: update Context Entries to include highest DCI
+        let slot = (input_virt + ctx_size as u64) as *mut u32;
+        let speed_field = (speed as u32) << 20;
+        let context_entries = (max_dci as u32) << 27;
+        ptr::write_volatile(slot, speed_field | context_entries);
+        ptr::write_volatile(slot.add(1), (port_num as u32) << 16);
+        
+        // Bulk IN endpoint context (EP Type = 6 = Bulk IN)
+        let ep_in_ctx = (input_virt + ((1 + dci_in as usize) * ctx_size) as u64) as *mut u32;
+        let cerr = 3u32 << 1;
+        let ep_type_bulk_in = 6u32 << 3;
+        let mps_in = (max_packet_in as u32) << 16;
+        ptr::write_volatile(ep_in_ctx.add(1), cerr | ep_type_bulk_in | mps_in);
+        ptr::write_volatile(ep_in_ctx.add(2) as *mut u64, in_ring_phys | 1);
+        ptr::write_volatile(ep_in_ctx.add(4), max_packet_in as u32);
+        
+        // Bulk OUT endpoint context (EP Type = 2 = Bulk OUT)
+        let ep_out_ctx = (input_virt + ((1 + dci_out as usize) * ctx_size) as u64) as *mut u32;
+        let ep_type_bulk_out = 2u32 << 3;
+        let mps_out = (max_packet_out as u32) << 16;
+        ptr::write_volatile(ep_out_ctx.add(1), cerr | ep_type_bulk_out | mps_out);
+        ptr::write_volatile(ep_out_ctx.add(2) as *mut u64, out_ring_phys | 1);
+        ptr::write_volatile(ep_out_ctx.add(4), max_packet_out as u32);
+    }
+    
+    // Store bulk rings
+    {
+        let mut rings = SLOT_RINGS.lock();
+        if let Some(Some(slot_rings)) = rings.get_mut(slot_id as usize) {
+            slot_rings.bulk_in = Some(bulk_in_ring);
+            slot_rings.bulk_in_dci = dci_in;
+            slot_rings.bulk_out = Some(bulk_out_ring);
+            slot_rings.bulk_out_dci = dci_out;
+        }
+    }
+    
+    // Issue Configure Endpoint command
+    let trb = Trb {
+        parameter: input_phys,
+        status: 0,
+        control: (TRB_TYPE_CONFIGURE_EP << 10) | ((slot_id as u32) << 24),
+    };
+    
+    submit_command(controller, trb);
+    
+    let success = if let Some((cc, _, _)) = wait_command_completion(controller) {
+        if cc == 1 {
+            crate::serial_println!("[xHCI] Bulk endpoints configured: slot {} IN_DCI={} OUT_DCI={}",
+                slot_id, dci_in, dci_out);
+            true
+        } else {
+            crate::serial_println!("[xHCI] Configure bulk EPs failed: cc={}", cc);
             false
         }
     } else {
@@ -1461,78 +1582,204 @@ fn hid_keycode_to_ascii(keycode: u8, modifiers: u8) -> u8 {
 // Full Device Setup (called after enumerate_ports)
 // ============================================================================
 
-/// Set up all detected devices: Enable Slot → Address → Descriptors → HID config
+/// Set up all detected devices: Enable Slot → Address → Descriptors → HID/Mass Storage config
 fn setup_devices() {
+    let mut ms_devices: Vec<(u8, u8, u8, u16, u16)> = Vec::new();
+    
+    {
+        let mut ctrl = CONTROLLER.lock();
+        let controller = match ctrl.as_mut() {
+            Some(c) => c,
+            None => return,
+        };
+        
+        let num_devices = controller.devices.len();
+        if num_devices == 0 {
+            return;
+        }
+        
+        crate::serial_println!("[xHCI] Setting up {} devices...", num_devices);
+        
+        // Process each device: Enable Slot → Address → Get descriptors
+        for i in 0..num_devices {
+            let port = controller.devices[i].port;
+            let speed = controller.devices[i].speed;
+            
+            // Enable Slot
+            let slot_id = match enable_slot(controller) {
+                Some(id) => id,
+                None => {
+                    crate::serial_println!("[xHCI] Failed to enable slot for port {}", port);
+                    continue;
+                }
+            };
+            
+            controller.devices[i].slot_id = slot_id;
+            
+            // Address Device
+            if !address_device(controller, slot_id, port, speed) {
+                crate::serial_println!("[xHCI] Failed to address device on port {}", port);
+                continue;
+            }
+            
+            // Get Device Descriptor
+            let mut dev = controller.devices[i].clone();
+            if !get_device_descriptor(controller, slot_id, &mut dev) {
+                crate::serial_println!("[xHCI] Failed to get device descriptor for slot {}", slot_id);
+                continue;
+            }
+            controller.devices[i] = dev;
+            
+            // Get Configuration Descriptor + find HID and Mass Storage endpoints
+            if let Some(all_interfaces) = get_config_descriptor(controller, slot_id) {
+                let mut ms_in: Option<(u8, u16)> = None;
+                let mut ms_out: Option<(u8, u16)> = None;
+                
+                for &(iface_class, iface_num, subclass, protocol, ep_addr, max_packet, interval) in &all_interfaces {
+                    match iface_class {
+                        0x03 => {
+                            // HID device
+                            let _ = set_boot_protocol(controller, slot_id, iface_num);
+                            let _ = set_idle(controller, slot_id, iface_num);
+                            
+                            configure_hid_endpoint(
+                                controller, slot_id, port, speed,
+                                ep_addr, max_packet, interval,
+                            );
+                            
+                            if controller.devices[i].class == 0 {
+                                controller.devices[i].class = 0x03;
+                                controller.devices[i].subclass = subclass;
+                                controller.devices[i].protocol = protocol;
+                            }
+                            
+                            crate::serial_println!("[xHCI] HID endpoint configured: slot {} EP {:#x} max_pkt {} interval {}",
+                                slot_id, ep_addr, max_packet, interval);
+                        }
+                        0x08 => {
+                            // Mass storage: collect bulk endpoints
+                            if ep_addr & 0x80 != 0 {
+                                ms_in = Some((ep_addr, max_packet));
+                            } else {
+                                ms_out = Some((ep_addr, max_packet));
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                
+                // Configure mass storage bulk endpoints
+                if let (Some((in_addr, in_mps)), Some((out_addr, out_mps))) = (ms_in, ms_out) {
+                    if configure_bulk_endpoints(controller, slot_id, port, speed, in_addr, out_addr, in_mps, out_mps) {
+                        ms_devices.push((slot_id, in_addr, out_addr, in_mps, out_mps));
+                        
+                        if controller.devices[i].class == 0 {
+                            controller.devices[i].class = 0x08;
+                            controller.devices[i].subclass = 0x06;
+                            controller.devices[i].protocol = 0x50;
+                        }
+                    }
+                }
+            }
+        }
+        
+        crate::serial_println!("[xHCI] Device setup complete");
+    }
+    
+    // Initialize mass storage devices outside CONTROLLER lock
+    // (usb_storage bulk transfers need to lock CONTROLLER internally)
+    for (slot_id, in_addr, out_addr, in_mps, out_mps) in ms_devices {
+        super::usb_storage::init_device(slot_id, in_addr, out_addr, in_mps, out_mps);
+    }
+}
+
+// ============================================================================
+// Bulk Transfer Support (for USB Mass Storage)
+// ============================================================================
+
+/// Send data on a bulk OUT endpoint. Returns true on success.
+pub fn bulk_transfer_out(slot_id: u8, dci: u8, buf_phys: u64, length: u32) -> bool {
+    // Enqueue Normal TRB on the bulk OUT ring
+    {
+        let mut rings = SLOT_RINGS.lock();
+        let slot_rings = match rings.get_mut(slot_id as usize).and_then(|r| r.as_mut()) {
+            Some(r) => r,
+            None => return false,
+        };
+        
+        let ring = match slot_rings.bulk_out.as_mut() {
+            Some(r) => r,
+            None => return false,
+        };
+        
+        let trb = Trb {
+            parameter: buf_phys,
+            status: length,
+            control: (TRB_TYPE_NORMAL << 10) | TRB_IOC,
+        };
+        ring.enqueue_trb(trb);
+    }
+    
+    // Ring doorbell and wait for completion
     let mut ctrl = CONTROLLER.lock();
     let controller = match ctrl.as_mut() {
         Some(c) => c,
-        None => return,
+        None => return false,
     };
     
-    let num_devices = controller.devices.len();
-    if num_devices == 0 {
-        return;
+    unsafe {
+        let db = (controller.doorbell_base + (slot_id as u64) * 4) as *mut u32;
+        ptr::write_volatile(db, dci as u32);
     }
     
-    crate::serial_println!("[xHCI] Setting up {} devices...", num_devices);
-    
-    // Process each device: Enable Slot → Address → Get descriptors
-    for i in 0..num_devices {
-        let port = controller.devices[i].port;
-        let speed = controller.devices[i].speed;
-        
-        // Enable Slot
-        let slot_id = match enable_slot(controller) {
-            Some(id) => id,
-            None => {
-                crate::serial_println!("[xHCI] Failed to enable slot for port {}", port);
-                continue;
-            }
+    if let Some((cc, _, _)) = wait_transfer_event(controller) {
+        return cc == 1 || cc == 13; // Success or Short Packet
+    }
+    false
+}
+
+/// Receive data on a bulk IN endpoint. Returns number of bytes actually transferred.
+pub fn bulk_transfer_in(slot_id: u8, dci: u8, buf_phys: u64, length: u32) -> Option<u32> {
+    // Enqueue Normal TRB on the bulk IN ring
+    {
+        let mut rings = SLOT_RINGS.lock();
+        let slot_rings = match rings.get_mut(slot_id as usize).and_then(|r| r.as_mut()) {
+            Some(r) => r,
+            None => return None,
         };
         
-        controller.devices[i].slot_id = slot_id;
+        let ring = match slot_rings.bulk_in.as_mut() {
+            Some(r) => r,
+            None => return None,
+        };
         
-        // Address Device
-        if !address_device(controller, slot_id, port, speed) {
-            crate::serial_println!("[xHCI] Failed to address device on port {}", port);
-            continue;
-        }
-        
-        // Get Device Descriptor
-        let mut dev = controller.devices[i].clone();
-        if !get_device_descriptor(controller, slot_id, &mut dev) {
-            crate::serial_println!("[xHCI] Failed to get device descriptor for slot {}", slot_id);
-            continue;
-        }
-        controller.devices[i] = dev;
-        
-        // Get Configuration Descriptor + find HID endpoints
-        if let Some(hid_interfaces) = get_config_descriptor(controller, slot_id) {
-            for (iface_num, subclass, protocol, ep_addr, max_packet, interval) in &hid_interfaces {
-                // Set Boot Protocol for HID devices
-                let _ = set_boot_protocol(controller, slot_id, *iface_num);
-                let _ = set_idle(controller, slot_id, *iface_num);
-                
-                // Configure the interrupt IN endpoint
-                configure_hid_endpoint(
-                    controller, slot_id, port, speed,
-                    *ep_addr, *max_packet, *interval,
-                );
-                
-                // Update device class if it was 0 (composite device)
-                if controller.devices[i].class == 0 {
-                    controller.devices[i].class = 0x03; // HID
-                    controller.devices[i].subclass = *subclass;
-                    controller.devices[i].protocol = *protocol;
-                }
-                
-                crate::serial_println!("[xHCI] HID endpoint configured: slot {} EP {:#x} max_pkt {} interval {}",
-                    slot_id, ep_addr, max_packet, interval);
-            }
-        }
+        let trb = Trb {
+            parameter: buf_phys,
+            status: length,
+            control: (TRB_TYPE_NORMAL << 10) | TRB_IOC,
+        };
+        ring.enqueue_trb(trb);
     }
     
-    crate::serial_println!("[xHCI] Device setup complete");
+    // Ring doorbell and wait for completion
+    let mut ctrl = CONTROLLER.lock();
+    let controller = match ctrl.as_mut() {
+        Some(c) => c,
+        None => return None,
+    };
+    
+    unsafe {
+        let db = (controller.doorbell_base + (slot_id as u64) * 4) as *mut u32;
+        ptr::write_volatile(db, dci as u32);
+    }
+    
+    if let Some((cc, residue, _)) = wait_transfer_event(controller) {
+        if cc == 1 || cc == 13 {
+            // Transfer event reports bytes NOT transferred (residue)
+            return Some(length.saturating_sub(residue));
+        }
+    }
+    None
 }
 
 /// Poll all HID devices once for input reports

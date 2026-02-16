@@ -591,7 +591,21 @@ pub(super) fn cmd_mv(args: &[&str]) {
     }
 }
 
-pub(super) fn cmd_cat(args: &[&str], redirect: Option<(&str, bool)>) {
+pub(super) fn cmd_cat(args: &[&str], redirect: Option<(&str, bool)>, piped: Option<&str>) {
+    // If piped input, just output it
+    if let Some(input) = piped {
+        if let Some((file, append)) = redirect {
+            let _ = crate::ramfs::with_fs(|fs| {
+                if !fs.exists(file) { fs.touch(file).ok(); }
+                if append { fs.append_file(file, input.as_bytes()) } 
+                else { fs.write_file(file, input.as_bytes()) }
+            });
+        } else {
+            crate::print!("{}", input);
+        }
+        return;
+    }
+    
     if args.is_empty() {
         crate::println!("Usage: cat <file>");
         return;
@@ -687,65 +701,79 @@ pub(super) fn cmd_cat_vfs(path: &str) -> Option<alloc::string::String> {
     }
 }
 
-pub(super) fn cmd_head(args: &[&str]) {
-    if args.is_empty() {
+pub(super) fn cmd_head(args: &[&str], piped: Option<&str>) {
+    let lines: usize = if args.len() > 1 { args[1].parse().unwrap_or(10) }
+                        else if args.len() == 1 && args[0].starts_with('-') { args[0][1..].parse().unwrap_or(10) }
+                        else { 10 };
+    
+    let content_str = if let Some(input) = piped {
+        alloc::string::String::from(input)
+    } else if !args.is_empty() && !args[0].starts_with('-') {
+        match crate::ramfs::with_fs(|fs| fs.read_file(args[0]).map(|c| c.to_vec())) {
+            Ok(content) => match core::str::from_utf8(&content) {
+                Ok(t) => alloc::string::String::from(t),
+                Err(_) => return,
+            },
+            Err(e) => { crate::println_color!(COLOR_RED, "head: {}", e.as_str()); return; }
+        }
+    } else {
         crate::println!("Usage: head <file> [lines]");
         return;
-    }
+    };
     
-    let lines: usize = if args.len() > 1 { args[1].parse().unwrap_or(10) } else { 10 };
-    
-    match crate::ramfs::with_fs(|fs| fs.read_file(args[0]).map(|c| c.to_vec())) {
-        Ok(content) => {
-            if let Ok(text) = core::str::from_utf8(&content) {
-                for (i, line) in text.lines().enumerate() {
-                    if i >= lines { break; }
-                    crate::println!("{}", line);
-                }
-            }
-        }
-        Err(e) => crate::println_color!(COLOR_RED, "head: {}", e.as_str()),
+    for (i, line) in content_str.lines().enumerate() {
+        if i >= lines { break; }
+        crate::println!("{}", line);
     }
 }
 
-pub(super) fn cmd_tail(args: &[&str]) {
-    if args.is_empty() {
+pub(super) fn cmd_tail(args: &[&str], piped: Option<&str>) {
+    let lines: usize = if args.len() > 1 { args[1].parse().unwrap_or(10) } else { 10 };
+    
+    let content_str = if let Some(input) = piped {
+        alloc::string::String::from(input)
+    } else if !args.is_empty() {
+        match crate::ramfs::with_fs(|fs| fs.read_file(args[0]).map(|c| c.to_vec())) {
+            Ok(content) => match core::str::from_utf8(&content) {
+                Ok(t) => alloc::string::String::from(t),
+                Err(_) => return,
+            },
+            Err(e) => { crate::println_color!(COLOR_RED, "tail: {}", e.as_str()); return; }
+        }
+    } else {
         crate::println!("Usage: tail <file> [lines]");
         return;
-    }
+    };
     
-    let lines: usize = if args.len() > 1 { args[1].parse().unwrap_or(10) } else { 10 };
-    
-    match crate::ramfs::with_fs(|fs| fs.read_file(args[0]).map(|c| c.to_vec())) {
-        Ok(content) => {
-            if let Ok(text) = core::str::from_utf8(&content) {
-                let all: Vec<&str> = text.lines().collect();
-                let start = if all.len() > lines { all.len() - lines } else { 0 };
-                for line in &all[start..] {
-                    crate::println!("{}", line);
-                }
-            }
-        }
-        Err(e) => crate::println_color!(COLOR_RED, "tail: {}", e.as_str()),
+    let all: Vec<&str> = content_str.lines().collect();
+    let start = if all.len() > lines { all.len() - lines } else { 0 };
+    for line in &all[start..] {
+        crate::println!("{}", line);
     }
 }
 
-pub(super) fn cmd_wc(args: &[&str]) {
-    if args.is_empty() {
+pub(super) fn cmd_wc(args: &[&str], piped: Option<&str>) {
+    // Use piped input if available, otherwise read file
+    let (content_str, name) = if let Some(input) = piped {
+        (alloc::string::String::from(input), alloc::string::String::from("(stdin)"))
+    } else if !args.is_empty() {
+        match crate::ramfs::with_fs(|fs| fs.read_file(args[0]).map(|c| c.to_vec())) {
+            Ok(content) => {
+                match core::str::from_utf8(&content) {
+                    Ok(t) => (alloc::string::String::from(t), alloc::string::String::from(args[0])),
+                    Err(_) => return,
+                }
+            }
+            Err(e) => { crate::println_color!(COLOR_RED, "wc: {}", e.as_str()); return; }
+        }
+    } else {
         crate::println!("Usage: wc <file>");
         return;
-    }
+    };
     
-    match crate::ramfs::with_fs(|fs| fs.read_file(args[0]).map(|c| c.to_vec())) {
-        Ok(content) => {
-            if let Ok(text) = core::str::from_utf8(&content) {
-                let lines = text.lines().count();
-                let words = text.split_whitespace().count();
-                crate::println!("{:>6} {:>6} {:>6} {}", lines, words, content.len(), args[0]);
-            }
-        }
-        Err(e) => crate::println_color!(COLOR_RED, "wc: {}", e.as_str()),
-    }
+    let lines = content_str.lines().count();
+    let words = content_str.split_whitespace().count();
+    crate::println!("{:>6} {:>6} {:>6} {}", lines, words, content_str.len(), name);
 }
 
 pub(super) fn cmd_stat(args: &[&str]) {
@@ -858,32 +886,43 @@ pub(super) fn cmd_echo(args: &[&str], redirect: Option<(&str, bool)>) {
     }
 }
 
-pub(super) fn cmd_grep(args: &[&str]) {
-    if args.len() < 2 {
-        crate::println!("Usage: grep <pattern> <file>");
+pub(super) fn cmd_grep(args: &[&str], piped: Option<&str>) {
+    if args.is_empty() {
+        crate::println!("Usage: grep <pattern> [file]");
         return;
     }
     
     let pattern = args[0];
     
-    match crate::ramfs::with_fs(|fs| fs.read_file(args[1]).map(|c| c.to_vec())) {
-        Ok(content) => {
-            if let Ok(text) = core::str::from_utf8(&content) {
-                for line in text.lines() {
-                    if line.contains(pattern) {
-                        let parts: Vec<&str> = line.split(pattern).collect();
-                        for (i, part) in parts.iter().enumerate() {
-                            crate::print!("{}", part);
-                            if i < parts.len() - 1 {
-                                crate::print_color!(COLOR_RED, "{}", pattern);
-                            }
-                        }
-                        crate::println!();
-                    }
+    // Use piped input if available, otherwise read file
+    let content = if let Some(input) = piped {
+        alloc::string::String::from(input)
+    } else if args.len() >= 2 {
+        match crate::ramfs::with_fs(|fs| fs.read_file(args[1]).map(|c| c.to_vec())) {
+            Ok(content) => {
+                match core::str::from_utf8(&content) {
+                    Ok(t) => alloc::string::String::from(t),
+                    Err(_) => return,
                 }
             }
+            Err(e) => { crate::println_color!(COLOR_RED, "grep: {}", e.as_str()); return; }
         }
-        Err(e) => crate::println_color!(COLOR_RED, "grep: {}", e.as_str()),
+    } else {
+        crate::println!("Usage: grep <pattern> <file>");
+        return;
+    };
+    
+    for line in content.lines() {
+        if line.contains(pattern) {
+            let parts: Vec<&str> = line.split(pattern).collect();
+            for (i, part) in parts.iter().enumerate() {
+                crate::print!("{}", part);
+                if i < parts.len() - 1 {
+                    crate::print_color!(COLOR_RED, "{}", pattern);
+                }
+            }
+            crate::println!();
+        }
     }
 }
 

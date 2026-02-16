@@ -192,43 +192,49 @@ pub(super) fn cmd_realpath(args: &[&str]) {
     crate::println!("{}", path);
 }
 
-pub(super) fn cmd_sort(args: &[&str]) {
-    if args.is_empty() {
+pub(super) fn cmd_sort(args: &[&str], piped: Option<&str>) {
+    let content = if let Some(input) = piped {
+        Some(alloc::string::String::from(input))
+    } else if !args.is_empty() {
+        super::network::read_file_content(args[0])
+    } else {
         crate::println!("Usage: sort <file>");
         return;
-    }
+    };
     
-    // Read file content
-    let path = args[0];
-    match super::network::read_file_content(path) {
-        Some(content) => {
-            let mut lines: Vec<&str> = content.lines().collect();
+    match content {
+        Some(text) => {
+            let mut lines: Vec<&str> = text.lines().collect();
             lines.sort();
             for line in lines {
                 crate::println!("{}", line);
             }
         }
-        None => crate::println_color!(COLOR_RED, "sort: cannot read {}", path),
+        None => crate::println_color!(COLOR_RED, "sort: cannot read input"),
     }
 }
 
-pub(super) fn cmd_uniq(args: &[&str]) {
-    if args.is_empty() {
+pub(super) fn cmd_uniq(args: &[&str], piped: Option<&str>) {
+    let content = if let Some(input) = piped {
+        Some(alloc::string::String::from(input))
+    } else if !args.is_empty() {
+        super::network::read_file_content(args[0])
+    } else {
         crate::println!("Usage: uniq <file>");
         return;
-    }
+    };
     
-    match super::network::read_file_content(args[0]) {
-        Some(content) => {
+    match content {
+        Some(text) => {
             let mut last_line: Option<&str> = None;
-            for line in content.lines() {
+            for line in text.lines() {
                 if last_line != Some(line) {
                     crate::println!("{}", line);
                     last_line = Some(line);
                 }
             }
         }
-        None => crate::println_color!(COLOR_RED, "uniq: cannot read {}", args[0]),
+        None => crate::println_color!(COLOR_RED, "uniq: cannot read input"),
     }
 }
 

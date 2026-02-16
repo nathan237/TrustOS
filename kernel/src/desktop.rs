@@ -15,7 +15,6 @@ use alloc::format;
 use alloc::collections::BTreeMap;
 use spin::Mutex;
 use crate::framebuffer::{self, COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN, COLOR_WHITE, COLOR_BLACK};
-use crate::graphics::desktop_gfx;
 use crate::apps::text_editor::{EditorState, render_editor};
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -26,21 +25,9 @@ static EXIT_DESKTOP_FLAG: AtomicBool = AtomicBool::new(false);
 // 🧮 MATH UTILITIES for no_std environment
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Fast approximate square root using Newton-Raphson method
-fn fast_sqrt(x: f32) -> f32 {
-    if x <= 0.0 { return 0.0; }
-    let mut guess = x / 2.0;
-    for _ in 0..5 {
-        guess = (guess + x / guess) / 2.0;
-    }
-    guess
-}
+/// Fast approximate square root (delegates to shared math)
+fn fast_sqrt(x: f32) -> f32 { crate::math::fast_sqrt(x) }
 
-/// Approximate x^2
-#[allow(dead_code)]
-fn square(x: f32) -> f32 {
-    x * x
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🎨 TRUSTOS OFFICIAL PALETTE - Matrix-like professional dark theme
@@ -3998,6 +3985,65 @@ struct AppConfig {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+        
+        // ── Draw TrustOS fleur-de-lis logo above center text ──
+        // The logo integrates with the matrix rain: edge pixels glow green
+        {
+            let logo_w = crate::logo_bitmap::LOGO_W as u32;
+            let logo_h = crate::logo_bitmap::LOGO_H as u32;
+            let logo_x = (width / 2).saturating_sub(logo_w / 2);
+            // Place logo above the "TrustOS" text, with a small gap
+            let logo_y = text_y0.saturating_sub(logo_h + 16);
+            
+            for ly in 0..logo_h {
+                for lx in 0..logo_w {
+                    let argb = crate::logo_bitmap::LOGO_PIXELS[(ly as usize) * (logo_w as usize) + (lx as usize)];
+                    let a = (argb >> 24) & 0xFF;
+                    let r = (argb >> 16) & 0xFF;
+                    let g = (argb >> 8) & 0xFF;
+                    let b = argb & 0xFF;
+                    
+                    // Skip near-black / transparent pixels
+                    if a < 20 { continue; }
+                    let luminance = (r * 77 + g * 150 + b * 29) >> 8;
+                    if luminance < 15 { continue; }
+                    
+                    let px = logo_x + lx;
+                    let py = logo_y + ly;
+                    if px >= width || py >= height { continue; }
+                    
+                    // Edge glow: edge pixels get a subtle green corona
+                    if crate::logo_bitmap::logo_edge_pixel(lx as usize, ly as usize) {
+                        // Glow in 2px radius around edges
+                        for gdy in 0..3u32 {
+                            for gdx in 0..3u32 {
+                                let gx = px + gdx;
+                                let gy = py + gdy;
+                                if gx > 0 && gy > 0 && gx - 1 < width && gy - 1 < height {
+                                    let existing = framebuffer::get_pixel(gx - 1, gy - 1);
+                                    let eg = (existing >> 8) & 0xFF;
+                                    if eg < 30 {
+                                        framebuffer::put_pixel(gx - 1, gy - 1, 0xFF001A08);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Draw actual pixel with alpha blend
+                    if a >= 240 {
+                        framebuffer::put_pixel(px, py, argb);
+                    } else {
+                        let bg = framebuffer::get_pixel(px, py);
+                        let inv_a = 255 - a;
+                        let nr = ((r * a + ((bg >> 16) & 0xFF) * inv_a) / 255) & 0xFF;
+                        let ng = ((g * a + ((bg >> 8) & 0xFF) * inv_a) / 255) & 0xFF;
+                        let nb = ((b * a + (bg & 0xFF) * inv_a) / 255) & 0xFF;
+                        framebuffer::put_pixel(px, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
                     }
                 }
             }
