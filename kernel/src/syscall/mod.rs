@@ -114,6 +114,12 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         CHDIR => sys_chdir(a1),
         MKDIR => sys_mkdir(a1),
         UNLINK => sys_unlink(a1),
+        DUP => linux::sys_dup(a1 as i32),
+        DUP2 => linux::sys_dup2(a1 as i32, a2 as i32),
+        DUP3 => linux::sys_dup2(a1 as i32, a2 as i32),
+        POLL => linux::sys_poll(a1, a2 as u32, a3 as i32),
+        GETDENTS64 => linux::sys_getdents64(a1 as i32, a2, a3 as u32),
+        OPENAT => linux::sys_openat(a1 as i32, a2, a3 as u32),
         
         // ====== Memory Management ======
         MMAP => linux::sys_mmap(a1, a2, a3, a4, a5 as i64, a6),
@@ -493,19 +499,29 @@ fn sys_execve(pathname: u64, _argv: u64, _envp: u64) -> i64 {
     }
 }
 
-fn sys_wait4(pid: i32, wstatus: u64, _options: u32) -> i64 {
-    // Convert pid for the wait call
+fn sys_wait4(pid: i32, wstatus: u64, options: u32) -> i64 {
     let target_pid = if pid > 0 { pid as u32 } else { 0 };
+    let wnohang = options & 1 != 0; // WNOHANG
     
-    match crate::process::wait(target_pid) {
-        Ok(status) => {
-            if wstatus != 0 && validate_user_ptr(wstatus, 4, true) {
-                unsafe { *(wstatus as *mut i32) = status; }
+    // Blocking wait: retry with yields (up to ~5 s)
+    let max_tries: u32 = if wnohang { 1 } else { 5000 };
+    
+    for _ in 0..max_tries {
+        match crate::process::wait(target_pid) {
+            Ok(status) => {
+                if wstatus != 0 && validate_user_ptr(wstatus, 4, true) {
+                    // Linux encodes exit status as (code << 8)
+                    unsafe { *(wstatus as *mut i32) = (status & 0xFF) << 8; }
+                }
+                return target_pid as i64;
             }
-            target_pid as i64
+            Err(_) => {
+                if wnohang { return 0; }
+                crate::thread::yield_thread();
+            }
         }
-        Err(_) => errno::ECHILD,
     }
+    errno::ECHILD
 }
 
 fn sys_kill(pid: i32, sig: i32) -> i64 {
@@ -582,9 +598,11 @@ fn sys_listen(fd: i32, backlog: u32) -> i64 {
 }
 
 /// Accept a connection
-fn sys_accept(fd: i32, _addr_ptr: u64, _addr_len_ptr: u64) -> i64 {
-    // TODO: Implement accept for listening sockets
-    errno::ENOSYS
+fn sys_accept(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
+    match crate::netstack::socket::accept(fd, addr_ptr, addr_len_ptr) {
+        Ok(new_fd) => new_fd as i64,
+        Err(e) => e as i64,
+    }
 }
 
 /// Send data to connected socket

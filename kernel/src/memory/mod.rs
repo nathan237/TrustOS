@@ -6,6 +6,7 @@
 pub mod heap;
 pub mod frame;
 pub mod paging;
+pub mod cow;
 
 use core::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
 

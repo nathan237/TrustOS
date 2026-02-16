@@ -204,9 +204,67 @@ pub fn listen(fd: i32, backlog: u32) -> Result<(), i32> {
     
     sock.state = SocketState::Listening;
     sock.backlog = backlog.max(1);
-    
-    crate::serial_println!("[SOCKET] Listening fd={} backlog={}", fd, backlog);
+    let port = sock.local_port;
+    let bl = sock.backlog;
+    drop(table);
+
+    // Register with TCP listener infrastructure
+    crate::netstack::tcp::listen_on(port, bl);
+    crate::serial_println!("[SOCKET] Listening fd={} port={} backlog={}", fd, port, bl);
     Ok(())
+}
+
+/// Accept an incoming connection on a listening socket
+pub fn accept(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> Result<i32, i32> {
+    let listen_port = {
+        let table = SOCKET_TABLE.lock();
+        let sock = table.get(&fd).ok_or(-9i32)?; // EBADF
+        if sock.state != SocketState::Listening {
+            return Err(-22); // EINVAL
+        }
+        sock.local_port
+    };
+
+    // Poll for an accepted connection (with timeout)
+    for _ in 0..2000 {
+        crate::netstack::poll();
+
+        if let Some((src_port, remote_ip, remote_port)) =
+            crate::netstack::tcp::accept_connection(listen_port)
+        {
+            let new_fd = NEXT_SOCKET_FD.fetch_add(1, Ordering::Relaxed);
+            let mut new_sock = Socket::new(AddressFamily::Inet, SocketType::Stream, 0);
+            new_sock.state = SocketState::Connected;
+            new_sock.local_port = src_port;
+            new_sock.tcp_src_port = src_port;
+            new_sock.remote_addr = Some(SockAddrIn::new(remote_ip, remote_port));
+            SOCKET_TABLE.lock().insert(new_fd, new_sock);
+
+            // Write peer address if the caller requested it
+            if addr_ptr != 0 && addr_len_ptr != 0 {
+                let sa = SockAddrIn::new(remote_ip, remote_port);
+                if crate::memory::validate_user_ptr(addr_ptr, core::mem::size_of::<SockAddrIn>(), true) {
+                    unsafe { *(addr_ptr as *mut SockAddrIn) = sa; }
+                }
+                if crate::memory::validate_user_ptr(addr_len_ptr, 4, true) {
+                    unsafe { *(addr_len_ptr as *mut u32) = core::mem::size_of::<SockAddrIn>() as u32; }
+                }
+            }
+
+            crate::serial_println!(
+                "[SOCKET] accept fd={} -> new_fd={} remote={}:{}",
+                fd, new_fd,
+                remote_ip.iter().map(|b| alloc::format!("{}", b)).collect::<alloc::vec::Vec<_>>().join("."),
+                remote_port
+            );
+            return Ok(new_fd);
+        }
+
+        // Brief yield before retrying
+        for _ in 0..5000 { core::hint::spin_loop(); }
+    }
+
+    Err(-11) // EAGAIN
 }
 
 /// Connect to remote address
@@ -479,4 +537,17 @@ pub fn is_socket(fd: i32) -> bool {
 /// Get socket state (for debugging)
 pub fn get_state(fd: i32) -> Option<SocketState> {
     SOCKET_TABLE.lock().get(&fd).map(|s| s.state)
+}
+
+/// Check if socket has data available for reading
+pub fn has_readable_data(fd: i32) -> bool {
+    let table = SOCKET_TABLE.lock();
+    if let Some(sock) = table.get(&fd) {
+        if sock.state == SocketState::Connected {
+            if let Some(addr) = &sock.remote_addr {
+                return crate::netstack::tcp::receive_data(addr.ip(), addr.port(), sock.tcp_src_port).is_some();
+            }
+        }
+    }
+    false
 }

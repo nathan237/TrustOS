@@ -1,7 +1,7 @@
 ﻿==================================================================
   TrustOS Automated Test Report (QEMU)
-  Generated: 2026-02-16 12:30:02
-  Boot time: 12.7s  |  Test duration: 151.8s
+  Generated: 2026-02-16 16:48:32
+  Boot time: 9.6s  |  Test duration: 151.6s
   QEMU: q35, 256M RAM, 2 CPUs, virtio-net, serial TCP
 ==================================================================
 

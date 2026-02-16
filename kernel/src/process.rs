@@ -214,6 +214,24 @@ impl Process {
     pub fn getenv(&self, key: &str) -> Option<&str> {
         self.env.get(key).map(|s| s.as_str())
     }
+    
+    /// Duplicate fd to the lowest available number
+    pub fn dup_fd(&mut self, old_fd: i32) -> Result<i32, &'static str> {
+        let entry = self.fd_table.get(&old_fd).ok_or("Bad fd")?.clone();
+        let new_fd = self.next_fd;
+        self.next_fd += 1;
+        self.fd_table.insert(new_fd, entry);
+        Ok(new_fd)
+    }
+    
+    /// Duplicate fd to a specific target number
+    pub fn dup2_fd(&mut self, old_fd: i32, new_fd: i32) -> Result<i32, &'static str> {
+        if old_fd == new_fd { return Ok(new_fd); }
+        let entry = self.fd_table.get(&old_fd).ok_or("Bad fd")?.clone();
+        self.fd_table.remove(&new_fd);
+        self.fd_table.insert(new_fd, entry);
+        Ok(new_fd)
+    }
 }
 
 /// Process table
@@ -284,18 +302,86 @@ pub fn create(name: &str, ppid: Pid) -> Result<Pid, &'static str> {
     Ok(pid)
 }
 
-/// Fork the current process (creates a copy)
+/// Fork the current process with Copy-on-Write semantics.
+///
+/// Creates a child process that shares the parent's physical pages.
+/// Pages are marked read-only + COW; on first write the page fault handler
+/// allocates a private copy (see `memory::cow`).
 pub fn fork() -> Result<Pid, &'static str> {
     let current = current_pid();
-    let table = PROCESS_TABLE.read();
     
-    let parent = table.processes.get(&current)
-        .ok_or("Current process not found")?;
+    // Read parent data while holding read lock
+    let (name, cwd, env, fd_table, next_fd, parent_cr3, memory) = {
+        let table = PROCESS_TABLE.read();
+        let parent = table.processes.get(&current)
+            .ok_or("Current process not found")?;
+        (
+            parent.name.clone(),
+            parent.cwd.clone(),
+            parent.env.clone(),
+            parent.fd_table.clone(),
+            parent.next_fd,
+            parent.cr3,
+            parent.memory.clone(),
+        )
+    };
     
-    let name = parent.name.clone();
-    drop(table);
+    // Clone address space with COW (drops all locks first)
+    let kernel_cr3 = crate::memory::paging::kernel_cr3();
+    let (address_space, cr3) = if parent_cr3 != kernel_cr3 {
+        match crate::memory::cow::clone_cow(parent_cr3) {
+            Some(space) => {
+                let c = space.cr3();
+                (Some(Arc::new(Mutex::new(space))), c)
+            }
+            None => {
+                // Fallback: fresh address space
+                match AddressSpace::new_with_kernel() {
+                    Some(space) => {
+                        let c = space.cr3();
+                        (Some(Arc::new(Mutex::new(space))), c)
+                    }
+                    None => (None, kernel_cr3)
+                }
+            }
+        }
+    } else {
+        (None, kernel_cr3)
+    };
     
-    create(&name, current)
+    // Allocate PID and insert child under write lock
+    let mut table = PROCESS_TABLE.write();
+    let pid = table.alloc_pid();
+    
+    let child = Process {
+        pid,
+        ppid: current,
+        name,
+        state: ProcessState::Ready,
+        flags: ProcessFlags(ProcessFlags::NONE),
+        exit_code: 0,
+        context: CpuContext::default(),
+        memory,
+        fd_table,   // inherits parent's fd table
+        next_fd,
+        cwd,
+        env,
+        cpu_time: 0,
+        children: Vec::new(),
+        cr3,
+        address_space,
+    };
+    
+    if let Some(parent) = table.processes.get_mut(&current) {
+        parent.children.push(pid);
+    }
+    table.processes.insert(pid, child);
+    
+    // Initialize signal state for child
+    crate::signals::init_process(pid);
+    
+    crate::log_debug!("[PROC] COW-fork: {} -> {}", current, pid);
+    Ok(pid)
 }
 
 /// Exit the current process

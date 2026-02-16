@@ -39,6 +39,14 @@ pub extern "x86-interrupt" fn page_fault_handler(
     // ── Demand paging: only for user-mode faults on non-present pages ──
     let is_user_fault = error_code.contains(PageFaultErrorCode::USER_MODE);
     let is_protection = error_code.contains(PageFaultErrorCode::PROTECTION_VIOLATION);
+    let is_write = error_code.contains(PageFaultErrorCode::CAUSED_BY_WRITE);
+    
+    // ── COW: user write fault on copy-on-write page ──
+    if is_user_fault && is_protection && is_write {
+        if crate::memory::cow::handle_cow_fault(fault_addr) {
+            return; // COW page resolved — resume user process
+        }
+    }
     
     if is_user_fault && !is_protection {
         // Fault on a non-present page from Ring 3 — try to service it

@@ -735,3 +735,51 @@ pub fn sync_all() -> VfsResult<()> {
     let _ = block_cache::sync();
     Ok(())
 }
+
+/// Duplicate a file descriptor (lowest available new fd)
+pub fn dup_fd(old_fd: Fd) -> VfsResult<Fd> {
+    let vfs = VFS.read();
+    let file = vfs.open_files.get(&old_fd).ok_or(VfsError::BadFd)?;
+    let copy = OpenFile {
+        ino: file.ino,
+        mount_idx: file.mount_idx,
+        offset: file.offset,
+        flags: file.flags,
+    };
+    let new_fd = vfs.alloc_fd();
+    drop(vfs);
+    let mut vfs = VFS.write();
+    vfs.open_files.insert(new_fd, copy);
+    Ok(new_fd)
+}
+
+/// Duplicate fd to a specific target number
+pub fn dup2_fd(old_fd: Fd, new_fd: Fd) -> VfsResult<Fd> {
+    if old_fd == new_fd {
+        if VFS.read().open_files.contains_key(&old_fd) { return Ok(new_fd); }
+        return Err(VfsError::BadFd);
+    }
+    let vfs = VFS.read();
+    let file = vfs.open_files.get(&old_fd).ok_or(VfsError::BadFd)?;
+    let copy = OpenFile {
+        ino: file.ino,
+        mount_idx: file.mount_idx,
+        offset: file.offset,
+        flags: file.flags,
+    };
+    drop(vfs);
+    let mut vfs = VFS.write();
+    vfs.open_files.remove(&new_fd);
+    vfs.open_files.insert(new_fd, copy);
+    Ok(new_fd)
+}
+
+/// Get file stat by fd
+pub fn fstat_fd(fd: Fd) -> VfsResult<Stat> {
+    let vfs = VFS.read();
+    let file = vfs.open_files.get(&fd).ok_or(VfsError::BadFd)?;
+    let mount_idx = file.mount_idx;
+    let ino = file.ino;
+    let fs = &vfs.mounts[mount_idx].fs;
+    fs.stat(ino)
+}

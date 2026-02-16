@@ -15,12 +15,20 @@ pub mod flags {
     pub const URG: u8 = 0x20;
 }
 
-/// TCP connection state (minimal)
+/// TCP connection state — full RFC 793 state machine
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TcpState {
     Closed,
+    Listen,
     SynSent,
+    SynReceived,
     Established,
+    FinWait1,
+    FinWait2,
+    CloseWait,
+    LastAck,
+    TimeWait,
+    Closing,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -51,6 +59,42 @@ static CONNECTIONS: Mutex<BTreeMap<ConnectionId, TcpConnection>> = Mutex::new(BT
 static RX_DATA: Mutex<BTreeMap<ConnectionId, Vec<Vec<u8>>>> = Mutex::new(BTreeMap::new());
 static NEXT_EPHEMERAL_PORT: AtomicU16 = AtomicU16::new(49152);
 static NEXT_SEQ: AtomicU32 = AtomicU32::new(1);
+
+/// Listener for server-side TCP (tracks port → accept queue)
+struct Listener {
+    backlog: u32,
+    accept_queue: Vec<ConnectionId>,
+}
+
+/// Active listeners keyed by port
+static LISTENERS: Mutex<BTreeMap<u16, Listener>> = Mutex::new(BTreeMap::new());
+
+/// Register a listening port
+pub fn listen_on(port: u16, backlog: u32) {
+    LISTENERS.lock().insert(port, Listener { backlog, accept_queue: Vec::new() });
+    crate::serial_println!("[TCP] Listening on port {}", port);
+}
+
+/// Stop listening on a port
+pub fn stop_listening(port: u16) {
+    LISTENERS.lock().remove(&port);
+}
+
+/// Accept a completed connection from the listener queue.
+/// Returns (our_src_port, remote_ip, remote_port) or None.
+pub fn accept_connection(listen_port: u16) -> Option<(u16, [u8; 4], u16)> {
+    let mut listeners = LISTENERS.lock();
+    let listener = listeners.get_mut(&listen_port)?;
+    if listener.accept_queue.is_empty() { return None; }
+    let conn_id = listener.accept_queue.remove(0);
+    let remote_ip = [
+        ((conn_id.dst_ip >> 24) & 0xFF) as u8,
+        ((conn_id.dst_ip >> 16) & 0xFF) as u8,
+        ((conn_id.dst_ip >> 8) & 0xFF) as u8,
+        (conn_id.dst_ip & 0xFF) as u8,
+    ];
+    Some((conn_id.src_port, remote_ip, conn_id.dst_port))
+}
 
 /// Performance: batch ACK threshold (send ACK every N packets or after timeout)
 const DELAYED_ACK_PACKETS: u8 = 4;
@@ -101,7 +145,7 @@ fn get_source_ip() -> [u8; 4] {
         .unwrap_or([10, 0, 2, 15])
 }
 
-/// Handle incoming TCP packet (optimized with delayed ACK)
+/// Handle incoming TCP packet — full state machine
 pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
     if data.len() < 20 {
         return;
@@ -110,9 +154,9 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
     let src_port = u16::from_be_bytes([data[0], data[1]]);
     let dst_port = u16::from_be_bytes([data[2], data[3]]);
     let seq = u32::from_be_bytes([data[4], data[5], data[6], data[7]]);
-    let ack = u32::from_be_bytes([data[8], data[9], data[10], data[11]]);
+    let ack_num = u32::from_be_bytes([data[8], data[9], data[10], data[11]]);
     let data_offset = data[12] >> 4;
-    let flags = data[13];
+    let tcp_flags = data[13];
     let header_len = (data_offset as usize) * 4;
 
     if data.len() < header_len {
@@ -126,94 +170,175 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
         dst_port: src_port,
     };
 
-    let mut conns = CONNECTIONS.lock();
-    let conn = match conns.get_mut(&conn_id) {
-        Some(c) => c,
-        None => return,
-    };
-
-    // Handle RST - immediately close connection
-    if (flags & flags::RST) != 0 {
-        // (RST log removed to keep serial clean)
-        conn.state = TcpState::Closed;
-        conn.fin_received = true;
-        conn.fin_sent = true;
-        return;
-    }
-
-    if conn.fin_received && conn.fin_sent {
-        return;
-    }
-
-    // Handle SYN-ACK (connection establishment) - always ACK immediately
-    if (flags & flags::SYN) != 0 && (flags & flags::ACK) != 0 {
-        conn.state = TcpState::Established;
-        conn.ack = seq.wrapping_add(1);
-        conn.pending_acks = 0;
-        conn.last_ack_time = crate::logger::get_ticks();
-        // (connection established log removed)
-        drop(conns);
-        let _ = send_ack(src_ip, src_port, dst_port);
-        return;
-    }
-
     let payload = &data[header_len..];
-    let fin = (flags & flags::FIN) != 0;
-    let psh = (flags & flags::PSH) != 0;
+    let fin  = (tcp_flags & flags::FIN) != 0;
+    let syn  = (tcp_flags & flags::SYN) != 0;
+    let ack  = (tcp_flags & flags::ACK) != 0;
+    let rst  = (tcp_flags & flags::RST) != 0;
+    let psh  = (tcp_flags & flags::PSH) != 0;
     let payload_len = payload.len() as u32;
 
-    if fin && payload_len == 0 && conn.fin_received && seq.wrapping_add(1) <= conn.ack {
-        return;
-    }
+    let mut conns = CONNECTIONS.lock();
 
-    if !payload.is_empty() || fin {
-        let fin_inc = if fin { 1 } else { 0 };
-        let new_ack = seq.wrapping_add(payload_len).wrapping_add(fin_inc);
-        let should_send_fin = fin && !conn.fin_sent;
-
-        if new_ack > conn.ack {
-            if !payload.is_empty() {
-                // (payload log removed)
-                // Store payload in RX buffer
-                let mut rx = RX_DATA.lock();
-                rx.entry(conn_id).or_insert_with(Vec::new).push(payload.to_vec());
-                drop(rx);
-            }
-
-            conn.ack = new_ack;
-            conn.pending_acks = conn.pending_acks.saturating_add(1);
-        }
-
-        if fin {
+    if let Some(conn) = conns.get_mut(&conn_id) {
+        // ── RST — immediately close ──
+        if rst {
+            conn.state = TcpState::Closed;
             conn.fin_received = true;
+            conn.fin_sent = true;
+            return;
         }
 
-        // Delayed ACK: only send ACK when:
-        // 1. FIN received (must ACK immediately)
-        // 2. PSH flag set (sender wants immediate response)
-        // 3. Accumulated enough packets
-        // 4. Timeout exceeded
-        let now = crate::logger::get_ticks();
-        let should_ack = fin 
-            || psh 
-            || conn.pending_acks >= DELAYED_ACK_PACKETS
-            || now.saturating_sub(conn.last_ack_time) >= DELAYED_ACK_MS;
+        if conn.fin_received && conn.fin_sent && conn.state == TcpState::Closed {
+            return;
+        }
 
-        if should_ack {
-            conn.pending_acks = 0;
-            conn.last_ack_time = now;
-            drop(conns);
-            let _ = send_ack(src_ip, src_port, dst_port);
-            if should_send_fin {
-                let _ = send_fin(src_ip, src_port, dst_port);
+        match conn.state {
+            // ── Client handshake: waiting for SYN-ACK ──
+            TcpState::SynSent => {
+                if syn && ack {
+                    conn.state = TcpState::Established;
+                    conn.ack = seq.wrapping_add(1);
+                    conn.pending_acks = 0;
+                    conn.last_ack_time = crate::logger::get_ticks();
+                    drop(conns);
+                    let _ = send_ack(src_ip, src_port, dst_port);
+                }
             }
-        } else {
-            drop(conns);
-        }
-        if should_send_fin {
-            let _ = send_fin(src_ip, src_port, dst_port);
-        }
 
+            // ── Server handshake: waiting for ACK to complete 3-way ──
+            TcpState::SynReceived => {
+                if ack {
+                    conn.state = TcpState::Established;
+                    let listen_port = conn_id.src_port;
+                    drop(conns);
+                    // Move connection to the accept queue
+                    let mut listeners = LISTENERS.lock();
+                    if let Some(listener) = listeners.get_mut(&listen_port) {
+                        listener.accept_queue.push(conn_id);
+                    }
+                }
+            }
+
+            // ── Data transfer ──
+            TcpState::Established => {
+                // Store payload
+                if !payload.is_empty() {
+                    let new_ack = seq.wrapping_add(payload_len);
+                    if new_ack > conn.ack {
+                        conn.ack = new_ack;
+                        let mut rx = RX_DATA.lock();
+                        rx.entry(conn_id).or_insert_with(Vec::new).push(payload.to_vec());
+                    }
+                }
+
+                if fin {
+                    // Peer initiated close → CloseWait
+                    conn.ack = seq.wrapping_add(payload_len).wrapping_add(1);
+                    conn.fin_received = true;
+                    conn.state = TcpState::CloseWait;
+                    drop(conns);
+                    let _ = send_ack(src_ip, src_port, dst_port);
+                    return;
+                }
+
+                // Delayed ACK logic
+                if !payload.is_empty() {
+                    conn.pending_acks = conn.pending_acks.saturating_add(1);
+                    let now = crate::logger::get_ticks();
+                    let should_ack = psh
+                        || conn.pending_acks >= DELAYED_ACK_PACKETS
+                        || now.saturating_sub(conn.last_ack_time) >= DELAYED_ACK_MS;
+                    if should_ack {
+                        conn.pending_acks = 0;
+                        conn.last_ack_time = now;
+                        drop(conns);
+                        let _ = send_ack(src_ip, src_port, dst_port);
+                    }
+                }
+            }
+
+            // ── Active close: we sent FIN, waiting for ACK/FIN ──
+            TcpState::FinWait1 => {
+                if fin && ack {
+                    // Simultaneous close shortcut → TimeWait
+                    conn.ack = seq.wrapping_add(1);
+                    conn.fin_received = true;
+                    conn.state = TcpState::TimeWait;
+                    drop(conns);
+                    let _ = send_ack(src_ip, src_port, dst_port);
+                } else if fin {
+                    conn.ack = seq.wrapping_add(1);
+                    conn.fin_received = true;
+                    conn.state = TcpState::Closing;
+                    drop(conns);
+                    let _ = send_ack(src_ip, src_port, dst_port);
+                } else if ack {
+                    conn.state = TcpState::FinWait2;
+                }
+            }
+
+            TcpState::FinWait2 => {
+                if fin {
+                    conn.ack = seq.wrapping_add(1);
+                    conn.fin_received = true;
+                    conn.state = TcpState::TimeWait;
+                    drop(conns);
+                    let _ = send_ack(src_ip, src_port, dst_port);
+                }
+            }
+
+            TcpState::Closing => {
+                if ack {
+                    conn.state = TcpState::TimeWait;
+                }
+            }
+
+            TcpState::LastAck => {
+                if ack {
+                    conn.state = TcpState::Closed;
+                }
+            }
+
+            TcpState::CloseWait => {
+                // May still receive data retransmissions
+                if !payload.is_empty() {
+                    conn.ack = seq.wrapping_add(payload_len);
+                    let mut rx = RX_DATA.lock();
+                    rx.entry(conn_id).or_insert_with(Vec::new).push(payload.to_vec());
+                }
+            }
+
+            _ => {}
+        }
+    } else {
+        // ── No existing connection — check listeners for incoming SYN ──
+        if syn && !ack {
+            let mut listeners = LISTENERS.lock();
+            if let Some(listener) = listeners.get_mut(&dst_port) {
+                if listener.accept_queue.len() < listener.backlog as usize + 16 {
+                    let init_seq = NEXT_SEQ.fetch_add(1, Ordering::Relaxed);
+                    let new_conn = TcpConnection {
+                        state: TcpState::SynReceived,
+                        seq: init_seq.wrapping_add(1),
+                        ack: seq.wrapping_add(1),
+                        fin_received: false,
+                        fin_sent: false,
+                        pending_acks: 0,
+                        last_ack_time: crate::logger::get_ticks(),
+                        last_sent_seq: init_seq,
+                        last_sent_time: crate::logger::get_ticks(),
+                        retransmit_count: 0,
+                    };
+                    drop(listeners);
+                    conns.insert(conn_id, new_conn);
+                    drop(conns);
+                    // Send SYN-ACK
+                    let _ = send_syn_ack(src_ip, src_port, dst_port,
+                                         seq.wrapping_add(1), init_seq);
+                }
+            }
+        }
     }
 }
 
@@ -264,6 +389,28 @@ pub fn send_syn(dest_ip: [u8; 4], dest_port: u16) -> Result<u16, &'static str> {
 
     crate::netstack::ip::send_packet(dest_ip, 6, &segment)?;
     Ok(src_port)
+}
+
+/// Send a TCP SYN-ACK (server side of handshake)
+fn send_syn_ack(dest_ip: [u8; 4], dest_port: u16, src_port: u16, ack_num: u32, seq: u32) -> Result<(), &'static str> {
+    let src_ip = get_source_ip();
+
+    let mut segment = Vec::with_capacity(20);
+    segment.extend_from_slice(&src_port.to_be_bytes());
+    segment.extend_from_slice(&dest_port.to_be_bytes());
+    segment.extend_from_slice(&seq.to_be_bytes());
+    segment.extend_from_slice(&ack_num.to_be_bytes());
+    segment.push(0x50);
+    segment.push(flags::SYN | flags::ACK);
+    segment.extend_from_slice(&TCP_WINDOW_SIZE.to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes());
+    segment.extend_from_slice(&0u16.to_be_bytes());
+
+    let csum = tcp_checksum(src_ip, dest_ip, &segment);
+    segment[16] = (csum >> 8) as u8;
+    segment[17] = (csum & 0xFF) as u8;
+
+    crate::netstack::ip::send_packet(dest_ip, 6, &segment)
 }
 
 /// Send ACK for an established connection
@@ -382,6 +529,12 @@ pub fn send_fin(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Result<(), &
     if let Some(conn) = conns.get_mut(&conn_id) {
         conn.seq = conn.seq.wrapping_add(1);
         conn.fin_sent = true;
+        // State transitions for active/passive close
+        match conn.state {
+            TcpState::Established => conn.state = TcpState::FinWait1,
+            TcpState::CloseWait  => conn.state = TcpState::LastAck,
+            _ => {}
+        }
     }
     Ok(())
 }

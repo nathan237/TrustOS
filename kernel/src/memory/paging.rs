@@ -123,7 +123,7 @@ impl PageTableEntry {
 #[repr(align(4096))]
 #[repr(C)]
 pub struct PageTable {
-    entries: [PageTableEntry; ENTRIES_PER_TABLE],
+    pub(crate) entries: [PageTableEntry; ENTRIES_PER_TABLE],
 }
 
 impl PageTable {

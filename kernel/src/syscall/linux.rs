@@ -449,13 +449,55 @@ pub fn sys_munmap(addr: u64, length: u64) -> i64 {
     0
 }
 
-/// sys_mprotect - Change memory protection
+/// sys_mprotect - Change memory protection (walks page tables)
 pub fn sys_mprotect(addr: u64, length: u64, prot: u64) -> i64 {
-    if addr == 0 {
+    use prot_flags::*;
+    use crate::memory::paging::{PageFlags, PageTable};
+    
+    if addr == 0 || addr & 0xFFF != 0 {
         return errno::EINVAL;
     }
     
-    // TODO: walk pages and update flags
+    let page_size = 4096u64;
+    let aligned_length = (length + page_size - 1) & !(page_size - 1);
+    let num_pages = (aligned_length / page_size) as usize;
+    
+    // Build new permission flags
+    let mut pf = PageFlags::PRESENT | PageFlags::USER;
+    if (prot & PROT_WRITE) != 0 {
+        pf |= PageFlags::WRITABLE;
+    }
+    if (prot & PROT_EXEC) == 0 {
+        pf |= PageFlags::NO_EXECUTE;
+    }
+    let new_flags = PageFlags::new(pf);
+    
+    crate::exec::with_current_address_space(|space| {
+        let hhdm = crate::memory::hhdm_offset();
+        let cr3 = space.cr3();
+        
+        for i in 0..num_pages {
+            let virt = addr + (i as u64 * page_size);
+            let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
+            let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
+            let pd_idx   = ((virt >> 21) & 0x1FF) as usize;
+            let pt_idx   = ((virt >> 12) & 0x1FF) as usize;
+            
+            let pml4 = unsafe { &*((cr3 + hhdm) as *const PageTable) };
+            if !pml4.entries[pml4_idx].is_present() { continue; }
+            let pdpt = unsafe { &*((pml4.entries[pml4_idx].phys_addr() + hhdm) as *const PageTable) };
+            if !pdpt.entries[pdpt_idx].is_present() { continue; }
+            let pd = unsafe { &*((pdpt.entries[pdpt_idx].phys_addr() + hhdm) as *const PageTable) };
+            if !pd.entries[pd_idx].is_present() { continue; }
+            let pt = unsafe { &mut *((pd.entries[pd_idx].phys_addr() + hhdm) as *mut PageTable) };
+            if !pt.entries[pt_idx].is_present() { continue; }
+            
+            let phys = pt.entries[pt_idx].phys_addr();
+            pt.entries[pt_idx].set(phys, new_flags);
+            unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags)); }
+        }
+    });
+    
     crate::log_debug!("[MPROTECT] addr={:#x} len={:#x} prot={:#x}", addr, length, prot);
     0
 }
@@ -770,7 +812,7 @@ pub fn sys_gettimeofday(tv: u64, tz: u64) -> i64 {
     0
 }
 
-/// sys_nanosleep - Sleep for specified time
+/// sys_nanosleep - Sleep for specified time (yield-based)
 pub fn sys_nanosleep(req: u64, rem: u64) -> i64 {
     if !validate_user_ptr(req, core::mem::size_of::<Timespec>(), false) {
         return errno::EFAULT;
@@ -779,10 +821,10 @@ pub fn sys_nanosleep(req: u64, rem: u64) -> i64 {
     let ts = unsafe { &*(req as *const Timespec) };
     let ms = (ts.tv_sec * 1000 + ts.tv_nsec / 1_000_000) as u64;
     
-    // Simple busy wait - in a real OS we'd block the thread
+    // Yield-based sleep — gives other threads CPU time
     let start = crate::time::uptime_ticks();
-    while crate::time::uptime_ticks() - start < ms {
-        core::hint::spin_loop();
+    while crate::time::uptime_ticks().saturating_sub(start) < ms {
+        crate::thread::yield_thread();
     }
     
     if rem != 0 && validate_user_ptr(rem, core::mem::size_of::<Timespec>(), true) {
@@ -1275,4 +1317,208 @@ pub fn sys_readv(fd: i32, iov: u64, iovcnt: u32) -> i64 {
     }
     
     total
+}
+
+// ============================================================================
+// File Descriptor Duplication
+// ============================================================================
+
+/// sys_dup - Duplicate file descriptor to lowest available number
+pub fn sys_dup(old_fd: i32) -> i64 {
+    if crate::pipe::is_pipe_fd(old_fd) {
+        return old_fd as i64; // simplified pipe dup
+    }
+    match crate::vfs::dup_fd(old_fd) {
+        Ok(new_fd) => new_fd as i64,
+        Err(_) => errno::EBADF,
+    }
+}
+
+/// sys_dup2 - Duplicate fd to specific target
+pub fn sys_dup2(old_fd: i32, new_fd: i32) -> i64 {
+    if old_fd == new_fd {
+        return new_fd as i64;
+    }
+    if crate::pipe::is_pipe_fd(old_fd) {
+        return old_fd as i64; // simplified pipe dup
+    }
+    match crate::vfs::dup2_fd(old_fd, new_fd) {
+        Ok(fd) => fd as i64,
+        Err(_) => errno::EBADF,
+    }
+}
+
+// ============================================================================
+// poll - Wait for events on file descriptors
+// ============================================================================
+
+/// pollfd structure (Linux-compatible)
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct PollFd {
+    pub fd: i32,
+    pub events: i16,
+    pub revents: i16,
+}
+
+const POLLIN: i16 = 1;
+const POLLOUT: i16 = 4;
+const POLLERR: i16 = 8;
+const POLLHUP: i16 = 16;
+#[allow(dead_code)]
+const POLLNVAL: i16 = 32;
+
+/// sys_poll - Check readiness of file descriptors
+pub fn sys_poll(fds_ptr: u64, nfds: u32, timeout_ms: i32) -> i64 {
+    if nfds == 0 { return 0; }
+    let size = (nfds as usize) * core::mem::size_of::<PollFd>();
+    if !validate_user_ptr(fds_ptr, size, true) {
+        return errno::EFAULT;
+    }
+    
+    let fds = unsafe { core::slice::from_raw_parts_mut(fds_ptr as *mut PollFd, nfds as usize) };
+    
+    let max_tries = if timeout_ms == 0 { 1usize }
+                    else if timeout_ms < 0 { 100 }
+                    else { (timeout_ms as usize / 10).max(1) };
+    
+    for _ in 0..max_tries {
+        let mut ready = 0i64;
+        for pfd in fds.iter_mut() {
+            pfd.revents = 0;
+            if pfd.fd < 0 { continue; }
+            
+            // stdin — always readable for now
+            if pfd.fd == 0 && (pfd.events & POLLIN) != 0 { pfd.revents |= POLLIN; }
+            // stdout/stderr — always writable
+            if (pfd.fd == 1 || pfd.fd == 2) && (pfd.events & POLLOUT) != 0 { pfd.revents |= POLLOUT; }
+            // Pipes — ready
+            if crate::pipe::is_pipe_fd(pfd.fd) {
+                if (pfd.events & POLLIN) != 0 { pfd.revents |= POLLIN; }
+                if (pfd.events & POLLOUT) != 0 { pfd.revents |= POLLOUT; }
+            }
+            // Sockets — ready
+            if crate::netstack::socket::is_socket(pfd.fd) {
+                if (pfd.events & POLLIN) != 0 { pfd.revents |= POLLIN; }
+                if (pfd.events & POLLOUT) != 0 { pfd.revents |= POLLOUT; }
+            }
+            // Regular VFS fds — always ready for regular files
+            if pfd.revents == 0 && pfd.fd >= 3 {
+                if (pfd.events & POLLIN) != 0 { pfd.revents |= POLLIN; }
+                if (pfd.events & POLLOUT) != 0 { pfd.revents |= POLLOUT; }
+            }
+            
+            if pfd.revents != 0 { ready += 1; }
+        }
+        if ready > 0 { return ready; }
+        if timeout_ms == 0 { return 0; }
+        crate::thread::yield_thread();
+    }
+    0
+}
+
+// ============================================================================
+// getdents64 - Read directory entries (Linux-compatible)
+// ============================================================================
+
+/// sys_getdents64 - Get directory entries in Linux dirent64 format
+pub fn sys_getdents64(fd: i32, dirp: u64, count: u32) -> i64 {
+    if !validate_user_ptr(dirp, count as usize, true) {
+        return errno::EFAULT;
+    }
+    
+    // Use CWD as directory path (fd-based dir lookup would need additional VFS
+    // infrastructure; this covers the common `getdents64(open("."))` case).
+    let path = crate::vfs::getcwd();
+    
+    let entries = match crate::vfs::readdir(&path) {
+        Ok(e) => e,
+        Err(_) => return errno::ENOTDIR,
+    };
+    
+    let buf = unsafe { core::slice::from_raw_parts_mut(dirp as *mut u8, count as usize) };
+    let mut offset = 0usize;
+    
+    for entry in &entries {
+        let name_bytes = entry.name.as_bytes();
+        // d_ino(8) + d_off(8) + d_reclen(2) + d_type(1) + name + NUL, then 8-byte align
+        let reclen = (8 + 8 + 2 + 1 + name_bytes.len() + 1 + 7) & !7;
+        
+        if offset + reclen > count as usize { break; }
+        
+        let d_type: u8 = match entry.file_type {
+            crate::vfs::FileType::Directory  => 4,
+            crate::vfs::FileType::Regular    => 8,
+            crate::vfs::FileType::CharDevice => 2,
+            crate::vfs::FileType::BlockDevice => 6,
+            crate::vfs::FileType::Symlink    => 10,
+            crate::vfs::FileType::Pipe       => 1,
+            crate::vfs::FileType::Socket     => 12,
+        };
+        
+        let ptr = &mut buf[offset..];
+        if ptr.len() < reclen { break; }
+        
+        // d_ino
+        ptr[0..8].copy_from_slice(&entry.ino.to_le_bytes());
+        // d_off (next offset)
+        let next_off = (offset + reclen) as u64;
+        ptr[8..16].copy_from_slice(&next_off.to_le_bytes());
+        // d_reclen
+        ptr[16..18].copy_from_slice(&(reclen as u16).to_le_bytes());
+        // d_type
+        ptr[18] = d_type;
+        // d_name (null-terminated)
+        let name_start = 19;
+        let name_end = name_start + name_bytes.len();
+        if name_end < ptr.len() {
+            ptr[name_start..name_end].copy_from_slice(name_bytes);
+            ptr[name_end] = 0;
+        }
+        // Zero padding
+        for i in (name_end + 1)..reclen.min(ptr.len()) {
+            ptr[i] = 0;
+        }
+        
+        offset += reclen;
+    }
+    
+    offset as i64
+}
+
+// ============================================================================
+// openat - Open file relative to directory fd
+// ============================================================================
+
+/// sys_openat - Open file relative to directory fd
+pub fn sys_openat(dirfd: i32, pathname: u64, flags: u32) -> i64 {
+    const AT_FDCWD: i32 = -100;
+    
+    let path = match read_user_string(pathname, 256) {
+        Some(s) => s,
+        None => return errno::EFAULT,
+    };
+    
+    // Absolute path or AT_FDCWD → regular open
+    if path.starts_with('/') || dirfd == AT_FDCWD {
+        return match crate::vfs::open(&path, crate::vfs::OpenFlags(flags)) {
+            Ok(fd) => fd as i64,
+            Err(_) => errno::ENOENT,
+        };
+    }
+    
+    // Relative to CWD as fallback
+    let full_path = {
+        let cwd = crate::vfs::getcwd();
+        if cwd == "/" {
+            alloc::format!("/{}", path)
+        } else {
+            alloc::format!("{}/{}", cwd, path)
+        }
+    };
+    
+    match crate::vfs::open(&full_path, crate::vfs::OpenFlags(flags)) {
+        Ok(fd) => fd as i64,
+        Err(_) => errno::ENOENT,
+    }
 }
