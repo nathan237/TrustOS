@@ -285,7 +285,14 @@ fn setup_ioapic_routing() {
     }
     
     let ioapic = &acpi_info.io_apics[0];
-    let ioapic_virt = crate::memory::phys_to_virt(ioapic.address);
+    // Map I/O APIC MMIO region into kernel page tables
+    let ioapic_virt = match crate::memory::map_mmio(ioapic.address, 4096) {
+        Ok(v) => v,
+        Err(e) => {
+            crate::serial_println!("[APIC] Failed to map I/O APIC MMIO at {:#x}: {}", ioapic.address, e);
+            return;
+        }
+    };
     IOAPIC_BASE_VIRT.store(ioapic_virt, Ordering::SeqCst);
     
     unsafe {
@@ -388,8 +395,15 @@ pub fn init() -> bool {
         return false;
     }
     
-    // Map LAPIC base to virtual address via HHDM
-    let lapic_virt = crate::memory::phys_to_virt(lapic_phys);
+    // Map LAPIC MMIO region into kernel page tables
+    // (HHDM from Limine only covers RAM, not device MMIO like the LAPIC)
+    let lapic_virt = match crate::memory::map_mmio(lapic_phys, 4096) {
+        Ok(v) => v,
+        Err(e) => {
+            crate::serial_println!("[APIC] Failed to map LAPIC MMIO at {:#x}: {}", lapic_phys, e);
+            return false;
+        }
+    };
     LAPIC_BASE_VIRT.store(lapic_virt, Ordering::SeqCst);
     
     crate::serial_println!("[APIC] LAPIC at phys={:#x}, virt={:#x}", lapic_phys, lapic_virt);

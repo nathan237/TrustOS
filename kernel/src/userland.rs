@@ -245,21 +245,21 @@ extern "C" fn syscall_entry() {
         // - R11 = user RFLAGS
         // 
         // We're still on user stack! Need to switch to kernel stack.
-        // But we need to save RSP first...
+        // Save user RSP to a temp variable (NOT a register — we must
+        // preserve the user's callee-saved regs R12-R15 across syscalls).
         
-        // Save user RSP in R12 (we'll push it later)
-        "mov r12, rsp",
+        // Save user RSP in a temp variable
+        "mov [rip + {user_rsp_temp}], rsp",
         
-        // Load kernel stack from a known location
-        // We'll use a static variable for the kernel stack pointer
+        // Load kernel stack
         "mov rsp, [rip + {kernel_stack}]",
         
-        // Now we're on kernel stack, push user context
-        "push r12",          // User RSP
+        // Push user context from saved location
+        "push QWORD PTR [rip + {user_rsp_temp}]",   // User RSP
         "push rcx",          // User RIP (saved by SYSCALL)
         "push r11",          // User RFLAGS (saved by SYSCALL)
         
-        // Push callee-saved registers
+        // Push callee-saved registers (user's original values, unmodified!)
         "push rbx",
         "push rbp",
         "push r12",
@@ -312,9 +312,14 @@ extern "C" fn syscall_entry() {
         "sysretq",
         
         kernel_stack = sym KERNEL_SYSCALL_STACK_TOP,
+        user_rsp_temp = sym USER_RSP_TEMP,
         handler = sym crate::interrupts::syscall::syscall_handler_rust,
     );
 }
+
+/// Temporary storage for user RSP during syscall entry (before stack switch)
+#[no_mangle]
+static mut USER_RSP_TEMP: u64 = 0;
 
 /// Kernel stack for syscall handling (separate from interrupt stacks)
 static mut KERNEL_SYSCALL_STACK: [u8; 16384] = [0; 16384]; // 16 KB
@@ -475,6 +480,7 @@ pub unsafe fn return_from_ring3(exit_code: i32) -> ! {
     core::arch::asm!(
         "mov rax, {code}",
         "mov rsp, [{return_rsp}]",
+        "sti",          // Re-enable interrupts (disabled by exception/syscall handler)
         "jmp [{return_rip}]",
         code = in(reg) exit_code as i64,
         return_rsp = sym KERNEL_RETURN_RSP,

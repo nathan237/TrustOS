@@ -1072,23 +1072,33 @@ pub fn exec_signal_test() -> ExecResult {
     }
     let user_stack = stack_top - 8;
 
+    // Spawn a proper process so getpid() > 0 and signals are initialized
+    let pid = crate::process::spawn("signal_test").unwrap_or(0);
+    let prev_pid = crate::process::current_pid();
+
     // Set up stdio for the test process
     crate::vfs::setup_stdio();
 
+    let exit_code;
     unsafe {
         let kernel_cr3: u64;
         core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
         CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
         CURRENT_USER_STACK_BOTTOM.store(stack_top - (stack_pages as u64 * 4096), Ordering::SeqCst);
+        crate::process::start_running(pid);
         address_space.activate();
-        let exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
+        exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
         CURRENT_USER_SPACE.store(core::ptr::null_mut(), Ordering::Release);
         core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
-        crate::vfs::cleanup_stdio();
-        crate::log!("[EXEC] signal_test exited with code {}", exit_code);
-        ExecResult::Exited(exit_code)
     }
+
+    crate::process::finish(pid, exit_code);
+    crate::process::reap(pid);
+    crate::vfs::cleanup_stdio();
+    crate::process::set_current(prev_pid);
+    crate::log!("[EXEC] signal_test exited with code {}", exit_code);
+    ExecResult::Exited(exit_code)
 }
 
 /// Test stdio + getpid + clock_gettime from Ring 3.
@@ -1177,23 +1187,33 @@ pub fn exec_stdio_test() -> ExecResult {
     }
     let user_stack = stack_top - 8;
 
+    // Spawn a proper process so getpid() > 0
+    let pid = crate::process::spawn("stdio_test").unwrap_or(0);
+    let prev_pid = crate::process::current_pid();
+
     // Set up stdio for the test process
     crate::vfs::setup_stdio();
 
+    let exit_code;
     unsafe {
         let kernel_cr3: u64;
         core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
         CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
         CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
         CURRENT_USER_STACK_BOTTOM.store(stack_top - (stack_pages as u64 * 4096), Ordering::SeqCst);
+        crate::process::start_running(pid);
         address_space.activate();
-        let exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
+        exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
         CURRENT_USER_SPACE.store(core::ptr::null_mut(), Ordering::Release);
         core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
-        crate::vfs::cleanup_stdio();
-        crate::log!("[EXEC] stdio_test exited with code {}", exit_code);
-        ExecResult::Exited(exit_code)
     }
+
+    crate::process::finish(pid, exit_code);
+    crate::process::reap(pid);
+    crate::vfs::cleanup_stdio();
+    crate::process::set_current(prev_pid);
+    crate::log!("[EXEC] stdio_test exited with code {}", exit_code);
+    ExecResult::Exited(exit_code)
 }
 
 /// Check if a file is an executable ELF

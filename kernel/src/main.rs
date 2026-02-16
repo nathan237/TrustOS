@@ -289,8 +289,13 @@ pub unsafe extern "C" fn kmain() -> ! {
                     kernel_end = end;
                 }
             }
-            // Sum all memory (usable + reclaimable)
-            total_phys_memory += entry.length;
+            // Sum only usable memory (not reserved / MMIO / framebuffer)
+            if entry.entry_type == limine::memory_map::EntryType::USABLE
+                || entry.entry_type == limine::memory_map::EntryType::BOOTLOADER_RECLAIMABLE
+                || entry.entry_type == limine::memory_map::EntryType::ACPI_RECLAIMABLE
+            {
+                total_phys_memory += entry.length;
+            }
         }
 
         // Store total physical memory for later use
