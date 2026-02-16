@@ -996,6 +996,9 @@ pub(super) fn execute_command(cmd: &str) {
         "trailer" | "trustos_trailer" => trailer::cmd_trustos_trailer(),
         "video" => apps::cmd_video(args),
 
+        // -- Jarvis AI assistant --
+        "jarvis" | "j" | "ai" | "assistant" => jarvis::cmd_jarvis(args),
+
         "" => {}
         _ => {
             // Check if it's an executable file
@@ -1021,3 +1024,4 @@ mod network;        // Browser, Sandbox, Container, HTML rendering       (~830 l
 mod unix;           // Unix utility stubs and POSIX commands             (~1160 lines)
 mod apps;           // TrustLang, Film, Transpile, Video, Lab, Gterm    (~3930 lines)
 mod trailer;        // TrustOS Trailer -- 2-min cinematic showcase         (~900 lines)
+mod jarvis;         // Jarvis AI assistant — NLU + planner + executor     (~600 lines)
