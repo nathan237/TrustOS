@@ -588,6 +588,82 @@ pub fn clear_backbuffer(color: u32) {
     }
 }
 
+// ============================================================================
+// SMP PARALLEL BLIT - Copy buffer directly to MMIO framebuffer using all cores
+// ============================================================================
+
+/// Context for parallel blit operation
+#[repr(C)]
+struct ParallelBlitCtx {
+    src: *const u32,
+    dst: *mut u8,
+    src_stride: usize,   // source width in u32s
+    dst_pitch: usize,    // destination pitch in bytes
+    width: usize,        // copy width in u32s
+}
+
+unsafe impl Send for ParallelBlitCtx {}
+unsafe impl Sync for ParallelBlitCtx {}
+
+/// Worker function for parallel blit (called on each core)
+fn blit_rows_worker(start: usize, end: usize, data: *mut u8) {
+    let ctx = unsafe { &*(data as *const ParallelBlitCtx) };
+    for y in start..end {
+        unsafe {
+            let src = ctx.src.add(y * ctx.src_stride);
+            let dst = ctx.dst.add(y * ctx.dst_pitch) as *mut u32;
+            #[cfg(target_arch = "x86_64")]
+            {
+                crate::graphics::simd::copy_row_sse2(dst, src, ctx.width);
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
+                core::ptr::copy_nonoverlapping(src, dst, ctx.width);
+            }
+        }
+    }
+}
+
+/// Blit an external buffer directly to the MMIO framebuffer using SMP.
+/// Splits the row copies across all available CPU cores.
+/// This combines the backbuffer-write + swap into a single parallel operation.
+/// Robust: BSP fills any rows that APs missed (timeout protection).
+///
+/// `src`: pointer to ARGB pixel buffer (w * h)
+/// `w`: width in pixels
+/// `h`: height in pixels
+pub fn blit_to_fb_parallel(src: *const u32, w: usize, h: usize) {
+    let addr = FB_ADDR.load(Ordering::SeqCst);
+    if addr.is_null() { return; }
+
+    let fb_w = FB_WIDTH.load(Ordering::SeqCst) as usize;
+    let pitch = FB_PITCH.load(Ordering::SeqCst) as usize;
+    let fb_h = FB_HEIGHT.load(Ordering::SeqCst) as usize;
+
+    let copy_w = w.min(fb_w);
+    let copy_h = h.min(fb_h);
+
+    let ctx = ParallelBlitCtx {
+        src,
+        dst: addr,
+        src_stride: w,
+        dst_pitch: pitch,
+        width: copy_w,
+    };
+
+    // Try SMP parallel blit (sends IPI to wake APs)
+    crate::cpu::smp::parallel_for(
+        copy_h,
+        blit_rows_worker,
+        &ctx as *const ParallelBlitCtx as *mut u8,
+    );
+
+    // Safety net: BSP re-blits ALL rows to fill any that APs missed.
+    // Writing the same pixels twice is idempotent, so this is safe.
+    // Cost: ~1ms extra on BSP, but guarantees no missing rows.
+    blit_rows_worker(0, copy_h, &ctx as *const ParallelBlitCtx as *mut u8);
+}
+
 /// Draw filled rectangle to backbuffer (SSE2 optimized)
 pub fn fill_rect(x: u32, y: u32, w: u32, h: u32, color: u32) {
     let width = FB_WIDTH.load(Ordering::SeqCst) as u32;

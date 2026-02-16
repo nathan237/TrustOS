@@ -3365,13 +3365,13 @@ struct AppConfig {
             "showcase3d" | "demo3d" => {
                 output.push(String::from("\u{2713} Showcase 3D Cinematic - ESC to skip scenes"));
                 drop(output);
-                crate::shell::cmd_showcase3d();
+                crate::shell::desktop::cmd_showcase3d();
                 return Vec::new();
             },
             "filled3d" => {
                 output.push(String::from("\u{2713} Filled 3D Test - ESC to exit"));
                 drop(output);
-                crate::shell::cmd_filled3d();
+                crate::shell::desktop::cmd_filled3d();
                 return Vec::new();
             },
             "exit" | "quit" => {

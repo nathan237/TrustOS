@@ -847,6 +847,34 @@ fn fill_triangle(buf: &mut [u32], w: usize, h: usize,
     }
 }
 
+/// Render a mesh as wireframe with depth-colored edges and vertex glow.
+/// Public API for external callers (trailer, showcase, etc.)
+pub fn render_wireframe_mesh(buf: &mut [u32], w: usize, h: usize,
+                             mesh: &Mesh, angle_y: f32, angle_x: f32, dz: f32,
+                             color: u32) {
+    for (idx, &(a, b)) in mesh.edges.iter().enumerate() {
+        if a >= mesh.vertices.len() || b >= mesh.vertices.len() { continue; }
+        let (x0, y0, z0) = transform_vertex(mesh.vertices[a], angle_y, angle_x, dz, w, h);
+        let (x1, y1, z1) = transform_vertex(mesh.vertices[b], angle_y, angle_x, dz, w, h);
+        let avg_z = (z0 + z1) * 0.5;
+        let base = match &mesh.edge_colors {
+            Some(ec) if idx < ec.len() => ec[idx],
+            _ => color,
+        };
+        let c = depth_color(avg_z, base);
+        draw_line_thick(buf, w, h, x0, y0, x1, y1, c);
+    }
+    // Vertex glow: bright 3x3 dots at each vertex
+    for v in &mesh.vertices {
+        let (sx, sy, _z) = transform_vertex(*v, angle_y, angle_x, dz, w, h);
+        for dy in -1..=1i32 {
+            for dx in -1..=1i32 {
+                additive_blend(buf, w, h, sx + dx, sy + dy, 0x00FFFFFF);
+            }
+        }
+    }
+}
+
 /// Render a mesh with filled triangles, flat shading, backface culling, and painter's sort.
 /// `light_dir` should be normalized. `base_color` is the object's base ARGB color.
 /// `ambient` is the minimum brightness (0.0-1.0).

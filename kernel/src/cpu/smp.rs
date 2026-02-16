@@ -16,6 +16,43 @@ static CPU_COUNT: AtomicU32 = AtomicU32::new(1);
 /// Number of ready CPUs  
 static READY_COUNT: AtomicU32 = AtomicU32::new(1);
 
+// ============================================================================
+// IPI - Inter-Processor Interrupts (wake APs from HLT)
+// ============================================================================
+
+/// Local APIC base address (MMIO, standard x86 default)
+const LAPIC_BASE: u64 = 0xFEE0_0000;
+/// ICR Low register offset (Interrupt Command Register)
+const ICR_LOW: u64 = 0x300;
+/// ICR High register offset (destination field)
+const ICR_HIGH: u64 = 0x310;
+
+/// Send a fixed IPI to a specific APIC ID
+/// Vector 0xFE = a "wake-up" interrupt that does nothing except resume from HLT
+unsafe fn send_ipi(target_apic_id: u32) {
+    let lapic_phys = crate::acpi::local_apic_address();
+    // CRITICAL: translate physical LAPIC address to virtual via HHDM
+    // (no identity mapping exists in this kernel)
+    let base = crate::memory::phys_to_virt(lapic_phys) as *mut u32;
+    // Write destination APIC ID to ICR_HIGH[31:24]
+    let high = base.byte_add(ICR_HIGH as usize);
+    core::ptr::write_volatile(high, target_apic_id << 24);
+    // Write ICR_LOW: Fixed delivery, vector 0xFE, edge-triggered, assert
+    let low = base.byte_add(ICR_LOW as usize);
+    core::ptr::write_volatile(low, 0x0000_40FE); // Fixed | Assert | Edge | Vector 0xFE
+}
+
+/// Send IPI to all APs to wake them from HLT
+pub fn wake_all_aps() {
+    let cpus = cpu_count() as usize;
+    for i in 1..cpus.min(MAX_CPUS) {
+        if is_cpu_ready(i as u32) {
+            let apic_id = unsafe { PER_CPU[i].apic_id };
+            unsafe { send_ipi(apic_id); }
+        }
+    }
+}
+
 /// Per-CPU initialization complete flags
 static CPU_READY: [AtomicBool; MAX_CPUS] = {
     const INIT: AtomicBool = AtomicBool::new(false);
@@ -256,7 +293,8 @@ static SMP_ENABLED: AtomicBool = AtomicBool::new(true);
 const PARALLEL_THRESHOLD: usize = 32;
 
 /// Maximum spin iterations to wait for APs (prevents infinite hang)
-const MAX_WAIT_SPINS: u32 = 500_000;
+/// With PAUSE instruction at ~140 cycles/iter and 3 GHz CPU: ~47ms timeout
+const MAX_WAIT_SPINS: u32 = 1_000_000;
 
 /// Enable SMP parallelism
 pub fn enable_smp() {
@@ -324,6 +362,9 @@ pub fn parallel_for(total_items: usize, func: WorkFn, data: *mut u8) {
         dispatched += 1;
     }
     
+    // APs poll with PAUSE, so they'll pick up WORK_PENDING on their own.
+    // No IPI needed — avoids LAPIC MMIO complexity.
+    
     // BSP (Bootstrap Processor) handles chunk 0
     func(0, chunk_size.min(total_items), data);
     WORK_COMPLETION.fetch_add(1, Ordering::Release);
@@ -341,6 +382,11 @@ pub fn parallel_for(total_items: usize, func: WorkFn, data: *mut u8) {
             if spin_count > MAX_WAIT_SPINS {
                 crate::serial_println!("[SMP] WARNING: Timeout waiting for APs, completed {}/{}", 
                     WORK_COMPLETION.load(Ordering::Relaxed), expected);
+                // Cancel unfinished work to prevent use-after-free
+                // (caller's stack data may be freed after we return)
+                for cancel_id in 1..num_cpus {
+                    WORK_PENDING[cancel_id].store(false, Ordering::Release);
+                }
                 break;
             }
         }
@@ -379,29 +425,29 @@ pub unsafe extern "C" fn ap_entry(smp_info: &limine::smp::Cpu) -> ! {
         PER_CPU[processor_id].apic_id = lapic_id;
         PER_CPU[processor_id].work_completed = 0;
         
-        // Enable SSE for this CPU
-        super::simd::enable_sse();
+        // SSE is already enabled by Limine on all x86_64 CPUs.
         
-        // Mark CPU as ready
-        CPU_READY[processor_id].store(true, Ordering::Release);
-        READY_COUNT.fetch_add(1, Ordering::Release);
-        
-        crate::serial_println!("[SMP] AP {} online (LAPIC ID: {})", processor_id, lapic_id);
+        // NOTE: We do NOT mark AP as ready because without a loaded IDT
+        // and Local APIC timer, APs cannot safely handle interrupts and
+        // will be parked in cli;hlt. parallel_for checks ready_cpu_count
+        // and will run BSP-only when count is 1.
     }
     
-    // AP work loop - check for work, then HLT to yield vCPU
-    // HLT suspends the CPU until the next interrupt (timer/IPI),
-    // which lets VirtualBox/Hyper-V refresh the display properly.
-    // Without HLT, the AP spin loop consumes 100% of a vCPU and
-    // starves the hypervisor's display refresh thread.
+    // AP idle loop: interrupts disabled + halt.
+    // APs are registered as online but currently idle.
+    // Without a per-AP IDT and Local APIC timer, APs cannot safely
+    // receive interrupts, so we keep them halted with CLI.
+    // parallel_for uses BSP-only mode (safety net re-blits all rows).
     loop {
+        // Check for work before halting (in case BSP posted work
+        // between our last check and the HLT instruction)
         check_and_execute_work(processor_id);
         
-        // HLT: yield CPU to hypervisor until next interrupt
-        // On bare metal: wakes on timer IRQ (~1ms with PIT/APIC timer)
-        // On VBox/QEMU: immediately yields the vCPU timeslice
+        // CLI + HLT: sleep with no interrupts (safe, won't triple-fault)
+        // The only way to wake is via NMI or INIT, which we don't send.
+        // This effectively parks the AP.
         unsafe {
-            core::arch::asm!("sti; hlt", options(nomem, nostack));
+            core::arch::asm!("cli; hlt", options(nomem, nostack));
         }
     }
 }

@@ -61,7 +61,7 @@ Write-Host "`nCreating VM '$VMName'..." -ForegroundColor Yellow
 
 # Configure VM with UEFI enabled
 Write-Host "Configuring VM (UEFI mode)..." -ForegroundColor Yellow
-& $VBoxManage modifyvm $VMName --memory 1024 --vram 128 --cpus 2
+& $VBoxManage modifyvm $VMName --memory 1024 --vram 128 --cpus 4
 & $VBoxManage modifyvm $VMName --firmware efi64
 & $VBoxManage modifyvm $VMName --graphicscontroller vboxsvga
 & $VBoxManage modifyvm $VMName --boot1 dvd --boot2 disk --boot3 none --boot4 none

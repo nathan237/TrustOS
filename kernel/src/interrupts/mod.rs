@@ -32,6 +32,9 @@ lazy_static! {
         idt[pic::InterruptIndex::Mouse.as_usize()]
             .set_handler_fn(handlers::mouse_interrupt_handler);
         
+        // SMP IPI wakeup vector (0xFE = 254) - wakes APs from HLT
+        idt[0xFE].set_handler_fn(handlers::smp_ipi_handler);
+        
         idt
     };
 }
@@ -53,6 +56,12 @@ pub fn init() {
     x86_64::instructions::interrupts::enable();
     
     crate::log_debug!("IDT loaded, PIC initialized, SYSCALL ready, interrupts enabled");
+}
+
+/// Load IDT on an Application Processor (AP)
+/// Called from AP entry point so it can handle IPI vectors
+pub fn load_idt_on_ap() {
+    IDT.load();
 }
 
 /// Disable interrupts and run closure

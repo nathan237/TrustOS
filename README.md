@@ -4,21 +4,24 @@
 
 ### **Trust** the code. **Rust** is the reason.
 
-**A fully auditable, bare-metal operating system — 136,000+ lines of pure Rust. Zero C. Zero secrets.**
+**A fully auditable, bare-metal operating system — 131,000+ lines of pure Rust. Zero C. Zero secrets.**
+
+*One dev. One OS. Nothing to hide.*
 
 **🏆 The first bare-metal OS with a built-in real-time kernel introspection laboratory.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-130%2C000%2B%20lines-blue?style=for-the-badge)]()
-[![ISO](https://img.shields.io/badge/ISO-8.19%20MB-purple?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.2.0-orange?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-131%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![ISO](https://img.shields.io/badge/ISO-8.45%20MB-purple?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.3.3-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
 [![Watch the demo](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
 [![Watch the Film](https://img.shields.io/badge/▶%20TrustOS%20Film-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/FILM_ID)
+[![Watch the Trailer](https://img.shields.io/badge/▶%20Trailer-YouTube-FF4444?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/TRAILER_ID)
 
 [Why "Trust"?](#-why-trustos) · [Features](#-features) · [Quick Start](#-quick-start) · [Architecture](#-architecture) · [Contributing](#-contributing)
 
@@ -30,6 +33,7 @@
 
 | Date | Changes |
 |------|----------|
+| **2026-02-16** | **v0.3.3 — Cinematic Trailer + Visual Overhaul** — Beat-synced 128 BPM trailer (`trailer` command) with 14 scenes, 1984/Big Brother theme, feature showcase crescendo (17 cards with decreasing delay), glow/vignette/CRT effects, XOR plasma, optimized fire. SMP: APs safely parked (cli;hlt), BSP-only mode. 131K lines, 253 source files. |
 | **2026-02-14** | **v0.2.0 — Ring 3 Userspace Execution** — Real CPL-3 process execution via IRETQ with clean kernel return. Embedded ELF64 binary loader. `exec test` and `exec hello` shell commands. TrustFS block freeing fixes (unlink, truncate). 130K+ lines. |
 | **2026-02-14** | **TrustLab v3 — UX Overhaul** — Full mouse/click support on all 7 panels, structured syscall tracing (50+ syscall names, args, return values in Kernel Trace), event detail panel, in-kernel UX auto-test suite (9 tests via `labtest` command). 136K+ lines. |
 | **2026-02-13** | **TrustLab v2 — Demo Mode** — Cinematic 27-second narrated demo with Matrix-themed Morpheus intro, 23 slides with panel-targeted narration, glitch transitions, red text overlay, progress bar, space-to-skip. PIT-based timing (100Hz). |
@@ -60,10 +64,10 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 
 | Metric | Value |
 |--------|-------|
-| **Total code** | 136,000+ lines of Rust |
-| **Source files** | 248 `.rs` files |
+| **Total code** | 131,000+ lines of Rust |
+| **Source files** | 253 `.rs` files |
 | **Kernel modules** | 35 independent modules |
-| **ISO size** | 8.19 MB |
+| **ISO size** | 8.45 MB |
 | **Boot time** | < 1 second |
 | **Desktop FPS** | 144 FPS (SSE2 SIMD) |
 | **C code** | 0 lines |
@@ -75,7 +79,7 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 | | Traditional OS | TrustOS |
 |---|:---:|:---:|
 | **Language** | C/C++ with 40 years of memory bugs | 100% Rust — memory safe by design |
-| Codebase | Millions of lines, impossible to audit | 136K lines, one person can read it all |
+| Codebase | Millions of lines, impossible to audit | 131K lines, one person can read it all |
 | **Binary blobs** | Everywhere | None. Zero. |
 | **Telemetry** | Opt-out (maybe) | Doesn't exist — verify it yourself |
 | **Build** | Complex cross-compilation toolchains | `cargo build` — that's it |

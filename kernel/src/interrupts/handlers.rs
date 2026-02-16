@@ -211,3 +211,16 @@ pub extern "x86-interrupt" fn mouse_interrupt_handler(_stack_frame: InterruptSta
         PICS.lock().notify_end_of_interrupt(pic::InterruptIndex::Mouse.as_u8());
     }
 }
+
+/// SMP IPI wakeup handler (vector 0xFE)
+/// This interrupt does nothing except wake the AP from HLT.
+/// The actual work check happens in the AP loop after returning from HLT.
+pub extern "x86-interrupt" fn smp_ipi_handler(_stack_frame: InterruptStackFrame) {
+    // Send EOI to Local APIC (write 0 to LAPIC_BASE + 0xB0)
+    // CRITICAL: use HHDM virtual address, not raw physical address
+    unsafe {
+        let lapic_virt = crate::memory::phys_to_virt(crate::acpi::local_apic_address());
+        let lapic = lapic_virt as *mut u32;
+        core::ptr::write_volatile(lapic.byte_add(0xB0), 0);
+    }
+}
