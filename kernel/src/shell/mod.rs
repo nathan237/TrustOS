@@ -769,6 +769,7 @@ pub(super) fn execute_command(cmd: &str) {
         "test" => commands::cmd_test(),
         "memtest" => commands::cmd_memtest(),
         "inttest" => commands::cmd_inttest(),
+        "nvme" => commands::cmd_nvme(),
         "keytest" => commands::cmd_keytest(),
         "hexdump" | "xxd" => commands::cmd_hexdump(args),
         "panic" => commands::cmd_panic(),

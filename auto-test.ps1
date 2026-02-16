@@ -340,6 +340,8 @@ $qemuArgs = @(
     "-netdev", "user,id=net0",
     "-device", "intel-hda",
     "-device", "hda-duplex",
+    "-drive", "file=`"$PSScriptRoot\trustos_nvme.img`",format=raw,if=none,id=nvme0",
+    "-device", "nvme,serial=TRUSTNVME001,drive=nvme0",
     "-serial", $serialArg,
     "-no-reboot"
 )

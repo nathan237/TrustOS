@@ -187,6 +187,13 @@ pub fn probe_storage() {
             }
         }
         
+        // NVMe Controller (class 0x01, subclass 0x08)
+        if dev.class_code == 0x01 && dev.subclass == 0x08 {
+            crate::serial_println!("[DRIVERS] NVMe controller at {:02X}:{:02X}.{} ({:04X}:{:04X})",
+                dev.bus, dev.device, dev.function, dev.vendor_id, dev.device_id);
+            // NVMe init is handled in Phase 10 (disk init) before probe_storage
+        }
+        
         // USB Controller (class 0x0C, subclass 0x03)
         if dev.class_code == 0x0C && dev.subclass == 0x03 {
             let usb_type = match dev.prog_if {
@@ -217,7 +224,12 @@ pub fn probe_storage() {
     }
     
     // Print storage summary
-    if ahci::is_initialized() {
+    if crate::nvme::is_initialized() {
+        if let Some((model, _serial, size, lba_sz)) = crate::nvme::get_info() {
+            let mb = (size * lba_sz as u64) / (1024 * 1024);
+            crate::serial_println!("[DRIVERS] Storage: NVMe {} ({} MB)", model, mb);
+        }
+    } else if ahci::is_initialized() {
         crate::serial_println!("[DRIVERS] Storage: AHCI with {} ports", ahci::get_port_count());
     } else if ata::is_initialized() {
         crate::serial_println!("[DRIVERS] Storage: IDE with {} drives", ata::list_drives().len());
@@ -228,7 +240,7 @@ pub fn probe_storage() {
 
 /// Check if any storage is available
 pub fn has_storage() -> bool {
-    ahci::is_initialized() || ata::is_initialized()
+    ahci::is_initialized() || ata::is_initialized() || crate::nvme::is_initialized()
 }
 
 /// Auto-detect and load drivers for all PCI devices

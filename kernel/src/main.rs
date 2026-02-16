@@ -26,6 +26,7 @@ mod pci;
 mod virtio;
 mod virtio_net;
 mod virtio_blk;
+mod nvme;
 mod drivers;
 mod netstack;
 mod time;
@@ -610,27 +611,49 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[PHASE] Disk init start");
     framebuffer::print_boot_status("Disk subsystem...", BootStatus::Info);
     if ENABLE_DISK {
-        // Try virtio-blk first (for persistent storage in QEMU)
-        let blk_devs: alloc::vec::Vec<_> = pci::get_devices().iter()
-            .filter(|d| d.vendor_id == 0x1AF4 && d.device_id == 0x1001)
+        // Try NVMe first (fastest, real hardware SSD)
+        let nvme_devs: alloc::vec::Vec<_> = pci::get_devices().iter()
+            .filter(|d| d.class_code == 0x01 && d.subclass == 0x08)
             .cloned()
             .collect();
         
-        if !blk_devs.is_empty() {
-            if let Err(e) = virtio_blk::init(&blk_devs[0]) {
-                crate::log_warn!("[DISK] virtio-blk init failed: {}", e);
-                // Fallback to RAM disk
-                disk::init();
-            } else {
-                framebuffer::print_boot_status(&alloc::format!("virtio-blk: {} MB storage", 
-                    (virtio_blk::capacity() * 512) / (1024 * 1024)), BootStatus::Ok);
+        if !nvme_devs.is_empty() {
+            match nvme::init(&nvme_devs[0]) {
+                Ok(()) => {
+                    if let Some((model, _serial, size, lba_sz)) = nvme::get_info() {
+                        let mb = (size * lba_sz as u64) / (1024 * 1024);
+                        framebuffer::print_boot_status(
+                            &alloc::format!("NVMe: {} ({} MB)", model, mb), BootStatus::Ok);
+                    }
+                }
+                Err(e) => {
+                    crate::log_warn!("[DISK] NVMe init failed: {}", e);
+                }
             }
-        } else {
-            // No virtio-blk, use RAM disk
-            disk::init();
         }
         
-        if disk::is_available() || virtio_blk::is_initialized() {
+        // Try virtio-blk (for QEMU guests without NVMe)
+        if !nvme::is_initialized() {
+            let blk_devs: alloc::vec::Vec<_> = pci::get_devices().iter()
+                .filter(|d| d.vendor_id == 0x1AF4 && d.device_id == 0x1001)
+                .cloned()
+                .collect();
+            
+            if !blk_devs.is_empty() {
+                if let Err(e) = virtio_blk::init(&blk_devs[0]) {
+                    crate::log_warn!("[DISK] virtio-blk init failed: {}", e);
+                    disk::init();
+                } else {
+                    framebuffer::print_boot_status(&alloc::format!("virtio-blk: {} MB storage", 
+                        (virtio_blk::capacity() * 512) / (1024 * 1024)), BootStatus::Ok);
+                }
+            } else {
+                // No NVMe, no virtio-blk → RAM disk
+                disk::init();
+            }
+        }
+        
+        if disk::is_available() || virtio_blk::is_initialized() || nvme::is_initialized() {
             framebuffer::print_boot_status("Disk driver ready", BootStatus::Ok);
         } else {
             framebuffer::print_boot_status("No disk detected", BootStatus::Skip);
