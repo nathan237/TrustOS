@@ -68,8 +68,11 @@ Copy-Item "$PSScriptRoot\limine\BOOTX64.EFI" "$IsoRoot\EFI\BOOT\BOOTX64.EFI" -Fo
     Copy-Item "$PSScriptRoot\limine\$_" "$IsoRoot\boot\limine\$_" -Force -ErrorAction SilentlyContinue
 }
 
-# Create ISO
-wsl bash -c "cd /mnt/c/Users/nathan/Documents/Scripts/OSrust && xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label iso_root -o trustos.iso 2>&1 | tail -1"
+# Create ISO (convert current dir to WSL path dynamically)
+$perfWinRoot = (Get-Location).Path
+$perfDrive = $perfWinRoot.Substring(0,1).ToLower()
+$perfWslRoot = "/mnt/$perfDrive" + ($perfWinRoot.Substring(2) -replace '\\', '/')
+wsl bash -c "cd $perfWslRoot && xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label iso_root -o trustos.iso 2>&1 | tail -1"
 & "$PSScriptRoot\limine\limine.exe" bios-install trustos.iso 2>&1 | Out-Null
 
 $ISOSize = [math]::Round((Get-Item $ISOPath).Length / 1MB, 2)

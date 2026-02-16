@@ -1,6 +1,12 @@
 use std::path::PathBuf;
 
 fn main() {
+    // ── Linker script (portable: uses CARGO_MANIFEST_DIR, no hardcoded paths) ──
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let linker_script = PathBuf::from(&manifest_dir).join("linker.ld");
+    println!("cargo:rustc-link-arg=-T{}", linker_script.display());
+    println!("cargo:rerun-if-changed={}", linker_script.display());
+
     // Get the path to the kernel binary
     let kernel_path = std::env::var("CARGO_BIN_FILE_TRUSTOS_KERNEL")
         .map(PathBuf::from)

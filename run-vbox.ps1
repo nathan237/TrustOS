@@ -42,8 +42,12 @@ Write-Host "ISO root prepared at: $IsoRoot" -ForegroundColor Green
 
 # Create ISO using WSL xorriso
 Write-Host "Creating ISO with WSL xorriso..." -ForegroundColor Yellow
-$wslIsoRoot = "/mnt/c/Users/nathan/Documents/Scripts/OSrust/iso_root"
-$wslIsoPath = "/mnt/c/Users/nathan/Documents/Scripts/OSrust/trustos.iso"
+# Convert Windows path to WSL path dynamically
+$winRoot = (Get-Location).Path
+$driveLetter = $winRoot.Substring(0,1).ToLower()
+$wslRoot = "/mnt/$driveLetter" + ($winRoot.Substring(2) -replace '\\', '/')
+$wslIsoRoot = "$wslRoot/iso_root"
+$wslIsoPath = "$wslRoot/trustos.iso"
 wsl -e xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin `
     -no-emul-boot -boot-load-size 4 -boot-info-table `
     --efi-boot boot/limine/limine-uefi-cd.bin `

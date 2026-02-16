@@ -3,7 +3,9 @@ set -e
 
 echo "=== Creating TrustOS Linux Subsystem initramfs ==="
 
-LINUX_DIR="/mnt/c/Users/nathan/Documents/Scripts/OSrust/linux"
+# Use script directory (portable, no hardcoded paths)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LINUX_DIR="$SCRIPT_DIR"
 INITRAMFS_DIR="$LINUX_DIR/initramfs"
 
 # Clean and create directories
@@ -124,7 +126,7 @@ fi
 # Copy to iso_root
 echo ""
 echo "=== Copying to iso_root ==="
-ISO_LINUX="/mnt/c/Users/nathan/Documents/Scripts/OSrust/iso_root/boot/linux"
+ISO_LINUX="$(dirname "$LINUX_DIR")/iso_root/boot/linux"
 mkdir -p "$ISO_LINUX"
 cp "$LINUX_DIR/bzImage" "$ISO_LINUX/" 2>/dev/null || true
 cp "$LINUX_DIR/initramfs.cpio.gz" "$ISO_LINUX/" 2>/dev/null || true

@@ -17,7 +17,7 @@ $env:CXX = "clang++"
 $env:AR = "llvm-ar"
 
 # Provide freestanding headers for mbedtls (assert.h, stddef.h, etc.)
-$mbedtlsInclude = "C:\Users\nathan\Documents\Scripts\OSrust\kernel\mbedtls-include"
+$mbedtlsInclude = "$PSScriptRoot\kernel\mbedtls-include"
 if (Test-Path $mbedtlsInclude) {
     $env:CFLAGS = "-I`"$mbedtlsInclude`" -mcmodel=kernel -mno-red-zone -ffreestanding"
     $env:BINDGEN_EXTRA_CLANG_ARGS = "-I`"$mbedtlsInclude`""

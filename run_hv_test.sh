@@ -1,7 +1,9 @@
 #!/bin/bash
 chmod 666 /dev/kvm
 rm -f /tmp/kvm_serial.log
-cd /mnt/c/Users/nathan/Documents/Scripts/OSrust
+# Navigate to workspace root (portable)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 (
   sleep 25
   echo 'sendkey h'

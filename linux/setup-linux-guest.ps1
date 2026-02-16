@@ -2,7 +2,7 @@
 # Script to prepare minimal Linux kernel and initramfs for TrustOS TSL
 
 $ErrorActionPreference = "Stop"
-$LinuxDir = "c:\Users\nathan\Documents\Scripts\OSrust\linux"
+$LinuxDir = "$PSScriptRoot"
 
 Write-Host "=== TrustOS Linux Subsystem - Kernel Setup ===" -ForegroundColor Cyan
 
@@ -14,8 +14,10 @@ if (-not (Test-Path $LinuxDir)) {
 Write-Host "`n[1/4] Preparing Linux kernel..." -ForegroundColor Yellow
 
 # Execute WSL script to build initramfs
+# Convert script root to WSL path
+$wslScriptRoot = $PSScriptRoot -replace '^([A-Za-z]):', { '/mnt/' + $_.Groups[1].Value.ToLower() } -replace '\\', '/'
 $wslCommands = @"
-cd /mnt/c/Users/nathan/Documents/Scripts/OSrust/linux
+cd $wslScriptRoot
 
 echo '=== Creating initramfs with BusyBox ==='
 
@@ -24,7 +26,7 @@ apt-get update -qq 2>/dev/null
 apt-get install -y busybox-static wget cpio gzip 2>/dev/null
 
 # Create initramfs structure
-INITRAMFS_DIR="/mnt/c/Users/nathan/Documents/Scripts/OSrust/linux/initramfs"
+INITRAMFS_DIR="$wslScriptRoot/initramfs"
 rm -rf "\$INITRAMFS_DIR"
 mkdir -p "\$INITRAMFS_DIR"/{bin,sbin,etc,proc,sys,dev,tmp,usr/bin,usr/sbin,root}
 
@@ -77,14 +79,14 @@ chmod +x "\$INITRAMFS_DIR/init"
 
 # Create cpio archive
 cd "\$INITRAMFS_DIR"
-find . | cpio -o -H newc 2>/dev/null | gzip > /mnt/c/Users/nathan/Documents/Scripts/OSrust/linux/initramfs.cpio.gz
-echo "initramfs created: \$(ls -lh /mnt/c/Users/nathan/Documents/Scripts/OSrust/linux/initramfs.cpio.gz | awk '{print \$5}')"
+find . | cpio -o -H newc 2>/dev/null | gzip > $wslScriptRoot/initramfs.cpio.gz
+echo "initramfs created: \$(ls -lh $wslScriptRoot/initramfs.cpio.gz | awk '{print \$5}')"
 
 echo ''
 echo '=== Getting Linux kernel ==='
 
 # Try to copy kernel from WSL
-cd /mnt/c/Users/nathan/Documents/Scripts/OSrust/linux
+cd $wslScriptRoot
 if [ -f /boot/vmlinuz-* ]; then
     KERNEL=\$(ls /boot/vmlinuz-* 2>/dev/null | head -1)
     echo "Found kernel: \$KERNEL"
@@ -103,7 +105,7 @@ fi
 
 echo ''
 echo '=== Files created ==='
-ls -lh /mnt/c/Users/nathan/Documents/Scripts/OSrust/linux/
+ls -lh $wslScriptRoot/
 "@
 
 Write-Host "[2/4] Running WSL build script..." -ForegroundColor Yellow
@@ -121,7 +123,7 @@ foreach ($file in $files) {
 }
 
 Write-Host "`n[4/4] Copying to iso_root..." -ForegroundColor Yellow
-$isoLinuxDir = "c:\Users\nathan\Documents\Scripts\OSrust\iso_root\boot\linux"
+$isoLinuxDir = "$PSScriptRoot\..\iso_root\boot\linux"
 New-Item -ItemType Directory -Path $isoLinuxDir -Force | Out-Null
 
 if (Test-Path "$LinuxDir\bzImage") {
