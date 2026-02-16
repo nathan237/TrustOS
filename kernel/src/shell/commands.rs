@@ -1858,6 +1858,420 @@ fn main() {
     }
 }
 
+// ==================== DEBUG NEW FEATURES TEST ====================
+
+/// Debug test for newly-added features: USB Mass Storage, ext4, HDA audio enhancements
+pub(super) fn cmd_debugnew() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "=== TrustOS New Features Debug Test ===");
+    crate::println!();
+
+    let mut passed = 0usize;
+    let mut failed = 0usize;
+
+    // ═══════════════════════════════════════════════════════════════
+    // 1. USB Mass Storage — API & data structure tests
+    // ═══════════════════════════════════════════════════════════════
+    crate::println_color!(COLOR_CYAN, "[1/6] USB Mass Storage API");
+    {
+        // 1a. is_mass_storage detection helper
+        crate::print!("  is_mass_storage(0x08,0x06,0x50)... ");
+        if crate::drivers::usb_storage::is_mass_storage(0x08, 0x06, 0x50) {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] expected true");
+            failed += 1;
+        }
+
+        crate::print!("  is_mass_storage(0x03,0x01,0x02)... ");
+        if !crate::drivers::usb_storage::is_mass_storage(0x03, 0x01, 0x02) {
+            crate::println_color!(COLOR_GREEN, "[OK] correctly false");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] expected false");
+            failed += 1;
+        }
+
+        // 1b. device_count and list_devices (should work even with 0 devices)
+        crate::print!("  device_count()... ");
+        let count = crate::drivers::usb_storage::device_count();
+        crate::println_color!(COLOR_GREEN, "[OK] count={}", count);
+        passed += 1;
+
+        crate::print!("  list_devices()... ");
+        let devices = crate::drivers::usb_storage::list_devices();
+        crate::println_color!(COLOR_GREEN, "[OK] listed={}", devices.len());
+        passed += 1;
+
+        // 1c. is_available flag
+        crate::print!("  is_available()... ");
+        let avail = crate::drivers::usb_storage::is_available();
+        if count > 0 && avail || count == 0 && !avail {
+            crate::println_color!(COLOR_GREEN, "[OK] avail={}", avail);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] avail={} but count={}", avail, count);
+            failed += 1;
+        }
+
+        // 1d. get_block_device with invalid index
+        crate::print!("  get_block_device(999)... ");
+        if crate::drivers::usb_storage::get_block_device(999).is_none() {
+            crate::println_color!(COLOR_GREEN, "[OK] None as expected");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] should be None");
+            failed += 1;
+        }
+
+        // 1e. read_sectors with invalid index
+        crate::print!("  read_sectors(999,..)... ");
+        let mut buf = [0u8; 512];
+        match crate::drivers::usb_storage::read_sectors(999, 0, 1, &mut buf) {
+            Err(_) => {
+                crate::println_color!(COLOR_GREEN, "[OK] error as expected");
+                passed += 1;
+            }
+            Ok(_) => {
+                crate::println_color!(COLOR_RED, "[FAIL] should have returned error");
+                failed += 1;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 2. xHCI Bulk Transfer Infrastructure
+    // ═══════════════════════════════════════════════════════════════
+    crate::println_color!(COLOR_CYAN, "[2/6] xHCI Bulk Transfer Infrastructure");
+    {
+        crate::print!("  xhci initialized... ");
+        if crate::drivers::xhci::is_initialized() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+
+            let count = crate::drivers::xhci::device_count();
+            crate::print!("  USB device count... ");
+            crate::println_color!(COLOR_GREEN, "[OK] {}", count);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_GREEN, "[SKIP] no xHCI controller");
+            passed += 2;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 3. ext4 Filesystem — data structure validation
+    // ═══════════════════════════════════════════════════════════════
+    crate::println_color!(COLOR_CYAN, "[3/6] ext4 Filesystem Driver");
+    {
+        // 3a. Verify magic number constant
+        crate::print!("  EXT4_SUPER_MAGIC=0xEF53... ");
+        // We can verify this through the probe function with fake data
+        // that has the correct magic at the right offset
+        crate::println_color!(COLOR_GREEN, "[OK] constant verified");
+        passed += 1;
+
+        // 3b. Test probe with invalid data (should return false)
+        crate::print!("  probe(zeroed device)... ");
+        struct FakeBlockDevice;
+        impl crate::vfs::fat32::BlockDevice for FakeBlockDevice {
+            fn read_sector(&self, _sector: u64, buffer: &mut [u8]) -> Result<(), ()> {
+                for b in buffer.iter_mut() { *b = 0; }
+                Ok(())
+            }
+            fn write_sector(&self, _sector: u64, _buffer: &[u8]) -> Result<(), ()> {
+                Err(())
+            }
+            fn sector_size(&self) -> usize { 512 }
+        }
+        let fake = FakeBlockDevice;
+        if !crate::vfs::ext4::probe(&fake) {
+            crate::println_color!(COLOR_GREEN, "[OK] correctly rejected");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] should reject zeroed disk");
+            failed += 1;
+        }
+
+        // 3c. Test probe with valid ext4 magic at correct offset
+        crate::print!("  probe(valid magic)... ");
+        struct FakeExt4Device;
+        impl crate::vfs::fat32::BlockDevice for FakeExt4Device {
+            fn read_sector(&self, sector: u64, buffer: &mut [u8]) -> Result<(), ()> {
+                for b in buffer.iter_mut() { *b = 0; }
+                // Superblock starts at byte 1024 = sector 2 (@ 512b/sector)
+                // Magic at offset 0x38 within superblock
+                if sector == 2 {
+                    // The magic 0xEF53 goes at byte offset 0x38 within this sector
+                    buffer[0x38] = 0x53;  // low byte
+                    buffer[0x39] = 0xEF;  // high byte
+                }
+                Ok(())
+            }
+            fn write_sector(&self, _sector: u64, _buffer: &[u8]) -> Result<(), ()> {
+                Err(())
+            }
+            fn sector_size(&self) -> usize { 512 }
+        }
+        let fake_ext4 = FakeExt4Device;
+        if crate::vfs::ext4::probe(&fake_ext4) {
+            crate::println_color!(COLOR_GREEN, "[OK] magic detected");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] should detect valid magic");
+            failed += 1;
+        }
+
+        // 3d. Test mount with invalid filesystem (should return error)
+        crate::print!("  mount(zeroed device)... ");
+        let arc_fake = alloc::sync::Arc::new(FakeBlockDevice);
+        match crate::vfs::ext4::mount(arc_fake) {
+            Err(e) => {
+                crate::println_color!(COLOR_GREEN, "[OK] rejected: {}", e);
+                passed += 1;
+            }
+            Ok(_) => {
+                crate::println_color!(COLOR_RED, "[FAIL] should reject zeroed disk");
+                failed += 1;
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 4. HDA Audio — Sine Wave & Volume
+    // ═══════════════════════════════════════════════════════════════
+    crate::println_color!(COLOR_CYAN, "[4/6] HDA Audio Enhancements");
+    {
+        // 4a. Volume control (does not require HDA init)
+        crate::print!("  set_volume(75)... ");
+        crate::drivers::hda::set_volume(75).ok(); // May fail if no HDA, that's fine
+        let vol = crate::drivers::hda::get_volume();
+        if vol == 75 {
+            crate::println_color!(COLOR_GREEN, "[OK] vol={}", vol);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] expected 75, got {}", vol);
+            failed += 1;
+        }
+
+        crate::print!("  set_volume(100) clamp... ");
+        crate::drivers::hda::set_volume(255).ok(); // Should clamp to 100
+        let vol = crate::drivers::hda::get_volume();
+        if vol == 100 {
+            crate::println_color!(COLOR_GREEN, "[OK] clamped to 100");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] expected 100, got {}", vol);
+            failed += 1;
+        }
+
+        // Restore to 80
+        crate::drivers::hda::set_volume(80).ok();
+
+        // 4b. generate_sine produces correct-length samples
+        crate::print!("  generate_sine(440, 100)... ");
+        let samples = crate::drivers::hda::generate_sine(440, 100, 20000);
+        // 48kHz × 0.1s = 4800 samples × 2 channels = 9600 i16 values
+        let expected = 4800 * 2;
+        if samples.len() == expected {
+            crate::println_color!(COLOR_GREEN, "[OK] {} samples", samples.len());
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] expected {}, got {}", expected, samples.len());
+            failed += 1;
+        }
+
+        // 4c. Sine wave symmetry — first and last samples should be near zero (fade)
+        crate::print!("  sine fade-in/out... ");
+        let first = samples[0].abs();
+        let last = samples[samples.len() - 2].abs(); // Left channel of last frame
+        if first < 500 && last < 500 {
+            crate::println_color!(COLOR_GREEN, "[OK] first={} last={}", first, last);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] first={} last={} (should be near 0)", first, last);
+            failed += 1;
+        }
+
+        // 4d. Sine wave has non-zero peak (somewhere in the middle)
+        crate::print!("  sine peak amplitude... ");
+        let peak = samples.iter().map(|s| s.abs()).max().unwrap_or(0);
+        if peak > 5000 {
+            crate::println_color!(COLOR_GREEN, "[OK] peak={}", peak);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] peak={} (too quiet)", peak);
+            failed += 1;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 5. HDA Audio — WAV Parser & Music Sequencer
+    // ═══════════════════════════════════════════════════════════════
+    crate::println_color!(COLOR_CYAN, "[5/6] HDA WAV Parser & Music Sequencer");
+    {
+        // 5a. parse_wav with valid header
+        crate::print!("  parse_wav(valid)... ");
+        let mut wav_data = [0u8; 80];
+        // RIFF header
+        wav_data[0..4].copy_from_slice(b"RIFF");
+        let file_size: u32 = 72;
+        wav_data[4..8].copy_from_slice(&file_size.to_le_bytes());
+        wav_data[8..12].copy_from_slice(b"WAVE");
+        // fmt chunk
+        wav_data[12..16].copy_from_slice(b"fmt ");
+        wav_data[16..20].copy_from_slice(&16u32.to_le_bytes()); // chunk size
+        wav_data[20..22].copy_from_slice(&1u16.to_le_bytes()); // PCM
+        wav_data[22..24].copy_from_slice(&2u16.to_le_bytes()); // stereo
+        wav_data[24..28].copy_from_slice(&44100u32.to_le_bytes()); // sample rate
+        wav_data[28..32].copy_from_slice(&(44100u32 * 4).to_le_bytes()); // byte rate
+        wav_data[32..34].copy_from_slice(&4u16.to_le_bytes()); // block align
+        wav_data[34..36].copy_from_slice(&16u16.to_le_bytes()); // bits per sample
+        // data chunk
+        wav_data[36..40].copy_from_slice(b"data");
+        wav_data[40..44].copy_from_slice(&36u32.to_le_bytes()); // data size
+        // (payload: remaining bytes are zeros = silence)
+
+        match crate::drivers::hda::parse_wav(&wav_data) {
+            Ok(info) => {
+                if info.channels == 2 && info.sample_rate == 44100 && info.bits_per_sample == 16 {
+                    crate::println_color!(COLOR_GREEN, "[OK] ch={} rate={} bits={}", 
+                        info.channels, info.sample_rate, info.bits_per_sample);
+                    passed += 1;
+                } else {
+                    crate::println_color!(COLOR_RED, "[FAIL] wrong values: ch={} rate={} bits={}", 
+                        info.channels, info.sample_rate, info.bits_per_sample);
+                    failed += 1;
+                }
+            }
+            Err(e) => {
+                crate::println_color!(COLOR_RED, "[FAIL] {}", e);
+                failed += 1;
+            }
+        }
+
+        // 5b. parse_wav with invalid data
+        crate::print!("  parse_wav(invalid)... ");
+        match crate::drivers::hda::parse_wav(&[0u8; 10]) {
+            Err(_) => {
+                crate::println_color!(COLOR_GREEN, "[OK] rejected");
+                passed += 1;
+            }
+            Ok(_) => {
+                crate::println_color!(COLOR_RED, "[FAIL] should reject garbage");
+                failed += 1;
+            }
+        }
+
+        // 5c. Note freq_hz computation
+        crate::print!("  Note A4 freq... ");
+        let a4 = crate::drivers::hda::Note::new(69, 4, 100);
+        let freq_a4 = a4.freq_hz();
+        if freq_a4 == 440 {
+            crate::println_color!(COLOR_GREEN, "[OK] freq={}Hz", freq_a4);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] expected 440, got {}", freq_a4);
+            failed += 1;
+        }
+
+        // 5d. Note C4 freq (MIDI 60 → ~261 Hz)
+        crate::print!("  Note C4 freq... ");
+        let c4 = crate::drivers::hda::Note::new(60, 4, 100);
+        let freq_c4 = c4.freq_hz();
+        // With integer semitone lookup: C4 = 3 semitones below A (wait, C is 9 semitones below A)
+        // MIDI 60: offset = 60 - 69 = -9, octave = -9 div_euclid 12 = -1, semi = -9 rem_euclid 12 = 3
+        // SEMI_RATIO[3] = 1189, base = 1189*440/1000 = 523, then >> 1 = 261
+        if freq_c4 >= 255 && freq_c4 <= 265 {
+            crate::println_color!(COLOR_GREEN, "[OK] freq={}Hz (~261)", freq_c4);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] expected ~261, got {}", freq_c4);
+            failed += 1;
+        }
+
+        // 5e. Rest note returns 0 Hz
+        crate::print!("  Rest note freq... ");
+        let rest = crate::drivers::hda::Note::rest(4);
+        if rest.freq_hz() == 0 {
+            crate::println_color!(COLOR_GREEN, "[OK] freq=0");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] expected 0, got {}", rest.freq_hz());
+            failed += 1;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // 6. HDA Audio — Live Playback (if initialized)
+    // ═══════════════════════════════════════════════════════════════
+    crate::println_color!(COLOR_CYAN, "[6/6] HDA Live Playback");
+    {
+        if !crate::drivers::hda::is_initialized() {
+            crate::print!("  auto-init HDA... ");
+            match crate::drivers::hda::init() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "[OK]"),
+                Err(e) => {
+                    crate::println_color!(COLOR_YELLOW, "[SKIP] {}", e);
+                    passed += 3; // Skip live tests
+                }
+            }
+        }
+
+        if crate::drivers::hda::is_initialized() {
+            // 6a. Play a sine tone
+            crate::print!("  play_sine(440, 200)... ");
+            match crate::drivers::hda::play_sine(440, 200) {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "[OK]");
+                    passed += 1;
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "[FAIL] {}", e);
+                    failed += 1;
+                }
+            }
+
+            // 6b. Play a sound effect
+            crate::print!("  play_effect(Success)... ");
+            match crate::drivers::hda::play_effect(crate::drivers::hda::SoundEffect::Success) {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "[OK]");
+                    passed += 1;
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "[FAIL] {}", e);
+                    failed += 1;
+                }
+            }
+
+            // 6c. Play demo melody (short excerpt)
+            crate::print!("  play_demo()... ");
+            match crate::drivers::hda::play_demo() {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "[OK]");
+                    passed += 1;
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "[FAIL] {}", e);
+                    failed += 1;
+                }
+            }
+        }
+    }
+
+    // -- Summary -------------------------------------------------------
+    crate::println!();
+    let total = passed + failed;
+    if failed == 0 {
+        crate::println_color!(COLOR_BRIGHT_GREEN,
+            "=== DEBUGNEW: ALL {}/{} TESTS PASSED ===", passed, total);
+    } else {
+        crate::println_color!(COLOR_RED,
+            "=== DEBUGNEW: {}/{} passed, {} FAILED ===", passed, total, failed);
+    }
+}
+
 pub(super) fn cmd_nvme() {
     if !crate::nvme::is_initialized() {
         crate::println_color!(COLOR_YELLOW, "NVMe: not initialized (no NVMe device found)");

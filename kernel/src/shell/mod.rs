@@ -873,6 +873,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "test" => commands::cmd_test(),
         "memtest" => commands::cmd_memtest(),
         "inttest" => commands::cmd_inttest(),
+        "debugnew" => commands::cmd_debugnew(),
         "nvme" => commands::cmd_nvme(),
         "keytest" => commands::cmd_keytest(),
         "hexdump" | "xxd" => commands::cmd_hexdump(args),
