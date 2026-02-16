@@ -74,7 +74,7 @@ Write-Host "Configuring VM (UEFI mode)..." -ForegroundColor Yellow
 & $VBoxManage modifyvm $VMName --nic1 nat --nictype1 82540EM --cableconnected1 on
 
 # Add storage controllers
-& $VBoxManage storagectl $VMName --name "SATA" --add sata --controller IntelAhci --portcount 2
+& $VBoxManage storagectl $VMName --name "SATA" --add sata --controller IntelAhci --portcount 4
 
 # Attach ISO if it exists
 if (Test-Path $ISOPath) {
@@ -87,6 +87,16 @@ if (Test-Path $ISOPath) {
     Write-Host "  2. Or use WSL: wsl xorriso ..." -ForegroundColor Gray
     Write-Host "  3. Or run build-limine.ps1" -ForegroundColor Gray
 }
+
+# Create and attach a persistent data disk (AHCI port 1)
+$DataVdi = "$PSScriptRoot\trustos_data.vdi"
+if (-not (Test-Path $DataVdi)) {
+    Write-Host "Creating 64 MB data disk: $DataVdi" -ForegroundColor Yellow
+    & $VBoxManage createmedium disk --filename $DataVdi --size 64 --format VDI
+    Write-Host "Data disk created" -ForegroundColor Green
+}
+& $VBoxManage storageattach $VMName --storagectl "SATA" --port 1 --device 0 --type hdd --medium $DataVdi
+Write-Host "Data disk attached on SATA port 1" -ForegroundColor Green
 
 # Enable serial port for output
 & $VBoxManage modifyvm $VMName --uart1 0x3F8 4 --uartmode1 file "$PSScriptRoot\serial.log"

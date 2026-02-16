@@ -213,18 +213,47 @@ pub fn init() {
         crate::log_debug!("[VFS] Mounted procfs at /proc");
     }
     
-    // Mount TrustFS as root if virtio-blk available
+    // Mount TrustFS as root — try virtio-blk first, then AHCI
+    let mut root_mounted = false;
+    
     if crate::virtio_blk::is_initialized() {
-        match trustfs::TrustFs::new() {
+        let backend = Arc::new(fat32::VirtioBlockDevice);
+        let capacity = crate::virtio_blk::capacity();
+        match trustfs::TrustFs::new(backend, capacity) {
             Ok(trustfs) => {
                 mount("/", Arc::new(trustfs)).ok();
-                crate::log!("[VFS] Mounted TrustFS at / (persistent)");
+                crate::log!("[VFS] Mounted TrustFS at / (virtio-blk, persistent)");
+                root_mounted = true;
             }
             Err(e) => {
-                crate::log!("[VFS] TrustFS mount failed: {:?}, using ramfs", e);
+                crate::log!("[VFS] TrustFS mount on virtio-blk failed: {:?}", e);
             }
         }
-    } else {
+    }
+    
+    // Fallback: try TrustFS on AHCI data disk (e.g. VirtualBox)
+    if !root_mounted && crate::drivers::ahci::is_initialized() {
+        let devices = crate::drivers::ahci::list_devices();
+        // Use the first non-optical AHCI port with sectors > 0
+        for dev in &devices {
+            if dev.sector_count > 64 {
+                let backend = Arc::new(fat32::AhciBlockReader::new(dev.port_num as usize, 0));
+                match trustfs::TrustFs::new(backend, dev.sector_count) {
+                    Ok(trustfs) => {
+                        mount("/", Arc::new(trustfs)).ok();
+                        crate::log!("[VFS] Mounted TrustFS at / (AHCI port {}, persistent)", dev.port_num);
+                        root_mounted = true;
+                        break;
+                    }
+                    Err(e) => {
+                        crate::log_debug!("[VFS] TrustFS on AHCI port {} failed: {:?}", dev.port_num, e);
+                    }
+                }
+            }
+        }
+    }
+    
+    if !root_mounted {
         crate::log_debug!("[VFS] No block device, root will be ramfs");
     }
     

@@ -253,6 +253,22 @@ pub trait BlockDevice: Send + Sync {
 pub trait BlockReader: BlockDevice {}
 impl<T: BlockDevice> BlockReader for T {}
 
+/// VirtIO Block Device (wraps the virtio_blk module)
+pub struct VirtioBlockDevice;
+
+impl BlockDevice for VirtioBlockDevice {
+    fn read_sector(&self, sector: u64, buffer: &mut [u8]) -> Result<(), ()> {
+        // virtio_blk::read_sectors takes a generic &mut [u8]
+        crate::virtio_blk::read_sectors(sector, 1, buffer)
+            .map_err(|_| ())
+    }
+    
+    fn write_sector(&self, sector: u64, buffer: &[u8]) -> Result<(), ()> {
+        crate::virtio_blk::write_sectors(sector, 1, buffer)
+            .map_err(|_| ())
+    }
+}
+
 /// AHCI Block Device
 pub struct AhciBlockReader {
     port: usize,

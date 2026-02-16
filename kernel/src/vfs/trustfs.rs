@@ -21,6 +21,7 @@ use super::{
     FileSystem, FileOps, DirOps, Stat, DirEntry, FileType,
     Ino, VfsResult, VfsError
 };
+use super::fat32::BlockDevice;
 
 const SECTOR_SIZE: usize = 512;
 const MAGIC: u32 = 0x54525553; // "TRUS"
@@ -220,6 +221,7 @@ struct TrustFsInner {
     superblock: RwLock<Superblock>,
     inode_cache: RwLock<InodeCache>,
     dirty: RwLock<bool>,
+    backend: Arc<dyn BlockDevice>,
 }
 
 impl TrustFsInner {
@@ -228,7 +230,7 @@ impl TrustFsInner {
         if super::block_cache::cached_read(sector, buf).is_ok() {
             return Ok(());
         }
-        crate::virtio_blk::read_sector(sector, buf)
+        self.backend.read_sector(sector, buf)
             .map_err(|_| VfsError::IoError)
     }
     
@@ -237,7 +239,7 @@ impl TrustFsInner {
         if super::block_cache::cached_write(sector, buf).is_ok() {
             return Ok(());
         }
-        crate::virtio_blk::write_sector(sector, buf)
+        self.backend.write_sector(sector, buf)
             .map_err(|_| VfsError::IoError)
     }
     
@@ -760,17 +762,11 @@ pub struct TrustFs {
 }
 
 impl TrustFs {
-    /// Create new TrustFS, format if needed
-    pub fn new() -> VfsResult<Self> {
-        if !crate::virtio_blk::is_initialized() {
-            return Err(VfsError::IoError);
-        }
-        
-        let capacity = crate::virtio_blk::capacity();
-        
+    /// Create new TrustFS on a block device, format if needed
+    pub fn new(backend: Arc<dyn BlockDevice>, capacity: u64) -> VfsResult<Self> {
         // Try to read existing superblock
         let mut buf = [0u8; SECTOR_SIZE];
-        crate::virtio_blk::read_sector(SUPERBLOCK_SECTOR, &mut buf)
+        backend.read_sector(SUPERBLOCK_SECTOR, &mut buf)
             .map_err(|_| VfsError::IoError)?;
         
         let sb_ptr = buf.as_ptr() as *const Superblock;
@@ -781,39 +777,40 @@ impl TrustFs {
             existing_sb
         } else {
             crate::log!("[TrustFS] Formatting new filesystem...");
-            Self::format(capacity)?
+            Self::format_with(&*backend, capacity)?
         };
         
         let inner = Arc::new(TrustFsInner {
             superblock: RwLock::new(superblock),
             inode_cache: RwLock::new(InodeCache::new()),
             dirty: RwLock::new(false),
+            backend,
         });
         
         Ok(Self { inner })
     }
     
-    /// Format the disk with TrustFS
-    fn format(capacity: u64) -> VfsResult<Superblock> {
+    /// Format the disk with TrustFS using a given block device
+    fn format_with(backend: &dyn BlockDevice, capacity: u64) -> VfsResult<Superblock> {
         let sb = Superblock::new(capacity);
         
         // Write superblock
         let mut buf = [0u8; SECTOR_SIZE];
         let sb_ptr = buf.as_mut_ptr() as *mut Superblock;
         unsafe { *sb_ptr = sb; }
-        crate::virtio_blk::write_sector(SUPERBLOCK_SECTOR, &buf)
+        backend.write_sector(SUPERBLOCK_SECTOR, &buf)
             .map_err(|_| VfsError::IoError)?;
         
         // Clear inode table
         let zero_buf = [0u8; SECTOR_SIZE];
         for i in 0..INODE_SECTORS {
-            crate::virtio_blk::write_sector(INODE_START_SECTOR + i, &zero_buf)
+            backend.write_sector(INODE_START_SECTOR + i, &zero_buf)
                 .map_err(|_| VfsError::IoError)?;
         }
         
         // Clear bitmap
         for i in 0..BITMAP_SECTORS {
-            crate::virtio_blk::write_sector(BITMAP_START_SECTOR + i, &zero_buf)
+            backend.write_sector(BITMAP_START_SECTOR + i, &zero_buf)
                 .map_err(|_| VfsError::IoError)?;
         }
         
@@ -831,7 +828,7 @@ impl TrustFs {
         let root_offset = core::mem::size_of::<DiskInode>(); // Skip inode 0
         let inode_ptr = inode_buf[root_offset..].as_mut_ptr() as *mut DiskInode;
         unsafe { *inode_ptr = root_inode; }
-        crate::virtio_blk::write_sector(inode_sector, &inode_buf)
+        backend.write_sector(inode_sector, &inode_buf)
             .map_err(|_| VfsError::IoError)?;
         
         crate::log!("[TrustFS] Formatted: {} blocks, {} inodes", sb.total_blocks, sb.total_inodes);
