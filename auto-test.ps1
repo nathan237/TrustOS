@@ -113,11 +113,12 @@ function Run-Test {
     $cmd = $test.Cmd
     $category = $test.Category
     $validate = $test.Validate
+    $testTimeout = if ($test.Timeout) { $test.Timeout } else { $CmdTimeout }
 
     Write-Host ("  [{0}] {1} ... " -f $category, $name) -NoNewline
 
     try {
-        $result = Send-Command -writer $writer -stream $stream -cmd $cmd -timeout $CmdTimeout
+        $result = Send-Command -writer $writer -stream $stream -cmd $cmd -timeout $testTimeout
         $output = $result.Cleaned
         $rawOut = $result.Raw
         $success = & $validate $output
@@ -229,6 +230,9 @@ $tests = @(
 
     # -- SELFTEST --
     @{ Category="SELFTEST"; Name="builtin self-test"; Cmd="test"; Validate={ param($o) $o -match "self-test|Self-Test|OK|Done|PASS" } }
+
+    # -- INTTEST (Gap #1-5 integration) --
+    @{ Category="INTTEST"; Name="integration test suite"; Cmd="inttest"; Validate={ param($o) $o -match "ALL.*TESTS PASSED" }; Timeout=15 }
 
     # -- TRUSTLANG --
     @{ Category="TRUSTLANG"; Name="eval println"; Cmd='trustlang eval println("hello_tl")'; Validate={ param($o) $o -match "hello_tl" } }

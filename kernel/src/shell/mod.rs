@@ -768,6 +768,7 @@ pub(super) fn execute_command(cmd: &str) {
         "users" => commands::cmd_users(),
         "test" => commands::cmd_test(),
         "memtest" => commands::cmd_memtest(),
+        "inttest" => commands::cmd_inttest(),
         "keytest" => commands::cmd_keytest(),
         "hexdump" | "xxd" => commands::cmd_hexdump(args),
         "panic" => commands::cmd_panic(),

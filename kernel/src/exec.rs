@@ -910,6 +910,292 @@ pub fn exec_pipe_test() -> ExecResult {
     }
 }
 
+// ============================================================================
+// Gap #4/#5 Integration Tests
+// ============================================================================
+
+/// Test Ring 3 exception safety: execute UD2 (invalid opcode) in user mode.
+/// The kernel should NOT panic — it should catch the fault and kill the process
+/// with exit code -4 (SIGILL).
+pub fn exec_exception_safety_test() -> ExecResult {
+    crate::log!("[EXEC] Running exception safety test (UD2 in Ring 3)...");
+
+    let mut address_space = match AddressSpace::new_with_kernel() {
+        Some(a) => a,
+        None => return ExecResult::MemoryError,
+    };
+    let hhdm = hhdm_offset();
+
+    // Machine code: just UD2 (invalid opcode) then safety loop
+    //   ud2            ; 0F 0B — generates #UD exception
+    //   jmp $          ; EB FE — safety (never reached)
+    let code: [u8; 4] = [
+        0x0F, 0x0B,  // ud2
+        0xEB, 0xFE,  // jmp $
+    ];
+
+    let code_vaddr: u64 = 0x400000;
+    let code_phys = match alloc_physical_page() {
+        Some(p) => p,
+        None => return ExecResult::MemoryError,
+    };
+    unsafe {
+        let dest = (code_phys + hhdm) as *mut u8;
+        core::ptr::write_bytes(dest, 0, 4096);
+        core::ptr::copy_nonoverlapping(code.as_ptr(), dest, code.len());
+    }
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
+        return ExecResult::MemoryError;
+    }
+
+    let stack_top: u64 = 0x7FFFFFFF0000;
+    let stack_pages = 4usize;
+    for i in 0..stack_pages {
+        let vaddr = stack_top - (i as u64 + 1) * 4096;
+        let phys = match alloc_physical_page() { Some(p) => p, None => return ExecResult::MemoryError };
+        unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
+            return ExecResult::MemoryError;
+        }
+    }
+    let user_stack = stack_top - 8;
+
+    unsafe {
+        let kernel_cr3: u64;
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
+        CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
+        CURRENT_USER_STACK_BOTTOM.store(stack_top - (stack_pages as u64 * 4096), Ordering::SeqCst);
+        address_space.activate();
+        let exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
+        CURRENT_USER_SPACE.store(core::ptr::null_mut(), Ordering::Release);
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
+        crate::log!("[EXEC] exception_safety_test exited with code {}", exit_code);
+        ExecResult::Exited(exit_code)
+    }
+}
+
+/// Test signal syscalls from Ring 3: sigprocmask, kill(pid,0).
+/// Prints "SIG OK\n" on success, "SIG FAIL\n" on failure.
+pub fn exec_signal_test() -> ExecResult {
+    crate::log!("[EXEC] Running signal syscall test...");
+
+    let mut address_space = match AddressSpace::new_with_kernel() {
+        Some(a) => a,
+        None => return ExecResult::MemoryError,
+    };
+    let hhdm = hhdm_offset();
+
+    // Machine code:
+    //   getpid() → save pid in r12
+    //   rt_sigprocmask(SIG_SETMASK=2, &zero, &old, 8) → check 0
+    //   kill(pid, 0) → check 0  (existence check)
+    //   write(1, "SIG OK\n", 7)
+    //   exit(0)
+    //   --- fail path ---
+    //   write(1, "SIG FAIL\n", 9)
+    //   exit(1)
+    #[rustfmt::skip]
+    let code: [u8; 158] = [
+        // 0x00: getpid
+        0xB8, 0x27, 0x00, 0x00, 0x00,              // mov eax, 39
+        0x0F, 0x05,                                  // syscall
+        0x49, 0x89, 0xC4,                            // mov r12, rax
+        // 0x0A: sub rsp, 16 (space for mask + old)
+        0x48, 0x83, 0xEC, 0x10,                      // sub rsp, 16
+        0x48, 0xC7, 0x04, 0x24, 0x00, 0x00, 0x00, 0x00, // mov qword [rsp], 0
+        // 0x16: rt_sigprocmask(SIG_SETMASK=2, &mask, &old, 8)
+        0xB8, 0x0E, 0x00, 0x00, 0x00,              // mov eax, 14
+        0xBF, 0x02, 0x00, 0x00, 0x00,              // mov edi, 2
+        0x48, 0x8D, 0x34, 0x24,                     // lea rsi, [rsp]
+        0x48, 0x8D, 0x54, 0x24, 0x08,              // lea rdx, [rsp+8]
+        0x41, 0xBA, 0x08, 0x00, 0x00, 0x00,        // mov r10d, 8
+        0x0F, 0x05,                                  // syscall
+        0x85, 0xC0,                                  // test eax, eax
+        0x75, 0x33,                                  // jnz fail (0x68)
+        // 0x35: kill(pid, 0)
+        0xB8, 0x3E, 0x00, 0x00, 0x00,              // mov eax, 62
+        0x44, 0x89, 0xE7,                            // mov edi, r12d
+        0x31, 0xF6,                                  // xor esi, esi
+        0x0F, 0x05,                                  // syscall
+        0x85, 0xC0,                                  // test eax, eax
+        0x75, 0x23,                                  // jnz fail (0x68)
+        // 0x45: write(1, "SIG OK\n", 7)
+        0xB8, 0x01, 0x00, 0x00, 0x00,              // mov eax, 1
+        0xBF, 0x01, 0x00, 0x00, 0x00,              // mov edi, 1
+        0x48, 0x8D, 0x35, 0x38, 0x00, 0x00, 0x00,  // lea rsi, [rip+0x38] → msg
+        0xBA, 0x07, 0x00, 0x00, 0x00,              // mov edx, 7
+        0x0F, 0x05,                                  // syscall
+        // 0x5D: exit(0)
+        0xB8, 0x3C, 0x00, 0x00, 0x00,              // mov eax, 60
+        0x31, 0xFF,                                  // xor edi, edi
+        0x0F, 0x05,                                  // syscall
+        0xEB, 0xFE,                                  // jmp $
+        // 0x68: fail → write(1, "SIG FAIL\n", 9)
+        0xB8, 0x01, 0x00, 0x00, 0x00,              // mov eax, 1
+        0xBF, 0x01, 0x00, 0x00, 0x00,              // mov edi, 1
+        0x48, 0x8D, 0x35, 0x1C, 0x00, 0x00, 0x00,  // lea rsi, [rip+0x1C] → fail_msg
+        0xBA, 0x09, 0x00, 0x00, 0x00,              // mov edx, 9
+        0x0F, 0x05,                                  // syscall
+        0xB8, 0x3C, 0x00, 0x00, 0x00,              // mov eax, 60
+        0xBF, 0x01, 0x00, 0x00, 0x00,              // mov edi, 1
+        0x0F, 0x05,                                  // syscall
+        0xEB, 0xFE,                                  // jmp $
+        // 0x8E: data
+        b'S', b'I', b'G', b' ', b'O', b'K', b'\n',              // "SIG OK\n"
+        b'S', b'I', b'G', b' ', b'F', b'A', b'I', b'L', b'\n', // "SIG FAIL\n"
+    ];
+
+    let code_vaddr: u64 = 0x400000;
+    let code_phys = match alloc_physical_page() {
+        Some(p) => p,
+        None => return ExecResult::MemoryError,
+    };
+    unsafe {
+        let dest = (code_phys + hhdm) as *mut u8;
+        core::ptr::write_bytes(dest, 0, 4096);
+        core::ptr::copy_nonoverlapping(code.as_ptr(), dest, code.len());
+    }
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
+        return ExecResult::MemoryError;
+    }
+
+    let stack_top: u64 = 0x7FFFFFFF0000;
+    let stack_pages = 4usize;
+    for i in 0..stack_pages {
+        let vaddr = stack_top - (i as u64 + 1) * 4096;
+        let phys = match alloc_physical_page() { Some(p) => p, None => return ExecResult::MemoryError };
+        unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
+            return ExecResult::MemoryError;
+        }
+    }
+    let user_stack = stack_top - 8;
+
+    // Set up stdio for the test process
+    crate::vfs::setup_stdio();
+
+    unsafe {
+        let kernel_cr3: u64;
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
+        CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
+        CURRENT_USER_STACK_BOTTOM.store(stack_top - (stack_pages as u64 * 4096), Ordering::SeqCst);
+        address_space.activate();
+        let exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
+        CURRENT_USER_SPACE.store(core::ptr::null_mut(), Ordering::Release);
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
+        crate::vfs::cleanup_stdio();
+        crate::log!("[EXEC] signal_test exited with code {}", exit_code);
+        ExecResult::Exited(exit_code)
+    }
+}
+
+/// Test stdio + getpid + clock_gettime from Ring 3.
+/// Prints "IO OK\n" on success, "IO FAIL\n" on failure.
+pub fn exec_stdio_test() -> ExecResult {
+    crate::log!("[EXEC] Running stdio/time test...");
+
+    let mut address_space = match AddressSpace::new_with_kernel() {
+        Some(a) => a,
+        None => return ExecResult::MemoryError,
+    };
+    let hhdm = hhdm_offset();
+
+    // Machine code:
+    //   getpid() → check > 0
+    //   clock_gettime(MONOTONIC=1, &ts) → check == 0
+    //   write(1, "IO OK\n", 6)
+    //   exit(0)
+    //   --- fail path ---
+    //   write(1, "IO FAIL\n", 8)
+    //   exit(1)
+    #[rustfmt::skip]
+    let code: [u8; 121] = [
+        // 0x00: getpid
+        0xB8, 0x27, 0x00, 0x00, 0x00,              // mov eax, 39
+        0x0F, 0x05,                                  // syscall
+        0x85, 0xC0,                                  // test eax, eax
+        0x74, 0x3A,                                  // jz fail (0x45)
+        // 0x0B: clock_gettime(1, &ts)
+        0x48, 0x83, 0xEC, 0x10,                      // sub rsp, 16
+        0xB8, 0xE4, 0x00, 0x00, 0x00,              // mov eax, 228
+        0xBF, 0x01, 0x00, 0x00, 0x00,              // mov edi, 1
+        0x48, 0x89, 0xE6,                            // mov rsi, rsp
+        0x0F, 0x05,                                  // syscall
+        0x85, 0xC0,                                  // test eax, eax
+        0x75, 0x23,                                  // jnz fail (0x45)
+        // 0x22: write(1, "IO OK\n", 6)
+        0xB8, 0x01, 0x00, 0x00, 0x00,              // mov eax, 1
+        0xBF, 0x01, 0x00, 0x00, 0x00,              // mov edi, 1
+        0x48, 0x8D, 0x35, 0x38, 0x00, 0x00, 0x00,  // lea rsi, [rip+0x38] → msg
+        0xBA, 0x06, 0x00, 0x00, 0x00,              // mov edx, 6
+        0x0F, 0x05,                                  // syscall
+        // 0x3A: exit(0)
+        0xB8, 0x3C, 0x00, 0x00, 0x00,              // mov eax, 60
+        0x31, 0xFF,                                  // xor edi, edi
+        0x0F, 0x05,                                  // syscall
+        0xEB, 0xFE,                                  // jmp $
+        // 0x45: fail → write(1, "IO FAIL\n", 8)
+        0xB8, 0x01, 0x00, 0x00, 0x00,              // mov eax, 1
+        0xBF, 0x01, 0x00, 0x00, 0x00,              // mov edi, 1
+        0x48, 0x8D, 0x35, 0x1B, 0x00, 0x00, 0x00,  // lea rsi, [rip+0x1B] → fail_msg
+        0xBA, 0x08, 0x00, 0x00, 0x00,              // mov edx, 8
+        0x0F, 0x05,                                  // syscall
+        0xB8, 0x3C, 0x00, 0x00, 0x00,              // mov eax, 60
+        0xBF, 0x01, 0x00, 0x00, 0x00,              // mov edi, 1
+        0x0F, 0x05,                                  // syscall
+        0xEB, 0xFE,                                  // jmp $
+        // 0x6B: data
+        b'I', b'O', b' ', b'O', b'K', b'\n',                  // "IO OK\n"
+        b'I', b'O', b' ', b'F', b'A', b'I', b'L', b'\n',      // "IO FAIL\n"
+    ];
+
+    let code_vaddr: u64 = 0x400000;
+    let code_phys = match alloc_physical_page() {
+        Some(p) => p,
+        None => return ExecResult::MemoryError,
+    };
+    unsafe {
+        let dest = (code_phys + hhdm) as *mut u8;
+        core::ptr::write_bytes(dest, 0, 4096);
+        core::ptr::copy_nonoverlapping(code.as_ptr(), dest, code.len());
+    }
+    if address_space.map_page(code_vaddr, code_phys, PageFlags::USER_CODE).is_none() {
+        return ExecResult::MemoryError;
+    }
+
+    let stack_top: u64 = 0x7FFFFFFF0000;
+    let stack_pages = 4usize;
+    for i in 0..stack_pages {
+        let vaddr = stack_top - (i as u64 + 1) * 4096;
+        let phys = match alloc_physical_page() { Some(p) => p, None => return ExecResult::MemoryError };
+        unsafe { core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, 4096); }
+        if address_space.map_page(vaddr, phys, PageFlags::USER_DATA).is_none() {
+            return ExecResult::MemoryError;
+        }
+    }
+    let user_stack = stack_top - 8;
+
+    // Set up stdio for the test process
+    crate::vfs::setup_stdio();
+
+    unsafe {
+        let kernel_cr3: u64;
+        core::arch::asm!("mov {}, cr3", out(reg) kernel_cr3);
+        CURRENT_USER_SPACE.store(&mut address_space as *mut AddressSpace, Ordering::Release);
+        CURRENT_USER_BRK.store(UserMemoryRegion::HEAP_START, Ordering::SeqCst);
+        CURRENT_USER_STACK_BOTTOM.store(stack_top - (stack_pages as u64 * 4096), Ordering::SeqCst);
+        address_space.activate();
+        let exit_code = crate::userland::exec_ring3_process(code_vaddr, user_stack);
+        CURRENT_USER_SPACE.store(core::ptr::null_mut(), Ordering::Release);
+        core::arch::asm!("mov cr3, {}", in(reg) kernel_cr3, options(nostack, preserves_flags));
+        crate::vfs::cleanup_stdio();
+        crate::log!("[EXEC] stdio_test exited with code {}", exit_code);
+        ExecResult::Exited(exit_code)
+    }
+}
+
 /// Check if a file is an executable ELF
 pub fn is_executable(path: &str) -> bool {
     let fd = match crate::vfs::open(path, crate::vfs::OpenFlags(0)) {

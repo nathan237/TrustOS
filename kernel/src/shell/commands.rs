@@ -259,6 +259,7 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    benchmark [test]    Run performance benchmarks");
     crate::println!("    keytest             Interactive keyboard scancode tester");
     crate::println!("    test                Run internal kernel test suite");
+    crate::println!("    inttest             Integration test (10 tests, Gaps 1-5)");
     crate::println!("    panic               Trigger kernel panic (debug only)");
     crate::println!();
     
@@ -1421,6 +1422,188 @@ pub(super) fn cmd_keytest() {
         }
         crate::println!();
         crate::println!();
+    }
+}
+
+/// Comprehensive integration test suite: exercises all Gap #1–#5 features.
+/// Tests: exception safety, signal syscalls, stdio/time, plus all existing tests.
+pub(super) fn cmd_inttest() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "=== TrustOS Integration Test Suite ===");
+    crate::println!();
+
+    let mut passed = 0usize;
+    let mut failed = 0usize;
+
+    // -- 1. Kernel self-test (heap, string, interrupts) ---------------
+    crate::println_color!(COLOR_CYAN, "[ 1/10] Kernel self-test");
+    {
+        let mut ok = true;
+        crate::print!("  heap+string... ");
+        let v: Vec<u32> = (0..100).collect();
+        let mut s = String::from("Hello");
+        s.push_str(" World");
+        if v.len() == 100 && s.len() == 11 {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+            ok = false;
+        }
+        crate::print!("  interrupts... ");
+        if x86_64::instructions::interrupts::are_enabled() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+        let _ = ok;
+    }
+
+    // -- 2. Frame allocator -------------------------------------------
+    crate::println_color!(COLOR_CYAN, "[ 2/10] Frame allocator self-test");
+    let (p, f) = crate::memory::frame::self_test();
+    passed += p;
+    failed += f;
+    crate::println!();
+
+    // -- 3. Ring 3 basic exec -----------------------------------------
+    crate::println_color!(COLOR_CYAN, "[ 3/10] Ring 3 basic exec");
+    crate::print!("  hello world... ");
+    match crate::exec::exec_test_program() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
+            failed += 1;
+        }
+    }
+
+    // -- 4. Ring 3 ELF loader -----------------------------------------
+    crate::println_color!(COLOR_CYAN, "[ 4/10] Ring 3 ELF exec");
+    crate::print!("  ELF hello... ");
+    match crate::exec::exec_hello_elf() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
+            failed += 1;
+        }
+    }
+
+    // -- 5. Ring 3 brk + mmap -----------------------------------------
+    crate::println_color!(COLOR_CYAN, "[ 5/10] Ring 3 brk/mmap");
+    crate::print!("  memory mgmt... ");
+    match crate::exec::exec_memtest() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
+            failed += 1;
+        }
+    }
+
+    // -- 6. Ring 3 IPC pipe -------------------------------------------
+    crate::println_color!(COLOR_CYAN, "[ 6/10] Ring 3 IPC pipe");
+    crate::print!("  pipe2+rw... ");
+    match crate::exec::exec_pipe_test() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
+            failed += 1;
+        }
+    }
+
+    // -- 7. Exception safety (Gap #4) ---------------------------------
+    crate::println_color!(COLOR_CYAN, "[ 7/10] Exception safety (UD2 in Ring 3)");
+    crate::print!("  invalid opcode... ");
+    match crate::exec::exec_exception_safety_test() {
+        crate::exec::ExecResult::Exited(code) if code != 0 => {
+            // Non-zero exit = process was killed by signal (expected: -4 = SIGILL)
+            crate::println_color!(COLOR_GREEN, "[OK] killed with {}", code);
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?} (expected non-zero kill)", other);
+            failed += 1;
+        }
+    }
+    // If we reach here, kernel survived — that's the real test!
+    crate::print!("  kernel alive... ");
+    if x86_64::instructions::interrupts::are_enabled() {
+        crate::println_color!(COLOR_GREEN, "[OK]");
+        passed += 1;
+    } else {
+        crate::println_color!(COLOR_RED, "[FAIL]");
+        failed += 1;
+    }
+
+    // -- 8. Signal syscalls (Gap #4) ----------------------------------
+    crate::println_color!(COLOR_CYAN, "[ 8/10] Signal syscalls (sigprocmask + kill)");
+    crate::print!("  signal test... ");
+    match crate::exec::exec_signal_test() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
+            failed += 1;
+        }
+    }
+
+    // -- 9. Stdio + time (Gap #4) ------------------------------------
+    crate::println_color!(COLOR_CYAN, "[ 9/10] Stdio + getpid + clock_gettime");
+    crate::print!("  io test... ");
+    match crate::exec::exec_stdio_test() {
+        crate::exec::ExecResult::Exited(0) => {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "[FAIL] {:?}", other);
+            failed += 1;
+        }
+    }
+
+    // -- 10. Frame leak check -----------------------------------------
+    crate::println_color!(COLOR_CYAN, "[10/10] Frame leak test");
+    crate::print!("  alloc before... ");
+    let (total_before, used_before) = crate::memory::frame::stats();
+    let free_before = total_before - used_before;
+    crate::println!("free={}", free_before);
+    let _ = crate::exec::exec_test_program();
+    let (total_after, used_after) = crate::memory::frame::stats();
+    let free_after = total_after - used_after;
+    crate::print!("  alloc after... free={} ", free_after);
+    if free_after >= free_before {
+        crate::println_color!(COLOR_GREEN, "[OK]");
+        passed += 1;
+    } else {
+        let leaked = free_before - free_after;
+        crate::println_color!(COLOR_RED, "[FAIL] leaked {} frames", leaked);
+        failed += 1;
+    }
+
+    // -- Summary -------------------------------------------------------
+    crate::println!();
+    let total = passed + failed;
+    if failed == 0 {
+        crate::println_color!(COLOR_BRIGHT_GREEN,
+            "=== ALL {}/{} TESTS PASSED ===", passed, total);
+    } else {
+        crate::println_color!(COLOR_RED,
+            "=== {}/{} passed, {} FAILED ===", passed, total, failed);
     }
 }
 
