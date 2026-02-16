@@ -9,10 +9,10 @@
 | **CPU** | SIMD (SSE/SSE2) | ✅ Integrated | - |
 | **Memory** | x86_64 Paging | ✅ Integrated | - |
 | **Interrupts** | PIC 8259 | ✅ Integrated | - |
-| **Interrupts** | APIC/IOAPIC | ⚠️ Partial | HIGH |
+| **Interrupts** | APIC/IOAPIC | ✅ Integrated | - |
 | **Timer** | PIT 8254 | ✅ Integrated | - |
 | **Timer** | HPET | ⚠️ Detected | MEDIUM |
-| **Timer** | Local APIC Timer | ❌ Missing | HIGH |
+| **Timer** | Local APIC Timer | ✅ Integrated (PIT-calibrated, 100Hz periodic) | - |
 | **Keyboard** | PS/2 Keyboard | ✅ Integrated | - |
 | **Mouse** | PS/2 Mouse | ✅ Integrated | - |
 | **Console** | VGA Text Mode | ✅ Integrated | - |
@@ -26,8 +26,8 @@
 
 | Driver | Supported Chips/Standards | Status | Priority |
 |--------|---------------------------|--------|----------|
-| **AHCI/SATA** | Intel ICH, AMD | ⚠️ Partial | CRITICAL |
-| **NVMe** | NVMe 1.4 | ❌ Missing | CRITICAL |
+| **AHCI/SATA** | Intel ICH, AMD | ⚠️ Partial | HIGH |
+| **NVMe** | NVMe 1.4 | ✅ Integrated (read/write, QEMU tested) | - |
 | **IDE/PATA** | Legacy ATA | ❌ Missing | LOW |
 | **USB Mass Storage** | USB 2.0/3.0 | ❌ Missing | HIGH |
 | **SD/MMC** | SDHCI | ❌ Missing | MEDIUM |
@@ -75,10 +75,10 @@
 | **UHCI** | USB 1.0 | ⚠️ Detected | MEDIUM |
 | **OHCI** | USB 1.1 | ❌ Missing | MEDIUM |
 | **EHCI** | USB 2.0 | ⚠️ Detected | HIGH |
-| **xHCI** | USB 3.0/3.1/3.2 | ❌ Missing | CRITICAL |
+| **xHCI** | USB 3.0/3.1/3.2 | ✅ Integrated (HID boot protocol) | - |
 
 ### USB Classes:
-- ❌ HID (Keyboard/Mouse)
+- ✅ HID (Keyboard/Mouse via xHCI Boot Protocol)
 - ❌ Mass Storage
 - ❌ Hub
 - ❌ Audio
@@ -113,7 +113,7 @@
 
 | Feature | Description | Status | Priority |
 |---------|-------------|--------|----------|
-| **SMP** | Multi-core | ⚠️ Detection only | CRITICAL |
+| **SMP** | Multi-core | ✅ Integrated (AP boot, per-core scheduling) | - |
 | **NUMA** | Multi-socket | ❌ Missing | LOW |
 | **Power Management** | ACPI S-states | ❌ Missing | MEDIUM |
 | **Virtualization** | VT-x/AMD-V passthrough | ⚠️ Hypervisor | MEDIUM |
@@ -128,11 +128,11 @@
 ### IMMEDIATE (for real deployment)
 ```
 ┌──────────────────────────────────────┐
-│ 1. NVMe Driver (90% of modern PCs)  │
-│ 2. xHCI USB 3.0 (keyboard/mouse)    │
-│ 3. SMP Boot (multi-core)            │
-│ 4. APIC Timer (precise timing)      │
-│ 5. Full AHCI (SATA)                 │
+│ 1. NVMe Driver                    ✅ │
+│ 2. xHCI USB 3.0 (keyboard/mouse) ✅ │
+│ 3. SMP Boot (multi-core)          ✅ │
+│ 4. APIC Timer (precise timing)    ✅ │
+│ 5. Full AHCI (SATA)              ⚠️  │
 └──────────────────────────────────────┘
 ```
 

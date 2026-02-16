@@ -340,6 +340,7 @@ const HBA_PORT_CMD_CR: u32 = 1 << 15;  // Command List Running
 const ATA_CMD_READ_DMA_EXT: u8 = 0x25;
 const ATA_CMD_WRITE_DMA_EXT: u8 = 0x35;
 const ATA_CMD_IDENTIFY: u8 = 0xEC;
+const ATA_CMD_FLUSH_CACHE_EXT: u8 = 0xEA;
 
 /// ATA Status bits
 const ATA_DEV_BUSY: u8 = 0x80;
@@ -437,6 +438,21 @@ pub fn init(bar5: u64) -> bool {
         pi.count_ones(), num_cmd_slots);
     
     // Enable AHCI mode
+    hba.ghc |= 1 << 31;
+    
+    // HBA Reset for clean state
+    hba.ghc |= 1; // GHC.HR = 1
+    let mut reset_wait = 0u32;
+    while hba.ghc & 1 != 0 && reset_wait < 1_000_000 {
+        reset_wait += 1;
+        core::hint::spin_loop();
+    }
+    if hba.ghc & 1 != 0 {
+        crate::serial_println!("[AHCI] HBA reset timeout");
+        return false;
+    }
+    
+    // Re-enable AHCI mode after reset
     hba.ghc |= 1 << 31;
     
     let mut ports = Vec::new();
@@ -658,13 +674,25 @@ pub fn identify_device(port_num: u8) -> Result<u64, &'static str> {
     }
     let model = String::from(model.trim());
     
-    crate::serial_println!("[AHCI] Port {}: {} sectors ({} MB), model: {}", 
-        port_num, sector_count, sector_count / 2048, model);
+    // Extract serial number (words 10-19, 20 chars)
+    let mut serial = String::new();
+    for i in 10..20 {
+        let w = words[i];
+        let c1 = ((w >> 8) & 0xFF) as u8;
+        let c2 = (w & 0xFF) as u8;
+        if c1 >= 0x20 && c1 < 0x7F { serial.push(c1 as char); }
+        if c2 >= 0x20 && c2 < 0x7F { serial.push(c2 as char); }
+    }
+    let serial = String::from(serial.trim());
+    
+    crate::serial_println!("[AHCI] Port {}: {} sectors ({} MB), model: {}, serial: {}", 
+        port_num, sector_count, sector_count / 2048, model, serial);
     
     // Update port info in controller
     if let Some(port_info) = controller.ports.iter_mut().find(|p| p.port_num == port_num) {
         port_info.sector_count = sector_count;
         port_info.model = model;
+        port_info.serial = serial;
     }
     
     Ok(sector_count)
@@ -913,6 +941,77 @@ pub fn write_sectors(port_num: u8, lba: u64, count: u16, buffer: &[u8]) -> Resul
     }
     
     Ok(required_size)
+}
+
+/// Flush write cache on a port (FLUSH CACHE EXT command)
+pub fn flush_cache(port_num: u8) -> Result<(), &'static str> {
+    let mut ctrl = CONTROLLER.lock();
+    let controller = ctrl.as_mut().ok_or("AHCI not initialized")?;
+    
+    if !controller.initialized {
+        return Err("AHCI not initialized");
+    }
+    
+    let port_memory = controller.port_memory[port_num as usize].as_mut()
+        .ok_or("Port memory not allocated")?;
+    
+    let hba = unsafe { &mut *(controller.virt_addr as *mut HbaMemory) };
+    let port = unsafe { &mut *(hba.ports.as_mut_ptr().add(port_num as usize)) };
+    
+    port.is = 0xFFFFFFFF;
+    
+    let slot = find_cmdslot(port).ok_or("No free command slot")?;
+    
+    let cmd_header = &mut port_memory.cmd_list.headers[slot as usize];
+    cmd_header.flags = 5; // CFL = 5, no write, no prefetch
+    cmd_header.prdtl = 0; // No data transfer
+    cmd_header.prdbc = 0;
+    
+    let cmd_table = &mut *port_memory.cmd_tables[slot as usize];
+    let cmd_table_phys = virt_to_phys(cmd_table as *const _ as u64);
+    cmd_header.ctba = cmd_table_phys;
+    
+    unsafe {
+        ptr::write_bytes(cmd_table as *mut HbaCmdTable, 0, 1);
+    }
+    
+    let cfis = unsafe { &mut *(cmd_table.cfis.as_mut_ptr() as *mut FisRegH2D) };
+    cfis.fis_type = FisType::RegH2D as u8;
+    cfis.pmport_c = 0x80;
+    cfis.command = ATA_CMD_FLUSH_CACHE_EXT;
+    cfis.device = 0x40;
+    
+    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+    
+    // Wait for port ready
+    let mut spin = 0u32;
+    while (port.tfd & ((ATA_DEV_BUSY | ATA_DEV_DRQ) as u32)) != 0 && spin < 1_000_000 {
+        spin += 1;
+        core::hint::spin_loop();
+    }
+    if spin >= 1_000_000 {
+        return Err("Port busy timeout");
+    }
+    
+    port.ci = 1 << slot;
+    
+    // Flush can take a long time on real hardware
+    let mut timeout = 0u32;
+    loop {
+        if (port.ci & (1 << slot)) == 0 {
+            break;
+        }
+        if (port.is & (1 << 30)) != 0 {
+            return Err("Task file error during flush");
+        }
+        timeout += 1;
+        if timeout > 30_000_000 {
+            return Err("Flush timeout");
+        }
+        core::hint::spin_loop();
+    }
+    
+    Ok(())
 }
 
 // ============================================================================
