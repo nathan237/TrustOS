@@ -268,24 +268,30 @@ extern "C" fn syscall_entry() {
         "push r15",
         
         // Arguments are in: RAX=num, RDI=a1, RSI=a2, RDX=a3, R10=a4, R8=a5, R9=a6
-        // Rust calling convention: RDI, RSI, RDX, RCX, R8, R9
-        // We need: handler(num, a1, a2, a3, a4, a5)
+        // C calling convention: RDI, RSI, RDX, RCX, R8, R9, [rsp]=7th
+        // We need: handler(num, a1, a2, a3, a4, a5, a6)
         
-        // Shuffle arguments
-        "mov r15, rdi",      // Save a1
-        "mov rdi, rax",      // num -> rdi
-        "mov rax, rsi",      // Save a2
-        "mov rsi, r15",      // a1 -> rsi
-        "mov r15, rdx",      // Save a3
-        "mov rdx, rax",      // a2 -> rdx
-        "mov rcx, r15",      // a3 -> rcx
-        "mov r15, r10",      // r10 = a4
-        "mov r10, r8",       // Save a5
-        "mov r8, r15",       // a4 -> r8
-        "mov r9, r10",       // a5 -> r9
+        // Push a6 (r9) onto the stack as the 7th C argument
+        "push r9",
+        
+        // Shuffle the remaining six register arguments without clobbering
+        "mov r15, r8",       // save a5
+        "mov r12, rdi",      // save a1
+        "mov r13, rsi",      // save a2
+        "mov r14, rdx",      // save a3
+        
+        "mov rdi, rax",      // num  -> rdi (1st)
+        "mov rsi, r12",      // a1   -> rsi (2nd)
+        "mov rdx, r13",      // a2   -> rdx (3rd)
+        "mov rcx, r14",      // a3   -> rcx (4th)
+        "mov r8,  r10",      // a4   -> r8  (5th)
+        "mov r9,  r15",      // a5   -> r9  (6th)
         
         // Call Rust handler
         "call {handler}",
+        
+        // Clean up pushed a6
+        "add rsp, 8",
         
         // Result is in RAX
         

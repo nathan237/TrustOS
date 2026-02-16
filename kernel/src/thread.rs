@@ -263,25 +263,19 @@ extern "C" fn thread_entry_wrapper() {
 }
 
 /// User thread entry point (jumps to Ring 3)
+/// After context_switch restores callee-saved registers:
+///   R12 = user entry point, R13 = user stack, R14 = arg
+#[unsafe(naked)]
 extern "C" fn user_thread_entry() {
-    // R12 = user entry, R13 = user stack, R14 = arg
-    let entry: u64;
-    let stack: u64;
-    let arg: u64;
-    
-    unsafe {
-        core::arch::asm!(
-            "",
-            out("r12") entry,
-            out("r13") stack,
-            out("r14") arg,
-        );
-    }
-    
-    // Jump to Ring 3
-    unsafe {
-        crate::userland::jump_to_ring3_with_args(entry, stack, arg, 0);
-    }
+    core::arch::naked_asm!(
+        // Set up args for jump_to_ring3_with_args(entry, stack, arg, 0)
+        "mov rdi, r12",          // entry point
+        "mov rsi, r13",          // user stack
+        "mov rdx, r14",          // arg (argc)
+        "xor ecx, ecx",         // 0 (arg2)
+        "jmp {jump}",
+        jump = sym crate::userland::jump_to_ring3_with_args,
+    );
 }
 
 /// Thread exit handler

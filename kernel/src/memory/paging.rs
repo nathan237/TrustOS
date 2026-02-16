@@ -572,8 +572,64 @@ pub fn validate_user_ptr(ptr: u64, len: usize, write: bool) -> bool {
         return false;
     }
     
-    // TODO: Check page table mappings for current process
-    // For now, just validate address range
+    // Zero-length pointers are always valid if the address is in user space
+    if len == 0 {
+        return true;
+    }
+    
+    // Walk the current page tables to verify every page in the range is mapped
+    // with the correct permissions (USER, and WRITABLE if write=true).
+    let hhdm = crate::memory::hhdm_offset();
+    let cr3: u64;
+    unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
+    
+    let required_flags = if write {
+        PageFlags::new(PageFlags::PRESENT | PageFlags::USER | PageFlags::WRITABLE)
+    } else {
+        PageFlags::new(PageFlags::PRESENT | PageFlags::USER)
+    };
+    
+    // Check each page in the range
+    let start_page = ptr & !0xFFF;
+    let end_page = (end.saturating_sub(1)) & !0xFFF;
+    let mut page = start_page;
+    
+    loop {
+        if !check_page_flags(cr3, hhdm, page, required_flags) {
+            return false;
+        }
+        if page >= end_page {
+            break;
+        }
+        page += 0x1000;
+    }
+    
+    true
+}
+
+/// Check that a single virtual address has the required flags set in the page tables
+fn check_page_flags(cr3: u64, hhdm: u64, virt: u64, required: PageFlags) -> bool {
+    let pml4_idx = ((virt >> 39) & 0x1FF) as usize;
+    let pdpt_idx = ((virt >> 30) & 0x1FF) as usize;
+    let pd_idx   = ((virt >> 21) & 0x1FF) as usize;
+    let pt_idx   = ((virt >> 12) & 0x1FF) as usize;
+    
+    let pml4 = unsafe { &*((cr3 + hhdm) as *const PageTable) };
+    if !pml4.entries[pml4_idx].is_present() { return false; }
+    
+    let pdpt = unsafe { &*((pml4.entries[pml4_idx].phys_addr() + hhdm) as *const PageTable) };
+    if !pdpt.entries[pdpt_idx].is_present() { return false; }
+    
+    let pd = unsafe { &*((pdpt.entries[pdpt_idx].phys_addr() + hhdm) as *const PageTable) };
+    if !pd.entries[pd_idx].is_present() { return false; }
+    
+    let pt = unsafe { &*((pd.entries[pd_idx].phys_addr() + hhdm) as *const PageTable) };
+    if !pt.entries[pt_idx].is_present() { return false; }
+    
+    let flags = pt.entries[pt_idx].flags();
+    if required.is_user() && !flags.is_user() { return false; }
+    if required.is_writable() && !flags.is_writable() { return false; }
+    
     true
 }
 

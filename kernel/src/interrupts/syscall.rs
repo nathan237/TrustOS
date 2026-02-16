@@ -1,35 +1,30 @@
 //! SYSCALL/SYSRET Handler
 //! 
-//! Sets up the SYSCALL instruction for userland -> kernel transitions.
-//! Uses MSRs to configure entry point and segments.
-//!
-//! NOTE: For now, we just log syscalls since we don't have Ring 3 yet.
-//! When userland is ready, we'll set up proper SYSCALL/SYSRET with GDT.
+//! The actual SYSCALL entry point lives in `userland.rs` which configures
+//! STAR, LSTAR, and SFMASK MSRs.  This module provides the Rust-side
+//! handler (`syscall_handler_rust`) that the assembly trampoline calls,
+//! plus a reference copy of a minimal naked entry point (not active).
 
-use x86_64::registers::model_specific::{Efer, EferFlags, LStar, SFMask};
+// Imports kept for the reference syscall_entry below; not used by init().
+#[allow(unused_imports)]
+use x86_64::registers::model_specific::{Efer, EferFlags, LStar, SFMask, Star};
+#[allow(unused_imports)]
 use x86_64::registers::rflags::RFlags;
+#[allow(unused_imports)]
 use x86_64::VirtAddr;
 
 /// Initialize SYSCALL/SYSRET mechanism
+///
+/// NOTE: EFER, STAR, LSTAR, and SFMASK are all configured by
+/// `userland::init()` which sets up the full SYSCALL/SYSRET path
+/// including the correct entry point and segment selectors.
+/// This function is intentionally a no-op; it exists only so the
+/// rest of the codebase doesn't need to know that detail.
 pub fn init() {
-    unsafe {
-        // Enable SYSCALL/SYSRET in EFER MSR
-        let efer = Efer::read();
-        Efer::write(efer | EferFlags::SYSTEM_CALL_EXTENSIONS);
-        
-        // Set LSTAR MSR (syscall entry point)
-        // This is the address the CPU jumps to on SYSCALL instruction
-        LStar::write(VirtAddr::new(syscall_entry as *const () as u64));
-        
-        // Set SFMASK MSR (RFLAGS to clear on syscall)
-        // Clear interrupt flag to disable interrupts during syscall entry
-        SFMask::write(RFlags::INTERRUPT_FLAG | RFlags::DIRECTION_FLAG);
-        
-        // NOTE: STAR MSR not set - we'll configure GDT properly when implementing Ring 3
-        // For now, syscalls from kernel space will work via LSTAR
-    }
-    
-    crate::log!("SYSCALL handler initialized (kernel mode only)");
+    // All MSR configuration is handled by userland::init().
+    // The syscall_entry in this file is kept as a reference but is not used;
+    // userland.rs::syscall_entry is the active LSTAR target.
+    crate::log!("SYSCALL handler ready (entry point set by userland::init)");
 }
 
 /// Syscall entry point - called by SYSCALL instruction
