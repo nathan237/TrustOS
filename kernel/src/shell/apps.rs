@@ -565,6 +565,32 @@ fn main() {
                 Err(e) => crate::println!("\x1b[31mError:\x1b[0m {}", e),
             }
         }
+        "repl" => {
+            crate::println!("\x1b[1;36mTrustLang REPL\x1b[0m v1.0 — type 'exit' or 'quit' to leave");
+            crate::println!("  Expressions are auto-wrapped in fn main() {{ ... }}");
+            crate::println!("  Available: print/println, math ops, if/else, for, while");
+            crate::println!();
+            loop {
+                crate::print!("\x1b[36mtl>\x1b[0m ");
+                let line = crate::shell::read_line();
+                let trimmed = line.trim();
+                if trimmed.is_empty() { continue; }
+                if trimmed == "exit" || trimmed == "quit" { break; }
+                if trimmed == "help" {
+                    crate::println!("  println(\"hello\")       — print with newline");
+                    crate::println!("  let x = 42;            — declare variable");
+                    crate::println!("  for i in 0..5 {{ ... }}  — for loop");
+                    crate::println!("  fn foo(n: i64) {{ ... }} — define function + fn main()");
+                    continue;
+                }
+                match crate::trustlang::eval_line(trimmed) {
+                    Ok(output) => {
+                        if !output.is_empty() { crate::print!("{}", output); }
+                    }
+                    Err(e) => crate::println!("\x1b[31mError:\x1b[0m {}", e),
+                }
+            }
+        }
         _ => {
             crate::println!("\x1b[1;36mTrustLang\x1b[0m -- Integrated Programming Language");
             crate::println!("  Rust-inspired syntax, bytecode VM, zero dependencies\n");
@@ -572,6 +598,7 @@ fn main() {
             crate::println!("  trustlang run <file.tl>    Compile & execute a file");
             crate::println!("  trustlang check <file.tl>  Syntax check only");
             crate::println!("  trustlang eval <code>      Evaluate inline code");
+            crate::println!("  trustlang repl             Interactive REPL");
             crate::println!("  trustlang demo             Create & run demo program");
             crate::println!("\nExample:");
             crate::println!("  trustlang eval println(\"Hello TrustOS!\")");

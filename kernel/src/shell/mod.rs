@@ -671,6 +671,13 @@ fn print_prompt() {
     crate::print_color!(COLOR_GREEN, "$ ");
 }
 
+/// Read a line from keyboard input (public for REPL use)
+pub fn read_line() -> alloc::string::String {
+    let mut buf = [0u8; 512];
+    let len = crate::keyboard::read_line(&mut buf);
+    core::str::from_utf8(&buf[..len]).unwrap_or("").into()
+}
+
 /// Execute a shell command
 pub(super) fn execute_command(cmd: &str) {
     if cmd.is_empty() {

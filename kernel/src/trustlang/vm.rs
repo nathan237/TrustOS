@@ -158,6 +158,8 @@ const BUILTIN_SCREEN_H: u8 = 14;
 const BUILTIN_FLUSH: u8 = 15;
 const BUILTIN_DRAW_TEXT: u8 = 16;
 const BUILTIN_SLEEP: u8 = 17;
+const BUILTIN_TO_FLOAT: u8 = 18;
+const BUILTIN_READ_LINE: u8 = 19;
 
 /// Resolve builtin name → ID
 pub fn builtin_id(name: &str) -> Option<u8> {
@@ -168,6 +170,7 @@ pub fn builtin_id(name: &str) -> Option<u8> {
         "push" => Some(BUILTIN_PUSH),
         "to_string" => Some(BUILTIN_TO_STRING),
         "to_int" => Some(BUILTIN_TO_INT),
+        "to_float" => Some(BUILTIN_TO_FLOAT),
         "sqrt" => Some(BUILTIN_SQRT),
         "abs" => Some(BUILTIN_ABS),
         "pixel" => Some(BUILTIN_PIXEL),
@@ -180,6 +183,7 @@ pub fn builtin_id(name: &str) -> Option<u8> {
         "flush" => Some(BUILTIN_FLUSH),
         "draw_text" => Some(BUILTIN_DRAW_TEXT),
         "sleep" => Some(BUILTIN_SLEEP),
+        "read_line" => Some(BUILTIN_READ_LINE),
         _ => None,
     }
 }
@@ -727,6 +731,24 @@ fn exec_builtin(id: u8, args: &[Value], output: &mut String) -> Result<Value, St
             crate::cpu::tsc::pit_delay_ms(ms);
             Ok(Value::Void)
         }
+        BUILTIN_TO_FLOAT => {
+            let v = args.first().unwrap_or(&Value::Void);
+            match v {
+                Value::F64(f) => Ok(Value::F64(*f)),
+                Value::I64(n) => Ok(Value::F64(*n as f64)),
+                Value::Bool(b) => Ok(Value::F64(if *b { 1.0 } else { 0.0 })),
+                Value::Str(s) => {
+                    let f = parse_f64_simple(s.trim());
+                    Ok(Value::F64(f))
+                }
+                _ => Ok(Value::F64(0.0)),
+            }
+        }
+        BUILTIN_READ_LINE => {
+            // read_line() — read a line from keyboard
+            let line = crate::shell::read_line();
+            Ok(Value::Str(line))
+        }
         _ => Err(format!("unknown builtin id: {}", id)),
     }
 }
@@ -739,6 +761,27 @@ fn parse_i64_simple(s: &str) -> i64 {
         if i == 0 && ch == '-' { neg = true; continue; }
         if !ch.is_ascii_digit() { break; }
         val = val.wrapping_mul(10).wrapping_add((ch as i64) - 48);
+    }
+    if neg { -val } else { val }
+}
+
+/// Parse f64 from string without stdlib
+fn parse_f64_simple(s: &str) -> f64 {
+    let mut val: f64 = 0.0;
+    let mut neg = false;
+    let mut frac = false;
+    let mut frac_div: f64 = 1.0;
+    for (i, ch) in s.chars().enumerate() {
+        if i == 0 && ch == '-' { neg = true; continue; }
+        if ch == '.' && !frac { frac = true; continue; }
+        if !ch.is_ascii_digit() { break; }
+        let d = (ch as u8 - b'0') as f64;
+        if frac {
+            frac_div *= 10.0;
+            val += d / frac_div;
+        } else {
+            val = val * 10.0 + d;
+        }
     }
     if neg { -val } else { val }
 }

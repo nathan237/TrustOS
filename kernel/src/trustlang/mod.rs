@@ -18,6 +18,7 @@ pub mod compiler;
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use alloc::format;
 
 /// Compile and run TrustLang source code
 pub fn run(source: &str) -> Result<String, String> {
@@ -32,4 +33,16 @@ pub fn check(source: &str) -> Result<(), String> {
     let tokens = lexer::tokenize(source)?;
     let _ast = parser::parse(&tokens)?;
     Ok(())
+}
+
+/// Evaluate a single expression or statement in REPL mode.
+/// Wraps the input in `fn main() { ... }` for convenience.
+pub fn eval_line(line: &str) -> Result<String, String> {
+    // Try as-is first (might be a full program)
+    if line.contains("fn main") || line.contains("fn ") {
+        return run(line);
+    }
+    // Wrap in main()
+    let wrapped = format!("fn main() {{ {} }}", line);
+    run(&wrapped)
 }
