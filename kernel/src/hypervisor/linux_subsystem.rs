@@ -286,8 +286,8 @@ pub struct LinuxSubsystem {
     repo_updated: bool,
     /// Online mode: real HTTP downloads from package server
     online_mode: bool,
-    /// Package server URL for real downloads (QEMU user-net gateway)
-    pkg_server: Option<&'static str>,
+    /// Package server URL for real downloads (e.g. http://10.0.2.2:8080)
+    pkg_server: Option<String>,
     /// Count of files extracted from real downloads
     real_files_installed: u32,
     /// Total bytes downloaded
@@ -366,25 +366,32 @@ impl LinuxSubsystem {
         }
     }
 
-    /// Detect package server: try QEMU user-net (10.0.2.2), then VirtualBox (192.168.56.1)
-    fn detect_pkg_server(&self) -> Option<&'static str> {
-        // Try QEMU SLIRP gateway first
-        let servers: &[&str] = &[
-            "http://10.0.2.2:8080",
-            "http://192.168.56.1:8080",
-        ];
-        for &server in servers {
+    /// Detect package server: try DHCP gateway, QEMU user-net, VirtualBox host-only
+    fn detect_pkg_server(&self) -> Option<String> {
+        use alloc::vec::Vec;
+        let mut candidates: Vec<String> = Vec::new();
+
+        // 1. Try DHCP gateway (works for both QEMU SLIRP and VBox NAT)
+        if let Some((_ip, _mask, gw, _dns)) = crate::netstack::dhcp::get_config() {
+            if gw != [0, 0, 0, 0] {
+                candidates.push(alloc::format!("http://{}.{}.{}.{}:8080", gw[0], gw[1], gw[2], gw[3]));
+            }
+        }
+        // 2. Well-known addresses
+        candidates.push(String::from("http://10.0.2.2:8080"));
+        candidates.push(String::from("http://192.168.56.1:8080"));
+
+        // De-duplicate
+        candidates.dedup();
+
+        for server in &candidates {
             let url = alloc::format!("{}/repo/index", server);
             crate::serial_println!("[TSL-PKG] Trying server: {}", url);
             if let Ok(resp) = crate::netstack::http::get(&url) {
                 if resp.status_code == 200 && resp.body.len() > 10 {
                     crate::serial_println!("[TSL-PKG] Server found: {} ({} bytes index)",
                         server, resp.body.len());
-                    return Some(match server {
-                        "http://10.0.2.2:8080" => "http://10.0.2.2:8080",
-                        "http://192.168.56.1:8080" => "http://192.168.56.1:8080",
-                        _ => return None,
-                    });
+                    return Some(server.clone());
                 }
             }
         }
@@ -432,7 +439,7 @@ impl LinuxSubsystem {
             if line.starts_with("PKG ") {
                 // Package header — skip
                 continue;
-            } else if line.starts_with("FILE ") {
+            } else if line.starts_with("FILE /") {
                 // Flush previous file
                 if let Some(path) = current_path {
                     if self.install_file_to_ramfs(path, current_content.as_bytes()) {
@@ -979,10 +986,10 @@ Note: Running in simulated mode (no real Linux kernel)")
                 // Try real network fetch if network is available
                 if self.check_network() {
                     if let Some(server) = self.detect_pkg_server() {
-                        self.pkg_server = Some(server);
-                        self.online_mode = true;
                         out.push_str(&format!("Connected to package server: {}\n", server));
                         out.push_str(&format!("Get:1 {}/repo/index Packages [online]\n", server));
+                        self.pkg_server = Some(server);
+                        self.online_mode = true;
                     } else {
                         out.push_str("No package server found, using built-in repository.\n");
                         self.online_mode = false;
@@ -1079,12 +1086,12 @@ Note: Running in simulated mode (no real Linux kernel)")
                     total_size * 3));
 
                 // Download packages — real or simulated
-                let server = self.pkg_server;
+                let server = self.pkg_server.clone();
                 let is_online = self.online_mode && server.is_some();
 
                 for pkg in &to_install {
                     if is_online {
-                        let srv = server.unwrap();
+                        let srv = server.as_deref().unwrap();
                         out.push_str(&format!("Get:1 {}/repo/pool/{}.pkg {} [{} kB]\n",
                             srv, pkg.name, pkg.version, pkg.size_kb));
 
@@ -1105,7 +1112,7 @@ Note: Running in simulated mode (no real Linux kernel)")
                 }
                 if is_online {
                     out.push_str(&format!("Fetched {} bytes from {}\n",
-                        self.total_bytes_downloaded, server.unwrap()));
+                        self.total_bytes_downloaded, server.as_deref().unwrap()));
                 } else {
                     out.push_str(&format!("Fetched {} kB in 0s (internal)\n", total_size));
                 }
