@@ -146,9 +146,29 @@ impl From<u64> for SvmExitCode {
             0x7C => SvmExitCode::IoioOut,
             0x7D => SvmExitCode::MsrRead,
             0x7E => SvmExitCode::MsrWrite,
+            0x7F => SvmExitCode::TaskSwitch,
             0x81 => SvmExitCode::Shutdown,
             0x83 => SvmExitCode::Vmmcall,
+            0x76 => SvmExitCode::Invd,
+            0x79 => SvmExitCode::Invlpg,
+            0x6E => SvmExitCode::Rdtsc,
+            0x89 => SvmExitCode::Rdtscp,
+            0x8B => SvmExitCode::Wbinvd,
+            0x8C => SvmExitCode::Monitor,
+            0x8D => SvmExitCode::Mwait,
+            0x8F => SvmExitCode::Xsetbv,
+            0x77 => SvmExitCode::Pause,
+            0x64 => SvmExitCode::Vintr,
+            0x65 => SvmExitCode::Cr0SelWrite,
             0x400 => SvmExitCode::NpfFault,
+            // CR read intercepts (0x00-0x0F)
+            0x00 => SvmExitCode::ReadCr0,
+            0x03 => SvmExitCode::ReadCr3,
+            0x04 => SvmExitCode::ReadCr4,
+            // CR write intercepts (0x10-0x1F)
+            0x10 => SvmExitCode::WriteCr0,
+            0x13 => SvmExitCode::WriteCr3,
+            0x14 => SvmExitCode::WriteCr4,
             // Exception intercepts
             _ if code >= 0x40 && code <= 0x5F => unsafe { 
                 core::mem::transmute::<u64, SvmExitCode>(code) 

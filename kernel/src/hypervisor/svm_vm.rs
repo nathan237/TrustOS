@@ -15,7 +15,7 @@ use spin::Mutex;
 
 use super::{HypervisorError, Result};
 use super::svm::{self, SvmExitCode, SvmFeatures, VmrunGuestRegs};
-use super::svm::vmcb::{Vmcb, control_offsets, state_offsets};
+use super::svm::vmcb::{Vmcb, control_offsets, state_offsets, clean_bits};
 use super::svm::npt::{Npt, flags as npt_flags};
 
 /// VM ID counter
@@ -92,6 +92,44 @@ pub struct SvmVirtualMachine {
     console_id: Option<usize>,
     /// SVM features available
     features: SvmFeatures,
+    /// LAPIC timer emulation state
+    pub lapic: LapicState,
+}
+
+/// Emulated Local APIC timer state
+#[derive(Debug, Clone)]
+pub struct LapicState {
+    /// Timer initial count register
+    pub icr: u32,
+    /// Timer current count register
+    pub ccr: u32,
+    /// Timer divide configuration register
+    pub dcr: u32,
+    /// Timer LVT entry (vector + mode + mask)
+    pub timer_lvt: u32,
+    /// Spurious interrupt vector register
+    pub svr: u32,
+    /// Task priority register
+    pub tpr: u32,
+    /// Whether LAPIC is software-enabled
+    pub enabled: bool,
+    /// VMEXIT counter at last timer tick (for decrement simulation)
+    pub last_tick_exit: u64,
+}
+
+impl Default for LapicState {
+    fn default() -> Self {
+        Self {
+            icr: 0,
+            ccr: 0,
+            dcr: 0,
+            timer_lvt: 0x0001_0000, // Masked by default
+            svr: 0x1FF,             // Software enabled, vector 0xFF
+            tpr: 0,
+            enabled: false,
+            last_tick_exit: 0,
+        }
+    }
 }
 
 impl SvmVirtualMachine {
@@ -146,6 +184,7 @@ impl SvmVirtualMachine {
             asid,
             console_id: Some(console_id),
             features,
+            lapic: LapicState::default(),
         })
     }
     
@@ -443,18 +482,60 @@ impl SvmVirtualMachine {
                 // RAX is saved/loaded by VMCB automatically
                 vmcb.write_state(state_offsets::RSP, self.guest_regs.rsp);
                 
-                // Inject periodic timer interrupt to keep the guest alive
-                // Linux needs timer ticks to boot (drives the scheduler, init, etc.)
-                // Inject every 1000 VMEXITs to avoid flooding
-                if self.stats.vmexits > 0 && self.stats.vmexits % 1000 == 0 {
+                // Set VMCB clean bits — tell hardware what hasn't changed
+                // This avoids re-reading unchanged state from memory on VMRUN
+                // After a VMEXIT, if we only modified RIP (for instruction skip),
+                // we can mark most fields as clean.
+                let clean = clean_bits::IOPM      // I/O permissions didn't change
+                          | clean_bits::ASID      // ASID didn't change
+                          | clean_bits::NP        // NPT didn't change
+                          | clean_bits::LBR       // LBR didn't change
+                          | clean_bits::AVIC;     // AVIC didn't change
+                vmcb.set_clean_bits(clean);
+                
+                // Inject periodic timer interrupt based on LAPIC state
+                if self.lapic.enabled && self.lapic.icr > 0 {
+                    let masked = (self.lapic.timer_lvt >> 16) & 1;
+                    if masked == 0 {
+                        let timer_mode = (self.lapic.timer_lvt >> 17) & 0x3;
+                        let vector = (self.lapic.timer_lvt & 0xFF) as u64;
+                        let divider = match self.lapic.dcr & 0xB {
+                            0x0 => 2u64, 0x1 => 4, 0x2 => 8, 0x3 => 16,
+                            0x8 => 32, 0x9 => 64, 0xA => 128, 0xB => 1,
+                            _ => 1,
+                        };
+                        let elapsed = self.stats.vmexits.saturating_sub(self.lapic.last_tick_exit);
+                        let ticks = (elapsed * 256) / divider;
+                        
+                        if ticks >= self.lapic.icr as u64 {
+                            // Timer fired!
+                            let rflags = vmcb.read_state(state_offsets::RFLAGS);
+                            if (rflags & 0x200) != 0 && vector > 0 { // IF set and valid vector
+                                let event_inj: u64 = vector
+                                                   | (0u64 << 8)    // Type 0 = external interrupt
+                                                   | (1u64 << 31);  // V = valid
+                                vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
+                            }
+                            // Reset for periodic mode, stop for one-shot
+                            match timer_mode {
+                                1 => { // Periodic
+                                    self.lapic.last_tick_exit = self.stats.vmexits;
+                                    self.lapic.ccr = self.lapic.icr;
+                                }
+                                _ => { // One-shot or TSC-deadline
+                                    self.lapic.icr = 0;
+                                    self.lapic.ccr = 0;
+                                }
+                            }
+                        }
+                    }
+                } else if self.stats.vmexits > 0 && self.stats.vmexits % 5000 == 0 {
+                    // Fallback: if LAPIC timer not yet programmed, inject timer periodically
                     let rflags = vmcb.read_state(state_offsets::RFLAGS);
-                    let if_set = (rflags & 0x200) != 0; // Check IF (interrupt flag)
-                    if if_set {
-                        // EVENT_INJ format: vector[7:0] | type[10:8] | EV[11] | rsvd[30:12] | V[31]
-                        // type=0 = external interrupt, V=1 = valid
-                        let event_inj: u64 = 0x20        // Vector 0x20 (timer IRQ)
-                                           | (0 << 8)    // Type 0 = external interrupt
-                                           | (1u64 << 31); // V = valid
+                    if (rflags & 0x200) != 0 {
+                        let event_inj: u64 = 0x20
+                                           | (0u64 << 8)
+                                           | (1u64 << 31);
                         vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
                     }
                 }
@@ -594,12 +675,19 @@ impl SvmVirtualMachine {
                     let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                     vmcb.write_state(state_offsets::RIP, next_rip);
                     
-                    // Always inject timer on HLT to wake the guest
+                    // Inject timer on HLT to wake the guest
                     let rflags = vmcb.read_state(state_offsets::RFLAGS);
                     if (rflags & 0x200) != 0 { // IF set
-                        let event_inj: u64 = 0x20        // Vector 0x20 (timer)
-                                           | (0 << 8)    // Type 0 = external interrupt
-                                           | (1u64 << 31); // V = valid
+                        // Use LAPIC timer vector if programmed, otherwise default 0x20
+                        let vector = if self.lapic.enabled && (self.lapic.timer_lvt & 0xFF) > 0 
+                            && ((self.lapic.timer_lvt >> 16) & 1) == 0 {
+                            (self.lapic.timer_lvt & 0xFF) as u64
+                        } else {
+                            0x20
+                        };
+                        let event_inj: u64 = vector
+                                           | (0u64 << 8)    // Type 0 = external interrupt
+                                           | (1u64 << 31);  // V = valid
                         vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
                     }
                 }
@@ -761,6 +849,179 @@ impl SvmVirtualMachine {
                 // Selective CR0 write (LMSW, CLTS) — allow it
                 let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                 vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            // ===== Additional exits for Linux boot =====
+            
+            SvmExitCode::Xsetbv => {
+                // Guest wants to set XCR0 (extended control register)
+                // ECX = XCR number (must be 0), EDX:EAX = value
+                let xcr = self.guest_regs.rcx as u32;
+                let value = (self.guest_regs.rdx << 32) | (self.guest_regs.rax & 0xFFFF_FFFF);
+                if xcr == 0 {
+                    // Allow XSETBV with sanitized value:
+                    // Bit 0 (x87) must always be set, mask to supported features
+                    let safe_value = value | 1; // Ensure x87 bit is set
+                    unsafe {
+                        core::arch::asm!(
+                            "xsetbv",
+                            in("ecx") 0u32,
+                            in("edx") (safe_value >> 32) as u32,
+                            in("eax") safe_value as u32,
+                        );
+                    }
+                }
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            SvmExitCode::Invd => {
+                // INVD — invalidate caches without writeback
+                // Just skip it (WBINVD is the safe version)
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            SvmExitCode::Invlpg => {
+                // INVLPG — invalidate TLB entry for a single page
+                // With NPT, guest TLB management is handled by hardware
+                // Just advance RIP
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            SvmExitCode::Wbinvd => {
+                // WBINVD — write-back and invalidate caches
+                // Safe to execute on host (just flushes caches)
+                unsafe { core::arch::asm!("wbinvd", options(nomem, nostack)); }
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            SvmExitCode::Rdtsc => {
+                // RDTSC — return host TSC (with optional offset)
+                let tsc = unsafe { core::arch::x86_64::_rdtsc() };
+                self.guest_regs.rax = tsc & 0xFFFF_FFFF;
+                self.guest_regs.rdx = tsc >> 32;
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            SvmExitCode::Rdtscp => {
+                // RDTSCP — same as RDTSC but also returns IA32_TSC_AUX in ECX
+                let tsc = unsafe { core::arch::x86_64::_rdtsc() };
+                self.guest_regs.rax = tsc & 0xFFFF_FFFF;
+                self.guest_regs.rdx = tsc >> 32;
+                self.guest_regs.rcx = 0; // TSC_AUX = 0
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            SvmExitCode::Pause => {
+                // PAUSE — hint to processor, just skip
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            SvmExitCode::Monitor | SvmExitCode::Mwait | SvmExitCode::MwaitConditional => {
+                // MONITOR/MWAIT — used for power management idle
+                // Skip and let the guest continue (it will find an alternative)
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            SvmExitCode::Vintr => {
+                // Virtual interrupt delivered — just continue
+                Ok(true)
+            }
+            
+            SvmExitCode::TaskSwitch => {
+                // Task switch — Linux doesn't use hardware task switching in long mode
+                // Log and continue
+                crate::serial_println!("[SVM-VM {}] TaskSwitch at RIP=0x{:X}", self.id, guest_rip);
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            // Exception intercepts — re-inject into guest
+            SvmExitCode::ExceptionDE | SvmExitCode::ExceptionDB |
+            SvmExitCode::ExceptionBP | SvmExitCode::ExceptionOF |
+            SvmExitCode::ExceptionBR | SvmExitCode::ExceptionUD |
+            SvmExitCode::ExceptionNM | SvmExitCode::ExceptionMF |
+            SvmExitCode::ExceptionAC | SvmExitCode::ExceptionXF => {
+                // These exceptions don't have error codes — re-inject into guest
+                let vector = (exit_code - 0x40) as u8;
+                if self.stats.vmexits < 200 {
+                    crate::serial_println!("[SVM-VM {}] Exception #{} at RIP=0x{:X} — re-injecting", 
+                        self.id, vector, guest_rip);
+                }
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                // Event type 3 = exception, V=1
+                vmcb.inject_event(vector, 3, None);
+                Ok(true)
+            }
+            
+            SvmExitCode::ExceptionGP => {
+                // #GP — re-inject with error code
+                let error_code = exit_info1 as u32;
+                if self.stats.vmexits < 200 {
+                    crate::serial_println!("[SVM-VM {}] #GP(0x{:X}) at RIP=0x{:X}", 
+                        self.id, error_code, guest_rip);
+                }
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.inject_event(13, 3, Some(error_code));
+                Ok(true)
+            }
+            
+            SvmExitCode::ExceptionPF => {
+                // #PF — re-inject with error code, set CR2
+                let error_code = exit_info1 as u32;
+                let fault_addr = exit_info2;
+                if self.stats.vmexits < 200 {
+                    crate::serial_println!("[SVM-VM {}] #PF at 0x{:X} (err=0x{:X}) RIP=0x{:X}", 
+                        self.id, fault_addr, error_code, guest_rip);
+                }
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::CR2, fault_addr);
+                vmcb.inject_event(14, 3, Some(error_code));
+                Ok(true)
+            }
+            
+            SvmExitCode::ExceptionDF => {
+                // Double fault — this is very bad, stop the VM
+                crate::serial_println!("[SVM-VM {}] DOUBLE FAULT at RIP=0x{:X}", self.id, guest_rip);
+                self.state = SvmVmState::Crashed;
+                Ok(false)
+            }
+            
+            SvmExitCode::ExceptionTS | SvmExitCode::ExceptionNP |
+            SvmExitCode::ExceptionSS => {
+                // Exceptions with error codes — re-inject
+                let vector = (exit_code - 0x40) as u8;
+                let error_code = exit_info1 as u32;
+                if self.stats.vmexits < 200 {
+                    crate::serial_println!("[SVM-VM {}] Exception #{} (err=0x{:X}) at RIP=0x{:X}", 
+                        self.id, vector, error_code, guest_rip);
+                }
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.inject_event(vector, 3, Some(error_code));
+                Ok(true)
+            }
+            
+            SvmExitCode::ExceptionMC => {
+                // Machine Check — re-inject as abort
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.inject_event(18, 3, None);
                 Ok(true)
             }
             
@@ -954,9 +1215,10 @@ impl SvmVirtualMachine {
         }
     }
     
-    /// Emulate Local APIC MMIO access
-    fn handle_lapic_mmio(&mut self, gpa: u64, _error_code: u64) {
+    /// Emulate Local APIC MMIO access (read and write)
+    fn handle_lapic_mmio(&mut self, gpa: u64, error_code: u64) {
         let offset = (gpa & 0xFFF) as u32;
+        let is_write = (error_code & 0x2) != 0; // Bit 1 of NPF error code = write
         
         // Common LAPIC register offsets
         const LAPIC_ID: u32 = 0x020;
@@ -971,34 +1233,123 @@ impl SvmVirtualMachine {
         const LAPIC_ICR_LOW: u32 = 0x300;
         const LAPIC_ICR_HIGH: u32 = 0x310;
         const LAPIC_TIMER_LVT: u32 = 0x320;
+        const LAPIC_THERMAL_LVT: u32 = 0x330;
+        const LAPIC_PERF_LVT: u32 = 0x340;
         const LAPIC_LINT0: u32 = 0x350;
         const LAPIC_LINT1: u32 = 0x360;
+        const LAPIC_ERROR_LVT: u32 = 0x370;
         const LAPIC_TIMER_ICR: u32 = 0x380;
         const LAPIC_TIMER_CCR: u32 = 0x390;
         const LAPIC_TIMER_DCR: u32 = 0x3E0;
         
-        // For reads, return sensible defaults
-        let value: u32 = match offset {
-            LAPIC_ID => 0,           // APIC ID = 0 (BSP)
-            LAPIC_VERSION => 0x50014, // Version 0x14, max LVT entry 5
-            LAPIC_TPR => 0,
-            LAPIC_SVR => 0x1FF,       // Software enable, vector 0xFF
-            LAPIC_ISR_BASE..=0x170 => 0,
-            LAPIC_TMR_BASE..=0x1F0 => 0,
-            LAPIC_IRR_BASE..=0x270 => 0,
-            LAPIC_ESR => 0,
-            LAPIC_ICR_LOW => 0,
-            LAPIC_ICR_HIGH => 0,
-            LAPIC_TIMER_LVT => 0x10000, // Masked
-            LAPIC_LINT0 => 0x10000,     // Masked
-            LAPIC_LINT1 => 0x10000,     // Masked
-            LAPIC_TIMER_ICR => 0,
-            LAPIC_TIMER_CCR => 0,       // Timer current count = 0
-            LAPIC_TIMER_DCR => 0,
-            _ => 0,
-        };
-        
-        self.guest_regs.rax = value as u64;
+        if is_write {
+            let value = self.guest_regs.rax as u32;
+            match offset {
+                LAPIC_TPR => {
+                    self.lapic.tpr = value & 0xFF;
+                    // Also update V_TPR in VMCB for hardware acceleration
+                    if let Some(ref mut vmcb) = self.vmcb {
+                        vmcb.write_u32(control_offsets::V_TPR, value & 0x0F);
+                    }
+                }
+                LAPIC_EOI => {
+                    // End-of-interrupt: clear highest ISR bit (we don't track ISR, just accept)
+                }
+                LAPIC_SVR => {
+                    self.lapic.svr = value;
+                    self.lapic.enabled = (value & 0x100) != 0;
+                    if self.stats.vmexits < 1000 {
+                        crate::serial_println!("[SVM-VM {}] LAPIC SVR=0x{:X} enabled={}", 
+                            self.id, value, self.lapic.enabled);
+                    }
+                }
+                LAPIC_ICR_LOW => {
+                    // IPI — log but don't deliver (single vCPU)
+                    if self.stats.vmexits < 1000 {
+                        crate::serial_println!("[SVM-VM {}] LAPIC ICR write: 0x{:X} (IPI ignored, single vCPU)", 
+                            self.id, value);
+                    }
+                }
+                LAPIC_ICR_HIGH => {} // Destination for IPI, ignore
+                LAPIC_TIMER_LVT => {
+                    self.lapic.timer_lvt = value;
+                    if self.stats.vmexits < 1000 {
+                        let vector = value & 0xFF;
+                        let masked = (value >> 16) & 1;
+                        let mode = (value >> 17) & 0x3;
+                        let mode_str = match mode {
+                            0 => "one-shot",
+                            1 => "periodic",
+                            2 => "TSC-deadline",
+                            _ => "reserved",
+                        };
+                        crate::serial_println!("[SVM-VM {}] LAPIC timer LVT: vec={} mode={} masked={}", 
+                            self.id, vector, mode_str, masked);
+                    }
+                }
+                LAPIC_LINT0 | LAPIC_LINT1 | LAPIC_THERMAL_LVT | LAPIC_PERF_LVT | LAPIC_ERROR_LVT => {
+                    // LVT entries — accept silently
+                }
+                LAPIC_TIMER_ICR => {
+                    self.lapic.icr = value;
+                    self.lapic.ccr = value; // Start countdown
+                    self.lapic.last_tick_exit = self.stats.vmexits;
+                    if self.stats.vmexits < 1000 && value > 0 {
+                        crate::serial_println!("[SVM-VM {}] LAPIC timer ICR={} (timer armed)", self.id, value);
+                    }
+                }
+                LAPIC_TIMER_DCR => {
+                    self.lapic.dcr = value;
+                }
+                LAPIC_ESR => {} // Write clears ESR
+                _ => {
+                    if self.stats.vmexits < 200 {
+                        crate::serial_println!("[SVM-VM {}] LAPIC write offset=0x{:X} val=0x{:X}", 
+                            self.id, offset, value);
+                    }
+                }
+            }
+        } else {
+            // Read
+            let value: u32 = match offset {
+                LAPIC_ID => 0,                    // APIC ID = 0 (BSP)
+                LAPIC_VERSION => 0x0005_0014,     // Version 0x14, max LVT entry 5
+                LAPIC_TPR => self.lapic.tpr,
+                LAPIC_SVR => self.lapic.svr,
+                LAPIC_ISR_BASE..=0x170 => 0,
+                LAPIC_TMR_BASE..=0x1F0 => 0,
+                LAPIC_IRR_BASE..=0x270 => 0,
+                LAPIC_ESR => 0,
+                LAPIC_ICR_LOW => 0,               // Delivery status = idle
+                LAPIC_ICR_HIGH => 0,
+                LAPIC_TIMER_LVT => self.lapic.timer_lvt,
+                LAPIC_THERMAL_LVT => 0x0001_0000, // Masked
+                LAPIC_PERF_LVT => 0x0001_0000,    // Masked
+                LAPIC_LINT0 => 0x0001_0000,        // Masked
+                LAPIC_LINT1 => 0x0001_0000,        // Masked
+                LAPIC_ERROR_LVT => 0x0001_0000,    // Masked
+                LAPIC_TIMER_ICR => self.lapic.icr,
+                LAPIC_TIMER_CCR => {
+                    // Simulate countdown based on VMEXIT count difference
+                    if self.lapic.icr > 0 {
+                        let elapsed = self.stats.vmexits.saturating_sub(self.lapic.last_tick_exit);
+                        let divider = match self.lapic.dcr & 0xB {
+                            0x0 => 2u64, 0x1 => 4, 0x2 => 8, 0x3 => 16,
+                            0x8 => 32, 0x9 => 64, 0xA => 128, 0xB => 1,
+                            _ => 1,
+                        };
+                        let ticks = (elapsed * 256) / divider;
+                        let remaining = (self.lapic.icr as u64).saturating_sub(ticks);
+                        remaining as u32
+                    } else {
+                        0
+                    }
+                }
+                LAPIC_TIMER_DCR => self.lapic.dcr,
+                _ => 0,
+            };
+            self.guest_regs.rax = value as u64;
+        }
     }
     
     /// Handle I/O instruction exit

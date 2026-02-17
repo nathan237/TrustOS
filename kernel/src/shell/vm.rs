@@ -3911,9 +3911,251 @@ pub(super) fn cmd_vm(args: &[&str]) {
                 }
             }
         }
+        
+        // ── Memory dump command ─────────────────────────────────
+        "dump" | "hexdump" => {
+            if args.len() < 3 {
+                crate::println!("Usage: vm dump <id> <gpa_hex> [length]");
+                crate::println!("  Example: vm dump 1 0x1000 256");
+                return;
+            }
+            let id: u64 = args[1].parse().unwrap_or(0);
+            let gpa_str = args[2].trim_start_matches("0x").trim_start_matches("0X");
+            let gpa = u64::from_str_radix(gpa_str, 16).unwrap_or(0);
+            let len: usize = if args.len() > 3 {
+                args[3].parse().unwrap_or(128)
+            } else {
+                128
+            };
+            let len = len.min(4096); // Cap at 4KB
+            
+            match crate::hypervisor::cpu_vendor() {
+                crate::hypervisor::CpuVendor::Amd => {
+                    crate::hypervisor::svm_vm::with_vm(id, |vm| {
+                        crate::println_color!(COLOR_CYAN, "  Memory dump: VM {} @ GPA 0x{:X} ({} bytes)", id, gpa, len);
+                        crate::println!();
+                        
+                        if let Some(data) = vm.read_guest_memory(gpa, len) {
+                            // Hex dump with ASCII sidebar
+                            for row_start in (0..data.len()).step_by(16) {
+                                crate::print!("  {:08X}: ", gpa as usize + row_start);
+                                // Hex bytes
+                                for col in 0..16 {
+                                    if row_start + col < data.len() {
+                                        crate::print!("{:02X} ", data[row_start + col]);
+                                    } else {
+                                        crate::print!("   ");
+                                    }
+                                    if col == 7 { crate::print!(" "); }
+                                }
+                                // ASCII
+                                crate::print!(" |");
+                                for col in 0..16 {
+                                    if row_start + col < data.len() {
+                                        let b = data[row_start + col];
+                                        if b >= 0x20 && b < 0x7F {
+                                            crate::print!("{}", b as char);
+                                        } else {
+                                            crate::print!(".");
+                                        }
+                                    }
+                                }
+                                crate::println!("|");
+                            }
+                        } else {
+                            crate::println_color!(COLOR_RED, "  GPA 0x{:X}+{} is outside guest memory ({} bytes)", 
+                                gpa, len, vm.memory_size);
+                        }
+                    });
+                }
+                _ => {
+                    crate::println!("vm dump requires AMD SVM.");
+                }
+            }
+        }
+        
+        // ── Register dump command ───────────────────────────────
+        "regs" | "registers" => {
+            if args.len() < 2 {
+                crate::println!("Usage: vm regs <id>");
+                return;
+            }
+            let id: u64 = args[1].parse().unwrap_or(0);
+            
+            match crate::hypervisor::cpu_vendor() {
+                crate::hypervisor::CpuVendor::Amd => {
+                    crate::hypervisor::svm_vm::with_vm(id, |vm| {
+                        crate::println_color!(COLOR_CYAN, "  VM {} Register State", id);
+                        crate::println!();
+                        
+                        // GPRs in 2-column format
+                        crate::println!("  RAX={:016X}  RBX={:016X}", vm.guest_regs.rax, vm.guest_regs.rbx);
+                        crate::println!("  RCX={:016X}  RDX={:016X}", vm.guest_regs.rcx, vm.guest_regs.rdx);
+                        crate::println!("  RSI={:016X}  RDI={:016X}", vm.guest_regs.rsi, vm.guest_regs.rdi);
+                        crate::println!("  RBP={:016X}  RSP={:016X}", vm.guest_regs.rbp, 
+                            vm.vmcb.as_ref().map_or(0, |v| v.read_state(crate::hypervisor::svm::vmcb::state_offsets::RSP)));
+                        crate::println!("  R8 ={:016X}  R9 ={:016X}", vm.guest_regs.r8, vm.guest_regs.r9);
+                        crate::println!("  R10={:016X}  R11={:016X}", vm.guest_regs.r10, vm.guest_regs.r11);
+                        crate::println!("  R12={:016X}  R13={:016X}", vm.guest_regs.r12, vm.guest_regs.r13);
+                        crate::println!("  R14={:016X}  R15={:016X}", vm.guest_regs.r14, vm.guest_regs.r15);
+                        
+                        if let Some(ref vmcb) = vm.vmcb {
+                            use crate::hypervisor::svm::vmcb::{state_offsets, control_offsets};
+                            
+                            let rip = vmcb.read_state(state_offsets::RIP);
+                            let rfl = vmcb.read_state(state_offsets::RFLAGS);
+                            crate::println!("  RIP={:016X}  RFLAGS={:016X}", rip, rfl);
+                            
+                            // Flags decoded
+                            let flags_str = {
+                                let mut s = alloc::string::String::new();
+                                if rfl & 0x001 != 0 { s.push_str("CF "); }
+                                if rfl & 0x040 != 0 { s.push_str("ZF "); }
+                                if rfl & 0x080 != 0 { s.push_str("SF "); }
+                                if rfl & 0x200 != 0 { s.push_str("IF "); }
+                                if rfl & 0x400 != 0 { s.push_str("DF "); }
+                                if rfl & 0x800 != 0 { s.push_str("OF "); }
+                                s
+                            };
+                            crate::println!("  Flags: [{}]", flags_str.trim());
+                            
+                            crate::println!();
+                            crate::println!("  CR0={:016X}  CR2={:016X}", 
+                                vmcb.read_state(state_offsets::CR0), vmcb.read_state(state_offsets::CR2));
+                            crate::println!("  CR3={:016X}  CR4={:016X}", 
+                                vmcb.read_state(state_offsets::CR3), vmcb.read_state(state_offsets::CR4));
+                            crate::println!("  EFER={:016X}", vmcb.read_state(state_offsets::EFER));
+                            
+                            // Segments
+                            crate::println!();
+                            crate::println!("  CS: sel={:04X} base={:016X} lim={:08X} attr={:04X}", 
+                                vmcb.read_u16(state_offsets::CS_SELECTOR),
+                                vmcb.read_state(state_offsets::CS_BASE),
+                                vmcb.read_u32(state_offsets::CS_LIMIT),
+                                vmcb.read_u16(state_offsets::CS_ATTRIB));
+                            crate::println!("  SS: sel={:04X} base={:016X} lim={:08X} attr={:04X}", 
+                                vmcb.read_u16(state_offsets::SS_SELECTOR),
+                                vmcb.read_state(state_offsets::SS_BASE),
+                                vmcb.read_u32(state_offsets::SS_LIMIT),
+                                vmcb.read_u16(state_offsets::SS_ATTRIB));
+                            crate::println!("  DS: sel={:04X}  ES: sel={:04X}  FS: sel={:04X}  GS: sel={:04X}", 
+                                vmcb.read_u16(state_offsets::DS_SELECTOR),
+                                vmcb.read_u16(state_offsets::ES_SELECTOR),
+                                vmcb.read_u16(state_offsets::FS_SELECTOR),
+                                vmcb.read_u16(state_offsets::GS_SELECTOR));
+                            
+                            // LAPIC state
+                            crate::println!();
+                            crate::println_color!(COLOR_YELLOW, "  LAPIC State:");
+                            crate::println!("    Enabled: {}  SVR: 0x{:X}  TPR: 0x{:X}", 
+                                vm.lapic.enabled, vm.lapic.svr, vm.lapic.tpr);
+                            let timer_mode = match (vm.lapic.timer_lvt >> 17) & 0x3 {
+                                0 => "one-shot", 1 => "periodic", 2 => "TSC-deadline", _ => "reserved",
+                            };
+                            let timer_masked = (vm.lapic.timer_lvt >> 16) & 1;
+                            let timer_vec = vm.lapic.timer_lvt & 0xFF;
+                            crate::println!("    Timer: vec={} mode={} masked={} ICR={} DCR={}", 
+                                timer_vec, timer_mode, timer_masked, vm.lapic.icr, vm.lapic.dcr);
+                            
+                            // Last VMEXIT
+                            crate::println!();
+                            let exitcode = vmcb.read_control(control_offsets::EXITCODE);
+                            let info1 = vmcb.read_control(control_offsets::EXITINFO1);
+                            let info2 = vmcb.read_control(control_offsets::EXITINFO2);
+                            crate::println!("  Last VMEXIT: code=0x{:X} info1=0x{:X} info2=0x{:X}", exitcode, info1, info2);
+                            
+                            // Stats
+                            crate::println!();
+                            crate::println!("  VMEXITs: {}  CPUID: {}  I/O: {}  MSR: {}  NPF: {}  HLT: {}",
+                                vm.stats.vmexits, vm.stats.cpuid_exits, vm.stats.io_exits, 
+                                vm.stats.msr_exits, vm.stats.npf_exits, vm.stats.hlt_exits);
+                        }
+                    });
+                }
+                _ => {
+                    crate::println!("vm regs requires AMD SVM.");
+                }
+            }
+        }
+        
+        // ── Stack trace command ─────────────────────────────────
+        "stack" | "backtrace" | "bt" => {
+            if args.len() < 2 {
+                crate::println!("Usage: vm stack <id> [depth]");
+                return;
+            }
+            let id: u64 = args[1].parse().unwrap_or(0);
+            let depth: usize = if args.len() > 2 { args[2].parse().unwrap_or(16) } else { 16 };
+            
+            match crate::hypervisor::cpu_vendor() {
+                crate::hypervisor::CpuVendor::Amd => {
+                    crate::hypervisor::svm_vm::with_vm(id, |vm| {
+                        if let Some(ref vmcb) = vm.vmcb {
+                            use crate::hypervisor::svm::vmcb::state_offsets;
+                            
+                            let rsp = vmcb.read_state(state_offsets::RSP);
+                            let rip = vmcb.read_state(state_offsets::RIP);
+                            let rbp = vm.guest_regs.rbp;
+                            
+                            crate::println_color!(COLOR_CYAN, "  VM {} Stack Trace (RSP=0x{:X}, RIP=0x{:X})", id, rsp, rip);
+                            crate::println!();
+                            
+                            // Dump stack contents as potential return addresses
+                            crate::println!("  Stack contents (potential return addresses):");
+                            for i in 0..depth {
+                                let addr = rsp + (i as u64 * 8);
+                                if let Some(data) = vm.read_guest_memory(addr, 8) {
+                                    let val = u64::from_le_bytes([
+                                        data[0], data[1], data[2], data[3],
+                                        data[4], data[5], data[6], data[7],
+                                    ]);
+                                    // Heuristic: show only values that look like kernel addresses
+                                    let marker = if val > 0xFFFF_8000_0000_0000 { " <-- kernel addr" }
+                                        else if val > 0x1000 && val < 0x1_0000_0000 { " <-- possible code" }
+                                        else { "" };
+                                    crate::println!("  [{:2}] RSP+{:04X}: {:016X}{}", i, i * 8, val, marker);
+                                } else {
+                                    crate::println!("  [{:2}] RSP+{:04X}: <outside guest memory>", i, i * 8);
+                                    break;
+                                }
+                            }
+                            
+                            // Frame-pointer based walk if RBP looks valid
+                            if rbp > 0x1000 && rbp < vm.memory_size as u64 {
+                                crate::println!();
+                                crate::println!("  Frame pointer chain (RBP=0x{:X}):", rbp);
+                                let mut frame = rbp;
+                                for i in 0..depth.min(32) {
+                                    if frame < 0x1000 || frame >= vm.memory_size as u64 - 16 { break; }
+                                    if let Some(data) = vm.read_guest_memory(frame, 16) {
+                                        let next_rbp = u64::from_le_bytes([
+                                            data[0], data[1], data[2], data[3],
+                                            data[4], data[5], data[6], data[7],
+                                        ]);
+                                        let ret_addr = u64::from_le_bytes([
+                                            data[8], data[9], data[10], data[11],
+                                            data[12], data[13], data[14], data[15],
+                                        ]);
+                                        crate::println!("  #{}: RBP=0x{:X} -> ret=0x{:X}", i, frame, ret_addr);
+                                        if next_rbp <= frame || next_rbp == 0 { break; }
+                                        frame = next_rbp;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+                _ => {
+                    crate::println!("vm stack requires AMD SVM.");
+                }
+            }
+        }
+        
         _ => {
             crate::println!("Unknown VM command: {}", args[0]);
-            crate::println!("Commands: create, start, run, stop, list, guests, mount, console, input, inspect");
+            crate::println!("Commands: create, start, run, stop, list, guests, mount, console, input, inspect, dump, regs, stack");
         }
     }
 }

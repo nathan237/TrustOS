@@ -790,15 +790,20 @@ impl Vmcb {
     
     /// Set up basic intercepts for hypercall-based VM
     pub fn setup_basic_intercepts(&mut self) {
-        // Intercept: CPUID, HLT, I/O, MSR, shutdown
+        // Intercept: CPUID, HLT, I/O, MSR, shutdown, INVD
         let intercepts1 = intercepts::CPUID 
             | intercepts::HLT 
             | intercepts::IOIO
             | intercepts::MSR 
-            | intercepts::SHUTDOWN;
+            | intercepts::SHUTDOWN
+            | intercepts::INVD;  // Cache invalidation — need to emulate
         
         let intercepts2 = intercepts2::VMMCALL 
-            | intercepts2::VMRUN;
+            | intercepts2::VMRUN
+            | intercepts2::XSETBV    // Extended state set — must intercept
+            | intercepts2::WBINVD    // Write-back invalidate
+            | intercepts2::MONITOR   // MONITOR/MWAIT
+            | intercepts2::MWAIT;
         
         self.set_intercepts1(intercepts1);
         self.set_intercepts2(intercepts2);
