@@ -10,6 +10,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
 use alloc::format;
+use alloc::collections::VecDeque;
 use core::sync::atomic::{AtomicU64, Ordering};
 use spin::Mutex;
 
@@ -21,6 +22,7 @@ use super::mmio::{self, MmioDecoded};
 use super::ioapic::IoApicState;
 use super::hpet::HpetState;
 use super::pci::PciBus;
+use super::virtio_blk::{VirtioBlkState, VirtioConsoleState};
 
 /// VM ID counter
 static NEXT_VM_ID: AtomicU64 = AtomicU64::new(1);
@@ -114,6 +116,22 @@ pub struct SvmVirtualMachine {
     pub pci: PciBus,
     /// VMEXIT count at last PIT IRQ0 injection (for periodic timing)
     pub pit_last_inject: u64,
+    /// Serial COM1 input buffer (guest reads from here)
+    pub serial_input_buffer: VecDeque<u8>,
+    /// Serial COM1 Interrupt Enable Register
+    pub serial_ier: u8,
+    /// Serial COM1 FIFO Control Register state
+    pub serial_fcr: u8,
+    /// VirtIO block device RAM-backed storage (64 sectors * 512 = 32KB default)
+    pub virtio_blk_storage: Vec<u8>,
+    /// VirtIO block device status register
+    pub virtio_blk_status: u8,
+    /// VirtIO console device status register
+    pub virtio_console_status: u8,
+    /// VirtIO block device state (legacy I/O transport)
+    pub virtio_blk_state: VirtioBlkState,
+    /// VirtIO console device state (legacy I/O transport)
+    pub virtio_console_state: VirtioConsoleState,
 }
 
 /// Emulated Local APIC timer state
@@ -305,6 +323,14 @@ impl SvmVirtualMachine {
             hpet: HpetState::default(),
             pci: PciBus::default(),
             pit_last_inject: 0,
+            serial_input_buffer: VecDeque::with_capacity(256),
+            serial_ier: 0,
+            serial_fcr: 0,
+            virtio_blk_storage: alloc::vec![0u8; 64 * 512], // 32KB RAM disk
+            virtio_blk_status: 0,
+            virtio_console_status: 0,
+            virtio_blk_state: VirtioBlkState::with_capacity(64 * 512),
+            virtio_console_state: VirtioConsoleState::default(),
         })
     }
     
@@ -421,6 +447,15 @@ impl SvmVirtualMachine {
                               self.id, cs_base >> 4, ip);
         
         Ok(())
+    }
+    
+    /// Inject serial input data into the COM1 receive buffer.
+    /// The guest will see data available via LSR bit 0 and can read via port 0x3F8.
+    /// If IER bit 0 is set, an IRQ4 will be injected on the next VMRUN.
+    pub fn inject_serial_input(&mut self, data: &[u8]) {
+        for &b in data {
+            self.serial_input_buffer.push_back(b);
+        }
     }
     
     /// Setup guest state in VMCB for protected mode
@@ -596,6 +631,10 @@ impl SvmVirtualMachine {
                 break;
             }
             
+            // ── Timer interrupt injection ──────────────────────────────
+            // Priority: LAPIC timer → PIT IRQ0 → HPET → Serial IRQ4
+            let mut injected_timer = false;
+            
             // Sync RAX and RSP with VMCB (these are stored in VMCB state save area)
             {
                 let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
@@ -612,10 +651,6 @@ impl SvmVirtualMachine {
                           | clean_bits::LBR       // LBR didn't change
                           | clean_bits::AVIC;     // AVIC didn't change
                 vmcb.set_clean_bits(clean);
-                
-                // ── Timer interrupt injection ──────────────────────────────
-                // Priority: LAPIC timer → PIT IRQ0 → HPET (checked below)
-                let mut injected_timer = false;
                 
                 // 1) LAPIC timer (when programmed by the guest)
                 if self.lapic.enabled && self.lapic.icr > 0 {
@@ -697,21 +732,51 @@ impl SvmVirtualMachine {
                     }
                 }
                 
-                // 3) HPET timers → I/O APIC routing → interrupt injection
-                if !injected_timer {
+            } // end vmcb borrow for sections 1-2
+                
+            // 3) HPET timers → I/O APIC routing → interrupt injection
+            if !injected_timer {
+                // Check HPET first (borrows &mut self for hpet + ioapic)
+                let hpet_vector = self.check_hpet_interrupts();
+                if let Some(vector) = hpet_vector {
+                    let vmcb = self.vmcb.as_mut().unwrap();
                     let current_event = vmcb.read_control(control_offsets::EVENT_INJ);
                     let already_injecting = (current_event & (1u64 << 31)) != 0;
-                    
                     if !already_injecting {
-                        if let Some(vector) = self.check_hpet_interrupts() {
-                            let vmcb = self.vmcb.as_mut().unwrap();
-                            let rflags = vmcb.read_state(state_offsets::RFLAGS);
-                            if (rflags & 0x200) != 0 { // IF set
-                                let event_inj: u64 = vector
-                                                   | (0u64 << 8)    // Type 0 = external interrupt
-                                                   | (1u64 << 31);  // V = valid
-                                vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
-                            }
+                        let rflags = vmcb.read_state(state_offsets::RFLAGS);
+                        if (rflags & 0x200) != 0 { // IF set
+                            let event_inj: u64 = vector
+                                               | (0u64 << 8)    // Type 0 = external interrupt
+                                               | (1u64 << 31);  // V = valid
+                            vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
+                        }
+                    }
+                }
+            }
+            
+            // 4) Serial COM1 IRQ4 — inject when IER data-available enabled and buffer has data
+            if (self.serial_ier & 0x01) != 0 && !self.serial_input_buffer.is_empty() {
+                let vector = if let Some(route) = self.ioapic.get_irq_route(4) {
+                    if !route.masked && route.vector > 0 {
+                        route.vector as u64
+                    } else {
+                        (self.pic.master_vector_base + 4) as u64
+                    }
+                } else {
+                    (self.pic.master_vector_base + 4) as u64
+                };
+                
+                if vector > 0 {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    let current_event = vmcb.read_control(control_offsets::EVENT_INJ);
+                    let already_injecting = (current_event & (1u64 << 31)) != 0;
+                    if !already_injecting {
+                        let rflags = vmcb.read_state(state_offsets::RFLAGS);
+                        if (rflags & 0x200) != 0 {
+                            let event_inj: u64 = vector
+                                               | (0u64 << 8)
+                                               | (1u64 << 31);
+                            vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
                         }
                     }
                 }
@@ -1681,12 +1746,33 @@ impl SvmVirtualMachine {
             // IN instruction - return appropriate data for each port
             let value: u32 = match port {
                 // ── COM1 serial port (0x3F8-0x3FF) ───────────────────
-                0x3F8 => 0,                     // Data register - no data available
-                0x3F9 => 0,                     // Interrupt enable register
-                0x3FA => 0xC1,                  // IIR: FIFO enabled, no interrupt pending
+                0x3F8 => {
+                    // Data register — pop from input buffer if available
+                    if let Some(byte) = self.serial_input_buffer.pop_front() {
+                        byte as u32
+                    } else {
+                        0
+                    }
+                }
+                0x3F9 => self.serial_ier as u32, // Interrupt Enable Register
+                0x3FA => {
+                    // IIR: FIFO enabled + interrupt identification
+                    if (self.serial_ier & 0x01) != 0 && !self.serial_input_buffer.is_empty() {
+                        0xC4 // FIFO enabled, receive data available (priority 2)
+                    } else {
+                        0xC1 // FIFO enabled, no interrupt pending
+                    }
+                }
                 0x3FB => 0x03,                  // LCR: 8N1
                 0x3FC => 0x03,                  // MCR: DTR + RTS
-                0x3FD => 0x60,                  // LSR: TX empty + TX holding empty
+                0x3FD => {
+                    // LSR: bit 0 = Data Ready, bit 5 = THR empty, bit 6 = TX empty
+                    let mut lsr = 0x60u32; // TX empty + THR empty
+                    if !self.serial_input_buffer.is_empty() {
+                        lsr |= 0x01; // Data Ready
+                    }
+                    lsr
+                }
                 0x3FE => 0xB0,                  // MSR: CTS + DSR
                 0x3FF => 0,                     // Scratch register
                 
@@ -1770,6 +1856,18 @@ impl SvmVirtualMachine {
                     self.pci.read_config_data(byte_offset)
                 }
                 
+                // ── VirtIO Console (BAR0 = 0xC000, 64 bytes) ─────
+                0xC000..=0xC03F => {
+                    let offset = port - 0xC000;
+                    self.virtio_console_state.io_read(offset)
+                }
+                
+                // ── VirtIO Block (BAR0 = 0xC040, 64 bytes) ───────
+                0xC040..=0xC07F => {
+                    let offset = port - 0xC040;
+                    self.virtio_blk_state.io_read(offset)
+                }
+                
                 // ── ACPI / power management ───────────────────────
                 0xB000 => 0,           // PM1a_EVT_STS (no events)
                 0xB002 => 0,           // PM1a_EVT_EN
@@ -1820,8 +1918,22 @@ impl SvmVirtualMachine {
                     let ch = (value & 0xFF) as u8;
                     crate::serial_print!("{}", ch as char);
                 }
-                // Serial config writes — accept silently
-                0x3F9..=0x3FF | 0x2F9..=0x2FF => {}
+                // COM1 registers writes
+                0x3F9 => {
+                    // IER: Interrupt Enable Register
+                    self.serial_ier = value as u8;
+                }
+                0x3FA => {
+                    // FCR: FIFO Control Register
+                    self.serial_fcr = value as u8;
+                    if (value & 0x02) != 0 {
+                        // Clear receive FIFO
+                        self.serial_input_buffer.clear();
+                    }
+                }
+                0x3FB..=0x3FF => {} // LCR, MCR, scratch — accept silently
+                // COM2 config writes — accept silently
+                0x2F9..=0x2FF => {}
                 
                 // PIC programming — full ICW/OCW state machine
                 0x20 => {
@@ -1992,6 +2104,36 @@ impl SvmVirtualMachine {
                         };
                         crate::serial_println!("[SVM-VM {}] PCI CFG WRITE {:02X}:{:02X}.{} reg=0x{:02X} val=0x{:X}", 
                             self.id, bus, dev, func, reg, value);
+                    }
+                }
+                
+                // VirtIO Console I/O (BAR0 = 0xC000)
+                0xC000..=0xC03F => {
+                    let offset = port - 0xC000;
+                    let notify = self.virtio_console_state.io_write(offset, value);
+                    if notify {
+                        // Guest sent data on transmitq — read and output to serial
+                        self.virtio_console_state.process_transmitq(&self.guest_memory);
+                    }
+                }
+                
+                // VirtIO Block I/O (BAR0 = 0xC040)
+                0xC040..=0xC07F => {
+                    let offset = port - 0xC040;
+                    let notify = self.virtio_blk_state.io_write(offset, value);
+                    if notify {
+                        // Guest submitted block requests — process them
+                        // We need to split borrow: clone storage ref boundaries
+                        let storage_len = self.virtio_blk_storage.len();
+                        let storage_ptr = self.virtio_blk_storage.as_mut_ptr();
+                        let mem_ptr = self.guest_memory.as_mut_ptr();
+                        let mem_len = self.guest_memory.len();
+                        // Safety: virtio_blk_storage and guest_memory are separate Vec allocations
+                        unsafe {
+                            let storage = core::slice::from_raw_parts_mut(storage_ptr, storage_len);
+                            let guest_mem = core::slice::from_raw_parts_mut(mem_ptr, mem_len);
+                            self.virtio_blk_state.process_queue(guest_mem, storage);
+                        }
                     }
                 }
                 

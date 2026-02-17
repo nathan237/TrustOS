@@ -54,6 +54,9 @@ pub mod hpet;
 // Phase 10: PCI bus emulation + periodic timer injection
 pub mod pci;
 
+// Phase 11: Serial input, DSDT AML, VirtIO devices, VMX boot
+pub mod virtio_blk;
+
 // Self-tests for hypervisor subsystems
 pub mod tests;
 

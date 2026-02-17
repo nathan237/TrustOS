@@ -383,9 +383,18 @@ impl VirtualMachine {
             
             exit_reason::HLT => {
                 self.stats.hlt_exits += 1;
-                crate::lab_mode::trace_bus::emit_vm_exit(self.id, "HLT", guest_rip, "");
-                crate::serial_println!("[VM {}] Guest executed HLT at 0x{:X}", self.id, guest_rip);
-                Ok(false) // Arrêter la VM
+                // For Linux: HLT is used in idle loops, advance RIP past it and continue.
+                // Only stop the VM after too many consecutive HLTs without progress.
+                let vmcs = self.vmcs.as_ref().unwrap();
+                vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
+                
+                // Safety valve: if we've done thousands of HLTs, the guest is likely stuck
+                if self.stats.hlt_exits > 50000 {
+                    crate::serial_println!("[VM {}] Too many HLTs ({}), stopping", self.id, self.stats.hlt_exits);
+                    Ok(false)
+                } else {
+                    Ok(true)
+                }
             }
             
             exit_reason::IO_INSTRUCTION => {
@@ -542,15 +551,103 @@ impl VirtualMachine {
         
         if is_out {
             // OUT instruction
-            let value = (self.guest_regs.rax & 0xFF) as u8;
+            let value = self.guest_regs.rax as u32;
             
-            // Use virtual console for I/O
-            let result = super::console::handle_console_io(self.id, port, true, value);
-            self.guest_regs.rax = (self.guest_regs.rax & !0xFF) | (result as u64);
+            match port {
+                // Serial COM1 output
+                0x3F8 => {
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
+                    if let Some(console_id) = self.console_id {
+                        super::console::write_char(console_id, ch as char);
+                    }
+                }
+                // Serial COM2 output
+                0x2F8 => {
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
+                }
+                // Serial config writes — accept silently
+                0x3F9..=0x3FF | 0x2F9..=0x2FF => {}
+                // PIC, PIT, DMA, CMOS, keyboard — accept silently
+                0x20 | 0x21 | 0xA0 | 0xA1 => {} // PIC
+                0x40..=0x43 | 0x61 => {} // PIT
+                0x60 | 0x64 => {} // Keyboard
+                0x70 | 0x71 => {} // CMOS
+                0x80..=0x8F => {} // DMA page
+                0x00..=0x0F | 0xC0..=0xDF => {} // DMA
+                0x92 => {} // Fast A20
+                0xCF8 | 0xCFC..=0xCFF => {} // PCI (simplified)
+                0xB000..=0xB03F => {} // ACPI PM
+                0xE9 => {
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
+                }
+                0xED => {} // I/O delay
+                _ => {
+                    if self.stats.io_exits < 50 {
+                        crate::serial_println!("[VM {}] OUT port 0x{:X} val=0x{:X}", self.id, port, value);
+                    }
+                }
+            }
         } else {
-            // IN instruction
-            let value = super::console::handle_console_io(self.id, port, false, 0);
-            self.guest_regs.rax = (self.guest_regs.rax & !0xFF) | (value as u64);
+            // IN instruction — return appropriate values for Linux
+            let value: u32 = match port {
+                // COM1 serial
+                0x3F8 => 0,         // Data register (no input)
+                0x3F9 => 0,         // IER
+                0x3FA => 0xC1,      // IIR: FIFO enabled, no interrupt
+                0x3FB => 0x03,      // LCR: 8N1
+                0x3FC => 0x03,      // MCR
+                0x3FD => 0x60,      // LSR: TX empty + THR empty
+                0x3FE => 0xB0,      // MSR
+                0x3FF => 0,         // Scratch
+                // COM2
+                0x2F8..=0x2FF => match port & 0x7 {
+                    5 => 0x60,
+                    _ => 0,
+                },
+                // Keyboard
+                0x60 => 0,
+                0x64 => 0x1C,       // Status: input buffer empty
+                // PIC
+                0x20 => 0,          // Master ISR
+                0x21 => 0xFF,       // Master IMR (all masked)
+                0xA0 => 0,          // Slave ISR
+                0xA1 => 0xFF,       // Slave IMR
+                // PIT
+                0x40..=0x42 => 0,
+                0x43 => 0,
+                0x61 => 0x20,       // Speaker control
+                // CMOS
+                0x70 => 0,
+                0x71 => 0,
+                // VGA
+                0x3B0..=0x3DF => 0,
+                // DMA
+                0x00..=0x0F | 0x80..=0x8F | 0xC0..=0xDF => 0,
+                // PCI (simplified — return no devices)
+                0xCF8 => 0,
+                0xCFC..=0xCFF => 0xFFFF_FFFF,
+                // ACPI PM timer
+                0xB008 => {
+                    let ticks = self.stats.vm_exits.wrapping_mul(4);
+                    (ticks & 0xFFFF_FFFF) as u32
+                }
+                0xB000..=0xB03F => 0,
+                // Fast A20
+                0x92 => 0x02,
+                // Debug
+                0xE9 => 0,
+                0xED => 0,
+                _ => {
+                    if self.stats.io_exits < 50 {
+                        crate::serial_println!("[VM {}] IN port 0x{:X}", self.id, port);
+                    }
+                    0xFF
+                }
+            };
+            self.guest_regs.rax = (self.guest_regs.rax & !0xFFFF_FFFF) | (value as u64);
         }
         
         Ok(())

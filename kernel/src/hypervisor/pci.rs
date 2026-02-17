@@ -33,6 +33,10 @@ pub struct PciBus {
     pub host_bridge: [u8; 256],
     /// ISA Bridge config space (256 bytes)
     pub isa_bridge: [u8; 256],
+    /// VirtIO Console config space (256 bytes) — Bus 0, Device 2, Function 0
+    pub virtio_console: [u8; 256],
+    /// VirtIO Block config space (256 bytes) — Bus 0, Device 3, Function 0
+    pub virtio_blk: [u8; 256],
 }
 
 impl Default for PciBus {
@@ -41,9 +45,13 @@ impl Default for PciBus {
             config_addr: 0,
             host_bridge: [0u8; 256],
             isa_bridge: [0u8; 256],
+            virtio_console: [0u8; 256],
+            virtio_blk: [0u8; 256],
         };
         bus.init_host_bridge();
         bus.init_isa_bridge();
+        bus.init_virtio_console();
+        bus.init_virtio_blk();
         bus
     }
 }
@@ -158,6 +166,80 @@ impl PciBus {
         write_config_u16(c, regs::SUBSYSTEM_ID, 0x7000);
     }
     
+    /// Initialize VirtIO Console config space (Bus 0, Device 2, Function 0)
+    ///
+    /// VirtIO Console (legacy):
+    ///   Vendor: 0x1AF4 (Red Hat / VirtIO)
+    ///   Device: 0x1003 (VirtIO Console, transitional)
+    ///   Class:  0x07/0x80 (Communication controller / Other)
+    ///   BAR0:   0xC000 (I/O space, 64 bytes)
+    ///   IRQ:    INTA → GSI 17 (via _PRT)
+    fn init_virtio_console(&mut self) {
+        let c = &mut self.virtio_console;
+        
+        // VirtIO vendor
+        write_config_u16(c, regs::VENDOR_ID, 0x1AF4);
+        // VirtIO Console (transitional device ID)
+        write_config_u16(c, regs::DEVICE_ID, 0x1003);
+        // Command: I/O space + bus master
+        write_config_u16(c, regs::COMMAND, 0x0005);
+        // Status
+        write_config_u16(c, regs::STATUS, 0x0010); // Capabilities List
+        // Revision
+        c[regs::REVISION_ID] = 0x00;
+        // Class: Communication controller / Other
+        c[regs::PROG_IF] = 0x00;
+        c[regs::SUBCLASS] = 0x80;
+        c[regs::CLASS_CODE] = 0x07;
+        // Header type 0
+        c[regs::HEADER_TYPE] = 0x00;
+        // BAR0: I/O space at 0xC000 (bit 0 = 1 for I/O)
+        write_config_u32(c, regs::BAR0, 0xC001);
+        // Subsystem: VirtIO console = subsystem device ID 3
+        write_config_u16(c, regs::SUBSYSTEM_VENDOR, 0x1AF4);
+        write_config_u16(c, regs::SUBSYSTEM_ID, 0x0003);
+        // Interrupt: INTA, line 17
+        c[regs::INTERRUPT_LINE] = 17;
+        c[regs::INTERRUPT_PIN] = 0x01; // INTA
+    }
+    
+    /// Initialize VirtIO Block config space (Bus 0, Device 3, Function 0)
+    ///
+    /// VirtIO Block (legacy):
+    ///   Vendor: 0x1AF4 (Red Hat / VirtIO)
+    ///   Device: 0x1001 (VirtIO Block, transitional)
+    ///   Class:  0x01/0x80 (Mass storage / Other)
+    ///   BAR0:   0xC040 (I/O space, 64 bytes)
+    ///   IRQ:    INTA → GSI 18 (via _PRT)
+    fn init_virtio_blk(&mut self) {
+        let c = &mut self.virtio_blk;
+        
+        // VirtIO vendor
+        write_config_u16(c, regs::VENDOR_ID, 0x1AF4);
+        // VirtIO Block (transitional device ID)
+        write_config_u16(c, regs::DEVICE_ID, 0x1001);
+        // Command: I/O space + bus master
+        write_config_u16(c, regs::COMMAND, 0x0005);
+        // Status
+        write_config_u16(c, regs::STATUS, 0x0010); // Capabilities List
+        // Revision
+        c[regs::REVISION_ID] = 0x00;
+        // Class: Mass storage / Other
+        c[regs::PROG_IF] = 0x00;
+        c[regs::SUBCLASS] = 0x80;
+        c[regs::CLASS_CODE] = 0x01;
+        // Header type 0
+        c[regs::HEADER_TYPE] = 0x00;
+        // BAR0: I/O space at 0xC040 (bit 0 = 1 for I/O)
+        write_config_u32(c, regs::BAR0, 0xC041);
+        // Subsystem: VirtIO block = subsystem device ID 2
+        write_config_u16(c, regs::SUBSYSTEM_VENDOR, 0x1AF4);
+        write_config_u16(c, regs::SUBSYSTEM_ID, 0x0002);
+        // Interrupt: INTA, line 18
+        c[regs::INTERRUPT_LINE] = 18;
+        c[regs::INTERRUPT_PIN] = 0x01; // INTA
+    }
+    
     /// Handle write to CONFIG_ADDRESS port (0xCF8)
     pub fn write_config_address(&mut self, value: u32) {
         self.config_addr = value;
@@ -184,6 +266,8 @@ impl PciBus {
         match (bus, device, function) {
             (0, 0, 0) => Some(&self.host_bridge),
             (0, 1, 0) => Some(&self.isa_bridge),
+            (0, 2, 0) => Some(&self.virtio_console),
+            (0, 3, 0) => Some(&self.virtio_blk),
             _ => None,
         }
     }
@@ -193,6 +277,8 @@ impl PciBus {
         match (bus, device, function) {
             (0, 0, 0) => Some(&mut self.host_bridge),
             (0, 1, 0) => Some(&mut self.isa_bridge),
+            (0, 2, 0) => Some(&mut self.virtio_console),
+            (0, 3, 0) => Some(&mut self.virtio_blk),
             _ => None,
         }
     }
@@ -271,7 +357,7 @@ impl PciBus {
     
     /// Get a human-readable summary of what's on the bus
     pub fn describe_bus(&self) -> &'static str {
-        "PCI Bus 0: [0:0.0] Host Bridge (440FX), [0:1.0] ISA Bridge (PIIX3)"
+        "PCI Bus 0: [0:0.0] Host Bridge (440FX), [0:1.0] ISA Bridge (PIIX3), [0:2.0] VirtIO Console, [0:3.0] VirtIO Block"
     }
     
     /// Check if a device exists at the given BDF

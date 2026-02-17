@@ -14,14 +14,13 @@
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
 [![Lines](https://img.shields.io/badge/code-143%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![ISO](https://img.shields.io/badge/ISO-8.95%20MB-purple?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.3.4-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.3.5-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
 [![Watch the demo](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
 [![Watch the Film](https://img.shields.io/badge/▶%20TrustOS%20Film-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/FILM_ID)
-[![Watch the Trailer](https://img.shields.io/badge/▶%20Trailer-YouTube-FF4444?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/TRAILER_ID)
 
 [Why "Trust"?](#-why-trustos) · [Features](#-features) · [Quick Start](#-quick-start) · [Architecture](#-architecture) · [Contributing](#-contributing)
 
@@ -33,6 +32,7 @@
 
 | Date | Changes |
 |------|----------|
+| **2026-02-17** | **v0.3.5 — ACPI + Device Emulation** — Full ACPI table generation (RSDP v2, XSDT, MADT, FADT w/ PM timer + SCI, DSDT with AML bytecode), Intel 8259A PIC emulation (ICW1-4, OCW1-3, edge-triggered IRQs, cascaded master/slave, spurious IRQ detection), Intel 8254 PIT emulation (modes 0/2/3, channel 0-2, 1.193182 MHz, lobyte/hibyte access), CMOS RTC emulation (BCD time registers 0x00-0x09, Status A/B/C, NMI masking, century register), ACPI PM Timer (3.579545 MHz, 24/32-bit). Phase 0 infrastructure: setup.sh, setup.ps1, CI release workflow, Makefile auto-Limine, repo cleanup. |
 | **2026-02-16** | **v0.3.4 — POSIX Process Model + Real Disk Swap** — PTY/TTY subsystem with POSIX line discipline (canonical mode, echo, signal chars), pseudo-terminal pairs (master/slave), job control syscalls (SETPGID/SETSID/GETPGID/GETSID), `/etc/passwd` persistence (load/sync to filesystem), ELF improvements (PATH search across 5 dirs, shebang `#!` support, auxiliary vector on stack), `chroot` syscall with per-process root dir, NVMe-backed swap (last 64MB of disk, 8 sectors/page, in-memory fallback), kernel stacks 16KB→64KB. 96/96 tests. 143K lines, 262 source files. |
 | **2026-02-16** | **v0.3.3 — Cinematic Trailer + Visual Overhaul** — Beat-synced 128 BPM trailer (`trailer` command) with 14 scenes, 1984/Big Brother theme, feature showcase crescendo (17 cards with decreasing delay), glow/vignette/CRT effects, XOR plasma, optimized fire. SMP: APs safely parked (cli;hlt), BSP-only mode. 131K lines, 253 source files. |
 | **2026-02-14** | **v0.2.0 — Ring 3 Userspace Execution** — Real CPL-3 process execution via IRETQ with clean kernel return. Embedded ELF64 binary loader. `exec test` and `exec hello` shell commands. TrustFS block freeing fixes (unlink, truncate). 130K+ lines. |
@@ -73,7 +73,7 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 | **Desktop FPS** | 144 FPS (SSE2 SIMD) |
 | **C code** | 0 lines |
 | **External dependencies** | 0 (everything from scratch) |
-| **Development time** | 10 days |
+| **Development time** | 11 days |
 
 ### TrustOS vs The World
 
@@ -221,9 +221,15 @@ TrustOS is being built **with Linux binary compatibility in mind**. The infrastr
 - **File permissions**: chmod, chown
 - **Process isolation** with Ring 0/3 separation
 
-### ⚡ Hypervisor
-- **Intel VT-x (VMX)** and **AMD-V (SVM)** support
-- **Extended Page Tables (EPT)**, VMCS, VPID
+### ⚡ Hypervisor & Device Emulation
+- **Intel VT-x (VMX)** and **AMD-V (SVM)** dual-backend
+- **Extended Page Tables (EPT/NPT)**, VMCS, VMCB, VPID
+- **VMI Engine** — Virtual Machine Introspection for agentless guest monitoring
+- **ACPI table generation** — RSDP v2, XSDT, MADT, FADT, DSDT with AML bytecode
+- **PIC 8259A** emulation — cascaded master/slave, edge-triggered IRQs, ICW/OCW
+- **PIT 8254** emulation — 1.193 MHz timer, modes 0/2/3, channel 0-2
+- **CMOS RTC** — BCD time registers, NMI masking, century register
+- **ACPI PM Timer** — 3.579 MHz, 24/32-bit counter
 - **Guest VM isolation** for running Linux subsystem
 
 ### ⚡ Performance
@@ -465,7 +471,7 @@ TrustOS includes a **built-in cinematic animated explainer** — a 2-minute film
 | `video/` | ~1,500 | TrustVideo codec & player |
 | `framebuffer/` | ~1,500 | SSE2 SIMD rendering |
 | `filesystem/` | ~2,000 | TrustFS with WAL, VFS, FAT32 |
-| `hypervisor/` | ~2,000 | VT-x/SVM, EPT, guest VM isolation |
+| `hypervisor/` | ~10,000 | VT-x/SVM dual-backend, EPT/NPT, VMI engine, ACPI tables, PIC/PIT/RTC/PM timer emulation |
 | `tls13/` | ~2,000 | TLS 1.3, crypto, X.509 certs |
 | `ed25519.rs` | ~720 | Ed25519 asymmetric signatures (RFC 8032) |
 | `tty.rs` | ~330 | POSIX TTY layer with line discipline |
@@ -573,7 +579,7 @@ kernel/src/
 ├── trustlang/           # Compiler + VM
 ├── framebuffer/         # SSE2 SIMD rendering
 ├── graphics/            # 3D, raytracer, HoloMatrix
-├── hypervisor/          # VT-x/SVM, EPT, guest VMs
+├── hypervisor/          # VT-x/SVM, EPT/NPT, VMI, ACPI, PIC/PIT/RTC emulation
 ├── vfs/                 # TrustFS, FAT32, procfs, devfs
 ├── linux_compat/        # 100+ Linux syscalls
 ├── drivers/             # AHCI, USB, VirtIO, input
@@ -599,13 +605,21 @@ kernel/src/
 | Audio Synthesizer | ✅ (8-voice poly) | ❌ | ❌ | ❌ (single voice) | ❌ |
 | TLS 1.3 from scratch | ✅ | ❌ | ❌ | ❌ | Via OpenSSL |
 | Binary Analyzer | ✅ (TrustView) | ❌ | ❌ | ❌ | External (Ghidra) |
-| Hypervisor | ✅ (VT-x/SVM) | ❌ | ❌ | ❌ | Via KVM |
+| Hypervisor + VMI | ✅ (VT-x/SVM + introspection) | ❌ | ❌ | ❌ | Via KVM (no VMI) |
 | Memory safe | ✅ (Rust) | ❌ | ✅ (Rust) | ❌ | ❌ |
 | Fully auditable | ✅ | Partially | Partially | ✅ | ❌ |
 
 ---
 
 ## 📋 Changelog
+
+### v0.3.5 — February 2026
+- **ACPI Table Generation** — Full RSDP v2 (20+16 byte structure with extended checksum), XSDT (dynamic entry array), MADT (Local APIC + I/O APIC + ISO entries, LINT0/1 NMI), FADT (PM timer port 0x608, SCI IRQ 9, SMI CMD, ACPI enable/disable, PM1a event/control blocks, GPE0, FACS + DSDT pointers, x_ 64-bit generic addresses), DSDT (minimal valid AML: `_S5` sleep object for clean ACPI shutdown).
+- **PIC 8259A Emulation** — Full Intel 8259A Programmable Interrupt Controller. ICW1-4 initialization sequence, OCW1 (IMR), OCW2 (EOI: specific, non-specific, rotate), OCW3 (IRR/ISR read). Cascaded master/slave with IRQ2 cascade link. Edge-triggered mode. Spurious IRQ 7/15 detection. Priority rotation.
+- **PIT 8254 Emulation** — Intel 8254 Programmable Interval Timer. 1.193182 MHz base. Modes 0 (interrupt on terminal count), 2 (rate generator), 3 (square wave). Channels 0-2. Lobyte/Hibyte/Word access modes. Latch command. Tick-based countdown with `advance()` and elapsed tick calculation.
+- **CMOS RTC Emulation** — Motorola MC146818. Registers 0x00-0x09 (seconds→year) in BCD, Status Register A (UIP + divider + rate), B (24h mode, BCD, update-ended interrupt enable), C (interrupt flags read-clear). NMI mask via port 0x70 bit 7. Century register at 0x32.
+- **ACPI PM Timer** — 3.579545 MHz counter. 24-bit and 32-bit configurable width. Tick accumulation from TSC delta. Read via port 0x608.
+- **Phase 0 Infrastructure** — `setup.sh` (one-liner Linux/macOS/WSL setup), `setup.ps1` (Windows PowerShell), `.github/workflows/release.yml` (CI ISO build on tag), Makefile auto-Limine download, repo cleanup (48 junk files removed from tracking).
 
 ### v0.3.4 — February 2026
 - **PTY/TTY Subsystem** — Full POSIX TTY layer with line discipline (canonical mode, echo, ISIG signal chars ^C/^Z/^\\). TTY_TABLE with named devices, ioctls (TIOCGPGRP, TIOCSPGRP, TIOCSCTTY, TIOCGSID, TIOCGWINSZ, TIOCSWINSZ, TCGETS, TCSETS). Termios struct with ECHO, ICANON, ISIG flags.
@@ -709,7 +723,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 - GitHub: [@nathan237](https://github.com/nathan237)
 - Project: [TrustOS](https://github.com/nathan237/TrustOS)
 
-> Every line of TrustOS — 143,000+ lines of Rust — was designed, written, and tested by a single developer in 11 days.
+> Every line of TrustOS — 143,000+ lines of Rust — was designed, written, and tested by a single developer. 11 days. Zero C. Zero compromises.
 
 ---
 

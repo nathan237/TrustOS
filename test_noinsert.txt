@@ -1,0 +1,168 @@
+﻿
+============================================================
+  TrustOS Automated Test Suite (QEMU)
+  2026-02-16 18:55:50
+============================================================
+
+  ISO: C:\Users\nathan\Documents\Scripts\OSrust\trustos.iso
+  Serial: TCP 5555
+  Tests: 96
+
+[1/4] Starting QEMU...
+  PID: 26920
+[2/4] Connecting serial TCP...
+  Connected!
+[3/4] Waiting for TrustOS boot...
+  Booted in 9.6s
+
+[4/4] Running 96 tests...
+------------------------------------------------------------
+
+  -- SHELL --
+  [SHELL] echo simple text ... [PASS]
+  [SHELL] echo with spaces ... [PASS]
+  [SHELL] pwd default root ... [PASS]
+  [SHELL] whoami ... [PASS]
+  [SHELL] hostname ... [PASS]
+  [SHELL] version ... [PASS]
+  [SHELL] uname -a ... [PASS]
+  [SHELL] clear no crash ... [PASS]
+  [SHELL] history ... [PASS]
+  [SHELL] help ... [PASS]
+  [SHELL] cowsay ... [PASS]
+
+  -- SYSINFO --
+  [SYSINFO] date ... [PASS]
+  [SYSINFO] uptime ... [PASS]
+  [SYSINFO] info ... [PASS]
+  [SYSINFO] free heap ... [PASS]
+  [SYSINFO] df disk usage ... [PASS]
+  [SYSINFO] ps processes ... [PASS]
+  [SYSINFO] env variables ... [PASS]
+  [SYSINFO] lscpu ... [PASS]
+  [SYSINFO] lsmem ... [PASS]
+  [SYSINFO] lspci ... [PASS]
+  [SYSINFO] lsblk ... [PASS]
+  [SYSINFO] vmstat ... [PASS]
+  [SYSINFO] iostat ... [PASS]
+  [SYSINFO] neofetch ... [PASS]
+  [SYSINFO] dmesg ... [PASS]
+
+  -- FS --
+  [FS] mkdir test_dir ... [PASS]
+  [FS] ls sees new dir ... [PASS]
+  [FS] touch file ... [PASS]
+  [FS] echo to file ... [PASS]
+  [FS] cat file ... [PASS]
+  [FS] ls dir content ... [PASS]
+  [FS] stat file ... [PASS]
+  [FS] wc file ... [PASS]
+  [FS] cp file ... [PASS]
+  [FS] cat copied file ... [PASS]
+  [FS] mv file ... [PASS]
+  [FS] cat renamed file ... [PASS]
+  [FS] grep in file ... [PASS]
+  [FS] find file ... [PASS]
+  [FS] tree ... [PASS]
+  [FS] head file ... [PASS]
+  [FS] tail file ... [PASS]
+  [FS] diff two files ... [PASS]
+  [FS] hexdump file ... [PASS]
+  [FS] rm file ... [PASS]
+  [FS] rm verify gone ... [PASS]
+  [FS] cd directory ... [PASS]
+  [FS] pwd after cd ... [PASS]
+  [FS] cd back to root ... [PASS]
+
+  -- TEXT --
+  [TEXT] seq 5 ... [PASS]
+  [TEXT] seq 3 7 ... [PASS]
+  [TEXT] factor 12 ... [PASS]
+  [TEXT] factor 97 prime ... [PASS]
+  [TEXT] factor invalid ... [PASS]
+  [TEXT] expr 2 + 3 ... [PASS]
+  [TEXT] cal ... [PASS]
+
+  -- SELFTEST --
+  [SELFTEST] builtin self-test ... [PASS]
+
+  -- INTTEST --
+  [INTTEST] integration test suite ... [PASS]
+
+  -- TRUSTLANG --
+  [TRUSTLANG] eval println ... [PASS]
+  [TRUSTLANG] eval 2+3 ... [PASS]
+  [TRUSTLANG] eval 6*7 ... [PASS]
+  [TRUSTLANG] eval string ... [PASS]
+  [TRUSTLANG] eval 100/4 ... [PASS]
+  [TRUSTLANG] eval 17 mod 5 ... [PASS]
+  [TRUSTLANG] eval bool ... [PASS]
+  [TRUSTLANG] eval let var ... [PASS]
+  [TRUSTLANG] eval if-else ... [PASS]
+  [TRUSTLANG] eval loop ... [PASS]
+
+  -- USERS --
+  [USERS] id ... [PASS]
+  [USERS] users ... [PASS]
+
+  -- STUBS --
+  [STUBS] bc stub ... [PASS]
+  [STUBS] base64 stub ... [PASS]
+  [STUBS] md5sum stub ... [PASS]
+  [STUBS] sha256sum stub ... [PASS]
+
+  -- PROC --
+  [PROC] sleep 0 ... [PASS]
+  [PROC] tty ... [PASS]
+
+  -- DISK --
+  [DISK] disk info ... [PASS]
+  [DISK] fdisk ... [PASS]
+  [DISK] blkid ... [PASS]
+
+  -- AUDIO --
+  [AUDIO] beep ... [PASS]
+  [AUDIO] audio status ... [PASS]
+
+  -- NET --
+  [NET] ifconfig ... [PASS]
+  [NET] arp ... [PASS]
+  [NET] route ... [PASS]
+  [NET] netstat ... [PASS]
+  [NET] ping gateway ... [PASS]
+  [NET] nslookup ... [PASS]
+
+  -- DEBUG --
+  [DEBUG] irqstat ... [PASS]
+  [DEBUG] smpstatus ... [PASS]
+  [DEBUG] perf ... [PASS]
+  [DEBUG] memdbg ... [PASS]
+  [DEBUG] regs ... [PASS]
+
+  -- SECURITY --
+  [SECURITY] create sig file ... [PASS]
+  [SECURITY] sig sign ... [PASS]
+  [SECURITY] sig verify ... [PASS]
+
+Shutting down QEMU...
+
+============================================================
+  TEST RESULTS SUMMARY
+============================================================
+  Total:    96
+  Passed:   96
+  Failed:   0
+  Rate:     100%
+  Duration: 148.8s (+ 9.6s boot)
+============================================================
+
+=== BY CATEGORY ===
+                96/96
+
+=== KNOWN BUGS ===
+  CHESS-3D: White pieces don't move first (black starts)
+  CHESS-3D: Pawn promotion not implemented
+  CHESS-2D: Pawn promotion not implemented
+
+Report saved to: C:\Users\nathan\Documents\Scripts\OSrust\test_report.txt
+

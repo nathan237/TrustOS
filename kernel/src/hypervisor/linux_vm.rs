@@ -552,20 +552,44 @@ impl LinuxVm {
     
     /// Boot with Intel VMX
     fn boot_with_vmx(&mut self, entry_point: u64) -> Result<()> {
-        use super::svm_vm::SvmVirtualMachine;
+        use super::vm::VirtualMachine;
         
-        // For now, we'll just print that VMX boot would happen
-        // Full implementation requires:
-        // 1. Create VM with VMCS
-        // 2. Map guest memory
-        // 3. Setup protected mode state
-        // 4. Enter guest
+        crate::serial_println!("[LINUX-VM {}] VMX boot: creating Intel VT-x VM...", self.id);
         
-        crate::serial_println!("[LINUX-VM {}] VMX boot not yet fully implemented", self.id);
-        crate::serial_println!("[LINUX-VM {}] Kernel ready at 0x{:X}, waiting for VMX run loop", 
-            self.id, entry_point);
+        // Create VMX VM
+        let mut vm = VirtualMachine::new(self.id + 100, "linux-vmx-guest", self.config.memory_mb)?;
+        
+        // Initialize VMCS and EPT
+        vm.initialize()?;
+        
+        crate::serial_println!("[LINUX-VM {}] VMX VM initialized, loading {} MB...", 
+            self.id, self.guest_memory.len() / (1024 * 1024));
+        
+        // Load the prepared memory into VMX VM
+        vm.load_binary(&self.guest_memory, 0)?;
+        
+        crate::serial_println!("[LINUX-VM {}] Starting Linux kernel via VMX...", self.id);
+        crate::serial_println!("[LINUX-VM {}] Entry: 0x{:X}, Boot params: 0x{:X}", 
+            self.id, entry_point, boot_proto::BOOT_PARAMS_ADDR);
         
         self.running.store(true, Ordering::SeqCst);
+        
+        // The guest memory is already fully prepared (kernel, boot params, page tables, etc.)
+        // We use start() with the entry point directly.
+        // Note: This requires Intel VT-x hardware. When running on AMD or QEMU TCG,
+        // VMLAUNCH will fail and the error will be reported by the VM run loop.
+        match vm.start(entry_point, boot_proto::INIT_STACK) {
+            Ok(()) => {
+                crate::serial_println!("[LINUX-VM {}] VMX execution completed", self.id);
+            }
+            Err(e) => {
+                crate::serial_println!("[LINUX-VM {}] VMX execution failed: {:?}", self.id, e);
+                crate::serial_println!("[LINUX-VM {}] Note: VMX requires Intel CPU with VT-x. QEMU TCG does not support nested VMX.", self.id);
+                return Err(e);
+            }
+        }
+        
+        self.running.store(false, Ordering::SeqCst);
         
         Ok(())
     }

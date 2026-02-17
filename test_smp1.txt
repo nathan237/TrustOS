@@ -1,0 +1,285 @@
+﻿
+============================================================
+  TrustOS Automated Test Suite (QEMU)
+  2026-02-16 18:09:52
+============================================================
+
+  ISO: C:\Users\nathan\Documents\Scripts\OSrust\trustos.iso
+  Serial: TCP 5555
+  Tests: 96
+
+[1/4] Starting QEMU...
+  PID: 30828
+[2/4] Connecting serial TCP...
+  Connected!
+[3/4] Waiting for TrustOS boot...
+  Booted in 9.6s
+
+[4/4] Running 96 tests...
+------------------------------------------------------------
+
+  -- SHELL --
+  [SHELL] echo simple text ... [PASS]
+  [SHELL] echo with spaces ... [PASS]
+  [SHELL] pwd default root ... [PASS]
+  [SHELL] whoami ... [PASS]
+  [SHELL] hostname ... [PASS]
+  [SHELL] version ... [PASS]
+  [SHELL] uname -a ... [PASS]
+  [SHELL] clear no crash ... [PASS]
+  [SHELL] history ... [PASS]
+  [SHELL] help ... [PASS]
+  [SHELL] cowsay ... [PASS]
+
+  -- SYSINFO --
+  [SYSINFO] date ... [PASS]
+  [SYSINFO] uptime ... [PASS]
+  [SYSINFO] info ... [PASS]
+  [SYSINFO] free heap ... [PASS]
+  [SYSINFO] df disk usage ... [PASS]
+  [SYSINFO] ps processes ... [PASS]
+  [SYSINFO] env variables ... [PASS]
+  [SYSINFO] lscpu ... [PASS]
+  [SYSINFO] lsmem ... [PASS]
+  [SYSINFO] lspci ... [PASS]
+  [SYSINFO] lsblk ... [PASS]
+  [SYSINFO] vmstat ... [PASS]
+  [SYSINFO] iostat ... [PASS]
+  [SYSINFO] neofetch ... [PASS]
+  [SYSINFO] dmesg ... [PASS]
+
+  -- FS --
+  [FS] mkdir test_dir ... [PASS]
+  [FS] ls sees new dir ... [PASS]
+  [FS] touch file ... [PASS]
+  [FS] echo to file ... [PASS]
+  [FS] cat file ... [PASS]
+  [FS] ls dir content ... [PASS]
+  [FS] stat file ... [PASS]
+  [FS] wc file ... [PASS]
+  [FS] cp file ... [PASS]
+  [FS] cat copied file ... [PASS]
+  [FS] mv file ... [PASS]
+  [FS] cat renamed file ... [PASS]
+  [FS] grep in file ... [PASS]
+  [FS] find file ... [PASS]
+  [FS] tree ... [PASS]
+  [FS] head file ... [PASS]
+  [FS] tail file ... [PASS]
+  [FS] diff two files ... [PASS]
+  [FS] hexdump file ... [PASS]
+  [FS] rm file ... [PASS]
+  [FS] rm verify gone ... [PASS]
+  [FS] cd directory ... [PASS]
+  [FS] pwd after cd ... [PASS]
+  [FS] cd back to root ... [PASS]
+
+  -- TEXT --
+  [TEXT] seq 5 ... [PASS]
+  [TEXT] seq 3 7 ... [PASS]
+  [TEXT] factor 12 ... [PASS]
+  [TEXT] factor 97 prime ... [PASS]
+  [TEXT] factor invalid ... [PASS]
+  [TEXT] expr 2 + 3 ... [PASS]
+  [TEXT] cal ... [PASS]
+
+  -- SELFTEST --
+  [SELFTEST] builtin self-test ... [PASS]
+
+  -- INTTEST --
+  [INTTEST] integration test suite ... [FAIL]
+    >> === TrustOS Integration Test Suite ===  [ 1/15] Kernel self-test  heap+string... [OK]  interrupts... [OK]  [ 2/15] Frame all
+
+  -- TRUSTLANG --
+  [TRUSTLANG] eval println ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [TRUSTLANG] eval 2+3 ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [TRUSTLANG] eval 6*7 ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [TRUSTLANG] eval string ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [TRUSTLANG] eval 100/4 ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [TRUSTLANG] eval 17 mod 5 ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [TRUSTLANG] eval bool ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [TRUSTLANG] eval let var ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [TRUSTLANG] eval if-else ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [TRUSTLANG] eval loop ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+
+  -- USERS --
+  [USERS] id ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [USERS] users ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+
+  -- STUBS --
+  [STUBS] bc stub ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [STUBS] base64 stub ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [STUBS] md5sum stub ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [STUBS] sha256sum stub ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+
+  -- PROC --
+  [PROC] sleep 0 ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [PROC] tty ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+
+  -- DISK --
+  [DISK] disk info ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [DISK] fdisk ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [DISK] blkid ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+
+  -- AUDIO --
+  [AUDIO] beep ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [AUDIO] audio status ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+
+  -- NET --
+  [NET] ifconfig ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [NET] arp ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [NET] route ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [NET] netstat ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [NET] ping gateway ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [NET] nslookup ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+
+  -- DEBUG --
+  [DEBUG] irqstat ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [DEBUG] smpstatus ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [DEBUG] perf ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [DEBUG] memdbg ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [DEBUG] regs ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+
+  -- SECURITY --
+  [SECURITY] create sig file ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [SECURITY] sig sign ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+  [SECURITY] sig verify ... [ERROR] Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly closed by the remote host."
+
+Shutting down QEMU...
+
+============================================================
+  TEST RESULTS SUMMARY
+============================================================
+  Total:    96
+  Passed:   58
+  Failed:   38
+  Rate:     60.4%
+  Duration: 128.5s (+ 9.6s boot)
+============================================================
+
+=== FAILURES ===
+  [INTTEST] integration test suite
+    Cmd:    inttest
+    Output: === TrustOS Integration Test Suite ===  [ 1/15] Kernel self-test  heap+string... [OK]  interrupts... [OK]  [ 2/15] Frame allocator self-test  [FRAME-T...
+  [TRUSTLANG] eval println
+    Cmd:    trustlang eval println("hello_tl")
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [TRUSTLANG] eval 2+3
+    Cmd:    trustlang eval println(2+3)
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [TRUSTLANG] eval 6*7
+    Cmd:    trustlang eval println(6*7)
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [TRUSTLANG] eval string
+    Cmd:    trustlang eval println("TrustOS_rocks")
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [TRUSTLANG] eval 100/4
+    Cmd:    trustlang eval println(100/4)
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [TRUSTLANG] eval 17 mod 5
+    Cmd:    trustlang eval println(17%5)
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [TRUSTLANG] eval bool
+    Cmd:    trustlang eval println(3>2)
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [TRUSTLANG] eval let var
+    Cmd:    trustlang eval let x = 99; println(x);
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [TRUSTLANG] eval if-else
+    Cmd:    trustlang eval if (10 > 5) { println("yes"); } else { println("no"); }
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [TRUSTLANG] eval loop
+    Cmd:    trustlang eval let mut i = 0; while i < 3 { println(i); i = i + 1; }
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [USERS] id
+    Cmd:    id
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [USERS] users
+    Cmd:    users
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [STUBS] bc stub
+    Cmd:    bc
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [STUBS] base64 stub
+    Cmd:    base64
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [STUBS] md5sum stub
+    Cmd:    md5sum
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [STUBS] sha256sum stub
+    Cmd:    sha256sum
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [PROC] sleep 0
+    Cmd:    sleep 0
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [PROC] tty
+    Cmd:    tty
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [DISK] disk info
+    Cmd:    disk
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [DISK] fdisk
+    Cmd:    fdisk
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [DISK] blkid
+    Cmd:    blkid
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [AUDIO] beep
+    Cmd:    beep
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [AUDIO] audio status
+    Cmd:    audio
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [NET] ifconfig
+    Cmd:    ifconfig
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [NET] arp
+    Cmd:    arp
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [NET] route
+    Cmd:    route
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [NET] netstat
+    Cmd:    netstat
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [NET] ping gateway
+    Cmd:    ping 10.0.2.2
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [NET] nslookup
+    Cmd:    nslookup example.com
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [DEBUG] irqstat
+    Cmd:    irqstat
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [DEBUG] smpstatus
+    Cmd:    smpstatus
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [DEBUG] perf
+    Cmd:    perf
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [DEBUG] memdbg
+    Cmd:    memdbg
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [DEBUG] regs
+    Cmd:    regs
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [SECURITY] create sig file
+    Cmd:    echo sigtest > /tmp_sig.txt
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [SECURITY] sig sign
+    Cmd:    sig sign /tmp_sig.txt
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+  [SECURITY] sig verify
+    Cmd:    sig verify /tmp_sig.txt
+    Output: Exception: Exception calling "Write" with "3" argument(s): "Unable to write data to the transport connection: An existing connection was forcibly clos...
+
+=== BY CATEGORY ===
+                58/96
+
+=== KNOWN BUGS ===
+  CHESS-3D: White pieces don't move first (black starts)
+  CHESS-3D: Pawn promotion not implemented
+  CHESS-2D: Pawn promotion not implemented
+
+Report saved to: C:\Users\nathan\Documents\Scripts\OSrust\test_report.txt
+
