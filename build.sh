@@ -63,7 +63,7 @@ find_ovmf() {
 check_deps() {
     info "══ Checking dependencies ══"
     local all_ok=true
-    for cmd in cargo rustup xorriso "$QEMU"; do
+    for cmd in cargo rustup git xorriso "$QEMU"; do
         if command -v "$cmd" &>/dev/null; then
             ok "$cmd"
         else
@@ -71,6 +71,12 @@ check_deps() {
             all_ok=false
         fi
     done
+    # Check Limine
+    if [ -f "$SCRIPT_DIR/limine/BOOTX64.EFI" ]; then
+        ok "Limine bootloader"
+    else
+        warn "Limine not found (will be auto-downloaded on first build)"
+    fi
     if OVMF=$(find_ovmf); then
         ok "OVMF ($OVMF)"
     else
@@ -95,10 +101,52 @@ do_build() {
     ok "Kernel built: $KERNEL_BIN ($ksize)"
 }
 
+ensure_limine() {
+    local LIMINE_DIR="$SCRIPT_DIR/limine"
+    local LIMINE_BRANCH="${LIMINE_BRANCH:-v8.x-binary}"
+
+    if [ -f "$LIMINE_DIR/BOOTX64.EFI" ] && [ -f "$LIMINE_DIR/limine-bios.sys" ]; then
+        ok "Limine bootloader found"
+        return 0
+    fi
+
+    info "Limine bootloader not found — downloading..."
+
+    if ! command -v git &>/dev/null; then
+        err "git is required to fetch Limine. Install git and retry."
+        exit 1
+    fi
+
+    if [ -d "$LIMINE_DIR" ]; then
+        warn "Limine directory exists but is incomplete, re-cloning..."
+        rm -rf "$LIMINE_DIR"
+    fi
+
+    git clone "https://github.com/limine-bootloader/limine.git" \
+        --branch="$LIMINE_BRANCH" --depth=1 "$LIMINE_DIR"
+
+    # Build the limine utility if a Makefile is present (needed for BIOS install)
+    if [ -f "$LIMINE_DIR/Makefile" ]; then
+        info "Building limine utility..."
+        make -C "$LIMINE_DIR" 2>/dev/null || warn "limine utility build skipped (not critical for UEFI)"
+    fi
+
+    if [ ! -f "$LIMINE_DIR/BOOTX64.EFI" ]; then
+        err "Limine download succeeded but BOOTX64.EFI not found."
+        err "Check https://github.com/limine-bootloader/limine for the correct branch."
+        exit 1
+    fi
+
+    ok "Limine bootloader ready"
+}
+
 do_iso() {
     do_build
 
     info "══ Creating bootable ISO ══"
+
+    # Auto-download Limine if not present
+    ensure_limine
 
     # Ensure iso_root structure
     mkdir -p "$ISO_ROOT/boot/limine"
@@ -107,11 +155,11 @@ do_iso() {
     # Copy kernel
     cp "$KERNEL_BIN" "$ISO_ROOT/boot/$KERNEL_PKG"
 
-    # Copy Limine bootloader files
-    cp -f limine/BOOTX64.EFI         "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI"          2>/dev/null || true
-    cp -f limine/limine-bios.sys     "$ISO_ROOT/boot/limine/limine-bios.sys"    2>/dev/null || true
-    cp -f limine/limine-bios-cd.bin  "$ISO_ROOT/boot/limine/limine-bios-cd.bin" 2>/dev/null || true
-    cp -f limine/limine-uefi-cd.bin  "$ISO_ROOT/boot/limine/limine-uefi-cd.bin" 2>/dev/null || true
+    # Copy Limine bootloader files (fail loudly now — they must exist)
+    cp -f limine/BOOTX64.EFI         "$ISO_ROOT/EFI/BOOT/BOOTX64.EFI"
+    cp -f limine/limine-bios.sys     "$ISO_ROOT/boot/limine/limine-bios.sys"
+    cp -f limine/limine-bios-cd.bin  "$ISO_ROOT/boot/limine/limine-bios-cd.bin"
+    cp -f limine/limine-uefi-cd.bin  "$ISO_ROOT/boot/limine/limine-uefi-cd.bin"
 
     # Copy boot config
     cp -f limine.conf "$ISO_ROOT/limine.conf"              2>/dev/null || true
