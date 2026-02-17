@@ -85,6 +85,10 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 | **Telemetry** | Opt-out (maybe) | Doesn't exist — verify it yourself |
 | **Build** | Complex cross-compilation toolchains | `cargo build` — that's it |
 
+### 🔭 Vision
+
+TrustOS is not another Linux clone — it's a living laboratory. The goal was never to replace your daily driver, but to build the first bare-metal environment where you can observe, understand, and experiment with every layer of an operating system in real time. Today, TrustLab already lets you trace kernel events, inspect memory, and monitor virtual machines from the hypervisor level. Tomorrow, TrustOS will become a full **open-source Cyber Range**: a training and research platform for cybersecurity where pentesters, researchers, and students can boot a guest OS, observe its processes agentlessly, trace exploits live, and analyze malware in a fully transparent environment. Every line is auditable Rust, every architectural decision is documented, and the AI that accelerates development isn't a secret — it's an advantage. The code is open. The vision is simple: **if you can't observe your system, you can't trust it.**
+
 ---
 
 ## ✨ Features
