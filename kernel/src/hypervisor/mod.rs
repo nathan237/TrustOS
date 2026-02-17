@@ -118,6 +118,8 @@ pub enum HypervisorError {
     InvalidState,
     /// Invalid binary/kernel format
     InvalidBinary,
+    /// Invalid guest type/format
+    InvalidGuest,
 }
 
 pub type Result<T> = core::result::Result<T, HypervisorError>;
@@ -337,29 +339,54 @@ pub fn start_vm(vm_id: u64) -> Result<()> {
 pub fn start_vm_with_guest(vm_id: u64, guest_name: &str) -> Result<()> {
     match cpu_vendor() {
         CpuVendor::Amd => {
-            // Load guest binary and start VM
-            let guest_data = guests::get_guest(guest_name)
-                .ok_or(HypervisorError::VmNotFound)?;
+            // Check if this is a Linux guest
+            let is_linux = guest_name == "linux-test" 
+                || guest_name.ends_with(".bzimage") 
+                || guest_name.ends_with(".bzImage");
             
-            let is_protected = guest_name == "pm-test" || guest_name == "protected";
-            
-            svm_vm::with_vm(vm_id, |vm| {
-                // Initialize if needed
-                if vm.vmcb.is_none() {
-                    vm.initialize()?;
-                }
-                // Load binary at 0x1000
-                vm.load_binary(&guest_data, 0x1000)?;
-                if is_protected {
-                    // Protected mode: entry=0x1000, stack=0x8000
-                    vm.setup_protected_mode(0x1000, 0x8000)?;
+            if is_linux {
+                // Linux boot protocol path
+                let bzimage_data = if guest_name == "linux-test" {
+                    linux_loader::create_test_linux_kernel()
                 } else {
-                    // Real mode (default)
-                    vm.setup_real_mode(0x1000)?;
-                }
-                vm.start()
-            }).unwrap_or(Err(HypervisorError::VmNotFound))?;
-            Ok(())
+                    guests::get_guest(guest_name)
+                        .ok_or(HypervisorError::VmNotFound)?
+                        .to_vec()
+                };
+                
+                svm_vm::with_vm(vm_id, |vm| {
+                    vm.start_linux(
+                        &bzimage_data,
+                        "console=ttyS0 earlyprintk=serial nokaslr",
+                        None,
+                    )
+                }).unwrap_or(Err(HypervisorError::VmNotFound))?;
+                Ok(())
+            } else {
+                // Legacy binary guest path
+                let guest_data = guests::get_guest(guest_name)
+                    .ok_or(HypervisorError::VmNotFound)?;
+                
+                let is_protected = guest_name == "pm-test" || guest_name == "protected";
+                
+                svm_vm::with_vm(vm_id, |vm| {
+                    // Initialize if needed
+                    if vm.vmcb.is_none() {
+                        vm.initialize()?;
+                    }
+                    // Load binary at 0x1000
+                    vm.load_binary(&guest_data, 0x1000)?;
+                    if is_protected {
+                        // Protected mode: entry=0x1000, stack=0x8000
+                        vm.setup_protected_mode(0x1000, 0x8000)?;
+                    } else {
+                        // Real mode (default)
+                        vm.setup_real_mode(0x1000)?;
+                    }
+                    vm.start()
+                }).unwrap_or(Err(HypervisorError::VmNotFound))?;
+                Ok(())
+            }
         }
         CpuVendor::Intel => vm::start_vm_with_guest(vm_id, guest_name),
         CpuVendor::Unknown => Err(HypervisorError::NoVirtualizationSupport),

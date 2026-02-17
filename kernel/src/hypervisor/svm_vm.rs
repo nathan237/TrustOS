@@ -172,6 +172,15 @@ impl SvmVirtualMachine {
         core::mem::forget(iopm);
         crate::serial_println!("[SVM-VM {}] IOPM allocated at HPA=0x{:X}", self.id, iopm_phys);
         
+        // Allocate MSRPM (MSR Permission Map) — 8 KB (2 pages)
+        // All bits = 1 means intercept all MSR accesses
+        let msrpm = alloc::vec![0xFFu8; 8192]; // 8KB, all 1s = intercept everything
+        let msrpm_ptr = msrpm.as_ptr() as u64;
+        let msrpm_phys = msrpm_ptr - crate::memory::hhdm_offset();
+        vmcb.set_msrpm_base(msrpm_phys);
+        core::mem::forget(msrpm);
+        crate::serial_println!("[SVM-VM {}] MSRPM allocated at HPA=0x{:X}", self.id, msrpm_phys);
+        
         // Setup NPT if supported
         if self.features.npt {
             let mut npt = Npt::new(self.asid);
@@ -293,18 +302,86 @@ impl SvmVirtualMachine {
     }
 
     /// Setup guest state in VMCB for long mode (64-bit)
-    pub fn setup_long_mode(&mut self, entry_point: u64, stack_ptr: u64) -> Result<()> {
-        // Get NPT CR3 for guest paging
-        let guest_cr3 = self.npt.as_ref().map(|n| n.cr3()).unwrap_or(0);
-        
+    pub fn setup_long_mode(&mut self, entry_point: u64, stack_ptr: u64, guest_cr3: u64) -> Result<()> {
         let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
         vmcb.setup_long_mode(entry_point, guest_cr3);
         
         vmcb.write_state(state_offsets::RIP, entry_point);
         vmcb.write_state(state_offsets::RSP, stack_ptr);
         
-        crate::serial_println!("[SVM-VM {}] Long mode: RIP=0x{:X}, RSP=0x{:X}", 
-                              self.id, entry_point, stack_ptr);
+        crate::serial_println!("[SVM-VM {}] Long mode: RIP=0x{:X}, RSP=0x{:X}, CR3=0x{:X}", 
+                              self.id, entry_point, stack_ptr, guest_cr3);
+        
+        Ok(())
+    }
+    
+    /// Start a Linux kernel using the Linux boot protocol
+    pub fn start_linux(
+        &mut self,
+        bzimage_data: &[u8],
+        cmdline: &str,
+        initrd: Option<&[u8]>,
+    ) -> Result<()> {
+        use super::linux_loader;
+        
+        // Initialize VMCB and NPT if not done
+        if self.vmcb.is_none() {
+            self.initialize()?;
+        }
+        
+        crate::serial_println!("[SVM-VM {}] Loading Linux kernel ({} bytes)...", self.id, bzimage_data.len());
+        
+        // Parse bzImage
+        let kernel = linux_loader::parse_bzimage(bzimage_data)
+            .map_err(|e| {
+                crate::serial_println!("[SVM-VM {}] bzImage parse error: {:?}", self.id, e);
+                HypervisorError::InvalidGuest
+            })?;
+        
+        crate::serial_println!("[SVM-VM {}] Kernel: protocol={}.{}, 64-bit={}, entry=0x{:X}",
+            self.id, kernel.header.version >> 8, kernel.header.version & 0xFF,
+            kernel.supports_64bit, kernel.entry_64);
+        
+        // Prepare guest memory
+        let config = linux_loader::LinuxGuestConfig {
+            cmdline: alloc::string::String::from(cmdline),
+            memory_size: self.memory_size as u64,
+            initrd: initrd.map(|d| d.to_vec()),
+        };
+        
+        let setup = linux_loader::load_linux_kernel(&mut self.guest_memory, &kernel, &config)
+            .map_err(|e| {
+                crate::serial_println!("[SVM-VM {}] Linux load error: {:?}", self.id, e);
+                HypervisorError::InvalidGuest
+            })?;
+        
+        crate::serial_println!("[SVM-VM {}] Linux loaded: entry=0x{:X}, stack=0x{:X}, cr3=0x{:X}, gdt=0x{:X}",
+            self.id, setup.entry_point, setup.stack_ptr, setup.cr3, setup.gdt_base);
+        
+        // Configure VMCB for Linux long mode boot
+        {
+            let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+            vmcb.setup_long_mode_for_linux(
+                setup.entry_point,
+                setup.stack_ptr,
+                setup.cr3,
+                setup.gdt_base,
+                39, // 5 GDT entries × 8 bytes - 1
+            );
+        }
+        
+        // Set RSI = boot_params address (Linux boot protocol requirement)
+        self.guest_regs.rsi = setup.boot_params_addr;
+        self.guest_regs.rbp = 0;
+        self.guest_regs.rdi = 0;
+        
+        crate::serial_println!("[SVM-VM {}] Starting Linux with RSI=0x{:X} (boot_params)", 
+            self.id, setup.boot_params_addr);
+        
+        // Start execution
+        self.state = SvmVmState::Running;
+        crate::lab_mode::trace_bus::emit_vm_lifecycle(self.id, "LINUX_STARTED");
+        self.run_loop()?;
         
         Ok(())
     }

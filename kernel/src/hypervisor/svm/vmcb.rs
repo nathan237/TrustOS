@@ -679,38 +679,109 @@ impl Vmcb {
     }
     
     /// Configure for long mode guest (64-bit)
-    pub fn setup_long_mode(&mut self, entry_point: u64, cr3: u64) {
-        let data_attrib: u16 = 0x00A3; // L + Present + Data RW
-        let code_attrib: u16 = 0x00AB; // L + Present + Code RX
+    /// 
+    /// AMD VMCB segment attribute format (16-bit):
+    ///   [3:0]  = Type (from GDT descriptor type field)
+    ///   [4]    = S (1=code/data, 0=system)
+    ///   [6:5]  = DPL
+    ///   [7]    = P (Present)
+    ///   [8]    = AVL
+    ///   [9]    = L (Long mode, 64-bit code)
+    ///   [10]   = D/B (Default operand size)
+    ///   [11]   = G (Granularity)
+    pub fn setup_long_mode(&mut self, entry_point: u64, guest_cr3: u64) {
+        // CS: 64-bit code segment — type=0xB (code, exec/read, accessed), S=1, P=1, L=1, G=1
+        // attrib = 0x0A9B: G=1(bit11), L=1(bit9), P=1(bit7), S=1(bit4), type=0xB
+        let code64_attrib: u16 = 0x0A9B;
+        // Data segments: type=0x3 (data, read/write, accessed), S=1, P=1, G=1
+        let data64_attrib: u16 = 0x0C93;
         
-        self.set_cs(0x08, code_attrib, 0xFFFFFFFF, 0);
-        self.set_ds(0x10, data_attrib, 0xFFFFFFFF, 0);
-        self.set_es(0x10, data_attrib, 0xFFFFFFFF, 0);
-        self.set_fs(0x10, data_attrib, 0xFFFFFFFF, 0);
-        self.set_gs(0x10, data_attrib, 0xFFFFFFFF, 0);
-        self.set_ss(0x10, data_attrib, 0xFFFFFFFF, 0);
+        self.set_cs(0x08, code64_attrib, 0xFFFFFFFF, 0);
+        self.set_ds(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        self.set_es(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        self.set_fs(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        self.set_gs(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        self.set_ss(0x10, data64_attrib, 0xFFFFFFFF, 0);
         
-        self.set_tr(0x18, 0x008B, 0xFFFF, 0);
+        // TR: busy 64-bit TSS (type=0xB), P=1
+        self.set_tr(0, 0x008B, 0xFFFF, 0);
+        // LDTR: LDT descriptor (type=0x2), P=1
         self.set_ldtr(0, 0x0082, 0xFFFF, 0);
         
-        // GDTR: point to GDT at GPA 0x1000
+        // GDTR/IDTR
         self.set_gdtr(23, 0x1000);
         self.set_idtr(0, 0);
         
-        // CR0: PE + PG (paging enabled)
-        self.set_cr0(0x80000011);
+        // CR0: PE + ET + PG (protected mode + paging)
+        self.set_cr0(0x8001_0031); // PG + WP + NE + ET + PE
         
-        // CR3: Guest page tables
-        self.set_cr3(cr3);
+        // CR3: Guest page tables (NOT the NPT CR3!)
+        self.set_cr3(guest_cr3);
         
-        // CR4: PAE required for long mode
-        self.set_cr4(0x00000020);  // PAE
+        // CR4: PAE + PGE + OSFXSR + OSXMMEXCPT
+        self.set_cr4(0x00000620); // PAE=0x20 + PGE=0x80 + OSFXSR=0x200 + OSXMMEXCPT=0x400
         
-        // EFER: LME + LMA
-        self.set_efer(0x00000500);
+        // EFER: SCE + LME + LMA + SVME (SVME required for guest EFER on AMD)
+        self.set_efer(0x00001501); // SVME(12) + LMA(10) + LME(8) + SCE(0)
         
         self.set_rflags(0x00000002);
         self.set_rip(entry_point);
+        
+        // CPL 0 (ring 0)
+        self.set_cpl(0);
+        
+        self.set_dr6(0xFFFF0FF0);
+        self.set_dr7(0x00000400);
+        self.set_pat(0x0007040600070406);
+    }
+    
+    /// Configure for Linux kernel boot in 64-bit long mode
+    /// Uses the Linux boot protocol layout from linux_loader
+    pub fn setup_long_mode_for_linux(
+        &mut self,
+        entry_point: u64,
+        stack_ptr: u64,
+        guest_cr3: u64,
+        gdt_base: u64,
+        gdt_limit: u32,
+    ) {
+        // CS: 64-bit code, selector 0x08
+        let code64_attrib: u16 = 0x0A9B;
+        // Data: 64-bit data, selector 0x10
+        let data64_attrib: u16 = 0x0C93;
+        
+        self.set_cs(0x08, code64_attrib, 0xFFFFFFFF, 0);
+        self.set_ds(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        self.set_es(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        self.set_fs(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        self.set_gs(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        self.set_ss(0x10, data64_attrib, 0xFFFFFFFF, 0);
+        
+        // TR: busy 64-bit TSS
+        self.set_tr(0, 0x008B, 0x67, 0);
+        // LDTR: unusable
+        self.set_ldtr(0, 0x0082, 0, 0);
+        
+        // Use the Linux guest's own GDT
+        self.set_gdtr(gdt_limit, gdt_base);
+        self.set_idtr(0, 0);
+        
+        // CR0: PG + WP + NE + ET + PE
+        self.set_cr0(0x8001_0033);
+        
+        // CR3: Guest page tables
+        self.set_cr3(guest_cr3);
+        
+        // CR4: PAE + PGE + OSFXSR + OSXMMEXCPT
+        self.set_cr4(0x00000620);
+        
+        // EFER: SCE + LME + LMA + SVME
+        self.set_efer(0x00001501);
+        
+        self.set_rflags(0x00000002);
+        self.set_rip(entry_point);
+        self.set_rsp(stack_ptr);
+        self.set_cpl(0);
         
         self.set_dr6(0xFFFF0FF0);
         self.set_dr7(0x00000400);
