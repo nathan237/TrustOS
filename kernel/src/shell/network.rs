@@ -789,6 +789,16 @@ fn collect_text(nodes: &[crate::browser::HtmlNode], result: &mut String) {
 
 // Helper function to read file content as String
 pub(super) fn read_file_content(path: &str) -> Option<String> {
+    // Try ramfs first (installed packages, /tmp files)
+    if let Ok(data) = crate::ramfs::with_fs(|fs| {
+        fs.read_file(path).map(|slice| {
+            String::from(core::str::from_utf8(slice).unwrap_or(""))
+        })
+    }) {
+        return Some(data);
+    }
+
+    // Then try VFS
     match crate::vfs::open(path, crate::vfs::OpenFlags(0)) {
         Ok(fd) => {
             let mut buf = [0u8; 4096];

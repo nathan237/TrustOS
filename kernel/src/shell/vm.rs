@@ -2943,14 +2943,14 @@ pub(super) fn cmd_elfinfo(args: &[&str]) {
 
 /// Try to execute a file if it exists and is executable
 pub(super) fn try_exec_file(command: &str, args: &[&str]) -> bool {
-    // Only try if it looks like a path
-    if !command.contains('/') && !command.contains('.') {
-        return false;
-    }
-    
     let path = resolve_program_path(command);
     
-    if file_exists(&path) && crate::exec::is_executable(&path) {
+    if !file_exists(&path) {
+        return false;
+    }
+
+    // Try ELF binary first
+    if crate::exec::is_executable(&path) {
         crate::println_color!(COLOR_CYAN, "Executing: {}", path);
         match crate::exec::exec_path(&path, args) {
             crate::exec::ExecResult::Exited(code) => {
@@ -2968,10 +2968,135 @@ pub(super) fn try_exec_file(command: &str, args: &[&str]) -> bool {
                 crate::println_color!(COLOR_RED, "Out of memory");
             }
         }
-        true
-    } else {
-        false
+        return true;
     }
+    
+    // Try shell script (#!/bin/sh)
+    if let Some(content) = super::network::read_file_content(&path) {
+        if content.starts_with("#!/bin/sh") || content.starts_with("#!/bin/bash") {
+            exec_shell_script(&content, args);
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Execute a simple shell script (#!/bin/sh)
+/// Supports: echo, #comments, variable substitution ($1..$9, $@, $#)
+fn exec_shell_script(script: &str, args: &[&str]) {
+    use alloc::string::String;
+
+    for line in script.lines() {
+        let line = line.trim();
+        // Skip shebang, empty lines, comments
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        // Variable substitution
+        let expanded = expand_shell_vars(line, args);
+        let expanded = expanded.trim();
+
+        // Split into command + arguments
+        let parts: alloc::vec::Vec<&str> = expanded.splitn(2, char::is_whitespace).collect();
+        let cmd = parts[0];
+        let rest = if parts.len() > 1 { parts[1].trim() } else { "" };
+
+        match cmd {
+            "echo" => {
+                // Handle echo: strip surrounding quotes, process escape sequences
+                let msg = strip_shell_quotes(rest);
+                crate::println!("{}", msg);
+            }
+            "printf" => {
+                let msg = strip_shell_quotes(rest);
+                crate::print!("{}", msg);
+            }
+            "exit" => {
+                break;
+            }
+            _ => {
+                // Try to run as a sub-command through the shell
+                // (for things like `vim --version` calling itself)
+                // Skip to avoid infinite recursion if it's the same command
+            }
+        }
+    }
+}
+
+/// Expand shell variables: $1, $2, ..., $@, $#, $0
+fn expand_shell_vars(line: &str, args: &[&str]) -> String {
+    use alloc::string::String;
+    let mut result = String::with_capacity(line.len());
+    let chars: alloc::vec::Vec<char> = line.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '$' && i + 1 < chars.len() {
+            match chars[i + 1] {
+                '@' => {
+                    result.push_str(&args.join(" "));
+                    i += 2;
+                }
+                '#' => {
+                    result.push_str(&alloc::format!("{}", args.len()));
+                    i += 2;
+                }
+                '0' => {
+                    result.push_str("sh");
+                    i += 2;
+                }
+                c @ '1'..='9' => {
+                    let idx = (c as usize) - ('1' as usize);
+                    if idx < args.len() {
+                        result.push_str(args[idx]);
+                    }
+                    i += 2;
+                }
+                _ => {
+                    result.push('$');
+                    i += 1;
+                }
+            }
+        } else {
+            result.push(chars[i]);
+            i += 1;
+        }
+    }
+    result
+}
+
+/// Strip surrounding quotes from a string and process escape sequences
+fn strip_shell_quotes(s: &str) -> String {
+    use alloc::string::String;
+    let s = s.trim();
+    let unquoted = if (s.starts_with('\'') && s.ends_with('\''))
+        || (s.starts_with('"') && s.ends_with('"'))
+    {
+        &s[1..s.len() - 1]
+    } else {
+        s
+    };
+    // Process basic escape sequences
+    let mut result = String::with_capacity(unquoted.len());
+    let mut esc = false;
+    for c in unquoted.chars() {
+        if esc {
+            match c {
+                'n' => result.push('\n'),
+                't' => result.push('\t'),
+                '\\' => result.push('\\'),
+                '"' => result.push('"'),
+                '\'' => result.push('\''),
+                _ => { result.push('\\'); result.push(c); }
+            }
+            esc = false;
+        } else if c == '\\' {
+            esc = true;
+        } else {
+            result.push(c);
+        }
+    }
+    result
 }
 
 /// Resolve a program name to a full path
@@ -2990,7 +3115,7 @@ pub(super) fn resolve_program_path(name: &str) -> String {
     }
     
     // Search in PATH-like directories
-    let search_dirs = ["/bin", "/usr/bin", "/sbin"];
+    let search_dirs = ["/usr/bin", "/bin", "/usr/sbin", "/sbin", "/usr/local/bin"];
     
     for dir in &search_dirs {
         let path = format!("{}/{}", dir, name);
