@@ -325,7 +325,12 @@ pub fn load_linux_kernel(
     // 5. Set up GDT
     setup_guest_gdt(guest_memory)?;
 
-    // 6. Load initrd if provided
+    // 6. Install ACPI tables (RSDP, XSDT, MADT, FADT, DSDT)
+    let rsdp_addr = super::acpi::install_acpi_tables(guest_memory);
+    // Set acpi_rsdp_addr in boot_params (offset 0x070, 64-bit — Linux boot protocol 2.14+)
+    write_u64(guest_memory, BOOT_PARAMS_ADDR as usize + 0x070, rsdp_addr);
+    
+    // 7. Load initrd if provided
     if let Some(ref initrd_data) = config.initrd {
         let initrd_end = INITRD_LOAD_ADDR as usize + initrd_data.len();
         if initrd_end > guest_memory.len() {
@@ -437,12 +442,17 @@ fn setup_e820_map(guest_memory: &mut [u8], bp: usize, mem_size: u64) -> u8 {
                      0x9FC00, 0xA0000 - 0x9FC00, E820Type::Reserved);
     count += 1;
 
-    // Entry 2: Video/BIOS ROM (0xA0000 - 0xFFFFF)
+    // Entry 2: ACPI tables (0x50000 - 0x50300, marked ACPI reclaimable)
+    write_e820_entry(guest_memory, e820_base, count,
+                     0x50000, 0x1000, E820Type::Acpi);
+    count += 1;
+
+    // Entry 3: Video/BIOS ROM (0xA0000 - 0xFFFFF)
     write_e820_entry(guest_memory, e820_base, count,
                      0xA0000, 0x60000, E820Type::Reserved);
     count += 1;
 
-    // Entry 3: Main memory (1MB - end of guest memory)
+    // Entry 4: Main memory (1MB - end of guest memory)
     let main_mem_size = mem_size - 0x100000;
     write_e820_entry(guest_memory, e820_base, count,
                      0x100000, main_mem_size, E820Type::Ram);

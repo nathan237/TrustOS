@@ -94,6 +94,14 @@ pub struct SvmVirtualMachine {
     features: SvmFeatures,
     /// LAPIC timer emulation state
     pub lapic: LapicState,
+    /// PIC 8259A emulation state
+    pub pic: PicState,
+    /// PIT 8254 timer emulation state
+    pub pit: PitState,
+    /// ACPI PM timer counter (3.579545 MHz, 32-bit)
+    pub pm_timer_start: u64,
+    /// CMOS RTC state
+    cmos_index: u8,
 }
 
 /// Emulated Local APIC timer state
@@ -128,6 +136,98 @@ impl Default for LapicState {
             tpr: 0,
             enabled: false,
             last_tick_exit: 0,
+        }
+    }
+}
+
+/// Emulated 8259A PIC (Programmable Interrupt Controller) pair
+#[derive(Debug, Clone)]
+pub struct PicState {
+    /// Master PIC: ICW state machine phase (0=ready, 1-4=ICW sequence)
+    pub master_icw_phase: u8,
+    /// Slave PIC: ICW state machine phase
+    pub slave_icw_phase: u8,
+    /// Master PIC: interrupt mask register (IMR/OCW1)
+    pub master_imr: u8,
+    /// Slave PIC: interrupt mask register
+    pub slave_imr: u8,
+    /// Master PIC: vector base (set by ICW2)
+    pub master_vector_base: u8,
+    /// Slave PIC: vector base
+    pub slave_vector_base: u8,
+    /// Master PIC: in-service register (ISR)
+    pub master_isr: u8,
+    /// Master PIC: interrupt request register (IRR)
+    pub master_irr: u8,
+    /// Whether initialization is complete
+    pub initialized: bool,
+}
+
+impl Default for PicState {
+    fn default() -> Self {
+        Self {
+            master_icw_phase: 0,
+            slave_icw_phase: 0,
+            master_imr: 0xFF, // All masked
+            slave_imr: 0xFF,
+            master_vector_base: 0x08, // Default BIOS mapping
+            slave_vector_base: 0x70,
+            master_isr: 0,
+            master_irr: 0,
+            initialized: false,
+        }
+    }
+}
+
+/// Emulated 8254 PIT (Programmable Interval Timer) channel
+#[derive(Debug, Clone)]
+pub struct PitChannel {
+    /// Reload value (count)
+    pub reload: u16,
+    /// Current counter value
+    pub count: u16,
+    /// Operating mode (0-5)
+    pub mode: u8,
+    /// Access mode: 1=lobyte, 2=hibyte, 3=lo then hi
+    pub access: u8,
+    /// Latch state for reading
+    pub latched: bool,
+    pub latch_value: u16,
+    /// Waiting for high byte of 16-bit write
+    pub write_hi_pending: bool,
+    /// Output pin state
+    pub output: bool,
+}
+
+impl Default for PitChannel {
+    fn default() -> Self {
+        Self {
+            reload: 0xFFFF,
+            count: 0xFFFF,
+            mode: 0,
+            access: 3, // lo/hi by default
+            latched: false,
+            latch_value: 0,
+            write_hi_pending: false,
+            output: false,
+        }
+    }
+}
+
+/// Emulated 8254 PIT state (3 channels)
+#[derive(Debug, Clone)]
+pub struct PitState {
+    pub channels: [PitChannel; 3],
+}
+
+impl Default for PitState {
+    fn default() -> Self {
+        Self {
+            channels: [
+                PitChannel::default(),
+                PitChannel::default(),
+                PitChannel::default(),
+            ],
         }
     }
 }
@@ -185,6 +285,10 @@ impl SvmVirtualMachine {
             console_id: Some(console_id),
             features,
             lapic: LapicState::default(),
+            pic: PicState::default(),
+            pit: PitState::default(),
+            pm_timer_start: 0,
+            cmos_index: 0,
         })
     }
     
@@ -1387,23 +1491,60 @@ impl SvmVirtualMachine {
                 0x64 => 0x1C,                   // Status: input buffer empty, self-test passed
                 
                 // ── PIC (8259A) ───────────────────────────────────
-                0x20 => 0,                      // Master PIC: command/status
-                0x21 => 0xFF,                   // Master PIC: data (all IRQs masked)
-                0xA0 => 0,                      // Slave PIC: command/status
-                0xA1 => 0xFF,                   // Slave PIC: data (all IRQs masked)
+                0x20 => {
+                    // Master PIC: read ISR or IRR depending on OCW3
+                    self.pic.master_isr as u32
+                }
+                0x21 => self.pic.master_imr as u32,  // Master PIC: IMR
+                0xA0 => 0,                           // Slave PIC: ISR
+                0xA1 => self.pic.slave_imr as u32,   // Slave PIC: IMR
                 
                 // ── PIT (8254) timer ──────────────────────────────
-                0x40 => 0,                      // Counter 0 (system timer)
-                0x41 => 0,                      // Counter 1 (refresh)
-                0x42 => 0,                      // Counter 2 (speaker)
-                0x43 => 0,                      // Control word
+                0x40 | 0x41 | 0x42 => {
+                    let ch = (port - 0x40) as usize;
+                    let pit_ch = &mut self.pit.channels[ch];
+                    if pit_ch.latched {
+                        pit_ch.latched = false;
+                        pit_ch.latch_value as u32
+                    } else {
+                        // Simulate decrement based on VMEXIT count
+                        let simulated = pit_ch.count.wrapping_sub(
+                            (self.stats.vmexits & 0xFFFF) as u16
+                        );
+                        simulated as u32
+                    }
+                }
+                0x43 => 0,                      // Control word (write-only, read returns 0)
                 0x61 => 0x20,                   // NMI status / speaker control
                 
                 // ── CMOS/RTC ──────────────────────────────────────
-                0x70 => 0,
+                0x70 => self.cmos_index as u32,
                 0x71 => {
-                    // Return sensible CMOS values
-                    0x00 // Default: 0
+                    // Return CMOS register values based on selected index
+                    (match self.cmos_index {
+                        0x00 => 0x00u32,  // RTC seconds
+                        0x02 => 0x30,  // RTC minutes
+                        0x04 => 0x12,  // RTC hours (BCD 12 = noon)
+                        0x06 => 0x02,  // RTC day of week (Monday)
+                        0x07 => 0x17,  // RTC day of month
+                        0x08 => 0x02,  // RTC month (February)
+                        0x09 => 0x26,  // RTC year (2026 in BCD)
+                        0x0A => 0x26,  // Status Register A: divider + rate
+                        0x0B => 0x02,  // Status Register B: 24h mode
+                        0x0C => 0x00,  // Status Register C: no interrupts pending
+                        0x0D => 0x80,  // Status Register D: battery OK
+                        0x0E => 0x00,  // Diagnostic status
+                        0x0F => 0x00,  // Shutdown status
+                        0x10 => 0x00,  // Floppy type (none)
+                        0x12 => 0x00,  // Hard disk type (none)
+                        0x14 => 0x06,  // Equipment: math coprocessor, color display
+                        0x15 => 0x80,  // Base memory low byte (640K = 0x0280)
+                        0x16 => 0x02,  // Base memory high byte
+                        0x17 => 0x00,  // Extended memory low (set by e820 instead)
+                        0x18 => 0x00,  // Extended memory high
+                        0x32 => 0x20,  // Century (BCD 20 for 2000s)
+                        _ => 0x00,
+                    })
                 }
                 
                 // ── DMA controllers ───────────────────────────────
@@ -1417,7 +1558,22 @@ impl SvmVirtualMachine {
                 0xCFC..=0xCFF => 0xFFFF_FFFF,   // PCI config data (no devices)
                 
                 // ── ACPI / power management ───────────────────────
-                0xB000..=0xB03F => 0,           // ACPI PM base
+                0xB000 => 0,           // PM1a_EVT_STS (no events)
+                0xB002 => 0,           // PM1a_EVT_EN
+                0xB004 => 0,           // PM1a_CNT (SCI_EN will be checked)
+                0xB008 => {
+                    // ACPI PM Timer (3.579545 MHz, 32-bit)
+                    // Simulate based on VMEXIT count (each ~1µs ≈ 3.58 ticks)
+                    let ticks = self.stats.vmexits.wrapping_mul(4); // ~4 ticks per vmexit
+                    (ticks & 0xFFFF_FFFF) as u32
+                }
+                0xB009..=0xB00B => {
+                    // PM timer upper bytes (32-bit read may access byte-at-a-time)
+                    let ticks = self.stats.vmexits.wrapping_mul(4);
+                    let byte_offset = (port - 0xB008) as u32;
+                    ((ticks >> (byte_offset * 8)) & 0xFF) as u32
+                }
+                0xB00C..=0xB03F => 0,  // Other PM registers
                 
                 // ── Debug / misc ──────────────────────────────────
                 0xE9 => 0,                      // Bochs debug port
@@ -1454,14 +1610,145 @@ impl SvmVirtualMachine {
                 // Serial config writes — accept silently
                 0x3F9..=0x3FF | 0x2F9..=0x2FF => {}
                 
-                // PIC programming — accept silently (ICW1-ICW4, OCW1-OCW3)
-                0x20 | 0x21 | 0xA0 | 0xA1 => {}
+                // PIC programming — full ICW/OCW state machine
+                0x20 => {
+                    // Master PIC command port
+                    let v = value as u8;
+                    if v & 0x10 != 0 {
+                        // ICW1: start initialization sequence
+                        self.pic.master_icw_phase = 1;
+                        self.pic.master_isr = 0;
+                        self.pic.master_irr = 0;
+                        if self.stats.io_exits < 200 {
+                            crate::serial_println!("[SVM-VM {}] PIC master: ICW1=0x{:02X}", self.id, v);
+                        }
+                    } else if v & 0x08 != 0 {
+                        // OCW3: read ISR/IRR command
+                    } else {
+                        // OCW2: EOI commands
+                        if v == 0x20 {
+                            // Non-specific EOI
+                            self.pic.master_isr = 0;
+                        }
+                    }
+                }
+                0x21 => {
+                    // Master PIC data port
+                    let v = value as u8;
+                    match self.pic.master_icw_phase {
+                        1 => {
+                            // ICW2: vector base
+                            self.pic.master_vector_base = v & 0xF8;
+                            self.pic.master_icw_phase = 2;
+                            if self.stats.io_exits < 200 {
+                                crate::serial_println!("[SVM-VM {}] PIC master: ICW2 vector_base=0x{:02X}", self.id, v);
+                            }
+                        }
+                        2 => {
+                            // ICW3: cascade configuration
+                            self.pic.master_icw_phase = 3;
+                        }
+                        3 => {
+                            // ICW4: mode
+                            self.pic.master_icw_phase = 0;
+                            self.pic.initialized = true;
+                            if self.stats.io_exits < 200 {
+                                crate::serial_println!("[SVM-VM {}] PIC master initialized: base=0x{:02X}", 
+                                    self.id, self.pic.master_vector_base);
+                            }
+                        }
+                        _ => {
+                            // OCW1: set IMR
+                            self.pic.master_imr = v;
+                        }
+                    }
+                }
+                0xA0 => {
+                    // Slave PIC command port
+                    let v = value as u8;
+                    if v & 0x10 != 0 {
+                        self.pic.slave_icw_phase = 1;
+                    } else if v == 0x20 {
+                        // Non-specific EOI
+                    }
+                }
+                0xA1 => {
+                    // Slave PIC data port
+                    let v = value as u8;
+                    match self.pic.slave_icw_phase {
+                        1 => {
+                            self.pic.slave_vector_base = v & 0xF8;
+                            self.pic.slave_icw_phase = 2;
+                            if self.stats.io_exits < 200 {
+                                crate::serial_println!("[SVM-VM {}] PIC slave: ICW2 vector_base=0x{:02X}", self.id, v);
+                            }
+                        }
+                        2 => { self.pic.slave_icw_phase = 3; }
+                        3 => { self.pic.slave_icw_phase = 0; }
+                        _ => { self.pic.slave_imr = v; }
+                    }
+                }
                 
-                // PIT programming — accept silently
-                0x40..=0x43 => {}
+                // PIT programming — track counter reload values
+                0x40 | 0x41 | 0x42 => {
+                    let ch = (port - 0x40) as usize;
+                    let v = value as u8;
+                    let pit_ch = &mut self.pit.channels[ch];
+                    match pit_ch.access {
+                        1 => {
+                            // Lobyte only
+                            pit_ch.reload = (pit_ch.reload & 0xFF00) | v as u16;
+                            pit_ch.count = pit_ch.reload;
+                        }
+                        2 => {
+                            // Hibyte only
+                            pit_ch.reload = (pit_ch.reload & 0x00FF) | ((v as u16) << 8);
+                            pit_ch.count = pit_ch.reload;
+                        }
+                        3 => {
+                            // Lo/hi sequence
+                            if pit_ch.write_hi_pending {
+                                pit_ch.reload = (pit_ch.reload & 0x00FF) | ((v as u16) << 8);
+                                pit_ch.count = pit_ch.reload;
+                                pit_ch.write_hi_pending = false;
+                                if ch == 0 && self.stats.io_exits < 200 {
+                                    crate::serial_println!("[SVM-VM {}] PIT ch0: reload={} ({} Hz)", 
+                                        self.id, pit_ch.reload,
+                                        if pit_ch.reload > 0 { 1193182 / pit_ch.reload as u32 } else { 0 });
+                                }
+                            } else {
+                                pit_ch.reload = (pit_ch.reload & 0xFF00) | v as u16;
+                                pit_ch.write_hi_pending = true;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                0x43 => {
+                    // PIT control word
+                    let v = value as u8;
+                    let channel = ((v >> 6) & 0x3) as usize;
+                    let access = (v >> 4) & 0x3;
+                    let mode = (v >> 1) & 0x7;
+                    
+                    if channel < 3 {
+                        if access == 0 {
+                            // Latch command
+                            self.pit.channels[channel].latched = true;
+                            self.pit.channels[channel].latch_value = self.pit.channels[channel].count;
+                        } else {
+                            self.pit.channels[channel].access = access;
+                            self.pit.channels[channel].mode = mode;
+                            self.pit.channels[channel].write_hi_pending = false;
+                        }
+                    }
+                }
                 
-                // CMOS — accept silently
-                0x70 | 0x71 => {}
+                // CMOS — track index register
+                0x70 => {
+                    self.cmos_index = (value as u8) & 0x7F; // Bit 7 = NMI disable
+                }
+                0x71 => {} // CMOS data write — accept silently
                 
                 // NMI / speaker control
                 0x61 => {}
@@ -1488,8 +1775,28 @@ impl SvmVirtualMachine {
                 }
                 0xED => {} // I/O delay, do nothing
                 
-                // ACPI
-                0xB000..=0xB03F => {}
+                // ACPI PM registers
+                0xB000..=0xB003 => {
+                    // PM1a_EVT: write to status clears bits (write-1-to-clear)
+                    if self.stats.io_exits < 100 {
+                        crate::serial_println!("[SVM-VM {}] ACPI PM1a_EVT write: port=0x{:X} val=0x{:X}", self.id, port, value);
+                    }
+                }
+                0xB004..=0xB005 => {
+                    // PM1a_CNT: SCI_EN etc.
+                    if self.stats.io_exits < 100 {
+                        crate::serial_println!("[SVM-VM {}] ACPI PM1a_CNT write: port=0x{:X} val=0x{:X}", self.id, port, value);
+                    }
+                    // Check for S5 (shutdown) request: SLP_TYP=5, SLP_EN=1
+                    if port == 0xB004 && (value & 0x2000) != 0 {
+                        let slp_typ = (value >> 10) & 0x7;
+                        crate::serial_println!("[SVM-VM {}] ACPI shutdown request: SLP_TYP={}", self.id, slp_typ);
+                        if slp_typ == 5 {
+                            self.state = SvmVmState::Stopped;
+                        }
+                    }
+                }
+                0xB006..=0xB03F => {} // Other PM registers — accept silently
                 
                 _ => {
                     if self.stats.io_exits < 50 {

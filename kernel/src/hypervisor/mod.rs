@@ -41,6 +41,7 @@ pub mod vmi;
 
 // Phase 7: Linux Boot Protocol
 pub mod linux_loader;
+pub mod acpi;
 
 // Phase 5: Linux Subsystem (TSL)
 pub mod virtio_console;
