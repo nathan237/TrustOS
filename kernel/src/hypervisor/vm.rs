@@ -471,11 +471,30 @@ impl VirtualMachine {
     
     /// Émuler CPUID
     fn handle_cpuid(&mut self) -> Result<()> {
-        // Lire EAX (function) et ECX (sub-function) du guest
-        let eax = self.guest_regs.rax as u32;
-        let ecx = self.guest_regs.rcx as u32;
+        let leaf = self.guest_regs.rax as u32;
+        let subleaf = self.guest_regs.rcx as u32;
         
-        // Exécuter CPUID réel et retourner le résultat
+        // Handle hypervisor-specific leaves
+        match leaf {
+            0x4000_0000 => {
+                // Hypervisor identification
+                self.guest_regs.rax = 0x4000_0001;
+                self.guest_regs.rbx = 0x7473_7254; // "Trst"
+                self.guest_regs.rcx = 0x7254_534F; // "OSTr"
+                self.guest_regs.rdx = 0x534F_7473; // "stOS"
+                return Ok(());
+            }
+            0x4000_0001 => {
+                self.guest_regs.rax = 0;
+                self.guest_regs.rbx = 0;
+                self.guest_regs.rcx = 0;
+                self.guest_regs.rdx = 0;
+                return Ok(());
+            }
+            _ => {}
+        }
+        
+        // Execute real CPUID
         let (out_eax, out_ebx, out_ecx, out_edx): (u32, u32, u32, u32);
         
         unsafe {
@@ -484,25 +503,32 @@ impl VirtualMachine {
                 "cpuid",
                 "mov {out_ebx:e}, ebx",
                 "pop rbx",
-                inout("eax") eax => out_eax,
-                inout("ecx") ecx => out_ecx,
+                inout("eax") leaf => out_eax,
+                inout("ecx") subleaf => out_ecx,
                 out_ebx = out(reg) out_ebx,
                 out("edx") out_edx,
             );
         }
         
-        // Optionnel: masquer certaines fonctionnalités
-        // Par exemple, cacher VMX au guest
-        let out_ecx = if eax == 1 {
-            out_ecx & !(1 << 5) // Cacher VMX
-        } else {
-            out_ecx
-        };
+        let (mut eax, ebx, mut ecx, edx) = (out_eax, out_ebx, out_ecx, out_edx);
         
-        self.guest_regs.rax = out_eax as u64;
-        self.guest_regs.rbx = out_ebx as u64;
-        self.guest_regs.rcx = out_ecx as u64;
-        self.guest_regs.rdx = out_edx as u64;
+        match leaf {
+            0x0000_0001 => {
+                ecx &= !(1 << 5);   // Hide VMX
+                ecx |= 1 << 31;     // Hypervisor present
+                ecx &= !(1 << 21);  // Hide x2APIC
+                ecx &= !(1 << 3);   // Hide MONITOR/MWAIT
+            }
+            0x0000_000A => {
+                eax = 0; ecx = 0; // Hide perf monitoring
+            }
+            _ => {}
+        }
+        
+        self.guest_regs.rax = eax as u64;
+        self.guest_regs.rbx = ebx as u64;
+        self.guest_regs.rcx = ecx as u64;
+        self.guest_regs.rdx = edx as u64;
         
         Ok(())
     }
@@ -534,15 +560,61 @@ impl VirtualMachine {
     fn handle_msr(&mut self, is_write: bool) -> Result<()> {
         let msr = self.guest_regs.rcx as u32;
         
+        // Common MSR constants
+        const IA32_APIC_BASE: u32 = 0x001B;
+        const IA32_MISC_ENABLE: u32 = 0x01A0;
+        const IA32_PAT: u32 = 0x0277;
+        const IA32_EFER: u32 = 0xC000_0080;
+        const MSR_STAR: u32 = 0xC000_0081;
+        const MSR_LSTAR: u32 = 0xC000_0082;
+        const MSR_CSTAR: u32 = 0xC000_0083;
+        const MSR_SFMASK: u32 = 0xC000_0084;
+        const MSR_FS_BASE: u32 = 0xC000_0100;
+        const MSR_GS_BASE: u32 = 0xC000_0101;
+        const MSR_KERNEL_GS_BASE: u32 = 0xC000_0102;
+        const MSR_TSC_AUX: u32 = 0xC000_0103;
+        
         if is_write {
-            // Le guest veut écrire un MSR
-            // On peut soit l'ignorer, soit le passer au hardware
-            crate::serial_println!("[VM {}] Guest WRMSR 0x{:X} (ignored)", self.id, msr);
+            let _value = (self.guest_regs.rdx << 32) | (self.guest_regs.rax & 0xFFFF_FFFF);
+            // For VT-x, many MSRs are handled by VMCS guest state or MSR load/store areas.
+            // Silently accept writes to common MSRs.
+            match msr {
+                MSR_STAR | MSR_LSTAR | MSR_CSTAR | MSR_SFMASK |
+                MSR_FS_BASE | MSR_GS_BASE | MSR_KERNEL_GS_BASE |
+                IA32_PAT | IA32_EFER | IA32_APIC_BASE | IA32_MISC_ENABLE |
+                MSR_TSC_AUX => {}
+                0x0174..=0x0176 => {} // SYSENTER_CS/ESP/EIP
+                0x0200..=0x020F => {} // MTRRs
+                0x0400..=0x047F => {} // MC banks
+                _ => {
+                    if self.stats.vm_exits < 100 {
+                        crate::serial_println!("[VM {}] WRMSR 0x{:X} (ignored)", self.id, msr);
+                    }
+                }
+            }
         } else {
-            // Le guest veut lire un MSR
-            // Retourner une valeur fictive ou réelle
-            self.guest_regs.rax = 0;
-            self.guest_regs.rdx = 0;
+            // RDMSR — return sensible values
+            let value: u64 = match msr {
+                IA32_APIC_BASE => 0xFEE0_0900, // Default + enabled + BSP
+                IA32_MISC_ENABLE => 1,          // Fast string enable
+                IA32_PAT => 0x0007040600070406, // Default PAT
+                IA32_EFER => 0x501,             // SCE + LME + LMA
+                MSR_TSC_AUX => 0,
+                0x00FE => 0,   // MTRRcap
+                0x0179 => 0,   // MCG_CAP
+                0x017A => 0,   // MCG_STATUS
+                0x02FF => 0x06, // MTRR_DEF_TYPE
+                0x0200..=0x020F => 0, // MTRRs
+                0x0400..=0x047F => 0, // MC banks
+                _ => {
+                    if self.stats.vm_exits < 100 {
+                        crate::serial_println!("[VM {}] RDMSR 0x{:X} = 0", self.id, msr);
+                    }
+                    0
+                }
+            };
+            self.guest_regs.rax = value & 0xFFFF_FFFF;
+            self.guest_regs.rdx = value >> 32;
         }
         
         Ok(())

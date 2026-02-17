@@ -442,6 +442,22 @@ impl SvmVirtualMachine {
                 let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                 // RAX is saved/loaded by VMCB automatically
                 vmcb.write_state(state_offsets::RSP, self.guest_regs.rsp);
+                
+                // Inject periodic timer interrupt to keep the guest alive
+                // Linux needs timer ticks to boot (drives the scheduler, init, etc.)
+                // Inject every 1000 VMEXITs to avoid flooding
+                if self.stats.vmexits > 0 && self.stats.vmexits % 1000 == 0 {
+                    let rflags = vmcb.read_state(state_offsets::RFLAGS);
+                    let if_set = (rflags & 0x200) != 0; // Check IF (interrupt flag)
+                    if if_set {
+                        // EVENT_INJ format: vector[7:0] | type[10:8] | EV[11] | rsvd[30:12] | V[31]
+                        // type=0 = external interrupt, V=1 = valid
+                        let event_inj: u64 = 0x20        // Vector 0x20 (timer IRQ)
+                                           | (0 << 8)    // Type 0 = external interrupt
+                                           | (1u64 << 31); // V = valid
+                        vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
+                    }
+                }
             }
             
             // Execute VMRUN with guest registers
@@ -572,17 +588,15 @@ impl SvmVirtualMachine {
             
             SvmExitCode::Hlt => {
                 self.stats.hlt_exits += 1;
-                crate::lab_mode::trace_bus::emit_vm_exit(self.id, "HLT", guest_rip, "");
-                // For Linux, HLT is used for idle loop - inject a timer interrupt
-                // to wake the guest up and skip the HLT
+                // For Linux, HLT is used for idle loop — inject a timer interrupt
+                // to wake the guest and advance past the HLT instruction
                 {
                     let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                     vmcb.write_state(state_offsets::RIP, next_rip);
-                    // Inject virtual timer interrupt via EVENT_INJ
-                    // Format: [31:0] = vector:8 | type:3 | EV:1 | rsvd:19 | V:1
-                    // type 0 = external interrupt, V=1 = valid
-                    // Only inject periodically to avoid flooding
-                    if self.stats.hlt_exits % 100 == 0 {
+                    
+                    // Always inject timer on HLT to wake the guest
+                    let rflags = vmcb.read_state(state_offsets::RFLAGS);
+                    if (rflags & 0x200) != 0 { // IF set
                         let event_inj: u64 = 0x20        // Vector 0x20 (timer)
                                            | (0 << 8)    // Type 0 = external interrupt
                                            | (1u64 << 31); // V = valid
@@ -590,12 +604,17 @@ impl SvmVirtualMachine {
                     }
                 }
                 
-                // If we've done too many HLTs without progress, stop
-                if self.stats.hlt_exits > 100_000 {
+                // Linux can HLT many times during boot (idle loops, waiting for devices)
+                // Only stop after an extreme number indicating a hang
+                if self.stats.hlt_exits > 5_000_000 {
                     crate::serial_println!("[SVM-VM {}] Too many HLT exits ({}), stopping", self.id, self.stats.hlt_exits);
                     self.state = SvmVmState::Stopped;
                     Ok(false)
                 } else {
+                    // Log periodically
+                    if self.stats.hlt_exits % 10000 == 0 {
+                        crate::serial_println!("[SVM-VM {}] HLT count: {}", self.id, self.stats.hlt_exits);
+                    }
                     Ok(true)
                 }
             }
@@ -629,23 +648,30 @@ impl SvmVirtualMachine {
                 self.stats.npf_exits += 1;
                 let guest_phys = exit_info2;
                 let error_code = exit_info1;
-                crate::lab_mode::trace_bus::emit_vm_memory(
-                    self.id, "NPF_VIOLATION", guest_phys, error_code
-                );
-                crate::serial_println!("[SVM-VM {}] NPF: GPA=0x{:X}, Error=0x{:X}", 
-                                      self.id, guest_phys, error_code);
                 
-                // Record violation
-                super::isolation::record_violation(
-                    self.id,
-                    guest_phys,
-                    None,
-                    error_code,
-                    guest_rip,
-                );
+                // Determine if this is a known MMIO region we can emulate
+                let handled = self.handle_npf(guest_phys, error_code, guest_rip);
                 
-                self.state = SvmVmState::Crashed;
-                Ok(false)
+                if handled {
+                    Ok(true)
+                } else {
+                    crate::lab_mode::trace_bus::emit_vm_memory(
+                        self.id, "NPF_VIOLATION", guest_phys, error_code
+                    );
+                    crate::serial_println!("[SVM-VM {}] FATAL NPF: GPA=0x{:X}, Error=0x{:X}, RIP=0x{:X}", 
+                                          self.id, guest_phys, error_code, guest_rip);
+                    
+                    super::isolation::record_violation(
+                        self.id,
+                        guest_phys,
+                        None,
+                        error_code,
+                        guest_rip,
+                    );
+                    
+                    self.state = SvmVmState::Crashed;
+                    Ok(false)
+                }
             }
             
             SvmExitCode::Vmmcall => {
@@ -749,10 +775,32 @@ impl SvmVirtualMachine {
     
     /// Handle CPUID exit
     fn handle_cpuid(&mut self) {
-        let eax = self.guest_regs.rax as u32;
-        let ecx = self.guest_regs.rcx as u32;
+        let leaf = self.guest_regs.rax as u32;
+        let subleaf = self.guest_regs.rcx as u32;
         
-        // Execute real CPUID
+        // Handle hypervisor-specific leaves
+        match leaf {
+            // Hypervisor identification (KVM-compatible)
+            0x4000_0000 => {
+                // Return "TrstOSTrstOS" and max leaf = 0x40000001
+                self.guest_regs.rax = 0x4000_0001;
+                self.guest_regs.rbx = 0x7473_7254; // "Trst"
+                self.guest_regs.rcx = 0x7254_534F; // "OSTr"
+                self.guest_regs.rdx = 0x534F_7473; // "stOS"
+                return;
+            }
+            0x4000_0001 => {
+                // Hypervisor features: report TSC frequency (if known) and basic features
+                self.guest_regs.rax = 0; // No special features
+                self.guest_regs.rbx = 0;
+                self.guest_regs.rcx = 0;
+                self.guest_regs.rdx = 0;
+                return;
+            }
+            _ => {}
+        }
+        
+        // Execute real CPUID on host
         let (out_eax, out_ebx, out_ecx, out_edx): (u32, u32, u32, u32);
         
         unsafe {
@@ -761,25 +809,196 @@ impl SvmVirtualMachine {
                 "cpuid",
                 "mov {out_ebx:e}, ebx",
                 "pop rbx",
-                inout("eax") eax => out_eax,
-                inout("ecx") ecx => out_ecx,
+                inout("eax") leaf => out_eax,
+                inout("ecx") subleaf => out_ecx,
                 out_ebx = out(reg) out_ebx,
                 out("edx") out_edx,
             );
         }
         
-        // Hide SVM from guest (optional - for security)
-        let out_ecx = if eax == 0x8000_0001 {
-            out_ecx & !(1 << 2) // Clear SVM bit
-        } else {
-            out_ecx
+        let (mut eax, mut ebx, mut ecx, mut edx) = (out_eax, out_ebx, out_ecx, out_edx);
+        
+        match leaf {
+            0x0000_0000 => {
+                // Basic CPUID: report hypervisor presence in max leaf
+                // Keep vendor string, but indicate hypervisor support
+                // Max standard leaf: pass through
+            }
+            0x0000_0001 => {
+                // Feature flags
+                ecx &= !(1 << 5);   // Hide VMX
+                ecx |= 1 << 31;     // Set hypervisor present bit
+                // Hide x2APIC if we don't emulate it
+                ecx &= !(1 << 21);  // Hide x2APIC
+                // Hide MONITOR/MWAIT (requires intercept setup)
+                ecx &= !(1 << 3);   // Hide MONITOR
+            }
+            0x0000_0007 => {
+                // Extended features
+                if subleaf == 0 {
+                    ebx &= !(1 << 0);  // Hide FSGSBASE for now
+                    ecx &= !(1 << 2);  // Hide UMIP
+                    ecx &= !(1 << 4);  // Hide OSPKE
+                }
+            }
+            0x0000_000A => {
+                // Performance monitoring — hide from guest
+                eax = 0;
+                ebx = 0;
+                ecx = 0;
+                edx = 0;
+            }
+            0x0000_000B | 0x0000_001F => {
+                // Extended topology — report 1 core, 1 thread
+                if subleaf == 0 {
+                    eax = 0; // No SMT sub-levels
+                    ebx = 1; // 1 logical processor
+                    ecx = (1 << 8) | subleaf; // SMT level type
+                } else if subleaf == 1 {
+                    eax = 0;
+                    ebx = 1; // 1 core
+                    ecx = (2 << 8) | subleaf; // Core level type
+                } else {
+                    eax = 0;
+                    ebx = 0;
+                    ecx = 0;
+                }
+            }
+            0x8000_0001 => {
+                // AMD extended features
+                ecx &= !(1 << 2);  // Hide SVM from guest
+            }
+            _ => {
+                // Pass through all other leaves unchanged
+            }
+        }
+        
+        self.guest_regs.rax = eax as u64;
+        self.guest_regs.rbx = ebx as u64;
+        self.guest_regs.rcx = ecx as u64;
+        self.guest_regs.rdx = edx as u64;
+    }
+    
+    /// Handle Nested Page Fault (NPF)
+    /// Returns true if the fault was handled successfully
+    fn handle_npf(&mut self, guest_phys: u64, error_code: u64, guest_rip: u64) -> bool {
+        // MMIO region constants
+        const LAPIC_BASE: u64 = 0xFEE0_0000;
+        const LAPIC_END: u64 = 0xFEE0_1000;
+        const IOAPIC_BASE: u64 = 0xFEC0_0000;
+        const IOAPIC_END: u64 = 0xFEC0_1000;
+        const HPET_BASE: u64 = 0xFED0_0000;
+        const HPET_END: u64 = 0xFED0_1000;
+        
+        match guest_phys {
+            // Local APIC MMIO (0xFEE00000 - 0xFEE00FFF)
+            LAPIC_BASE..=LAPIC_END => {
+                self.handle_lapic_mmio(guest_phys, error_code);
+                true
+            }
+            // I/O APIC MMIO (0xFEC00000 - 0xFEC00FFF) 
+            IOAPIC_BASE..=IOAPIC_END => {
+                // Silently absorb I/O APIC accesses
+                if self.stats.npf_exits < 20 {
+                    crate::serial_println!("[SVM-VM {}] IOAPIC access at 0x{:X} (emulated)", self.id, guest_phys);
+                }
+                self.guest_regs.rax = 0;
+                true
+            }
+            // HPET MMIO
+            HPET_BASE..=HPET_END => {
+                if self.stats.npf_exits < 20 {
+                    crate::serial_println!("[SVM-VM {}] HPET access at 0x{:X} (emulated)", self.id, guest_phys);
+                }
+                self.guest_regs.rax = 0;
+                true
+            }
+            // VGA framebuffer (0xA0000 - 0xBFFFF) — map if within guest memory
+            0xA0000..=0xBFFFF => {
+                if self.stats.npf_exits < 20 {
+                    crate::serial_println!("[SVM-VM {}] VGA FB access at 0x{:X}", self.id, guest_phys);
+                }
+                // Absorb silently
+                self.guest_regs.rax = 0;
+                true
+            }
+            // ROM area (0xC0000 - 0xFFFFF) — typically BIOS ROMs
+            0xC0000..=0xFFFFF => {
+                // Return zeros for ROM reads
+                self.guest_regs.rax = 0;
+                true
+            }
+            // Below guest memory but unmapped? Try to handle
+            gpa if gpa < self.memory_size as u64 => {
+                // The NPT should already map this, but in case of races or late mapping
+                crate::serial_println!("[SVM-VM {}] NPF in guest RAM at 0x{:X}, err=0x{:X}, RIP=0x{:X}", 
+                    self.id, gpa, error_code, guest_rip);
+                false
+            }
+            // Above 4GB region? Likely a BAR or device mapping
+            gpa if gpa >= 0x1_0000_0000 => {
+                if self.stats.npf_exits < 50 {
+                    crate::serial_println!("[SVM-VM {}] High MMIO access at 0x{:X} (absorbed)", self.id, gpa);
+                }
+                self.guest_regs.rax = 0xFFFF_FFFF_FFFF_FFFF; // Return all-ones (no device)
+                true
+            }
+            _ => {
+                // Unknown region — log and let caller decide
+                if self.stats.npf_exits < 50 {
+                    crate::serial_println!("[SVM-VM {}] NPF: GPA=0x{:X}, err=0x{:X}, RIP=0x{:X}", 
+                        self.id, guest_phys, error_code, guest_rip);
+                }
+                false
+            }
+        }
+    }
+    
+    /// Emulate Local APIC MMIO access
+    fn handle_lapic_mmio(&mut self, gpa: u64, _error_code: u64) {
+        let offset = (gpa & 0xFFF) as u32;
+        
+        // Common LAPIC register offsets
+        const LAPIC_ID: u32 = 0x020;
+        const LAPIC_VERSION: u32 = 0x030;
+        const LAPIC_TPR: u32 = 0x080;
+        const LAPIC_EOI: u32 = 0x0B0;
+        const LAPIC_SVR: u32 = 0x0F0;
+        const LAPIC_ISR_BASE: u32 = 0x100;
+        const LAPIC_TMR_BASE: u32 = 0x180;
+        const LAPIC_IRR_BASE: u32 = 0x200;
+        const LAPIC_ESR: u32 = 0x280;
+        const LAPIC_ICR_LOW: u32 = 0x300;
+        const LAPIC_ICR_HIGH: u32 = 0x310;
+        const LAPIC_TIMER_LVT: u32 = 0x320;
+        const LAPIC_LINT0: u32 = 0x350;
+        const LAPIC_LINT1: u32 = 0x360;
+        const LAPIC_TIMER_ICR: u32 = 0x380;
+        const LAPIC_TIMER_CCR: u32 = 0x390;
+        const LAPIC_TIMER_DCR: u32 = 0x3E0;
+        
+        // For reads, return sensible defaults
+        let value: u32 = match offset {
+            LAPIC_ID => 0,           // APIC ID = 0 (BSP)
+            LAPIC_VERSION => 0x50014, // Version 0x14, max LVT entry 5
+            LAPIC_TPR => 0,
+            LAPIC_SVR => 0x1FF,       // Software enable, vector 0xFF
+            LAPIC_ISR_BASE..=0x170 => 0,
+            LAPIC_TMR_BASE..=0x1F0 => 0,
+            LAPIC_IRR_BASE..=0x270 => 0,
+            LAPIC_ESR => 0,
+            LAPIC_ICR_LOW => 0,
+            LAPIC_ICR_HIGH => 0,
+            LAPIC_TIMER_LVT => 0x10000, // Masked
+            LAPIC_LINT0 => 0x10000,     // Masked
+            LAPIC_LINT1 => 0x10000,     // Masked
+            LAPIC_TIMER_ICR => 0,
+            LAPIC_TIMER_CCR => 0,       // Timer current count = 0
+            LAPIC_TIMER_DCR => 0,
+            _ => 0,
         };
         
-        // Write results back to guest
-        self.guest_regs.rax = out_eax as u64;
-        self.guest_regs.rbx = out_ebx as u64;
-        self.guest_regs.rcx = out_ecx as u64;
-        self.guest_regs.rdx = out_edx as u64;
+        self.guest_regs.rax = value as u64;
     }
     
     /// Handle I/O instruction exit
@@ -934,14 +1153,174 @@ impl SvmVirtualMachine {
     fn handle_msr(&mut self, is_write: bool) {
         let msr = self.guest_regs.rcx as u32;
         
+        // MSR constants
+        const IA32_APIC_BASE: u32 = 0x001B;
+        const IA32_MTRRCAP: u32 = 0x00FE;
+        const IA32_SYSENTER_CS: u32 = 0x0174;
+        const IA32_SYSENTER_ESP: u32 = 0x0175;
+        const IA32_SYSENTER_EIP: u32 = 0x0176;
+        const IA32_MCG_CAP: u32 = 0x0179;
+        const IA32_MCG_STATUS: u32 = 0x017A;
+        const IA32_MISC_ENABLE: u32 = 0x01A0;
+        const IA32_PAT: u32 = 0x0277;
+        const IA32_MTRR_DEF_TYPE: u32 = 0x02FF;
+        const IA32_EFER: u32 = 0xC000_0080;
+        const MSR_STAR: u32 = 0xC000_0081;
+        const MSR_LSTAR: u32 = 0xC000_0082;
+        const MSR_CSTAR: u32 = 0xC000_0083;
+        const MSR_SFMASK: u32 = 0xC000_0084;
+        const MSR_FS_BASE: u32 = 0xC000_0100;
+        const MSR_GS_BASE: u32 = 0xC000_0101;
+        const MSR_KERNEL_GS_BASE: u32 = 0xC000_0102;
+        const MSR_TSC_AUX: u32 = 0xC000_0103;
+        
         if is_write {
             let value = (self.guest_regs.rdx << 32) | (self.guest_regs.rax & 0xFFFF_FFFF);
-            crate::serial_println!("[SVM-VM {}] WRMSR 0x{:X} = 0x{:X}", self.id, msr, value);
-            // Silently ignore writes
+            
+            match msr {
+                // These are stored in VMCB state save area — write directly
+                MSR_STAR => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::STAR, value);
+                }
+                MSR_LSTAR => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::LSTAR, value);
+                }
+                MSR_CSTAR => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::CSTAR, value);
+                }
+                MSR_SFMASK => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::SFMASK, value);
+                }
+                MSR_KERNEL_GS_BASE => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::KERNEL_GS_BASE, value);
+                }
+                MSR_FS_BASE => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::FS_BASE, value);
+                }
+                MSR_GS_BASE => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::GS_BASE, value);
+                }
+                IA32_SYSENTER_CS => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::SYSENTER_CS, value);
+                }
+                IA32_SYSENTER_ESP => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::SYSENTER_ESP, value);
+                }
+                IA32_SYSENTER_EIP => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::SYSENTER_EIP, value);
+                }
+                IA32_PAT => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    vmcb.write_state(state_offsets::PAT, value);
+                }
+                IA32_EFER => {
+                    let vmcb = self.vmcb.as_mut().unwrap();
+                    // Ensure SVME stays set (required for SVM guest)
+                    let safe_efer = value | 0x1000; // Keep SVME bit
+                    vmcb.write_state(state_offsets::EFER, safe_efer);
+                }
+                // Silently ignore writes to these common MSRs
+                IA32_APIC_BASE | IA32_MISC_ENABLE | IA32_MCG_STATUS |
+                IA32_MTRR_DEF_TYPE | MSR_TSC_AUX => {}
+                // MTRR physBase/physMask pairs 0x200-0x20F
+                0x0200..=0x020F => {}
+                // Ignore MCi_STATUS/MCi_ADDR/MCi_MISC registers
+                0x0400..=0x047F => {}
+                _ => {
+                    if self.stats.msr_exits < 100 {
+                        crate::serial_println!("[SVM-VM {}] WRMSR 0x{:X} = 0x{:X} (ignored)", self.id, msr, value);
+                    }
+                }
+            }
         } else {
-            // RDMSR - return zeros for unknown MSRs
-            self.guest_regs.rax = 0;
-            self.guest_regs.rdx = 0;
+            // RDMSR
+            let value: u64 = match msr {
+                // Read from VMCB state save area
+                MSR_STAR => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::STAR)
+                }
+                MSR_LSTAR => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::LSTAR)
+                }
+                MSR_CSTAR => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::CSTAR)
+                }
+                MSR_SFMASK => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::SFMASK)
+                }
+                MSR_KERNEL_GS_BASE => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::KERNEL_GS_BASE)
+                }
+                MSR_FS_BASE => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::FS_BASE)
+                }
+                MSR_GS_BASE => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::GS_BASE)
+                }
+                IA32_SYSENTER_CS => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::SYSENTER_CS)
+                }
+                IA32_SYSENTER_ESP => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::SYSENTER_ESP)
+                }
+                IA32_SYSENTER_EIP => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::SYSENTER_EIP)
+                }
+                IA32_PAT => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::PAT)
+                }
+                IA32_EFER => {
+                    let vmcb = self.vmcb.as_ref().unwrap();
+                    vmcb.read_state(state_offsets::EFER)
+                }
+                // APIC base: report default (0xFEE00000) + enabled + BSP
+                IA32_APIC_BASE => 0xFEE0_0900,
+                // MTRRcap: report no MTRRs (simplest)
+                IA32_MTRRCAP => 0,
+                // MCG_CAP: report 0 MC banks
+                IA32_MCG_CAP => 0,
+                IA32_MCG_STATUS => 0,
+                // MISC_ENABLE: report basic features
+                IA32_MISC_ENABLE => 1, // Fast string enable
+                // MTRR default type: write-back with MTRRs disabled
+                IA32_MTRR_DEF_TYPE => 0x06,
+                // TSC_AUX: return 0
+                MSR_TSC_AUX => 0,
+                // MTRR physBase/physMask
+                0x0200..=0x020F => 0,
+                // MCi registers
+                0x0400..=0x047F => 0,
+                _ => {
+                    if self.stats.msr_exits < 100 {
+                        crate::serial_println!("[SVM-VM {}] RDMSR 0x{:X} = 0 (default)", self.id, msr);
+                    }
+                    0
+                }
+            };
+            
+            self.guest_regs.rax = value & 0xFFFF_FFFF;
+            self.guest_regs.rdx = value >> 32;
         }
     }
     

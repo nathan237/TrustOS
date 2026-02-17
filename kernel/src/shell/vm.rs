@@ -3832,18 +3832,61 @@ pub(super) fn cmd_vm(args: &[&str]) {
                             crate::println!("    Intr:    {:>8}", s.intr_exits);
                             
                             crate::println!();
-                            crate::println_color!(COLOR_YELLOW, "  Guest Registers:");
+                            crate::println_color!(COLOR_YELLOW, "  Guest GPRs:");
                             crate::println!("    RAX = 0x{:016X}  RBX = 0x{:016X}", vm.guest_regs.rax, vm.guest_regs.rbx);
                             crate::println!("    RCX = 0x{:016X}  RDX = 0x{:016X}", vm.guest_regs.rcx, vm.guest_regs.rdx);
                             crate::println!("    RSI = 0x{:016X}  RDI = 0x{:016X}", vm.guest_regs.rsi, vm.guest_regs.rdi);
                             crate::println!("    RBP = 0x{:016X}  RSP = 0x{:016X}", vm.guest_regs.rbp, vm.guest_regs.rsp);
                             crate::println!("    R8  = 0x{:016X}  R9  = 0x{:016X}", vm.guest_regs.r8, vm.guest_regs.r9);
                             crate::println!("    R10 = 0x{:016X}  R11 = 0x{:016X}", vm.guest_regs.r10, vm.guest_regs.r11);
+                            crate::println!("    R12 = 0x{:016X}  R13 = 0x{:016X}", vm.guest_regs.r12, vm.guest_regs.r13);
+                            crate::println!("    R14 = 0x{:016X}  R15 = 0x{:016X}", vm.guest_regs.r14, vm.guest_regs.r15);
+                            
+                            // Show VMCB control registers if available
+                            if let Some(ref vmcb) = vm.vmcb {
+                                use crate::hypervisor::svm::vmcb::state_offsets;
+                                crate::println!();
+                                crate::println_color!(COLOR_YELLOW, "  VMCB State:");
+                                let rip = vmcb.read_state(state_offsets::RIP);
+                                let rsp = vmcb.read_state(state_offsets::RSP);
+                                let rflags = vmcb.read_state(state_offsets::RFLAGS);
+                                let cr0 = vmcb.read_state(state_offsets::CR0);
+                                let cr3 = vmcb.read_state(state_offsets::CR3);
+                                let cr4 = vmcb.read_state(state_offsets::CR4);
+                                let efer = vmcb.read_state(state_offsets::EFER);
+                                let cs = vmcb.read_u16(state_offsets::CS_SELECTOR) as u64;
+                                let ds = vmcb.read_u16(state_offsets::DS_SELECTOR) as u64;
+                                let cpl = vmcb.read_u16(state_offsets::CPL) as u64;
+                                
+                                crate::println!("    RIP    = 0x{:016X}  RSP    = 0x{:016X}", rip, rsp);
+                                crate::println!("    RFLAGS = 0x{:016X}  CPL    = {}", rflags, cpl);
+                                crate::println!("    CR0 = 0x{:X}  CR3 = 0x{:X}  CR4 = 0x{:X}", cr0, cr3, cr4);
+                                crate::println!("    EFER = 0x{:X}  CS = 0x{:X}  DS = 0x{:X}", efer, cs, ds);
+                                
+                                // Show last exit info
+                                use crate::hypervisor::svm::vmcb::control_offsets;
+                                let exitcode = vmcb.read_control(control_offsets::EXITCODE);
+                                let exitinfo1 = vmcb.read_control(control_offsets::EXITINFO1);
+                                let exitinfo2 = vmcb.read_control(control_offsets::EXITINFO2);
+                                crate::println!();
+                                crate::println_color!(COLOR_YELLOW, "  Last VMEXIT:");
+                                crate::println!("    ExitCode = 0x{:X}  Info1 = 0x{:X}  Info2 = 0x{:X}", 
+                                    exitcode, exitinfo1, exitinfo2);
+                            }
                             
                             crate::println!();
                             crate::println_color!(COLOR_YELLOW, "  Memory:");
                             crate::println!("    Guest memory: {} KB ({} MB)", vm.memory_size / 1024, vm.memory_size / (1024 * 1024));
                             crate::println!("    ASID: {}", vm.asid);
+                            
+                            // Show console output (last 256 chars)
+                            let console_out = crate::hypervisor::get_console_output(*id);
+                            if !console_out.is_empty() {
+                                crate::println!();
+                                crate::println_color!(COLOR_YELLOW, "  Console Output (last 256 chars):");
+                                let start = if console_out.len() > 256 { console_out.len() - 256 } else { 0 };
+                                crate::println!("    {}", &console_out[start..]);
+                            }
                             
                             // Show a hex dump of guest memory at 0x5000 (where pm-test writes)
                             if let Some(data) = vm.read_guest_memory(0x5000, 32) {
@@ -3857,21 +3900,6 @@ pub(super) fn cmd_vm(args: &[&str]) {
                                     }
                                 }
                                 crate::println!();
-                            }
-                            
-                            // Show guest memory at 0x6000 (hypercall string zone)
-                            if let Some(data) = vm.read_guest_memory(0x6000, 48) {
-                                crate::println_color!(COLOR_YELLOW, "  Memory @ 0x6000 (hypercall string):");
-                                crate::print!("    \"");
-                                for &byte in data {
-                                    if byte == 0 { break; }
-                                    if byte >= 0x20 && byte < 0x7F {
-                                        crate::print!("{}", byte as char);
-                                    } else {
-                                        crate::print!(".");
-                                    }
-                                }
-                                crate::println!("\"");
                             }
                         });
                         
