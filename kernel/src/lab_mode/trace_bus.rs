@@ -26,6 +26,7 @@ pub enum EventCategory {
     Network = 6,
     Security = 7,
     Custom = 8,
+    Hypervisor = 9,
 }
 
 impl EventCategory {
@@ -40,6 +41,7 @@ impl EventCategory {
             Self::Network    => "NET",
             Self::Security   => "SEC",
             Self::Custom     => "USR",
+            Self::Hypervisor => "HV",
         }
     }
     
@@ -54,6 +56,7 @@ impl EventCategory {
             Self::Network    => 0xFF79C0FF, // cyan
             Self::Security   => 0xFFF85149, // red
             Self::Custom     => 0xFFE6EDF3, // white
+            Self::Hypervisor => 0xFFFF6B6B, // bright red-orange for VM events
         }
     }
 }
@@ -233,6 +236,58 @@ pub fn emit_static(category: EventCategory, msg: &'static str, payload: u64) {
         return;
     }
     emit(category, String::from(msg), payload);
+}
+
+// ============================================================================
+// HYPERVISOR / VM INTROSPECTION EVENTS
+// ============================================================================
+
+/// Emit a VM exit event with structured data
+pub fn emit_vm_exit(vm_id: u64, exit_reason: &str, guest_rip: u64, detail: &str) {
+    if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    let msg = alloc::format!("[VM {}] EXIT: {} at RIP=0x{:X} {}", vm_id, exit_reason, guest_rip, detail);
+    emit(EventCategory::Hypervisor, msg, vm_id);
+}
+
+/// Emit a VM lifecycle event (create, start, stop, crash)
+pub fn emit_vm_lifecycle(vm_id: u64, event: &str) {
+    if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    let msg = alloc::format!("[VM {}] {}", vm_id, event);
+    emit(EventCategory::Hypervisor, msg, vm_id);
+}
+
+/// Emit a VM I/O event (port access, console, hypercall)
+pub fn emit_vm_io(vm_id: u64, direction: &str, port: u16, value: u64) {
+    if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    let msg = alloc::format!("[VM {}] IO {} port=0x{:X} val=0x{:X}", vm_id, direction, port, value);
+    emit(EventCategory::Hypervisor, msg, vm_id);
+}
+
+/// Emit a VM memory event (EPT/NPT violation, page mapping)
+pub fn emit_vm_memory(vm_id: u64, event_type: &str, guest_phys: u64, extra: u64) {
+    if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    let msg = alloc::format!("[VM {}] MEM {} GPA=0x{:X} info=0x{:X}", vm_id, event_type, guest_phys, extra);
+    emit(EventCategory::Hypervisor, msg, vm_id);
+}
+
+/// Emit a VM register snapshot (for introspection panel)
+pub fn emit_vm_regs(vm_id: u64, rax: u64, rbx: u64, rcx: u64, rdx: u64, rip: u64, rsp: u64) {
+    if !super::LAB_ACTIVE.load(Ordering::Relaxed) {
+        return;
+    }
+    let msg = alloc::format!(
+        "[VM {}] REGS RAX=0x{:X} RBX=0x{:X} RCX=0x{:X} RDX=0x{:X} RIP=0x{:X} RSP=0x{:X}",
+        vm_id, rax, rbx, rcx, rdx, rip, rsp
+    );
+    emit(EventCategory::Hypervisor, msg, vm_id);
 }
 
 /// Read recent events (returns up to `count` most recent events)

@@ -163,6 +163,7 @@ impl PipelineState {
                 EventCategory::Network  => (4, 6),   // FS → Output
                 EventCategory::Security => (1, 5),   // Parser → HW
                 EventCategory::Custom   => (0, 6),   // Input → Output
+                EventCategory::Hypervisor => (5, 6), // HW → Output (VM events)
             };
             
             // Light up both stages

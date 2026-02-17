@@ -148,20 +148,15 @@ impl EptManager {
         
         // Pour simplifier, utiliser des pages de 2MB
         // Chaque entrée PD couvre 2MB
-        // Chaque entrée PDPT couvre 1GB
+        // Chaque entrée PDPT couvre 1GB (512 * 2MB)
         // Chaque entrée PML4 couvre 512GB
         
         let pages_2mb = (size + 0x1FFFFF) / 0x200000; // Nombre de pages 2MB
-        let pdpts_needed = (pages_2mb + 511) / 512;
+        let pdpts_needed = ((pages_2mb + 511) / 512).max(1);
         
-        // Créer les PDPT nécessaires
+        // Créer les PDPT et PD tables nécessaires
         for pdpt_idx in 0..pdpts_needed {
-            let pdpt = Box::new(EptTable::new());
-            let pdpt_phys = pdpt.as_ref() as *const EptTable as u64;
-            
-            // Créer le PD pour ce PDPT
-            let pd = Box::new(EptTable::new());
-            let pd_phys = pd.as_ref() as *const EptTable as u64;
+            let mut pd = Box::new(EptTable::new());
             
             // Remplir le PD avec des pages 2MB
             let start_page = pdpt_idx * 512;
@@ -172,49 +167,63 @@ impl EptManager {
                 }
                 
                 let phys_addr = (page_num * 0x200000) as u64;
-                // 2MB page avec RWX
-                let entry = EptEntry::new_large_page(phys_addr);
-                // Note: On doit modifier pd avant de le boxer
+                // 2MB large page avec RWX + WB memory type
+                pd.entries[pd_idx] = EptEntry::new_large_page(phys_addr);
             }
             
-            self.pds.push(pd);
-            self.pdpts.push(pdpt);
-        }
-        
-        // Configurer PML4 -> PDPT
-        for (i, pdpt) in self.pdpts.iter().enumerate() {
-            let pdpt_phys = pdpt.as_ref() as *const EptTable as u64;
-            self.pml4.entries[i] = EptEntry::new_table(pdpt_phys);
-        }
-        
-        // Configurer PDPT -> PD
-        for (i, pd) in self.pds.iter().enumerate() {
             let pd_phys = pd.as_ref() as *const EptTable as u64;
-            if i < self.pdpts.len() * 512 {
-                let pdpt_idx = i / 512;
-                let entry_idx = i % 512;
-                if pdpt_idx < self.pdpts.len() {
-                    // Note: On ne peut pas modifier après avoir boxé
-                    // Pour une vraie implémentation, il faudrait une approche différente
-                }
-            }
+            self.pds.push(pd);
+            
+            // Créer le PDPT et pointer vers le PD
+            let mut pdpt = Box::new(EptTable::new());
+            pdpt.entries[0] = EptEntry::new_table(pd_phys);
+            
+            let pdpt_phys = pdpt.as_ref() as *const EptTable as u64;
+            self.pdpts.push(pdpt);
+            
+            // Configurer PML4 -> PDPT
+            self.pml4.entries[pdpt_idx] = EptEntry::new_table(pdpt_phys);
         }
         
-        crate::serial_println!("[EPT] Identity mapping configured");
+        crate::serial_println!("[EPT] Identity mapping configured: {} 2MB pages, {} PDPT(s)", 
+                              pages_2mb, pdpts_needed);
         
         Ok(())
     }
     
     /// Mapper une page physique du guest vers une page physique de l'host
-    pub fn map_page(&mut self, guest_phys: u64, host_phys: u64, flags: u64) -> Result<()> {
+    pub fn map_page(&mut self, guest_phys: u64, host_phys: u64, _flags: u64) -> Result<()> {
         // Calculer les indices dans chaque niveau
         let pml4_idx = ((guest_phys >> 39) & 0x1FF) as usize;
         let pdpt_idx = ((guest_phys >> 30) & 0x1FF) as usize;
         let pd_idx = ((guest_phys >> 21) & 0x1FF) as usize;
-        let pt_idx = ((guest_phys >> 12) & 0x1FF) as usize;
         
-        // Pour l'instant, on utilise le mapping identité
-        // TODO: Implémenter le mapping complet avec allocation de tables
+        // Ensure PML4 entry exists → PDPT
+        if !self.pml4.entries[pml4_idx].is_present() {
+            let pdpt = Box::new(EptTable::new());
+            let pdpt_phys = pdpt.as_ref() as *const EptTable as u64;
+            self.pml4.entries[pml4_idx] = EptEntry::new_table(pdpt_phys);
+            self.pdpts.push(pdpt);
+        }
+        
+        // For 2MB large page mapping: write directly into PD
+        // Get PDPT physical, find/create PD
+        let pdpt_table_phys = self.pml4.entries[pml4_idx].phys_addr();
+        let pdpt_table = unsafe { &mut *(pdpt_table_phys as *mut EptTable) };
+        
+        if !pdpt_table.entries[pdpt_idx].is_present() {
+            let pd = Box::new(EptTable::new());
+            let pd_phys = pd.as_ref() as *const EptTable as u64;
+            pdpt_table.entries[pdpt_idx] = EptEntry::new_table(pd_phys);
+            self.pds.push(pd);
+        }
+        
+        let pd_table_phys = pdpt_table.entries[pdpt_idx].phys_addr();
+        let pd_table = unsafe { &mut *(pd_table_phys as *mut EptTable) };
+        
+        // Map as 2MB large page (aligned)
+        let aligned_host = host_phys & !0x1FFFFF;
+        pd_table.entries[pd_idx] = EptEntry::new_large_page(aligned_host);
         
         Ok(())
     }

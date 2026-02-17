@@ -176,6 +176,78 @@ pub fn shell_guest() -> Vec<u8> {
     code
 }
 
+/// Protected-mode guest that tests I/O, CR writes, and HLT
+/// Use with setup_protected_mode(0x1000, 0x8000)
+pub fn guest_protected_mode_test() -> Vec<u8> {
+    let mut code = Vec::new();
+    
+    // 32-bit protected mode code
+    // Print banner via COM1 serial (port 0x3F8) — tests I/O emulation
+    let banner = b"[TrustVM] Protected mode guest running!\r\n";
+    for &byte in banner {
+        // MOV DX, 0x3F8
+        code.extend_from_slice(&[0x66, 0xBA, 0xF8, 0x03]);
+        // MOV AL, byte
+        code.extend_from_slice(&[0xB0, byte]);
+        // OUT DX, AL
+        code.push(0xEE);
+    }
+    
+    // Also print via debug port 0xE9
+    for &byte in b"[PM-test] I/O OK\n" {
+        code.extend_from_slice(&[0xB0, byte]);  // MOV AL, imm8
+        code.extend_from_slice(&[0xE6, 0xE9]);  // OUT 0xE9, AL
+    }
+    
+    // Read PIC mask — IN AL, 0x21
+    code.extend_from_slice(&[0xE4, 0x21]); // IN AL, 0x21 (PIC1 data)
+    
+    // Write PIC mask — OUT 0x21, AL (mask all IRQs)
+    code.extend_from_slice(&[0xB0, 0xFF]); // MOV AL, 0xFF
+    code.extend_from_slice(&[0xE6, 0x21]); // OUT 0x21, AL
+    
+    // Print CR test message
+    for &byte in b"[PM-test] CR write test\n" {
+        code.extend_from_slice(&[0xB0, byte]);
+        code.extend_from_slice(&[0xE6, 0xE9]);
+    }
+    
+    // Read CR0 into EAX
+    code.extend_from_slice(&[0x0F, 0x20, 0xC0]); // MOV EAX, CR0
+    // Set NE bit (bit 5) — numeric error
+    code.extend_from_slice(&[0x0D, 0x20, 0x00, 0x00, 0x00]); // OR EAX, 0x20
+    // Write back CR0
+    code.extend_from_slice(&[0x0F, 0x22, 0xC0]); // MOV CR0, EAX
+    
+    // Print success
+    for &byte in b"[PM-test] CR0 write OK\n" {
+        code.extend_from_slice(&[0xB0, byte]);
+        code.extend_from_slice(&[0xE6, 0xE9]);
+    }
+    
+    // Test HLT (should get timer interrupt injected)
+    for &byte in b"[PM-test] HLT test\n" {
+        code.extend_from_slice(&[0xB0, byte]);
+        code.extend_from_slice(&[0xE6, 0xE9]);
+    }
+    code.push(0xF4); // HLT
+    
+    // After waking from HLT, print and exit
+    for &byte in b"[PM-test] Woke from HLT!\n" {
+        code.extend_from_slice(&[0xB0, byte]);
+        code.extend_from_slice(&[0xE6, 0xE9]);
+    }
+    
+    // Exit via VMMCALL (AMD: 0F 01 D9)
+    code.extend_from_slice(&[0xB8, 0x01, 0x00, 0x00, 0x00]); // MOV EAX, 1 (exit)
+    code.extend_from_slice(&[0x0F, 0x01, 0xD9]); // VMMCALL
+    
+    // HLT fallback
+    code.push(0xF4);
+    
+    code
+}
+
 /// 64-bit guest code template
 /// Returns (code, entry_offset)
 pub fn guest_64bit_hello() -> Vec<u8> {
@@ -213,11 +285,12 @@ pub fn get_guest(name: &str) -> Option<Vec<u8>> {
         "cpuid" => Some(cpuid_guest()),
         "shell" => Some(shell_guest()),
         "hello64" => Some(guest_64bit_hello()),
+        "pm-test" | "protected" => Some(guest_protected_mode_test()),
         _ => None,
     }
 }
 
 /// List available guests
 pub fn list_guests() -> &'static [&'static str] {
-    &["hello", "counter", "hypercall", "cpuid", "shell", "hello64"]
+    &["hello", "counter", "hypercall", "cpuid", "shell", "hello64", "pm-test"]
 }

@@ -79,13 +79,13 @@ pub struct SvmVirtualMachine {
     /// Statistics
     pub stats: SvmVmStats,
     /// VMCB (Virtual Machine Control Block)
-    pub vmcb: Option<Box<Vmcb>>,
+    pub(crate) vmcb: Option<Box<Vmcb>>,
     /// NPT (Nested Page Tables)
     npt: Option<Npt>,
     /// Guest physical memory
     guest_memory: Vec<u8>,
     /// Guest general-purpose registers
-    guest_regs: SvmGuestRegs,
+    pub(crate) guest_regs: SvmGuestRegs,
     /// ASID for TLB isolation
     asid: u32,
     /// Console ID for output
@@ -121,6 +121,11 @@ impl SvmVirtualMachine {
         crate::serial_println!("[SVM-VM {}] Created '{}' with {} MB RAM, ASID={}", 
                               id, name, memory_mb, asid);
         
+        // Emit to TrustLab trace bus
+        crate::lab_mode::trace_bus::emit_vm_lifecycle(
+            id, &format!("CREATED '{}' mem={}MB ASID={}", name, memory_mb, asid)
+        );
+        
         // Emit creation event
         super::api::emit_event(
             super::api::VmEventType::Created,
@@ -151,11 +156,21 @@ impl SvmVirtualMachine {
         // Create and setup VMCB
         let mut vmcb = Vmcb::new();
         
-        // Setup basic intercepts
+        // Setup basic intercepts (includes IOIO now)
         vmcb.setup_basic_intercepts();
         
         // Set ASID (must be non-zero for guest)
         vmcb.write_control(control_offsets::GUEST_ASID, self.asid as u64);
+        
+        // Allocate IOPM (I/O Permission Map) — 12 KB (3 pages)
+        // All bits = 1 means intercept all I/O ports
+        let iopm = alloc::vec![0xFFu8; 12288]; // 12KB, all 1s = intercept everything
+        let iopm_ptr = iopm.as_ptr() as u64;
+        let iopm_phys = iopm_ptr - crate::memory::hhdm_offset();
+        vmcb.set_iopm_base(iopm_phys);
+        // Leak the IOPM allocation so it lives for the duration of the VM
+        core::mem::forget(iopm);
+        crate::serial_println!("[SVM-VM {}] IOPM allocated at HPA=0x{:X}", self.id, iopm_phys);
         
         // Setup NPT if supported
         if self.features.npt {
@@ -303,6 +318,7 @@ impl SvmVirtualMachine {
         self.state = SvmVmState::Running;
         
         crate::serial_println!("[SVM-VM {}] Starting execution...", self.id);
+        crate::lab_mode::trace_bus::emit_vm_lifecycle(self.id, "STARTED");
         
         // Run the VM loop
         self.run_loop()?;
@@ -418,6 +434,9 @@ impl SvmVirtualMachine {
         }
         
         crate::serial_println!("[SVM-VM {}] Stopped after {} VMEXITs", self.id, self.stats.vmexits);
+        crate::lab_mode::trace_bus::emit_vm_lifecycle(
+            self.id, &format!("STOPPED after {} exits", self.stats.vmexits)
+        );
         
         Ok(())
     }
@@ -444,6 +463,11 @@ impl SvmVirtualMachine {
         match exit {
             SvmExitCode::Cpuid => {
                 self.stats.cpuid_exits += 1;
+                // Emit to TrustLab before handling
+                crate::lab_mode::trace_bus::emit_vm_exit(
+                    self.id, "CPUID", guest_rip,
+                    &alloc::format!("EAX=0x{:X} ECX=0x{:X}", self.guest_regs.rax, self.guest_regs.rcx)
+                );
                 self.handle_cpuid();
                 let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                 vmcb.write_state(state_offsets::RIP, next_rip);
@@ -452,16 +476,27 @@ impl SvmVirtualMachine {
             
             SvmExitCode::Hlt => {
                 self.stats.hlt_exits += 1;
-                // For Linux, HLT is used for idle loop - not a fatal exit
-                // We'll continue and let external interrupts wake the guest
-                // In a real implementation, we'd wait for an interrupt
-                // For now, just skip the HLT and continue
-                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
-                vmcb.write_state(state_offsets::RIP, next_rip);
+                crate::lab_mode::trace_bus::emit_vm_exit(self.id, "HLT", guest_rip, "");
+                // For Linux, HLT is used for idle loop - inject a timer interrupt
+                // to wake the guest up and skip the HLT
+                {
+                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                    vmcb.write_state(state_offsets::RIP, next_rip);
+                    // Inject virtual timer interrupt via EVENT_INJ
+                    // Format: [31:0] = vector:8 | type:3 | EV:1 | rsvd:19 | V:1
+                    // type 0 = external interrupt, V=1 = valid
+                    // Only inject periodically to avoid flooding
+                    if self.stats.hlt_exits % 100 == 0 {
+                        let event_inj: u64 = 0x20        // Vector 0x20 (timer)
+                                           | (0 << 8)    // Type 0 = external interrupt
+                                           | (1u64 << 31); // V = valid
+                        vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
+                    }
+                }
                 
                 // If we've done too many HLTs without progress, stop
-                if self.stats.hlt_exits > 1000 {
-                    crate::serial_println!("[SVM-VM {}] Too many HLT exits, stopping", self.id);
+                if self.stats.hlt_exits > 100_000 {
+                    crate::serial_println!("[SVM-VM {}] Too many HLT exits ({}), stopping", self.id, self.stats.hlt_exits);
                     self.state = SvmVmState::Stopped;
                     Ok(false)
                 } else {
@@ -471,6 +506,9 @@ impl SvmVirtualMachine {
             
             SvmExitCode::IoioIn | SvmExitCode::IoioOut => {
                 self.stats.io_exits += 1;
+                let port = ((exit_info1 >> 16) & 0xFFFF) as u16;
+                let dir = if matches!(exit, SvmExitCode::IoioIn) { "IN" } else { "OUT" };
+                crate::lab_mode::trace_bus::emit_vm_io(self.id, dir, port, self.guest_regs.rax);
                 self.handle_io(exit_info1);
                 let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                 vmcb.write_state(state_offsets::RIP, next_rip);
@@ -480,6 +518,11 @@ impl SvmVirtualMachine {
             SvmExitCode::MsrRead | SvmExitCode::MsrWrite => {
                 self.stats.msr_exits += 1;
                 let is_write = matches!(exit, SvmExitCode::MsrWrite);
+                let msr_dir = if is_write { "WRMSR" } else { "RDMSR" };
+                crate::lab_mode::trace_bus::emit_vm_exit(
+                    self.id, msr_dir, guest_rip,
+                    &alloc::format!("MSR=0x{:X}", self.guest_regs.rcx)
+                );
                 self.handle_msr(is_write);
                 let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                 vmcb.write_state(state_offsets::RIP, next_rip);
@@ -490,6 +533,9 @@ impl SvmVirtualMachine {
                 self.stats.npf_exits += 1;
                 let guest_phys = exit_info2;
                 let error_code = exit_info1;
+                crate::lab_mode::trace_bus::emit_vm_memory(
+                    self.id, "NPF_VIOLATION", guest_phys, error_code
+                );
                 crate::serial_println!("[SVM-VM {}] NPF: GPA=0x{:X}, Error=0x{:X}", 
                                       self.id, guest_phys, error_code);
                 
@@ -508,6 +554,12 @@ impl SvmVirtualMachine {
             
             SvmExitCode::Vmmcall => {
                 self.stats.vmmcall_exits += 1;
+                crate::lab_mode::trace_bus::emit_vm_exit(
+                    self.id, "VMMCALL", guest_rip,
+                    &alloc::format!("func=0x{:X} args=({:X},{:X},{:X})",
+                        self.guest_regs.rax, self.guest_regs.rbx,
+                        self.guest_regs.rcx, self.guest_regs.rdx)
+                );
                 let should_continue = self.handle_vmmcall();
                 let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                 vmcb.write_state(state_offsets::RIP, next_rip);
@@ -515,6 +567,7 @@ impl SvmVirtualMachine {
             }
             
             SvmExitCode::Shutdown => {
+                crate::lab_mode::trace_bus::emit_vm_lifecycle(self.id, "TRIPLE FAULT (shutdown)");
                 crate::serial_println!("[SVM-VM {}] Guest SHUTDOWN (triple fault)", self.id);
                 self.state = SvmVmState::Crashed;
                 Ok(false)
@@ -522,7 +575,70 @@ impl SvmVirtualMachine {
             
             SvmExitCode::Intr => {
                 self.stats.intr_exits += 1;
-                // External interrupt - just continue
+                // External interrupt - just continue (don't emit, too noisy)
+                Ok(true)
+            }
+            
+            // CR write intercepts — allow the write and continue
+            SvmExitCode::WriteCr0 => {
+                // Guest wants to write CR0 (e.g., enabling paging, FPU setup)
+                // The new value is in exit_info1 (for MOV-to-CR) or we need to decode
+                // With NPT enabled, most CR0 writes are safe to allow
+                let new_cr0 = exit_info1;
+                crate::lab_mode::trace_bus::emit_vm_exit(
+                    self.id, "WRITE_CR0", guest_rip,
+                    &alloc::format!("val=0x{:X}", new_cr0)
+                );
+                {
+                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                    // Write the value the guest wants into the VMCB CR0
+                    // Ensure PE (bit 0) stays set in protected mode
+                    let safe_cr0 = new_cr0 | 0x10; // Keep ET bit set
+                    vmcb.set_cr0(safe_cr0);
+                    vmcb.write_state(state_offsets::RIP, next_rip);
+                }
+                Ok(true)
+            }
+            
+            SvmExitCode::WriteCr3 => {
+                // Guest is switching page tables (e.g., context switch)
+                let new_cr3 = exit_info1;
+                {
+                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                    vmcb.set_cr3(new_cr3);
+                    vmcb.write_state(state_offsets::RIP, next_rip);
+                }
+                Ok(true)
+            }
+            
+            SvmExitCode::WriteCr4 => {
+                // Guest writing CR4 (PAE, PSE, etc.)
+                let new_cr4 = exit_info1;
+                crate::lab_mode::trace_bus::emit_vm_exit(
+                    self.id, "WRITE_CR4", guest_rip,
+                    &alloc::format!("val=0x{:X}", new_cr4)
+                );
+                {
+                    let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                    vmcb.set_cr4(new_cr4);
+                    vmcb.write_state(state_offsets::RIP, next_rip);
+                }
+                Ok(true)
+            }
+            
+            // CR read intercepts — let them read the current VMCB value
+            SvmExitCode::ReadCr0 | SvmExitCode::ReadCr3 | SvmExitCode::ReadCr4 => {
+                // The hardware handles CR reads via VMCB state save area
+                // Just advance RIP
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
+                Ok(true)
+            }
+            
+            SvmExitCode::Cr0SelWrite => {
+                // Selective CR0 write (LMSW, CLTS) — allow it
+                let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                vmcb.write_state(state_offsets::RIP, next_rip);
                 Ok(true)
             }
             
@@ -574,7 +690,7 @@ impl SvmVirtualMachine {
     fn handle_io(&mut self, info1: u64) {
         let is_in = (info1 & 1) != 0;
         let port = ((info1 >> 16) & 0xFFFF) as u16;
-        let size = match (info1 >> 4) & 0x7 {
+        let _size = match (info1 >> 4) & 0x7 {
             0 => 1, // Byte
             1 => 2, // Word
             2 => 4, // Dword
@@ -584,49 +700,137 @@ impl SvmVirtualMachine {
         if is_in {
             // IN instruction - return appropriate data for each port
             let value: u32 = match port {
-                // COM1 serial port
+                // ── COM1 serial port (0x3F8-0x3FF) ───────────────────
                 0x3F8 => 0,                     // Data register - no data available
-                0x3F9 => 0,                     // Interrupt enable
-                0x3FA => 0x01,                  // Interrupt identification (no interrupt pending)
-                0x3FB => 0x03,                  // Line control (8N1)
-                0x3FC => 0x03,                  // Modem control
-                0x3FD => 0x60,                  // Line status: TX empty + TX holding empty
-                0x3FE => 0xB0,                  // Modem status
+                0x3F9 => 0,                     // Interrupt enable register
+                0x3FA => 0xC1,                  // IIR: FIFO enabled, no interrupt pending
+                0x3FB => 0x03,                  // LCR: 8N1
+                0x3FC => 0x03,                  // MCR: DTR + RTS
+                0x3FD => 0x60,                  // LSR: TX empty + TX holding empty
+                0x3FE => 0xB0,                  // MSR: CTS + DSR
                 0x3FF => 0,                     // Scratch register
                 
-                // Keyboard/mouse
+                // ── COM2 serial (0x2F8-0x2FF) ─────────────────────────
+                0x2F8..=0x2FF => match port & 0x7 {
+                    5 => 0x60, // LSR: TX empty
+                    _ => 0,
+                },
+                
+                // ── Keyboard controller (8042) ────────────────────────
                 0x60 => 0,                      // Keyboard data
-                0x64 => 0x1C,                   // Keyboard status (input buffer empty)
+                0x64 => 0x1C,                   // Status: input buffer empty, self-test passed
                 
-                // PIC (Programmable Interrupt Controller)
-                0x20 | 0x21 | 0xA0 | 0xA1 => 0,
+                // ── PIC (8259A) ───────────────────────────────────
+                0x20 => 0,                      // Master PIC: command/status
+                0x21 => 0xFF,                   // Master PIC: data (all IRQs masked)
+                0xA0 => 0,                      // Slave PIC: command/status
+                0xA1 => 0xFF,                   // Slave PIC: data (all IRQs masked)
                 
-                // PIT (Programmable Interval Timer)
-                0x40..=0x43 => 0,
+                // ── PIT (8254) timer ──────────────────────────────
+                0x40 => 0,                      // Counter 0 (system timer)
+                0x41 => 0,                      // Counter 1 (refresh)
+                0x42 => 0,                      // Counter 2 (speaker)
+                0x43 => 0,                      // Control word
+                0x61 => 0x20,                   // NMI status / speaker control
                 
-                // CMOS
-                0x70 | 0x71 => 0,
+                // ── CMOS/RTC ──────────────────────────────────────
+                0x70 => 0,
+                0x71 => {
+                    // Return sensible CMOS values
+                    0x00 // Default: 0
+                }
                 
-                _ => 0xFF,
+                // ── DMA controllers ───────────────────────────────
+                0x00..=0x0F | 0x80..=0x8F | 0xC0..=0xDF => 0,
+                
+                // ── VGA / display ─────────────────────────────────
+                0x3B0..=0x3DF => 0,             // VGA registers
+                
+                // ── PCI config space ──────────────────────────────
+                0xCF8 => 0xFFFF_FFFF,           // PCI config addr (no devices)
+                0xCFC..=0xCFF => 0xFFFF_FFFF,   // PCI config data (no devices)
+                
+                // ── ACPI / power management ───────────────────────
+                0xB000..=0xB03F => 0,           // ACPI PM base
+                
+                // ── Debug / misc ──────────────────────────────────
+                0xE9 => 0,                      // Bochs debug port
+                0xED => 0,                      // I/O delay port
+                0x92 => 0x02,                   // Fast A20 gate (A20 enabled)
+                
+                _ => {
+                    // Unknown port — log first few then be silent
+                    if self.stats.io_exits < 50 {
+                        crate::serial_println!("[SVM-VM {}] Unhandled IN port 0x{:X}", self.id, port);
+                    }
+                    0xFF
+                }
             };
-            self.guest_regs.rax = (self.guest_regs.rax & !0xFF) | (value as u64 & 0xFF);
+            self.guest_regs.rax = (self.guest_regs.rax & !0xFFFF_FFFF) | (value as u64);
         } else {
             // OUT instruction
             let value = self.guest_regs.rax as u32;
             
-            // Handle serial output - write directly to physical serial port
-            if port == 0x3F8 && size == 1 {
-                let ch = (value & 0xFF) as u8;
+            match port {
+                // Serial output — write directly to physical serial port
+                0x3F8 => {
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
+                    if let Some(console_id) = self.console_id {
+                        super::console::write_char(console_id, ch as char);
+                    }
+                }
+                // COM2 serial output
+                0x2F8 => {
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
+                }
+                // Serial config writes — accept silently
+                0x3F9..=0x3FF | 0x2F9..=0x2FF => {}
                 
-                // Write to TrustOS serial port for real-time output
-                crate::serial_print!("{}", ch as char);
+                // PIC programming — accept silently (ICW1-ICW4, OCW1-OCW3)
+                0x20 | 0x21 | 0xA0 | 0xA1 => {}
                 
-                // Also write to VM console buffer
-                if let Some(console_id) = self.console_id {
-                    super::console::write_char(console_id, ch as char);
+                // PIT programming — accept silently
+                0x40..=0x43 => {}
+                
+                // CMOS — accept silently
+                0x70 | 0x71 => {}
+                
+                // NMI / speaker control
+                0x61 => {}
+                
+                // Keyboard controller commands
+                0x60 | 0x64 => {}
+                
+                // DMA
+                0x00..=0x0F | 0x80..=0x8F | 0xC0..=0xDF => {}
+                
+                // VGA
+                0x3B0..=0x3DF => {}
+                
+                // PCI config
+                0xCF8..=0xCFF => {}
+                
+                // Fast A20 gate
+                0x92 => {}
+                
+                // Debug ports
+                0xE9 => {
+                    let ch = (value & 0xFF) as u8;
+                    crate::serial_print!("{}", ch as char);
+                }
+                0xED => {} // I/O delay, do nothing
+                
+                // ACPI
+                0xB000..=0xB03F => {}
+                
+                _ => {
+                    if self.stats.io_exits < 50 {
+                        crate::serial_println!("[SVM-VM {}] Unhandled OUT port 0x{:X} val=0x{:X}", self.id, port, value);
+                    }
                 }
             }
-            // Ignore other port writes silently (PIC, PIT, etc.)
         }
     }
     

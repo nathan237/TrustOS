@@ -241,6 +241,10 @@ impl VirtualMachine {
         match exit_reason {
             exit_reason::CPUID => {
                 self.stats.cpuid_exits += 1;
+                crate::lab_mode::trace_bus::emit_vm_exit(
+                    self.id, "CPUID", guest_rip,
+                    &alloc::format!("EAX=0x{:X}", self.guest_regs.rax)
+                );
                 self.handle_cpuid()?;
                 // Avancer RIP après CPUID (2 bytes)
                 let vmcs = self.vmcs.as_ref().unwrap();
@@ -250,12 +254,16 @@ impl VirtualMachine {
             
             exit_reason::HLT => {
                 self.stats.hlt_exits += 1;
+                crate::lab_mode::trace_bus::emit_vm_exit(self.id, "HLT", guest_rip, "");
                 crate::serial_println!("[VM {}] Guest executed HLT at 0x{:X}", self.id, guest_rip);
                 Ok(false) // Arrêter la VM
             }
             
             exit_reason::IO_INSTRUCTION => {
                 self.stats.io_exits += 1;
+                let port = ((exit_qual >> 16) & 0xFFFF) as u16;
+                let dir = if (exit_qual & 8) == 0 { "OUT" } else { "IN" };
+                crate::lab_mode::trace_bus::emit_vm_io(self.id, dir, port, self.guest_regs.rax);
                 self.handle_io(exit_qual)?;
                 let vmcs = self.vmcs.as_ref().unwrap();
                 vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
@@ -275,6 +283,10 @@ impl VirtualMachine {
                 let vmcs = self.vmcs.as_ref().unwrap();
                 let guest_phys = vmcs.read(fields::GUEST_PHYSICAL_ADDRESS)?;
                 let guest_linear = vmcs.read(fields::GUEST_LINEAR_ADDRESS).ok();
+                
+                crate::lab_mode::trace_bus::emit_vm_memory(
+                    self.id, "EPT_VIOLATION", guest_phys, exit_qual
+                );
                 
                 // Record the violation in isolation module
                 super::isolation::record_violation(
@@ -296,6 +308,10 @@ impl VirtualMachine {
             }
             
             exit_reason::VMCALL => {
+                crate::lab_mode::trace_bus::emit_vm_exit(
+                    self.id, "VMCALL", guest_rip,
+                    &alloc::format!("func=0x{:X}", self.guest_regs.rax)
+                );
                 // Hypercall depuis le guest
                 let result = self.handle_vmcall()?;
                 let vmcs = self.vmcs.as_ref().unwrap();
@@ -304,6 +320,7 @@ impl VirtualMachine {
             }
             
             exit_reason::TRIPLE_FAULT => {
+                crate::lab_mode::trace_bus::emit_vm_lifecycle(self.id, "TRIPLE FAULT (crashed)");
                 crate::serial_println!("[VM {}] TRIPLE FAULT! Guest crashed.", self.id);
                 self.state = VmState::Crashed;
                 Ok(false)

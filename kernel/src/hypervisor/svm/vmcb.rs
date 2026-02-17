@@ -667,6 +667,11 @@ impl Vmcb {
         self.set_tr(0x18, 0x008B, 0xFFFF, 0);
         self.set_ldtr(0, 0x0082, 0xFFFF, 0);
         
+        // GDTR: point to GDT at GPA 0x1000 (3 entries × 8 bytes = 24 bytes)
+        self.set_gdtr(23, 0x1000);
+        // IDTR: no IDT initially (Linux will set up its own)
+        self.set_idtr(0, 0);
+        
         self.set_cr0(0x60000011);  // PE=1 (Protected mode)
         self.set_rflags(0x00000002);
         self.set_rip(entry_point);
@@ -687,6 +692,10 @@ impl Vmcb {
         
         self.set_tr(0x18, 0x008B, 0xFFFF, 0);
         self.set_ldtr(0, 0x0082, 0xFFFF, 0);
+        
+        // GDTR: point to GDT at GPA 0x1000
+        self.set_gdtr(23, 0x1000);
+        self.set_idtr(0, 0);
         
         // CR0: PE + PG (paging enabled)
         self.set_cr0(0x80000011);
@@ -710,9 +719,10 @@ impl Vmcb {
     
     /// Set up basic intercepts for hypercall-based VM
     pub fn setup_basic_intercepts(&mut self) {
-        // Intercept: CPUID, HLT, VMMCALL, MSR, shutdown
+        // Intercept: CPUID, HLT, I/O, MSR, shutdown
         let intercepts1 = intercepts::CPUID 
             | intercepts::HLT 
+            | intercepts::IOIO
             | intercepts::MSR 
             | intercepts::SHUTDOWN;
         

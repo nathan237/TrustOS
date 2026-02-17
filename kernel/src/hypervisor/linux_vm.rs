@@ -572,50 +572,48 @@ impl LinuxVm {
     
     /// Boot with AMD SVM
     fn boot_with_svm(&mut self, entry_point: u64) -> Result<()> {
-        use super::svm_vm::SvmVirtualMachine;
+        use super::svm_vm;
         
-        // Create SVM VM
-        let mut vm = SvmVirtualMachine::new("linux-guest", self.config.memory_mb)?;
+        // Create SVM VM via the global API (registers in SVM_VMS for Inspector)
+        let vm_id = svm_vm::create_vm("linux-guest", self.config.memory_mb)?;
         
-        // Initialize VMCB and NPT
-        vm.initialize()?;
+        crate::serial_println!("[LINUX-VM {}] SVM VM #{} created, loading {} MB...", 
+            self.id, vm_id, self.guest_memory.len() / (1024 * 1024));
         
-        let mem_size = self.guest_memory.len();
+        // Initialize, load memory, and configure via `with_vm`
+        let boot_result = svm_vm::with_vm(vm_id, |vm| -> Result<()> {
+            // Initialize VMCB and NPT
+            vm.initialize()?;
+            
+            // Load the prepared memory into SVM VM
+            vm.load_binary(&self.guest_memory, 0)?;
+            
+            // Setup protected mode with Linux entry point
+            vm.setup_protected_mode_for_linux(
+                entry_point, 
+                boot_proto::INIT_STACK,
+                boot_proto::BOOT_PARAMS_ADDR
+            )?;
+            
+            crate::serial_println!("[LINUX-VM {}] Starting Linux kernel execution...", self.id);
+            crate::serial_println!("[LINUX-VM {}] Entry: 0x{:X}, Boot params: 0x{:X}", 
+                self.id, entry_point, boot_proto::BOOT_PARAMS_ADDR);
+            
+            // Start the VM
+            vm.start()
+        });
         
-        crate::serial_println!("[LINUX-VM {}] Loading {} MB into SVM VM...", 
-            self.id, mem_size / (1024 * 1024));
-        
-        // Load the prepared memory into SVM VM
-        vm.load_binary(&self.guest_memory, 0)?;
-        
-        // Setup protected mode with Linux entry point
-        // Linux 32-bit entry expects:
-        // - CS = 0x10 (code segment selector)  
-        // - DS/ES/SS = 0x18 (data segment selector)
-        // - ESI = boot_params pointer (0x10000)
-        // - EIP = entry point (0x100000)
-        
-        vm.setup_protected_mode_for_linux(
-            entry_point, 
-            boot_proto::INIT_STACK,
-            boot_proto::BOOT_PARAMS_ADDR
-        )?;
-        
-        crate::serial_println!("[LINUX-VM {}] Starting Linux kernel execution...", self.id);
-        crate::serial_println!("[LINUX-VM {}] Entry: 0x{:X}, Boot params: 0x{:X}", 
-            self.id, entry_point, boot_proto::BOOT_PARAMS_ADDR);
-        
-        self.running.store(true, Ordering::SeqCst);
-        
-        // Start the VM - this enters the guest and runs until exit
-        // VMEXIT handling for serial I/O is done in svm_vm.rs
-        match vm.start() {
-            Ok(()) => {
+        match boot_result {
+            Some(Ok(())) => {
                 crate::serial_println!("[LINUX-VM {}] VM execution completed", self.id);
             }
-            Err(e) => {
+            Some(Err(e)) => {
                 crate::serial_println!("[LINUX-VM {}] VM execution failed: {:?}", self.id, e);
                 return Err(e);
+            }
+            None => {
+                crate::serial_println!("[LINUX-VM {}] Could not find VM #{}", self.id, vm_id);
+                return Err(HypervisorError::VmNotFound);
             }
         }
         

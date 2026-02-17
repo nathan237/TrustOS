@@ -188,8 +188,11 @@ pub fn free_frame(phys: u64) {
 pub fn alloc_frame_zeroed() -> Option<u64> {
     let phys = alloc_frame()?;
     let hhdm = crate::memory::hhdm_offset();
+    let virt = phys + hhdm;
+    crate::serial_println!("[FRAME] alloc_zeroed: phys={:#x} hhdm={:#x} virt={:#x}", phys, hhdm, virt);
+    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
     unsafe {
-        core::ptr::write_bytes((phys + hhdm) as *mut u8, 0, FRAME_SIZE as usize);
+        core::ptr::write_bytes(virt as *mut u8, 0, FRAME_SIZE as usize);
     }
     Some(phys)
 }

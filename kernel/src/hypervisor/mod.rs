@@ -36,6 +36,9 @@ pub mod vpid;
 pub mod isolation;
 pub mod branding;
 
+// Phase 6: Virtual Machine Introspection
+pub mod vmi;
+
 // Phase 5: Linux Subsystem (TSL)
 pub mod virtio_console;
 pub mod linux_subsystem;
@@ -335,15 +338,22 @@ pub fn start_vm_with_guest(vm_id: u64, guest_name: &str) -> Result<()> {
             let guest_data = guests::get_guest(guest_name)
                 .ok_or(HypervisorError::VmNotFound)?;
             
+            let is_protected = guest_name == "pm-test" || guest_name == "protected";
+            
             svm_vm::with_vm(vm_id, |vm| {
                 // Initialize if needed
                 if vm.vmcb.is_none() {
                     vm.initialize()?;
                 }
-                // Load binary at 0x1000 (typical real-mode boot)
+                // Load binary at 0x1000
                 vm.load_binary(&guest_data, 0x1000)?;
-                // Setup real mode and start
-                vm.setup_real_mode(0x1000)?;
+                if is_protected {
+                    // Protected mode: entry=0x1000, stack=0x8000
+                    vm.setup_protected_mode(0x1000, 0x8000)?;
+                } else {
+                    // Real mode (default)
+                    vm.setup_real_mode(0x1000)?;
+                }
                 vm.start()
             }).unwrap_or(Err(HypervisorError::VmNotFound))?;
             Ok(())

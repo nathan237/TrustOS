@@ -26,6 +26,7 @@ pub mod pipeline;
 pub mod hex_editor;
 pub mod demo;
 pub mod ux_test;
+pub mod vm_inspector;
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -75,6 +76,7 @@ pub enum PanelId {
     TrustLangEditor = 4,
     Pipeline = 5,
     HexEditor = 6,
+    VmInspector = 7,
 }
 
 impl PanelId {
@@ -86,7 +88,8 @@ impl PanelId {
             3 => PanelId::FileTree,
             4 => PanelId::TrustLangEditor,
             5 => PanelId::Pipeline,
-            _ => PanelId::HexEditor,
+            6 => PanelId::HexEditor,
+            _ => PanelId::VmInspector,
         }
     }
     
@@ -99,6 +102,7 @@ impl PanelId {
             PanelId::TrustLangEditor => "⌨ TrustLang Editor",
             PanelId::Pipeline => "⚙ Pipeline View",
             PanelId::HexEditor => "🔍 Hex Editor",
+            PanelId::VmInspector => "🖥 VM Inspector",
         }
     }
     
@@ -111,14 +115,16 @@ impl PanelId {
             PanelId::TrustLangEditor => COL_PURPLE,
             PanelId::Pipeline => COL_YELLOW,
             PanelId::HexEditor => COL_RED,
+            PanelId::VmInspector => 0xFFFF6B6B,
         }
     }
 
     /// All module types in order
-    pub fn all() -> [PanelId; 7] {
+    pub fn all() -> [PanelId; 8] {
         [
             PanelId::HardwareStatus, PanelId::KernelTrace, PanelId::CommandGuide,
-            PanelId::FileTree, PanelId::TrustLangEditor, PanelId::Pipeline, PanelId::HexEditor,
+            PanelId::FileTree, PanelId::TrustLangEditor, PanelId::Pipeline,
+            PanelId::HexEditor, PanelId::VmInspector,
         ]
     }
 
@@ -132,12 +138,16 @@ impl PanelId {
             PanelId::TrustLangEditor => "TrustLang",
             PanelId::Pipeline => "Pipeline",
             PanelId::HexEditor => "Hex Editor",
+            PanelId::VmInspector => "VM Inspector",
         }
     }
 
     /// Category label for switcher UI
     pub fn category(&self) -> &'static str {
-        "Core"
+        match self {
+            PanelId::VmInspector => "Hypervisor",
+            _ => "Core",
+        }
     }
 }
 
@@ -204,6 +214,7 @@ pub struct LabState {
     pub editor_state: editor::EditorState,
     pub pipeline_state: pipeline::PipelineState,
     pub hex_state: hex_editor::HexEditorState,
+    pub vm_inspector_state: vm_inspector::VmInspectorState,
     pub demo_state: demo::DemoState,
     /// Frame counter
     pub frame: u64,
@@ -227,6 +238,7 @@ impl LabState {
             editor_state: editor::EditorState::new(),
             pipeline_state: pipeline::PipelineState::new(),
             hex_state: hex_editor::HexEditorState::new(),
+            vm_inspector_state: vm_inspector::VmInspectorState::new(),
             demo_state: demo::DemoState::new(),
             frame: 0,
             auto_scroll: true,
@@ -299,6 +311,7 @@ impl LabState {
             PanelId::TrustLangEditor => self.editor_state.handle_key(key),
             PanelId::Pipeline => self.pipeline_state.handle_key(key),
             PanelId::HexEditor => self.hex_state.handle_key(key),
+            PanelId::VmInspector => self.vm_inspector_state.handle_key(key),
         }
     }
     
@@ -355,6 +368,9 @@ impl LabState {
             }
             "hex" | "hexedit" | "hexdump" => {
                 self.focus_module(PanelId::HexEditor);
+            }
+            "vm" | "vmi" | "inspector" | "hypervisor" => {
+                self.focus_module(PanelId::VmInspector);
             }
             _ if cmd.starts_with("hex ") => {
                 let path = raw[4..].trim();
@@ -494,6 +510,7 @@ impl LabState {
             PanelId::TrustLangEditor => self.editor_state.handle_click(lx, ly, w, h),
             PanelId::Pipeline => self.pipeline_state.handle_click(lx, ly, w, h),
             PanelId::HexEditor => self.hex_state.handle_click(lx, ly, w, h),
+            PanelId::VmInspector => self.vm_inspector_state.handle_click(lx, ly, w, h),
         }
     }
 
@@ -503,6 +520,7 @@ impl LabState {
         self.hw_state.update();
         self.trace_state.update();
         self.pipeline_state.update();
+        self.vm_inspector_state.update();
         // Demo tick: auto-focus panels
         if let Some(panel_idx) = self.demo_state.tick() {
             // Demo uses original slot indices
@@ -759,6 +777,7 @@ fn draw_module_content(state: &LabState, pid: PanelId, x: i32, y: i32, w: u32, h
         PanelId::TrustLangEditor => editor::draw(&state.editor_state, x, y, w, h),
         PanelId::Pipeline => pipeline::draw(&state.pipeline_state, x, y, w, h),
         PanelId::HexEditor => hex_editor::draw(&state.hex_state, x, y, w, h),
+        PanelId::VmInspector => vm_inspector::draw(&state.vm_inspector_state, x, y, w, h),
     }
 }
 
@@ -840,7 +859,7 @@ fn draw_shell_bar(state: &LabState, x: i32, y: i32, w: u32, h: u32) {
     // Input
     let input_x = x + 8 + (prompt.len() as i32 * char_w());
     if state.shell_input.is_empty() {
-        draw_lab_text(input_x, y + 7, "hw|trace|fs|edit|hex|swap|layout|run|test", COL_DIM);
+        draw_lab_text(input_x, y + 7, "hw|trace|fs|edit|hex|vm|swap|layout|run|test", COL_DIM);
     } else {
         draw_lab_text(input_x, y + 7, &state.shell_input, COL_TEXT);
     }
