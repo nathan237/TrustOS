@@ -284,6 +284,14 @@ pub struct LinuxSubsystem {
     installed_packages: Vec<(&'static str, &'static str)>,   // (name, version)
     /// Whether repo index was fetched
     repo_updated: bool,
+    /// Online mode: real HTTP downloads from package server
+    online_mode: bool,
+    /// Package server URL for real downloads (QEMU user-net gateway)
+    pkg_server: Option<&'static str>,
+    /// Count of files extracted from real downloads
+    real_files_installed: u32,
+    /// Total bytes downloaded
+    total_bytes_downloaded: usize,
 }
 
 impl LinuxSubsystem {
@@ -306,6 +314,10 @@ impl LinuxSubsystem {
             embedded_initramfs: None,
             installed_packages: Vec::new(),
             repo_updated: false,
+            online_mode: false,
+            pkg_server: None,
+            real_files_installed: 0,
+            total_bytes_downloaded: 0,
         }
     }
 
@@ -322,6 +334,168 @@ impl LinuxSubsystem {
     /// Check if a package is installed
     pub fn is_package_installed(&self, name: &str) -> bool {
         self.installed_packages.iter().any(|(n, _)| *n == name)
+    }
+
+    /// Check if the network is available for real package downloads.
+    /// Check if network is ready. Starts DHCP if a NIC is present.
+    fn check_network(&self) -> bool {
+        // Already bound?
+        if crate::netstack::dhcp::is_bound() {
+            return true;
+        }
+        // Is there a real NIC driver active?
+        let has_e1000 = crate::drivers::net::has_driver();
+        let has_virtio = crate::virtio_net::is_initialized();
+        if !has_e1000 && !has_virtio {
+            return false;
+        }
+        // Start DHCP
+        crate::netstack::dhcp::start();
+        // Wait up to 3 seconds
+        let start = crate::logger::get_ticks();
+        loop {
+            crate::netstack::poll();
+            if crate::netstack::dhcp::is_bound() {
+                return true;
+            }
+            let elapsed = crate::logger::get_ticks().saturating_sub(start);
+            if elapsed > 3000 {
+                return false;
+            }
+            for _ in 0..10000 { core::hint::spin_loop(); }
+        }
+    }
+
+    /// Detect package server: try QEMU user-net (10.0.2.2), then VirtualBox (192.168.56.1)
+    fn detect_pkg_server(&self) -> Option<&'static str> {
+        // Try QEMU SLIRP gateway first
+        let servers: &[&str] = &[
+            "http://10.0.2.2:8080",
+            "http://192.168.56.1:8080",
+        ];
+        for &server in servers {
+            let url = alloc::format!("{}/repo/index", server);
+            crate::serial_println!("[TSL-PKG] Trying server: {}", url);
+            if let Ok(resp) = crate::netstack::http::get(&url) {
+                if resp.status_code == 200 && resp.body.len() > 10 {
+                    crate::serial_println!("[TSL-PKG] Server found: {} ({} bytes index)",
+                        server, resp.body.len());
+                    return Some(match server {
+                        "http://10.0.2.2:8080" => "http://10.0.2.2:8080",
+                        "http://192.168.56.1:8080" => "http://192.168.56.1:8080",
+                        _ => return None,
+                    });
+                }
+            }
+        }
+        None
+    }
+
+    /// Download package bundle from server, returns raw bytes
+    fn download_package(&self, server: &str, name: &str) -> Option<Vec<u8>> {
+        let url = alloc::format!("{}/repo/pool/{}.pkg", server, name);
+        crate::serial_println!("[TSL-PKG] Downloading: {}", url);
+        match crate::netstack::http::get(&url) {
+            Ok(resp) if resp.status_code == 200 && !resp.body.is_empty() => {
+                crate::serial_println!("[TSL-PKG] Downloaded {} bytes for {}", resp.body.len(), name);
+                Some(resp.body)
+            }
+            Ok(resp) => {
+                crate::serial_println!("[TSL-PKG] Server returned {} for {}", resp.status_code, name);
+                None
+            }
+            Err(e) => {
+                crate::serial_println!("[TSL-PKG] Download failed for {}: {}", name, e);
+                None
+            }
+        }
+    }
+
+    /// Extract package bundle into ramfs.
+    /// Bundle format:
+    ///   PKG <name> <version>
+    ///   FILE <path>
+    ///   <content lines...>
+    ///   EOF
+    /// Returns number of files extracted.
+    fn extract_package_to_ramfs(&mut self, data: &[u8]) -> u32 {
+        let text = match core::str::from_utf8(data) {
+            Ok(t) => t,
+            Err(_) => return 0,
+        };
+
+        let mut files_installed = 0u32;
+        let mut current_path: Option<&str> = None;
+        let mut current_content = String::new();
+
+        for line in text.lines() {
+            if line.starts_with("PKG ") {
+                // Package header — skip
+                continue;
+            } else if line.starts_with("FILE ") {
+                // Flush previous file
+                if let Some(path) = current_path {
+                    if self.install_file_to_ramfs(path, current_content.as_bytes()) {
+                        files_installed += 1;
+                    }
+                }
+                current_path = Some(&line[5..]);
+                current_content = String::new();
+            } else if line == "EOF" {
+                // Flush last file
+                if let Some(path) = current_path {
+                    if self.install_file_to_ramfs(path, current_content.as_bytes()) {
+                        files_installed += 1;
+                    }
+                }
+                break;
+            } else {
+                // Content line
+                if current_path.is_some() {
+                    if !current_content.is_empty() {
+                        current_content.push('\n');
+                    }
+                    current_content.push_str(line);
+                }
+            }
+        }
+
+        self.real_files_installed += files_installed;
+        files_installed
+    }
+
+    /// Install a single file to ramfs, creating parent directories as needed
+    fn install_file_to_ramfs(&self, path: &str, content: &[u8]) -> bool {
+        crate::ramfs::with_fs(|fs| {
+            // Create parent directories recursively
+            let mut dir = String::new();
+            let parts: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+            if parts.len() > 1 {
+                for part in &parts[..parts.len() - 1] {
+                    dir.push('/');
+                    dir.push_str(part);
+                    let _ = fs.mkdir(&dir);
+                }
+            }
+            // Create and write the file
+            if fs.touch(path).is_ok() {
+                if fs.write_file(path, content).is_ok() {
+                    crate::serial_println!("[TSL-PKG] Installed: {} ({} bytes)", path, content.len());
+                    return true;
+                }
+            }
+            false
+        })
+    }
+
+    /// Whether we're in online download mode
+    pub fn is_online(&self) -> bool {
+        self.online_mode
+    }
+
+    /// Total bytes downloaded from package server
+    pub fn bytes_downloaded(&self) -> usize {
+        self.total_bytes_downloaded
     }
     
     /// Check if kernel is loaded
@@ -801,14 +975,35 @@ Note: Running in simulated mode (no real Linux kernel)")
         match subcmd {
             "update" => {
                 let mut out = String::new();
-                out.push_str("Hit:1 http://dl-cdn.alpinelinux.org/alpine/v3.19/main x86_64 Packages\n");
-                out.push_str("Hit:2 http://dl-cdn.alpinelinux.org/alpine/v3.19/community x86_64 Packages\n");
-                out.push_str("Hit:3 http://security.alpinelinux.org/alpine/v3.19/main x86_64 Packages\n");
+
+                // Try real network fetch if network is available
+                if self.check_network() {
+                    if let Some(server) = self.detect_pkg_server() {
+                        self.pkg_server = Some(server);
+                        self.online_mode = true;
+                        out.push_str(&format!("Connected to package server: {}\n", server));
+                        out.push_str(&format!("Get:1 {}/repo/index Packages [online]\n", server));
+                    } else {
+                        out.push_str("No package server found, using built-in repository.\n");
+                        self.online_mode = false;
+                    }
+                } else {
+                    self.online_mode = false;
+                }
+
+                if !self.online_mode {
+                    out.push_str("Hit:1 http://dl-cdn.alpinelinux.org/alpine/v3.19/main x86_64 Packages\n");
+                    out.push_str("Hit:2 http://dl-cdn.alpinelinux.org/alpine/v3.19/community x86_64 Packages\n");
+                    out.push_str("Hit:3 http://security.alpinelinux.org/alpine/v3.19/main x86_64 Packages\n");
+                }
                 out.push_str("Reading package lists... Done\n");
                 out.push_str("Building dependency tree... Done\n");
-                out.push_str(&format!("All packages are up to date.\n"));
-                out.push_str(&format!("{} packages can be upgraded. Run 'apt-get upgrade' to see them.\n",
-                    REPO_PACKAGES.len().saturating_sub(self.installed_packages.len()).min(8)));
+                if self.online_mode {
+                    out.push_str(&format!("{} packages available (live).\n", REPO_PACKAGES.len()));
+                } else {
+                    out.push_str(&format!("{} packages can be upgraded. Run 'apt-get upgrade' to see them.\n",
+                        REPO_PACKAGES.len().saturating_sub(self.installed_packages.len()).min(8)));
+                }
                 self.repo_updated = true;
                 Ok(CommandResult::success(out))
             }
@@ -883,21 +1078,46 @@ Note: Running in simulated mode (no real Linux kernel)")
                 out.push_str(&format!("After this operation, {} kB of additional disk space will be used.\n",
                     total_size * 3));
 
-                // Simulate downloads
-                for pkg in &to_install {
-                    out.push_str(&format!("Get:1 http://dl-cdn.alpinelinux.org/alpine/v3.19/main x86_64 {} {} [{} kB]\n",
-                        pkg.name, pkg.version, pkg.size_kb));
-                }
-                out.push_str(&format!("Fetched {} kB in 0s (internal)\n", total_size));
+                // Download packages — real or simulated
+                let server = self.pkg_server;
+                let is_online = self.online_mode && server.is_some();
 
-                // Simulate unpacking
+                for pkg in &to_install {
+                    if is_online {
+                        let srv = server.unwrap();
+                        out.push_str(&format!("Get:1 {}/repo/pool/{}.pkg {} [{} kB]\n",
+                            srv, pkg.name, pkg.version, pkg.size_kb));
+
+                        // Real HTTP download
+                        if let Some(data) = self.download_package(srv, pkg.name) {
+                            let dl_size = data.len();
+                            self.total_bytes_downloaded += dl_size;
+                            let files = self.extract_package_to_ramfs(&data);
+                            out.push_str(&format!("  -> Downloaded {} bytes, extracted {} files\n",
+                                dl_size, files));
+                        } else {
+                            out.push_str("  -> Download failed, using cached metadata\n");
+                        }
+                    } else {
+                        out.push_str(&format!("Get:1 http://dl-cdn.alpinelinux.org/alpine/v3.19/main x86_64 {} {} [{} kB]\n",
+                            pkg.name, pkg.version, pkg.size_kb));
+                    }
+                }
+                if is_online {
+                    out.push_str(&format!("Fetched {} bytes from {}\n",
+                        self.total_bytes_downloaded, server.unwrap()));
+                } else {
+                    out.push_str(&format!("Fetched {} kB in 0s (internal)\n", total_size));
+                }
+
+                // Unpack
                 for pkg in &to_install {
                     out.push_str(&format!("Selecting previously unselected package {}.\n", pkg.name));
                     out.push_str(&format!("Preparing to unpack {}_{}_amd64.deb ...\n", pkg.name, pkg.version));
                     out.push_str(&format!("Unpacking {} ({}) ...\n", pkg.name, pkg.version));
                 }
 
-                // Simulate configuration
+                // Configure
                 out.push_str("Setting up packages ...\n");
                 for pkg in &to_install {
                     out.push_str(&format!("Setting up {} ({}) ...\n", pkg.name, pkg.version));
@@ -905,6 +1125,10 @@ Note: Running in simulated mode (no real Linux kernel)")
                 }
 
                 out.push_str("Processing triggers for man-db ...\n");
+                if is_online {
+                    out.push_str(&format!("[online] {} files installed to filesystem.\n",
+                        self.real_files_installed));
+                }
 
                 if !not_found.is_empty() {
                     return Ok(CommandResult { exit_code: 1, stdout: out, stderr: String::new(), duration_ms: 0 });
