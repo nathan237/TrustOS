@@ -17,6 +17,8 @@ use super::{HypervisorError, Result};
 use super::svm::{self, SvmExitCode, SvmFeatures, VmrunGuestRegs};
 use super::svm::vmcb::{Vmcb, control_offsets, state_offsets, clean_bits};
 use super::svm::npt::{Npt, flags as npt_flags};
+use super::mmio::{self, MmioDecoded};
+use super::ioapic::IoApicState;
 
 /// VM ID counter
 static NEXT_VM_ID: AtomicU64 = AtomicU64::new(1);
@@ -102,6 +104,8 @@ pub struct SvmVirtualMachine {
     pub pm_timer_start: u64,
     /// CMOS RTC state
     cmos_index: u8,
+    /// I/O APIC emulation state
+    pub ioapic: IoApicState,
 }
 
 /// Emulated Local APIC timer state
@@ -289,6 +293,7 @@ impl SvmVirtualMachine {
             pit: PitState::default(),
             pm_timer_start: 0,
             cmos_index: 0,
+            ioapic: IoApicState::default(),
         })
     }
     
@@ -841,10 +846,41 @@ impl SvmVirtualMachine {
                 let guest_phys = exit_info2;
                 let error_code = exit_info1;
                 
+                // Fetch instruction bytes from VMCB for MMIO decoding
+                let vmcb_ref = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
+                let (fetched, insn_bytes) = vmcb_ref.guest_insn_bytes();
+                
+                // Try to decode the MMIO instruction
+                let decoded = mmio::decode_mmio_instruction(&insn_bytes, fetched, true);
+                
                 // Determine if this is a known MMIO region we can emulate
-                let handled = self.handle_npf(guest_phys, error_code, guest_rip);
+                let handled = self.handle_npf(guest_phys, error_code, guest_rip, decoded.as_ref());
                 
                 if handled {
+                    // Advance RIP past the decoded instruction
+                    if let Some(ref dec) = decoded {
+                        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                        vmcb.write_state(state_offsets::RIP, guest_rip + dec.insn_len as u64);
+                    } else if self.features.nrip_save {
+                        // Fallback: try NRIP_SAVE if decoder couldn't parse the instruction
+                        let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
+                        let nrip = vmcb.read_control(control_offsets::NEXT_RIP);
+                        if nrip > guest_rip && nrip < guest_rip + 16 {
+                            let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                            vmcb.write_state(state_offsets::RIP, nrip);
+                        } else {
+                            // Last resort: skip 3 bytes (common MOV instruction minimum)
+                            crate::serial_println!("[SVM-VM {}] NPF: decode failed, skipping 3 bytes at RIP=0x{:X}", 
+                                self.id, guest_rip);
+                            let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                            vmcb.write_state(state_offsets::RIP, guest_rip + 3);
+                        }
+                    } else {
+                        // No NRIP, no decode — skip 3 bytes as best guess
+                        crate::serial_println!("[SVM-VM {}] NPF: no decode/nrip, skipping 3 bytes", self.id);
+                        let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
+                        vmcb.write_state(state_offsets::RIP, guest_rip + 3);
+                    }
                     Ok(true)
                 } else {
                     crate::lab_mode::trace_bus::emit_vm_memory(
@@ -1246,7 +1282,7 @@ impl SvmVirtualMachine {
     
     /// Handle Nested Page Fault (NPF)
     /// Returns true if the fault was handled successfully
-    fn handle_npf(&mut self, guest_phys: u64, error_code: u64, guest_rip: u64) -> bool {
+    fn handle_npf(&mut self, guest_phys: u64, error_code: u64, guest_rip: u64, decoded: Option<&MmioDecoded>) -> bool {
         // MMIO region constants
         const LAPIC_BASE: u64 = 0xFEE0_0000;
         const LAPIC_END: u64 = 0xFEE0_1000;
@@ -1258,16 +1294,12 @@ impl SvmVirtualMachine {
         match guest_phys {
             // Local APIC MMIO (0xFEE00000 - 0xFEE00FFF)
             LAPIC_BASE..=LAPIC_END => {
-                self.handle_lapic_mmio(guest_phys, error_code);
+                self.handle_lapic_mmio(guest_phys, error_code, decoded);
                 true
             }
             // I/O APIC MMIO (0xFEC00000 - 0xFEC00FFF) 
             IOAPIC_BASE..=IOAPIC_END => {
-                // Silently absorb I/O APIC accesses
-                if self.stats.npf_exits < 20 {
-                    crate::serial_println!("[SVM-VM {}] IOAPIC access at 0x{:X} (emulated)", self.id, guest_phys);
-                }
-                self.guest_regs.rax = 0;
+                self.handle_ioapic_mmio(guest_phys, error_code, decoded);
                 true
             }
             // HPET MMIO
@@ -1275,7 +1307,8 @@ impl SvmVirtualMachine {
                 if self.stats.npf_exits < 20 {
                     crate::serial_println!("[SVM-VM {}] HPET access at 0x{:X} (emulated)", self.id, guest_phys);
                 }
-                self.guest_regs.rax = 0;
+                // HPET: return zero on reads; for writes, use decoded register but absorb
+                self.mmio_complete_read(decoded, 0);
                 true
             }
             // VGA framebuffer (0xA0000 - 0xBFFFF) — map if within guest memory
@@ -1283,19 +1316,16 @@ impl SvmVirtualMachine {
                 if self.stats.npf_exits < 20 {
                     crate::serial_println!("[SVM-VM {}] VGA FB access at 0x{:X}", self.id, guest_phys);
                 }
-                // Absorb silently
-                self.guest_regs.rax = 0;
+                self.mmio_complete_read(decoded, 0);
                 true
             }
             // ROM area (0xC0000 - 0xFFFFF) — typically BIOS ROMs
             0xC0000..=0xFFFFF => {
-                // Return zeros for ROM reads
-                self.guest_regs.rax = 0;
+                self.mmio_complete_read(decoded, 0);
                 true
             }
             // Below guest memory but unmapped? Try to handle
             gpa if gpa < self.memory_size as u64 => {
-                // The NPT should already map this, but in case of races or late mapping
                 crate::serial_println!("[SVM-VM {}] NPF in guest RAM at 0x{:X}, err=0x{:X}, RIP=0x{:X}", 
                     self.id, gpa, error_code, guest_rip);
                 false
@@ -1305,11 +1335,10 @@ impl SvmVirtualMachine {
                 if self.stats.npf_exits < 50 {
                     crate::serial_println!("[SVM-VM {}] High MMIO access at 0x{:X} (absorbed)", self.id, gpa);
                 }
-                self.guest_regs.rax = 0xFFFF_FFFF_FFFF_FFFF; // Return all-ones (no device)
+                self.mmio_complete_read(decoded, 0xFFFF_FFFF);
                 true
             }
             _ => {
-                // Unknown region — log and let caller decide
                 if self.stats.npf_exits < 50 {
                     crate::serial_println!("[SVM-VM {}] NPF: GPA=0x{:X}, err=0x{:X}, RIP=0x{:X}", 
                         self.id, guest_phys, error_code, guest_rip);
@@ -1319,8 +1348,42 @@ impl SvmVirtualMachine {
         }
     }
     
-    /// Emulate Local APIC MMIO access (read and write)
-    fn handle_lapic_mmio(&mut self, gpa: u64, error_code: u64) {
+    /// Get the write value from a decoded MMIO instruction.
+    /// Uses the decoded register or immediate; falls back to RAX if no decode available.
+    fn mmio_get_write_value(&self, decoded: Option<&MmioDecoded>) -> u32 {
+        if let Some(dec) = decoded {
+            if let Some(imm) = dec.immediate {
+                return mmio::mask_to_size(imm, dec.operand_size) as u32;
+            }
+            if let Some(reg_idx) = dec.register {
+                let val = mmio::read_guest_reg(&self.guest_regs, reg_idx);
+                return mmio::mask_to_size(val, dec.operand_size) as u32;
+            }
+        }
+        // Fallback: use RAX (legacy behavior)
+        self.guest_regs.rax as u32
+    }
+    
+    /// Complete an MMIO read by writing the result to the correct guest register.
+    /// If no decode available, falls back to writing RAX.
+    fn mmio_complete_read(&mut self, decoded: Option<&MmioDecoded>, value: u32) {
+        if let Some(dec) = decoded {
+            if !dec.is_write {
+                if let Some(reg_idx) = dec.register {
+                    // For MOVZX/MOVSX the operand_size tells us the MMIO access size,
+                    // but we write the full value (already masked) to the destination register.
+                    // LAPIC registers are always 32-bit, so we just zero-extend.
+                    mmio::write_guest_reg(&mut self.guest_regs, reg_idx, value as u64);
+                    return;
+                }
+            }
+        }
+        // Fallback: write to RAX
+        self.guest_regs.rax = value as u64;
+    }
+    
+    /// Emulate Local APIC MMIO access (read and write) using decoded instruction
+    fn handle_lapic_mmio(&mut self, gpa: u64, error_code: u64, decoded: Option<&MmioDecoded>) {
         let offset = (gpa & 0xFFF) as u32;
         let is_write = (error_code & 0x2) != 0; // Bit 1 of NPF error code = write
         
@@ -1347,7 +1410,7 @@ impl SvmVirtualMachine {
         const LAPIC_TIMER_DCR: u32 = 0x3E0;
         
         if is_write {
-            let value = self.guest_regs.rax as u32;
+            let value = self.mmio_get_write_value(decoded);
             match offset {
                 LAPIC_TPR => {
                     self.lapic.tpr = value & 0xFF;
@@ -1452,7 +1515,29 @@ impl SvmVirtualMachine {
                 LAPIC_TIMER_DCR => self.lapic.dcr,
                 _ => 0,
             };
-            self.guest_regs.rax = value as u64;
+            self.mmio_complete_read(decoded, value);
+        }
+    }
+    
+    /// Emulate I/O APIC MMIO access using decoded instruction
+    fn handle_ioapic_mmio(&mut self, gpa: u64, error_code: u64, decoded: Option<&MmioDecoded>) {
+        let offset = gpa - super::ioapic::IOAPIC_BASE;
+        let is_write = (error_code & 0x2) != 0;
+        
+        if is_write {
+            let value = self.mmio_get_write_value(decoded);
+            self.ioapic.write(offset, value);
+            if self.stats.npf_exits < 100 {
+                crate::serial_println!("[SVM-VM {}] IOAPIC write offset=0x{:X} val=0x{:X}", 
+                    self.id, offset, value);
+            }
+        } else {
+            let value = self.ioapic.read(offset);
+            if self.stats.npf_exits < 100 {
+                crate::serial_println!("[SVM-VM {}] IOAPIC read offset=0x{:X} -> 0x{:X}", 
+                    self.id, offset, value);
+            }
+            self.mmio_complete_read(decoded, value);
         }
     }
     

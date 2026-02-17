@@ -43,6 +43,10 @@ pub mod vmi;
 pub mod linux_loader;
 pub mod acpi;
 
+// Phase 8: MMIO instruction decoder + I/O APIC
+pub mod mmio;
+pub mod ioapic;
+
 // Self-tests for hypervisor subsystems
 pub mod tests;
 

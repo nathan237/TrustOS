@@ -76,6 +76,25 @@ pub fn run_all_tests() -> (usize, usize, alloc::vec::Vec<String>) {
     results.push(test_cmos_equipment_byte());
     results.push(test_cmos_century());
     
+    // ── MMIO Instruction Decoder Tests ──────────────────────────
+    results.push(test_mmio_decode_mov_write());
+    results.push(test_mmio_decode_mov_read());
+    results.push(test_mmio_decode_rex_w());
+    results.push(test_mmio_decode_imm32());
+    results.push(test_mmio_decode_movzx());
+    results.push(test_mmio_decode_disp32());
+    results.push(test_mmio_decode_r8_r15());
+    results.push(test_mmio_register_rw());
+    
+    // ── I/O APIC Tests ──────────────────────────────────────────
+    results.push(test_ioapic_defaults());
+    results.push(test_ioapic_version_register());
+    results.push(test_ioapic_id_readwrite());
+    results.push(test_ioapic_redir_table());
+    results.push(test_ioapic_indirect_access());
+    results.push(test_ioapic_irq_routing());
+    results.push(test_ioapic_readonly_bits());
+    
     // Tally results
     let mut passed = 0usize;
     let mut failed = 0usize;
@@ -1036,5 +1055,280 @@ fn cmos_register_value(index: u8) -> u8 {
         0x18 => 0x00,  // Extended memory high
         0x32 => 0x20,  // Century
         _ => 0x00,
+    }
+}
+
+// ============================================================================
+// MMIO INSTRUCTION DECODER TESTS
+// ============================================================================
+
+/// Test: MOV [rdi], eax → write, 4-byte, reg=RAX
+fn test_mmio_decode_mov_write() -> TestResult {
+    let bytes = [0x89, 0x07]; // MOV [rdi], eax
+    let d = super::mmio::decode_mmio_instruction(&bytes, 2, true);
+    let ok = match d {
+        Some(ref dec) => dec.is_write && dec.operand_size == 4 && dec.register == Some(0) && dec.insn_len == 2,
+        None => false,
+    };
+    TestResult {
+        name: "mmio_decode_mov_write",
+        passed: ok,
+        detail: if !ok { Some(format!("decoded={:?}", d)) } else { None },
+    }
+}
+
+/// Test: MOV ecx, [rdi] → read, 4-byte, reg=ECX(1)
+fn test_mmio_decode_mov_read() -> TestResult {
+    let bytes = [0x8B, 0x0F]; // MOV ecx, [rdi]
+    let d = super::mmio::decode_mmio_instruction(&bytes, 2, true);
+    let ok = match d {
+        Some(ref dec) => !dec.is_write && dec.operand_size == 4 && dec.register == Some(1) && dec.insn_len == 2,
+        None => false,
+    };
+    TestResult {
+        name: "mmio_decode_mov_read",
+        passed: ok,
+        detail: if !ok { Some(format!("decoded={:?}", d)) } else { None },
+    }
+}
+
+/// Test: REX.W MOV [rdi], rax → write, 8-byte, reg=RAX
+fn test_mmio_decode_rex_w() -> TestResult {
+    let bytes = [0x48, 0x89, 0x07]; // REX.W MOV [rdi], rax
+    let d = super::mmio::decode_mmio_instruction(&bytes, 3, true);
+    let ok = match d {
+        Some(ref dec) => dec.is_write && dec.operand_size == 8 && dec.register == Some(0) && dec.insn_len == 3,
+        None => false,
+    };
+    TestResult {
+        name: "mmio_decode_rex_w",
+        passed: ok,
+        detail: if !ok { Some(format!("decoded={:?}", d)) } else { None },
+    }
+}
+
+/// Test: MOV DWORD PTR [rdi], 0x12345678 → write, 4-byte, immediate
+fn test_mmio_decode_imm32() -> TestResult {
+    // C7 07 78 56 34 12 = MOV [rdi], 0x12345678
+    let bytes = [0xC7, 0x07, 0x78, 0x56, 0x34, 0x12];
+    let d = super::mmio::decode_mmio_instruction(&bytes, 6, true);
+    let ok = match d {
+        Some(ref dec) => dec.is_write && dec.operand_size == 4 
+            && dec.register.is_none() 
+            && dec.immediate == Some(0x12345678),
+        None => false,
+    };
+    TestResult {
+        name: "mmio_decode_imm32",
+        passed: ok,
+        detail: if !ok { Some(format!("decoded={:?}", d)) } else { None },
+    }
+}
+
+/// Test: MOVZX eax, BYTE PTR [rdi] → read, 1-byte, reg=EAX
+fn test_mmio_decode_movzx() -> TestResult {
+    let bytes = [0x0F, 0xB6, 0x07]; // MOVZX eax, byte ptr [rdi]
+    let d = super::mmio::decode_mmio_instruction(&bytes, 3, true);
+    let ok = match d {
+        Some(ref dec) => !dec.is_write && dec.operand_size == 1 && dec.register == Some(0),
+        None => false,
+    };
+    TestResult {
+        name: "mmio_decode_movzx",
+        passed: ok,
+        detail: if !ok { Some(format!("decoded={:?}", d)) } else { None },
+    }
+}
+
+/// Test: MOV eax, [rdi+0x320] → read with disp32, reg=EAX
+fn test_mmio_decode_disp32() -> TestResult {
+    let bytes = [0x8B, 0x87, 0x20, 0x03, 0x00, 0x00]; // MOV eax, [rdi+0x320]
+    let d = super::mmio::decode_mmio_instruction(&bytes, 6, true);
+    let ok = match d {
+        Some(ref dec) => !dec.is_write && dec.operand_size == 4 && dec.register == Some(0) && dec.insn_len == 6,
+        None => false,
+    };
+    TestResult {
+        name: "mmio_decode_disp32",
+        passed: ok,
+        detail: if !ok { Some(format!("decoded={:?}", d)) } else { None },
+    }
+}
+
+/// Test: REX.RB MOV [r15], r8d → write from extended register R8
+fn test_mmio_decode_r8_r15() -> TestResult {
+    // 45 89 07 = REX.RB MOV [r15], r8d  (REX=0x45: W=0,R=1,X=0,B=1)
+    // Actually: REX.R=1 means reg field extended, REX.B=1 means rm field extended
+    // 0x45 = 0100_0101 → W=0, R=1, X=0, B=1
+    // ModRM: 0x07 = mod=00, reg=000, rm=111 → reg = REX.R:000 = 8 (R8), rm = REX.B:111 = R15
+    let bytes = [0x45, 0x89, 0x07]; // MOV [r15], r8d
+    let d = super::mmio::decode_mmio_instruction(&bytes, 3, true);
+    let ok = match d {
+        Some(ref dec) => dec.is_write && dec.operand_size == 4 && dec.register == Some(8), // R8
+        None => false,
+    };
+    TestResult {
+        name: "mmio_decode_r8_r15",
+        passed: ok,
+        detail: if !ok { Some(format!("decoded={:?}", d)) } else { None },
+    }
+}
+
+/// Test: read_guest_reg / write_guest_reg round-trip
+fn test_mmio_register_rw() -> TestResult {
+    let mut regs = super::svm_vm::SvmGuestRegs::default();
+    // Write to R10 (index 10) and read back
+    super::mmio::write_guest_reg(&mut regs, 10, 0xDEAD_BEEF_CAFE_BABE);
+    let val = super::mmio::read_guest_reg(&regs, 10);
+    let ok = val == 0xDEAD_BEEF_CAFE_BABE && regs.r10 == 0xDEAD_BEEF_CAFE_BABE;
+    TestResult {
+        name: "mmio_register_rw",
+        passed: ok,
+        detail: if !ok { Some(format!("got 0x{:X}", val)) } else { None },
+    }
+}
+
+// ============================================================================
+// I/O APIC TESTS
+// ============================================================================
+
+/// Test: I/O APIC default state
+fn test_ioapic_defaults() -> TestResult {
+    let ioapic = super::ioapic::IoApicState::default();
+    let ok = ioapic.id == 1 && ioapic.ioregsel == 0;
+    // Verify all entries are masked
+    let all_masked = ioapic.redir_table.iter().all(|e| (e >> 16) & 1 == 1);
+    let ok = ok && all_masked;
+    TestResult {
+        name: "ioapic_defaults",
+        passed: ok,
+        detail: if !ok { Some(format!("id={} ioregsel={} all_masked={}", ioapic.id, ioapic.ioregsel, all_masked)) } else { None },
+    }
+}
+
+/// Test: I/O APIC version register
+fn test_ioapic_version_register() -> TestResult {
+    let ioapic = super::ioapic::IoApicState::default();
+    let ver = ioapic.read(0x10); // IOREGSEL defaults to 0, but we need to set it
+    // Actually, we need to set ioregsel to 1 first
+    let mut ioapic = ioapic;
+    ioapic.write(0x00, 0x01); // IOREGSEL = 1 (version register)
+    let ver = ioapic.read(0x10); // Read via IOWIN
+    let version = ver & 0xFF;
+    let max_redir = (ver >> 16) & 0xFF;
+    let ok = version == 0x20 && max_redir == 23;
+    TestResult {
+        name: "ioapic_version_register",
+        passed: ok,
+        detail: if !ok { Some(format!("ver=0x{:X} max_redir={}", version, max_redir)) } else { None },
+    }
+}
+
+/// Test: I/O APIC ID register read/write
+fn test_ioapic_id_readwrite() -> TestResult {
+    let mut ioapic = super::ioapic::IoApicState::default();
+    // Read default ID
+    ioapic.write(0x00, 0x00); // IOREGSEL = 0 (ID register)
+    let id_reg = ioapic.read(0x10);
+    let default_id = (id_reg >> 24) & 0xF;
+    
+    // Write a new ID
+    ioapic.write(0x00, 0x00);
+    ioapic.write(0x10, 0x05_00_00_00); // Set ID to 5
+    let id_reg = ioapic.read(0x10);
+    let new_id = (id_reg >> 24) & 0xF;
+    
+    let ok = default_id == 1 && new_id == 5;
+    TestResult {
+        name: "ioapic_id_readwrite",
+        passed: ok,
+        detail: if !ok { Some(format!("default={} new={}", default_id, new_id)) } else { None },
+    }
+}
+
+/// Test: I/O APIC redirection table write/read
+fn test_ioapic_redir_table() -> TestResult {
+    let mut ioapic = super::ioapic::IoApicState::default();
+    
+    // Write entry 0 low DWORD: vector=0x40, fixed delivery, physical, edge, unmasked
+    ioapic.write(0x00, 0x10); // IOREGSEL = 0x10 (entry 0 low)
+    ioapic.write(0x10, 0x0000_0040); // IOWIN = vector 0x40, unmasked
+    
+    // Write entry 0 high DWORD: destination APIC ID = 0
+    ioapic.write(0x00, 0x11); // IOREGSEL = 0x11 (entry 0 high)
+    ioapic.write(0x10, 0x0000_0000);
+    
+    // Read back low DWORD
+    ioapic.write(0x00, 0x10);
+    let lo = ioapic.read(0x10);
+    
+    let ok = (lo & 0xFF) == 0x40 && ((lo >> 16) & 1) == 0; // vector=0x40, not masked
+    TestResult {
+        name: "ioapic_redir_table",
+        passed: ok,
+        detail: if !ok { Some(format!("lo=0x{:X}", lo)) } else { None },
+    }
+}
+
+/// Test: I/O APIC indirect register access pattern
+fn test_ioapic_indirect_access() -> TestResult {
+    let mut ioapic = super::ioapic::IoApicState::default();
+    
+    // The guest writes IOREGSEL then reads/writes IOWIN
+    // Verify that writing IOREGSEL changes which register IOWIN accesses
+    ioapic.write(0x00, 0x00); // Select ID register
+    let id = ioapic.read(0x10);
+    ioapic.write(0x00, 0x01); // Select version register
+    let ver = ioapic.read(0x10);
+    
+    let ok = id != ver; // They should be different registers
+    TestResult {
+        name: "ioapic_indirect_access",
+        passed: ok,
+        detail: if !ok { Some(format!("id=0x{:X} ver=0x{:X}", id, ver)) } else { None },
+    }
+}
+
+/// Test: I/O APIC IRQ routing query
+fn test_ioapic_irq_routing() -> TestResult {
+    let mut ioapic = super::ioapic::IoApicState::default();
+    
+    // Configure GSI 2 → vector 0x30, unmasked, physical, edge, dest=0
+    ioapic.write(0x00, 0x14); // Entry 2 low = 0x10 + 2*2 = 0x14
+    ioapic.write(0x10, 0x0000_0030); // vector=0x30, unmasked
+    ioapic.write(0x00, 0x15); // Entry 2 high
+    ioapic.write(0x10, 0x0000_0000); // dest=0
+    
+    let route = ioapic.get_irq_route(2);
+    let ok = match route {
+        Some(ref r) => r.vector == 0x30 && !r.masked && r.delivery_mode == 0 && !r.level_triggered,
+        None => false,
+    };
+    TestResult {
+        name: "ioapic_irq_routing",
+        passed: ok,
+        detail: if !ok { Some(format!("route={:?}", route)) } else { None },
+    }
+}
+
+/// Test: Read-only bits (delivery status, remote IRR) cannot be written
+fn test_ioapic_readonly_bits() -> TestResult {
+    let mut ioapic = super::ioapic::IoApicState::default();
+    
+    // Try to write with bits 12 and 14 set
+    ioapic.write(0x00, 0x10); // Entry 0 low
+    ioapic.write(0x10, 0x0000_5030); // vector=0x30, try set bits 12+14
+    
+    ioapic.write(0x00, 0x10);
+    let lo = ioapic.read(0x10);
+    
+    // Bits 12 and 14 should be 0 (read-only, default to 0)
+    let bit12 = (lo >> 12) & 1;
+    let bit14 = (lo >> 14) & 1;
+    let ok = bit12 == 0 && bit14 == 0 && (lo & 0xFF) == 0x30;
+    TestResult {
+        name: "ioapic_readonly_bits",
+        passed: ok,
+        detail: if !ok { Some(format!("lo=0x{:X} bit12={} bit14={}", lo, bit12, bit14)) } else { None },
     }
 }

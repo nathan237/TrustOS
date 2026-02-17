@@ -219,6 +219,26 @@ impl Vmcb {
         Self { data: [0; 4096] }
     }
     
+    /// Read a single byte from the VMCB
+    #[inline]
+    pub fn read_u8(&self, offset: usize) -> u8 {
+        self.data[offset]
+    }
+    
+    /// Get the guest instruction bytes fetched by the CPU on #NPF/#VMEXIT.
+    /// Returns (bytes_fetched_count, instruction_bytes_array).
+    /// The VMCB provides up to 15 bytes at GUEST_INST_BYTES (offset 0x0D1),
+    /// with the valid count at BYTES_FETCHED (offset 0x0D0).
+    pub fn guest_insn_bytes(&self) -> (usize, [u8; 15]) {
+        let count = self.data[control_offsets::BYTES_FETCHED] as usize;
+        let mut buf = [0u8; 15];
+        let n = count.min(15);
+        for i in 0..n {
+            buf[i] = self.data[control_offsets::GUEST_INST_BYTES + i];
+        }
+        (n, buf)
+    }
+    
     /// Read a u16 from the VMCB
     #[inline]
     pub fn read_u16(&self, offset: usize) -> u16 {
