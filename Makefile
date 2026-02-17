@@ -15,7 +15,7 @@
 #   - qemu-system-x86_64 (for running)
 #   - OVMF firmware (for UEFI boot in QEMU)
 
-.PHONY: build iso run run-bios clean help check-deps disk
+.PHONY: build iso run run-bios clean help check-deps disk limine
 
 # ── Configuration (override via environment) ──
 KERNEL_PKG    ?= trustos_kernel
@@ -76,17 +76,17 @@ build:
 	echo "$(GREEN)✓ Kernel built: $(KERNEL_BIN) ($$KSIZE)$(RESET)"
 
 ## Create bootable ISO with Limine
-iso: build
+iso: build limine
 	@echo "$(CYAN)══ Creating bootable ISO ══$(RESET)"
 	@mkdir -p $(ISO_ROOT)/boot/limine
 	@mkdir -p $(ISO_ROOT)/EFI/BOOT
 	@# Copy kernel
 	@cp $(KERNEL_BIN) $(ISO_ROOT)/boot/$(KERNEL_PKG)
 	@# Copy Limine bootloader files
-	@cp -f limine/BOOTX64.EFI    $(ISO_ROOT)/EFI/BOOT/BOOTX64.EFI     2>/dev/null || true
-	@cp -f limine/limine-bios.sys    $(ISO_ROOT)/boot/limine/           2>/dev/null || true
-	@cp -f limine/limine-bios-cd.bin $(ISO_ROOT)/boot/limine/           2>/dev/null || true
-	@cp -f limine/limine-uefi-cd.bin $(ISO_ROOT)/boot/limine/           2>/dev/null || true
+	@cp -f limine/BOOTX64.EFI    $(ISO_ROOT)/EFI/BOOT/BOOTX64.EFI
+	@cp -f limine/limine-bios.sys    $(ISO_ROOT)/boot/limine/
+	@cp -f limine/limine-bios-cd.bin $(ISO_ROOT)/boot/limine/
+	@cp -f limine/limine-uefi-cd.bin $(ISO_ROOT)/boot/limine/
 	@# Copy boot config
 	@cp -f limine.conf $(ISO_ROOT)/limine.conf                          2>/dev/null || true
 	@cp -f limine.conf $(ISO_ROOT)/boot/limine/limine.conf              2>/dev/null || true
@@ -175,3 +175,18 @@ clean:
 	cargo clean
 	@rm -f $(ISO_FILE)
 	@echo "$(GREEN)✓ Cleaned$(RESET)"
+
+## Auto-download Limine bootloader if not present
+limine:
+	@if [ ! -f "limine/BOOTX64.EFI" ]; then \
+		echo "$(CYAN)══ Downloading Limine bootloader ══$(RESET)"; \
+		rm -rf limine; \
+		git clone https://github.com/limine-bootloader/limine.git \
+			--branch=v8.x-binary --depth=1; \
+		if [ -f limine/Makefile ]; then make -C limine 2>/dev/null || true; fi; \
+		if [ -f limine/BOOTX64.EFI ]; then \
+			echo "$(GREEN)✓ Limine ready$(RESET)"; \
+		else \
+			echo "$(RED)✗ Limine download failed$(RESET)"; exit 1; \
+		fi; \
+	fi

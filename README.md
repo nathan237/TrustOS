@@ -232,41 +232,46 @@ TrustOS is being built **with Linux binary compatibility in mind**. The infrastr
 
 ## 🚀 Quick Start
 
-### Prerequisites
+### Option A: Download the ISO (fastest)
+
+Grab the latest prebuilt ISO from [**Releases**](https://github.com/nathan237/TrustOS/releases) and boot it in any VM:
+
+```bash
+# QEMU (BIOS — no extra firmware needed)
+qemu-system-x86_64 -cdrom trustos.iso -m 512M -cpu max -smp 4 -display gtk -vga std -serial stdio
+
+# QEMU (UEFI)
+qemu-system-x86_64 -cdrom trustos.iso -m 512M -machine q35 -cpu max -smp 4 \
+  -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+  -display gtk -vga std -serial stdio
+```
+
+> Also works in VirtualBox, VMware, or on bare metal USB via `dd if=trustos.iso of=/dev/sdX`.
+
+### Option B: One-liner setup (build from source)
+
+**Linux / macOS / WSL:**
+```bash
+git clone https://github.com/nathan237/TrustOS.git && cd TrustOS && ./setup.sh
+```
+This automatically installs Rust nightly, QEMU, xorriso, OVMF, downloads Limine, builds the kernel, and creates the ISO.
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/nathan237/TrustOS.git; cd TrustOS; .\setup.ps1
+```
+
+### Option C: Manual build
+
+<details>
+<summary>Step-by-step instructions</summary>
+
+#### Prerequisites
 - Rust nightly (`rustup` will auto-install via `rust-toolchain.toml`)
 - QEMU with OVMF (UEFI firmware)
-- `xorriso` (for ISO creation)
+- `xorriso` (for ISO creation, Linux only)
 
-### Build & Run (Linux / macOS)
-
-```bash
-# Clone
-git clone https://github.com/nathan237/TrustOS.git
-cd TrustOS
-
-# Check dependencies
-make check-deps
-
-# Build + run in QEMU (UEFI)
-make run
-
-# Or step by step:
-make build          # Build kernel only
-make iso            # Build + create ISO
-make run-bios       # Run in BIOS mode (no OVMF needed)
-```
-
-Or use the shell script directly:
-```bash
-chmod +x build.sh
-./build.sh              # Build kernel + create ISO
-./build.sh --run        # Build + run in QEMU (UEFI)
-./build.sh --run-bios   # Build + run in QEMU (BIOS)
-./build.sh --check      # Check dependencies
-```
-
-#### Install Dependencies
-
+#### Install dependencies
 ```bash
 # Debian / Ubuntu
 sudo apt install qemu-system-x86 xorriso ovmf
@@ -281,12 +286,32 @@ sudo pacman -S qemu-full xorriso edk2-ovmf
 brew install qemu xorriso
 ```
 
-### Build & Run (Windows — PowerShell)
+#### Build & Run
+```bash
+make run            # Build + run in QEMU (UEFI)
+make run-bios       # Build + run in QEMU (BIOS)
+make iso            # Build kernel + create ISO only
+make check-deps     # Verify all tools are installed
+```
+
+#### Windows (PowerShell)
 ```powershell
 cargo build --release -p trustos_kernel
-.\run-vbox.ps1       # VirtualBox (full setup)
-.\run-qemu-gui.ps1   # QEMU with GUI
+.\run-qemu-gui.ps1     # QEMU with GUI
+.\run-vbox.ps1          # VirtualBox (full setup)
 ```
+
+</details>
+
+### First commands to try
+| Command | What it does |
+|---------|-------------|
+| `showcase` | Automated feature tour (great for screen recording) |
+| `desktop` | Launch the COSMIC2 desktop environment |
+| `trustlab` | Open the real-time kernel introspection laboratory |
+| `neofetch` | System info display |
+| `chess3d` | Play 3D chess against AI |
+| `help` | Show all 200+ commands |
 
 ---
 

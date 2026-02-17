@@ -1,0 +1,125 @@
+name: Build & Release ISO
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g., v0.3.5)'
+        required: false
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-iso:
+    name: Build TrustOS ISO
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xorriso
+
+      - name: Fetch Limine bootloader
+        run: |
+          git clone https://github.com/limine-bootloader/limine.git \
+            --branch=v8.x-binary --depth=1
+          if [ -f limine/Makefile ]; then
+            make -C limine 2>/dev/null || true
+          fi
+
+      - name: Build kernel (release)
+        run: cargo build --release -p trustos_kernel
+
+      - name: Create bootable ISO
+        run: |
+          mkdir -p iso_root/boot/limine iso_root/EFI/BOOT
+
+          cp target/x86_64-unknown-none/release/trustos_kernel iso_root/boot/trustos_kernel
+          cp -f limine/BOOTX64.EFI         iso_root/EFI/BOOT/BOOTX64.EFI
+          cp -f limine/limine-bios.sys     iso_root/boot/limine/
+          cp -f limine/limine-bios-cd.bin  iso_root/boot/limine/
+          cp -f limine/limine-uefi-cd.bin  iso_root/boot/limine/
+          cp -f limine.conf                iso_root/limine.conf
+          cp -f limine.conf                iso_root/boot/limine/limine.conf
+
+          xorriso -as mkisofs \
+            -b boot/limine/limine-bios-cd.bin \
+            -no-emul-boot -boot-load-size 4 -boot-info-table \
+            --efi-boot boot/limine/limine-uefi-cd.bin \
+            -efi-boot-part --efi-boot-image --protective-msdos-label \
+            -o trustos.iso iso_root
+
+          echo "ISO_SIZE=$(du -h trustos.iso | cut -f1)" >> $GITHUB_ENV
+          echo "KERNEL_SIZE=$(du -h target/x86_64-unknown-none/release/trustos_kernel | cut -f1)" >> $GITHUB_ENV
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trustos-iso
+          path: trustos.iso
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release_tag != ''
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag || github.ref_name }}
+          name: TrustOS ${{ github.event.inputs.release_tag || github.ref_name }}
+          body: |
+            ## TrustOS ${{ github.event.inputs.release_tag || github.ref_name }}
+
+            ### Download
+            - **trustos.iso** — Bootable ISO (UEFI + BIOS), ready for QEMU, VirtualBox, VMware, or bare metal USB
+
+            ### Quick Start
+            ```bash
+            # QEMU (UEFI)
+            qemu-system-x86_64 -cdrom trustos.iso -m 512M -machine q35 -cpu max -smp 4 \
+              -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE.fd \
+              -display gtk -vga std -serial stdio
+
+            # QEMU (BIOS — no OVMF needed)
+            qemu-system-x86_64 -cdrom trustos.iso -m 512M -cpu max -smp 4 \
+              -display gtk -vga std -serial stdio
+            ```
+
+            ### First Commands
+            - `showcase` — Automated feature tour
+            - `desktop` — Launch desktop environment
+            - `trustlab` — Kernel introspection laboratory
+            - `neofetch` — System info
+
+            ### Build Info
+            - Kernel: ${{ env.KERNEL_SIZE }}
+            - ISO: ${{ env.ISO_SIZE }}
+          files: trustos.iso
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

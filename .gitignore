@@ -122,7 +122,10 @@ launch-trustos.ps1
 
 # Debug & test output logs
 build_check*.txt
-build_err.txt
+build_err*.txt
+build_out*.txt
+build_output*.txt
+build_full*.txt
 debug_out.txt
 debug3_out.txt
 debug-serial3.ps1
@@ -133,6 +136,15 @@ test_report.txt
 vm_err.txt
 vm_out.txt
 serial.log
+
+# Rust ICE dumps
+rustc-ice-*.txt
+
+# QEMU logs and screenshots
+qemu_*.png
+qemu_*.log
+serial_*.log
+debug_screen_*.png
 
 # Publisher tools credentials (NEVER commit)
 tools/config/
