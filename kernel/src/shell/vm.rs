@@ -3200,6 +3200,7 @@ fn print_hv_help() {
     crate::println!("  vm stop <id>               - Stop a VM");
     crate::println!("  vm list                    - List all VMs");
     crate::println!("  vm guests                  - List available guests");
+    crate::println!("  vm inspect [id]            - Inspect VM state (regs, exits, mem)");
     crate::println!("  vm mount <id> <host> <guest> - Mount shared folder");
 }
 
@@ -3207,7 +3208,7 @@ fn print_hv_help() {
 pub(super) fn cmd_vm(args: &[&str]) {
     if args.is_empty() {
         crate::println!("Usage: vm <command> [args]");
-        crate::println!("Commands: create, start, run, stop, list, guests, mount");
+        crate::println!("Commands: create, start, run, stop, list, guests, inspect, mount");
         return;
     }
     
@@ -3279,6 +3280,15 @@ pub(super) fn cmd_vm(args: &[&str]) {
                         Ok(()) => {
                             crate::print_color!(COLOR_GREEN, "? ");
                             crate::println!("Guest '{}' completed", guest);
+                            
+                            // Show quick stats for the completed VM
+                            crate::hypervisor::svm_vm::with_vm(id, |vm| {
+                                let s = &vm.stats;
+                                crate::println!("  VMEXITs: {} (cpuid={} io={} msr={} hlt={} vmcall={})",
+                                    s.vmexits, s.cpuid_exits, s.io_exits,
+                                    s.msr_exits, s.hlt_exits, s.vmmcall_exits);
+                            });
+                            crate::println!("  Use 'vm inspect {}' for detailed state", id);
                         }
                         Err(e) => {
                             crate::print_color!(COLOR_RED, "? ");
@@ -3383,9 +3393,97 @@ pub(super) fn cmd_vm(args: &[&str]) {
             crate::hypervisor::inject_console_input(id, b"\n");
             crate::println!("Injected input to VM {}", id);
         }
+        "inspect" => {
+            // Show live VM state — registers, exit stats, memory summary
+            use crate::hypervisor::{detect_cpu_vendor, CpuVendor};
+            
+            match detect_cpu_vendor() {
+                CpuVendor::Amd => {
+                    let vms = crate::hypervisor::svm_vm::list_vms();
+                    if vms.is_empty() {
+                        crate::println!("No VMs to inspect. Run 'vm run pm-test' first.");
+                        return;
+                    }
+                    
+                    // If user gave an ID, inspect that one; otherwise inspect all
+                    let filter_id: Option<u64> = if args.len() > 1 { args[1].parse().ok() } else { None };
+                    
+                    for (id, name, state) in &vms {
+                        if let Some(fid) = filter_id {
+                            if *id != fid { continue; }
+                        }
+                        
+                        crate::println_color!(COLOR_CYAN, "+--- VM #{}: {} [{:?}] ---+", id, name, state);
+                        
+                        // Get detailed stats via with_vm
+                        crate::hypervisor::svm_vm::with_vm(*id, |vm| {
+                            let s = &vm.stats;
+                            crate::println!();
+                            crate::println_color!(COLOR_YELLOW, "  Exit Statistics:");
+                            crate::println!("    Total VMEXITs: {}", s.vmexits);
+                            crate::println!("    CPUID:   {:>8}", s.cpuid_exits);
+                            crate::println!("    I/O:     {:>8}", s.io_exits);
+                            crate::println!("    MSR:     {:>8}", s.msr_exits);
+                            crate::println!("    HLT:     {:>8}", s.hlt_exits);
+                            crate::println!("    NPF:     {:>8}", s.npf_exits);
+                            crate::println!("    VMCALL:  {:>8}", s.vmmcall_exits);
+                            crate::println!("    Intr:    {:>8}", s.intr_exits);
+                            
+                            crate::println!();
+                            crate::println_color!(COLOR_YELLOW, "  Guest Registers:");
+                            crate::println!("    RAX = 0x{:016X}  RBX = 0x{:016X}", vm.guest_regs.rax, vm.guest_regs.rbx);
+                            crate::println!("    RCX = 0x{:016X}  RDX = 0x{:016X}", vm.guest_regs.rcx, vm.guest_regs.rdx);
+                            crate::println!("    RSI = 0x{:016X}  RDI = 0x{:016X}", vm.guest_regs.rsi, vm.guest_regs.rdi);
+                            crate::println!("    RBP = 0x{:016X}  RSP = 0x{:016X}", vm.guest_regs.rbp, vm.guest_regs.rsp);
+                            crate::println!("    R8  = 0x{:016X}  R9  = 0x{:016X}", vm.guest_regs.r8, vm.guest_regs.r9);
+                            crate::println!("    R10 = 0x{:016X}  R11 = 0x{:016X}", vm.guest_regs.r10, vm.guest_regs.r11);
+                            
+                            crate::println!();
+                            crate::println_color!(COLOR_YELLOW, "  Memory:");
+                            crate::println!("    Guest memory: {} KB ({} MB)", vm.memory_size / 1024, vm.memory_size / (1024 * 1024));
+                            crate::println!("    ASID: {}", vm.asid);
+                            
+                            // Show a hex dump of guest memory at 0x5000 (where pm-test writes)
+                            if let Some(data) = vm.read_guest_memory(0x5000, 32) {
+                                crate::println!();
+                                crate::println_color!(COLOR_YELLOW, "  Memory @ 0x5000 (guest write zone):");
+                                crate::print!("    ");
+                                for (i, byte) in data.iter().enumerate() {
+                                    crate::print!("{:02X} ", byte);
+                                    if (i + 1) % 16 == 0 && i + 1 < data.len() {
+                                        crate::print!("\n    ");
+                                    }
+                                }
+                                crate::println!();
+                            }
+                            
+                            // Show guest memory at 0x6000 (hypercall string zone)
+                            if let Some(data) = vm.read_guest_memory(0x6000, 48) {
+                                crate::println_color!(COLOR_YELLOW, "  Memory @ 0x6000 (hypercall string):");
+                                crate::print!("    \"");
+                                for &byte in data {
+                                    if byte == 0 { break; }
+                                    if byte >= 0x20 && byte < 0x7F {
+                                        crate::print!("{}", byte as char);
+                                    } else {
+                                        crate::print!(".");
+                                    }
+                                }
+                                crate::println!("\"");
+                            }
+                        });
+                        
+                        crate::println!();
+                    }
+                }
+                _ => {
+                    crate::println!("VM inspect requires AMD SVM. Use 'vm list' instead.");
+                }
+            }
+        }
         _ => {
             crate::println!("Unknown VM command: {}", args[0]);
-            crate::println!("Commands: create, start, run, stop, list, guests, mount, console, input");
+            crate::println!("Commands: create, start, run, stop, list, guests, mount, console, input, inspect");
         }
     }
 }
@@ -3664,6 +3762,41 @@ fn analyze_elf(data: &[u8]) -> String {
     info.push_str("\n      Note: Execution requires x86_64 CPU emulation (slow)");
     
     info
+}
+
+/// Package manager shortcut — routes apt-get/apk/dpkg through the Linux subsystem
+pub(super) fn cmd_pkg(cmd: &str, args: &[&str]) {
+    use crate::hypervisor::linux_subsystem;
+
+    // Auto-init the linux subsystem if not started
+    let state = linux_subsystem::state();
+    if state == linux_subsystem::LinuxState::NotStarted {
+        let _ = linux_subsystem::init();
+        let _ = linux_subsystem::boot();
+    }
+
+    // Build the full command string: "apt-get install vim" etc.
+    let mut full = alloc::string::String::from(cmd);
+    for a in args {
+        full.push(' ');
+        full.push_str(a);
+    }
+
+    match linux_subsystem::execute(&full) {
+        Ok(result) => {
+            if !result.stdout.is_empty() {
+                crate::println!("{}", result.stdout);
+            }
+            if !result.stderr.is_empty() {
+                crate::print_color!(COLOR_RED, "{}", result.stderr);
+                crate::println!();
+            }
+        }
+        Err(e) => {
+            crate::print_color!(COLOR_RED, "Error: ");
+            crate::println!("{:?}", e);
+        }
+    }
 }
 
 /// Alpine Linux all-in-one command: download, extract, and test

@@ -958,6 +958,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "tasks" | "jobs" => vm::cmd_tasks(),
         "threads" => vm::cmd_threads(),
         "alpine" => vm::cmd_alpine(args),
+        "apt-get" | "apt" | "apk" | "dpkg" => vm::cmd_pkg(command, args),
         "persist" | "persistence" => vm::cmd_persistence(args),
         "disk" => vm::cmd_disk(),
         "dd" => vm::cmd_dd(args),

@@ -97,6 +97,14 @@ pub(super) fn cmd_which(args: &[&str]) {
                 break;
             }
         }
+        // Also check Linux subsystem installed packages
+        if !found {
+            let subsys = crate::hypervisor::linux_subsystem::subsystem();
+            if subsys.is_package_installed(name) {
+                crate::println!("/usr/bin/{}", name);
+                found = true;
+            }
+        }
         if !found {
             crate::println_color!(COLOR_RED, "{}: not found", name);
         }

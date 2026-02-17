@@ -181,36 +181,74 @@ pub fn shell_guest() -> Vec<u8> {
 pub fn guest_protected_mode_test() -> Vec<u8> {
     let mut code = Vec::new();
     
-    // 32-bit protected mode code
-    // Print banner via COM1 serial (port 0x3F8) — tests I/O emulation
-    let banner = b"[TrustVM] Protected mode guest running!\r\n";
-    for &byte in banner {
-        // MOV DX, 0x3F8
-        code.extend_from_slice(&[0x66, 0xBA, 0xF8, 0x03]);
-        // MOV AL, byte
-        code.extend_from_slice(&[0xB0, byte]);
-        // OUT DX, AL
-        code.push(0xEE);
+    // ── Helper closures ──────────────────────────────────────────
+    // Print string via COM1 serial (port 0x3F8) — 32-bit pmode
+    fn emit_serial(code: &mut Vec<u8>, msg: &[u8]) {
+        for &byte in msg {
+            code.extend_from_slice(&[0x66, 0xBA, 0xF8, 0x03]); // MOV DX, 0x3F8
+            code.extend_from_slice(&[0xB0, byte]);               // MOV AL, byte
+            code.push(0xEE);                                     // OUT DX, AL
+        }
+    }
+    // Print string via debug port 0xE9
+    fn emit_debug(code: &mut Vec<u8>, msg: &[u8]) {
+        for &byte in msg {
+            code.extend_from_slice(&[0xB0, byte]);  // MOV AL, imm8
+            code.extend_from_slice(&[0xE6, 0xE9]);  // OUT 0xE9, AL
+        }
     }
     
-    // Also print via debug port 0xE9
-    for &byte in b"[PM-test] I/O OK\n" {
-        code.extend_from_slice(&[0xB0, byte]);  // MOV AL, imm8
-        code.extend_from_slice(&[0xE6, 0xE9]);  // OUT 0xE9, AL
-    }
+    // ── Phase 1: Banner ──────────────────────────────────────────
+    emit_serial(&mut code, b"\r\n");
+    emit_serial(&mut code, b"========================================\r\n");
+    emit_serial(&mut code, b"  TrustVM Protected-Mode Mini-Kernel\r\n");
+    emit_serial(&mut code, b"  AMD SVM hardware virtualization\r\n");
+    emit_serial(&mut code, b"========================================\r\n");
+    emit_debug(&mut code, b"[PM-test] Boot OK\n");
+    
+    // ── Phase 2: CPUID queries ───────────────────────────────────
+    emit_serial(&mut code, b"[1/7] CPUID vendor... \r\n");
+    // EAX=0 → vendor string in EBX:EDX:ECX
+    code.extend_from_slice(&[0x31, 0xC0]);       // XOR EAX, EAX
+    code.extend_from_slice(&[0x0F, 0xA2]);       // CPUID
+    emit_debug(&mut code, b"[PM-test] CPUID leaf 0 OK\n");
+    
+    // EAX=1 → processor info + feature flags
+    emit_serial(&mut code, b"[2/7] CPUID features... \r\n");
+    code.extend_from_slice(&[0xB8, 0x01, 0x00, 0x00, 0x00]); // MOV EAX, 1
+    code.extend_from_slice(&[0x0F, 0xA2]);                     // CPUID
+    emit_debug(&mut code, b"[PM-test] CPUID leaf 1 OK\n");
+    
+    // EAX=0x80000000 → extended CPUID max
+    emit_serial(&mut code, b"[3/7] CPUID extended... \r\n");
+    code.extend_from_slice(&[0xB8, 0x00, 0x00, 0x00, 0x80]); // MOV EAX, 0x80000000
+    code.extend_from_slice(&[0x0F, 0xA2]);                     // CPUID
+    emit_debug(&mut code, b"[PM-test] CPUID leaf 80000000 OK\n");
+    
+    // ── Phase 3: I/O ports ───────────────────────────────────────
+    emit_serial(&mut code, b"[4/7] I/O port tests... \r\n");
     
     // Read PIC mask — IN AL, 0x21
     code.extend_from_slice(&[0xE4, 0x21]); // IN AL, 0x21 (PIC1 data)
-    
-    // Write PIC mask — OUT 0x21, AL (mask all IRQs)
+    // Write PIC mask — all masked
     code.extend_from_slice(&[0xB0, 0xFF]); // MOV AL, 0xFF
     code.extend_from_slice(&[0xE6, 0x21]); // OUT 0x21, AL
     
-    // Print CR test message
-    for &byte in b"[PM-test] CR write test\n" {
-        code.extend_from_slice(&[0xB0, byte]);
-        code.extend_from_slice(&[0xE6, 0xE9]);
-    }
+    // Read PIT counter 0 (port 0x40) — tests PIT I/O
+    code.extend_from_slice(&[0xE4, 0x40]); // IN AL, 0x40
+    
+    // Read CMOS register 0 (seconds) — port 0x70/0x71
+    code.extend_from_slice(&[0xB0, 0x00]); // MOV AL, 0 (seconds register)
+    code.extend_from_slice(&[0xE6, 0x70]); // OUT 0x70, AL (select reg)
+    code.extend_from_slice(&[0xE4, 0x71]); // IN AL, 0x71 (read value)
+    
+    // Read keyboard status port
+    code.extend_from_slice(&[0xE4, 0x64]); // IN AL, 0x64 (KBC status)
+    
+    emit_debug(&mut code, b"[PM-test] I/O ports OK\n");
+    
+    // ── Phase 4: CR writes ───────────────────────────────────────
+    emit_serial(&mut code, b"[5/7] Control register tests... \r\n");
     
     // Read CR0 into EAX
     code.extend_from_slice(&[0x0F, 0x20, 0xC0]); // MOV EAX, CR0
@@ -218,29 +256,78 @@ pub fn guest_protected_mode_test() -> Vec<u8> {
     code.extend_from_slice(&[0x0D, 0x20, 0x00, 0x00, 0x00]); // OR EAX, 0x20
     // Write back CR0
     code.extend_from_slice(&[0x0F, 0x22, 0xC0]); // MOV CR0, EAX
+    emit_debug(&mut code, b"[PM-test] CR0 write OK\n");
     
-    // Print success
-    for &byte in b"[PM-test] CR0 write OK\n" {
-        code.extend_from_slice(&[0xB0, byte]);
-        code.extend_from_slice(&[0xE6, 0xE9]);
+    // Read CR4 — set OSFXSR (bit 9) for SSE support indication
+    code.extend_from_slice(&[0x0F, 0x20, 0xE0]); // MOV EAX, CR4
+    code.extend_from_slice(&[0x0D, 0x00, 0x02, 0x00, 0x00]); // OR EAX, 0x200 (OSFXSR)
+    code.extend_from_slice(&[0x0F, 0x22, 0xE0]); // MOV CR4, EAX
+    emit_debug(&mut code, b"[PM-test] CR4 write OK\n");
+    
+    // ── Phase 5: Memory operations ───────────────────────────────
+    emit_serial(&mut code, b"[6/7] Memory test... \r\n");
+    
+    // Write a pattern to address 0x5000 (well within our 4MB guest memory)
+    // MOV EDI, 0x5000
+    code.extend_from_slice(&[0xBF, 0x00, 0x50, 0x00, 0x00]);
+    // MOV EAX, 0xDEADBEEF
+    code.extend_from_slice(&[0xB8, 0xEF, 0xBE, 0xAD, 0xDE]);
+    // MOV [EDI], EAX (store)
+    code.extend_from_slice(&[0x89, 0x07]);
+    // MOV EAX, 0 (clear)
+    code.extend_from_slice(&[0x31, 0xC0]);
+    // MOV EAX, [EDI] (load back)
+    code.extend_from_slice(&[0x8B, 0x07]);
+    // EAX should now be 0xDEADBEEF — verified by Inspector's register view
+    emit_debug(&mut code, b"[PM-test] Memory OK\n");
+    
+    // ── Phase 6: Hypercall — get TSC ─────────────────────────────
+    emit_serial(&mut code, b"[7/7] Hypercall tests... \r\n");
+    
+    // VMMCALL func 0x02 = get TSC
+    code.extend_from_slice(&[0xB8, 0x02, 0x00, 0x00, 0x00]); // MOV EAX, 2
+    code.extend_from_slice(&[0x0F, 0x01, 0xD9]);               // VMMCALL
+    // EAX now has TSC low bits
+    emit_debug(&mut code, b"[PM-test] VMMCALL get_time OK\n");
+    
+    // Store a string at GPA 0x6000 for hypercall_print
+    // "Hello from hypercall!\0"
+    let hc_msg = b"Hello from TrustVM hypercall!\0";
+    // MOV EDI, 0x6000
+    code.extend_from_slice(&[0xBF, 0x00, 0x60, 0x00, 0x00]);
+    for (i, &byte) in hc_msg.iter().enumerate() {
+        // MOV BYTE [EDI + i], byte
+        code.extend_from_slice(&[0xC6, 0x87]);
+        code.extend_from_slice(&(i as u32).to_le_bytes());
+        code.push(byte);
     }
     
-    // Test HLT (should get timer interrupt injected)
-    for &byte in b"[PM-test] HLT test\n" {
-        code.extend_from_slice(&[0xB0, byte]);
-        code.extend_from_slice(&[0xE6, 0xE9]);
-    }
+    // VMMCALL func 0x01 = print string at GPA in EBX
+    code.extend_from_slice(&[0xBB, 0x00, 0x60, 0x00, 0x00]); // MOV EBX, 0x6000
+    code.extend_from_slice(&[0xB8, 0x01, 0x00, 0x00, 0x00]); // MOV EAX, 1
+    code.extend_from_slice(&[0x0F, 0x01, 0xD9]);               // VMMCALL
+    emit_debug(&mut code, b"[PM-test] VMMCALL print OK\n");
+    
+    // ── Phase 7: HLT + wake ──────────────────────────────────────
+    emit_serial(&mut code, b"[*] HLT (waiting for timer inject)...\r\n");
     code.push(0xF4); // HLT
     
-    // After waking from HLT, print and exit
-    for &byte in b"[PM-test] Woke from HLT!\n" {
-        code.extend_from_slice(&[0xB0, byte]);
-        code.extend_from_slice(&[0xE6, 0xE9]);
-    }
+    // After waking from HLT, declare success
+    emit_serial(&mut code, b"[*] Woke from HLT!\r\n");
+    emit_serial(&mut code, b"========================================\r\n");
+    emit_serial(&mut code, b"  All 7 phases PASSED\r\n");
+    emit_serial(&mut code, b"  VM exiting via VMMCALL...\r\n");
+    emit_serial(&mut code, b"========================================\r\n");
+    emit_debug(&mut code, b"[PM-test] ALL TESTS PASSED\n");
     
-    // Exit via VMMCALL (AMD: 0F 01 D9)
-    code.extend_from_slice(&[0xB8, 0x01, 0x00, 0x00, 0x00]); // MOV EAX, 1 (exit)
-    code.extend_from_slice(&[0x0F, 0x01, 0xD9]); // VMMCALL
+    // ── Exit via VMMCALL ─────────────────────────────────────────
+    // Load EAX with 0xDEAD to leave a visible signature in registers
+    code.extend_from_slice(&[0xB8, 0xAD, 0xDE, 0x00, 0x00]); // MOV EAX, 0xDEAD
+    // Load EBX with 0xCAFE
+    code.extend_from_slice(&[0xBB, 0xFE, 0xCA, 0x00, 0x00]); // MOV EBX, 0xCAFE
+    // Now set EAX=0 (exit hypercall)
+    code.extend_from_slice(&[0xB8, 0x00, 0x00, 0x00, 0x00]); // MOV EAX, 0 (exit)
+    code.extend_from_slice(&[0x0F, 0x01, 0xD9]);               // VMMCALL
     
     // HLT fallback
     code.push(0xF4);

@@ -87,7 +87,7 @@ pub struct SvmVirtualMachine {
     /// Guest general-purpose registers
     pub(crate) guest_regs: SvmGuestRegs,
     /// ASID for TLB isolation
-    asid: u32,
+    pub asid: u32,
     /// Console ID for output
     console_id: Option<usize>,
     /// SVM features available
@@ -407,6 +407,23 @@ impl SvmVirtualMachine {
             // Handle #VMEXIT
             let continue_running = self.handle_vmexit_inline()?;
             
+            // Emit register snapshot to trace bus periodically (for VM Inspector)
+            if self.stats.vmexits % 50 == 0 || !continue_running {
+                let rip = {
+                    let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
+                    vmcb.read_state(state_offsets::RIP)
+                };
+                crate::lab_mode::trace_bus::emit_vm_regs(
+                    self.id,
+                    self.guest_regs.rax,
+                    self.guest_regs.rbx,
+                    self.guest_regs.rcx,
+                    self.guest_regs.rdx,
+                    rip,
+                    self.guest_regs.rsp,
+                );
+            }
+            
             if !continue_running {
                 break;
             }
@@ -435,7 +452,9 @@ impl SvmVirtualMachine {
         
         crate::serial_println!("[SVM-VM {}] Stopped after {} VMEXITs", self.id, self.stats.vmexits);
         crate::lab_mode::trace_bus::emit_vm_lifecycle(
-            self.id, &format!("STOPPED after {} exits", self.stats.vmexits)
+            self.id, &format!("STOPPED after {} exits (cpuid={} io={} msr={} hlt={} vmcall={})",
+                self.stats.vmexits, self.stats.cpuid_exits, self.stats.io_exits,
+                self.stats.msr_exits, self.stats.hlt_exits, self.stats.vmmcall_exits)
         );
         
         Ok(())
