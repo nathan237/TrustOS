@@ -226,34 +226,141 @@ pub struct PackageInfo {
 
 /// Available packages in the simulated repository
 const REPO_PACKAGES: &[PackageInfo] = &[
+    // Editors
     PackageInfo { name: "vim", version: "9.0.2127-r0", size_kb: 1824, description: "Improved vi-style text editor", deps: &["ncurses-libs", "vim-common"] },
     PackageInfo { name: "vim-common", version: "9.0.2127-r0", size_kb: 6240, description: "Vim common files", deps: &[] },
-    PackageInfo { name: "nano", version: "7.2-r1", size_kb: 612, description: "Pstringly enhanced clone of Pico editor", deps: &["ncurses-libs"] },
+    PackageInfo { name: "nano", version: "7.2-r1", size_kb: 612, description: "Nano text editor", deps: &["ncurses-libs"] },
+    PackageInfo { name: "emacs", version: "29.1-r0", size_kb: 48000, description: "GNU Emacs editor", deps: &[] },
+    PackageInfo { name: "micro", version: "2.0.13-r0", size_kb: 11264, description: "Modern terminal text editor", deps: &[] },
+    PackageInfo { name: "helix", version: "23.10-r0", size_kb: 24576, description: "Post-modern modal text editor", deps: &[] },
+    // Shells
+    PackageInfo { name: "bash", version: "5.2.21-r0", size_kb: 1320, description: "The GNU Bourne Again shell", deps: &["ncurses-libs"] },
+    PackageInfo { name: "zsh", version: "5.9.0-r0", size_kb: 3200, description: "Z shell", deps: &["ncurses-libs"] },
+    PackageInfo { name: "fish", version: "3.7.0-r0", size_kb: 6400, description: "Friendly interactive shell", deps: &["ncurses-libs"] },
+    PackageInfo { name: "dash", version: "0.5.12-r0", size_kb: 96, description: "POSIX compliant shell", deps: &[] },
+    // Libraries
     PackageInfo { name: "ncurses-libs", version: "6.4_p20231125-r0", size_kb: 308, description: "Ncurses libraries", deps: &[] },
-    PackageInfo { name: "curl", version: "8.5.0-r0", size_kb: 356, description: "URL retrieval utility and library", deps: &["ca-certificates", "libcurl"] },
-    PackageInfo { name: "libcurl", version: "8.5.0-r0", size_kb: 512, description: "The multiprotocol file transfer library", deps: &["openssl"] },
-    PackageInfo { name: "wget", version: "1.21.4-r0", size_kb: 480, description: "Network utility to retrieve files from the Web", deps: &["openssl"] },
-    PackageInfo { name: "git", version: "2.43.0-r0", size_kb: 14336, description: "Distributed version control system", deps: &["openssl", "curl", "perl"] },
-    PackageInfo { name: "perl", version: "5.38.2-r0", size_kb: 16384, description: "Larry Wall's Practical Extraction and Report Language", deps: &[] },
     PackageInfo { name: "openssl", version: "3.1.4-r5", size_kb: 7168, description: "Toolkit for SSL/TLS", deps: &["ca-certificates"] },
     PackageInfo { name: "ca-certificates", version: "20240226-r0", size_kb: 680, description: "Common CA certificates PEM files", deps: &[] },
-    PackageInfo { name: "python3", version: "3.11.8-r0", size_kb: 25600, description: "High-level scripting language", deps: &["libffi", "openssl"] },
+    PackageInfo { name: "libcurl", version: "8.5.0-r0", size_kb: 512, description: "The multiprotocol file transfer library", deps: &["openssl"] },
     PackageInfo { name: "libffi", version: "3.4.4-r3", size_kb: 52, description: "Portable foreign function interface library", deps: &[] },
+    // Network tools
+    PackageInfo { name: "curl", version: "8.5.0-r0", size_kb: 356, description: "URL retrieval utility and library", deps: &["ca-certificates", "libcurl"] },
+    PackageInfo { name: "wget", version: "1.21.4-r0", size_kb: 480, description: "Network utility to retrieve files from the Web", deps: &["openssl"] },
+    PackageInfo { name: "git", version: "2.43.0-r0", size_kb: 14336, description: "Distributed version control system", deps: &["openssl", "curl", "perl"] },
+    PackageInfo { name: "openssh", version: "9.6_p1-r0", size_kb: 3072, description: "Port of OpenBSD's free SSH release", deps: &["openssl"] },
+    PackageInfo { name: "nmap", version: "7.94-r0", size_kb: 5120, description: "Network exploration and security scanner", deps: &[] },
+    PackageInfo { name: "tcpdump", version: "4.99.4-r1", size_kb: 640, description: "Network packet analyzer", deps: &[] },
+    PackageInfo { name: "socat", version: "1.8.0.0-r0", size_kb: 384, description: "Multipurpose relay for binary protocols", deps: &[] },
+    PackageInfo { name: "iperf3", version: "3.16-r0", size_kb: 192, description: "Network bandwidth measurement tool", deps: &[] },
+    PackageInfo { name: "bind-tools", version: "9.18.24-r0", size_kb: 2048, description: "ISC BIND DNS tools (dig)", deps: &[] },
+    PackageInfo { name: "mtr", version: "0.95-r2", size_kb: 192, description: "Network diagnostic tool", deps: &[] },
+    PackageInfo { name: "wireguard-tools", version: "1.0.20210914-r3", size_kb: 64, description: "WireGuard VPN tools", deps: &[] },
+    PackageInfo { name: "openvpn", version: "2.6.8-r0", size_kb: 1024, description: "VPN solution", deps: &["openssl"] },
+    PackageInfo { name: "lynx", version: "2.8.9-r5", size_kb: 2048, description: "Text-mode web browser", deps: &[] },
+    // Languages
+    PackageInfo { name: "python3", version: "3.11.8-r0", size_kb: 25600, description: "High-level scripting language", deps: &["libffi", "openssl"] },
+    PackageInfo { name: "perl", version: "5.38.2-r0", size_kb: 16384, description: "Larry Wall's Practical Extraction and Report Language", deps: &[] },
     PackageInfo { name: "gcc", version: "13.2.1_git20231014-r0", size_kb: 102400, description: "The GNU Compiler Collection", deps: &["binutils", "musl-dev"] },
+    PackageInfo { name: "rust", version: "1.75.0-r0", size_kb: 204800, description: "The Rust programming language", deps: &["gcc", "musl-dev"] },
+    PackageInfo { name: "nodejs", version: "20.11.1-r0", size_kb: 30720, description: "JavaScript runtime built on V8", deps: &["openssl", "libffi"] },
+    PackageInfo { name: "go", version: "1.21.6-r0", size_kb: 143360, description: "Go programming language", deps: &[] },
+    PackageInfo { name: "ruby", version: "3.2.3-r0", size_kb: 12288, description: "Ruby programming language", deps: &[] },
+    PackageInfo { name: "php83", version: "8.3.2-r0", size_kb: 15360, description: "PHP programming language", deps: &[] },
+    PackageInfo { name: "lua5.4", version: "5.4.6-r2", size_kb: 256, description: "Lua programming language", deps: &[] },
+    PackageInfo { name: "zig", version: "0.11.0-r0", size_kb: 51200, description: "Zig programming language", deps: &[] },
+    PackageInfo { name: "nim", version: "2.0.2-r0", size_kb: 10240, description: "Nim programming language", deps: &[] },
+    PackageInfo { name: "openjdk17-jre", version: "17.0.10-r0", size_kb: 204800, description: "OpenJDK 17 Runtime", deps: &[] },
+    PackageInfo { name: "elixir", version: "1.16.1-r0", size_kb: 7680, description: "Elixir programming language", deps: &[] },
+    PackageInfo { name: "clang", version: "17.0.5-r0", size_kb: 81920, description: "C language family frontend for LLVM", deps: &[] },
+    PackageInfo { name: "cmake", version: "3.27.8-r0", size_kb: 9728, description: "Cross-platform build system", deps: &[] },
+    // Build tools
     PackageInfo { name: "binutils", version: "2.41-r0", size_kb: 8192, description: "Tools necessary to build programs", deps: &[] },
     PackageInfo { name: "musl-dev", version: "1.2.4_git20230717-r4", size_kb: 1024, description: "musl C library development files", deps: &[] },
     PackageInfo { name: "make", version: "4.4.1-r2", size_kb: 272, description: "GNU make utility", deps: &[] },
-    PackageInfo { name: "bash", version: "5.2.21-r0", size_kb: 1320, description: "The GNU Bourne Again shell", deps: &["ncurses-libs"] },
+    PackageInfo { name: "nasm", version: "2.16.01-r0", size_kb: 640, description: "Netwide Assembler", deps: &[] },
+    // Debug tools
+    PackageInfo { name: "gdb", version: "14.1-r0", size_kb: 12800, description: "GNU debugger", deps: &[] },
+    PackageInfo { name: "valgrind", version: "3.22.0-r0", size_kb: 22528, description: "Memory debugging tool", deps: &[] },
+    PackageInfo { name: "strace", version: "6.7-r0", size_kb: 580, description: "System call tracer", deps: &[] },
+    PackageInfo { name: "ltrace", version: "0.7.3-r8", size_kb: 384, description: "Library call tracer", deps: &[] },
+    PackageInfo { name: "lsof", version: "4.99.3-r0", size_kb: 320, description: "List open files", deps: &[] },
+    // Servers
+    PackageInfo { name: "nginx", version: "1.24.0-r15", size_kb: 2048, description: "HTTP and reverse proxy server", deps: &["openssl"] },
+    PackageInfo { name: "apache2", version: "2.4.58-r0", size_kb: 5120, description: "Apache HTTP Server", deps: &[] },
+    PackageInfo { name: "haproxy", version: "2.8.5-r0", size_kb: 3072, description: "TCP/HTTP Load Balancer", deps: &[] },
+    PackageInfo { name: "dnsmasq", version: "2.90-r0", size_kb: 384, description: "Lightweight DNS/DHCP server", deps: &[] },
+    PackageInfo { name: "squid", version: "6.6-r0", size_kb: 7680, description: "HTTP caching proxy", deps: &[] },
+    // Databases
+    PackageInfo { name: "redis", version: "7.2.4-r0", size_kb: 4096, description: "In-memory data structure store", deps: &[] },
+    PackageInfo { name: "postgresql16", version: "16.2-r0", size_kb: 15360, description: "PostgreSQL database server", deps: &[] },
+    PackageInfo { name: "mariadb", version: "10.11.6-r0", size_kb: 25600, description: "MariaDB database server", deps: &[] },
+    PackageInfo { name: "sqlite", version: "3.44.2-r0", size_kb: 1024, description: "SQLite database engine", deps: &[] },
+    // Containers & cloud
+    PackageInfo { name: "docker-cli", version: "24.0.7-r0", size_kb: 50000, description: "Docker container runtime", deps: &[] },
+    PackageInfo { name: "podman", version: "4.8.3-r0", size_kb: 40960, description: "Daemonless container engine", deps: &[] },
+    PackageInfo { name: "helm", version: "3.14.0-r0", size_kb: 15360, description: "Kubernetes package manager", deps: &[] },
+    PackageInfo { name: "kubectl", version: "1.29.1-r0", size_kb: 20480, description: "Kubernetes CLI", deps: &[] },
+    PackageInfo { name: "terraform", version: "1.7.2-r0", size_kb: 81920, description: "Infrastructure as code", deps: &[] },
+    PackageInfo { name: "ansible", version: "9.2.0-r0", size_kb: 25600, description: "IT automation tool", deps: &[] },
+    // System utilities
+    PackageInfo { name: "coreutils", version: "9.4-r1", size_kb: 6400, description: "GNU core utilities", deps: &[] },
+    PackageInfo { name: "findutils", version: "4.9.0-r5", size_kb: 640, description: "GNU find utilities", deps: &[] },
+    PackageInfo { name: "grep", version: "3.11-r0", size_kb: 320, description: "GNU grep", deps: &[] },
+    PackageInfo { name: "sed", version: "4.9-r2", size_kb: 224, description: "GNU stream editor", deps: &[] },
+    PackageInfo { name: "gawk", version: "5.3.0-r0", size_kb: 1024, description: "GNU awk", deps: &[] },
+    PackageInfo { name: "diffutils", version: "3.10-r0", size_kb: 384, description: "GNU diff utilities", deps: &[] },
+    PackageInfo { name: "patch", version: "2.7.6-r10", size_kb: 128, description: "GNU patch", deps: &[] },
+    PackageInfo { name: "less", version: "643-r0", size_kb: 192, description: "Pager program", deps: &[] },
+    PackageInfo { name: "file", version: "5.45-r1", size_kb: 640, description: "File type identification", deps: &[] },
+    PackageInfo { name: "iproute2", version: "6.7.0-r0", size_kb: 1024, description: "IP routing utilities", deps: &[] },
+    PackageInfo { name: "util-linux", version: "2.39.3-r0", size_kb: 4096, description: "System utilities", deps: &[] },
+    PackageInfo { name: "procps", version: "4.0.4-r0", size_kb: 480, description: "Process monitoring utilities", deps: &[] },
+    PackageInfo { name: "shadow", version: "4.14.3-r0", size_kb: 480, description: "User/group management", deps: &[] },
+    PackageInfo { name: "e2fsprogs", version: "1.47.0-r5", size_kb: 2048, description: "Ext2/3/4 filesystem utilities", deps: &[] },
+    // Compression
+    PackageInfo { name: "gzip", version: "1.13-r0", size_kb: 96, description: "GNU zip compression", deps: &[] },
+    PackageInfo { name: "bzip2", version: "1.0.8-r6", size_kb: 128, description: "Block-sorting compressor", deps: &[] },
+    PackageInfo { name: "xz", version: "5.4.5-r0", size_kb: 256, description: "XZ Utils compression", deps: &[] },
+    PackageInfo { name: "zstd", version: "1.5.5-r8", size_kb: 384, description: "Zstandard compression", deps: &[] },
+    PackageInfo { name: "zip", version: "3.0-r12", size_kb: 192, description: "Create ZIP archives", deps: &[] },
+    PackageInfo { name: "unzip", version: "6.0-r14", size_kb: 192, description: "Extract ZIP archives", deps: &[] },
+    PackageInfo { name: "p7zip", version: "17.05-r0", size_kb: 2048, description: "7-Zip file archiver", deps: &[] },
+    // Media
+    PackageInfo { name: "ffmpeg", version: "6.1.1-r0", size_kb: 20480, description: "Complete multimedia framework", deps: &[] },
+    PackageInfo { name: "imagemagick", version: "7.1.1-r0", size_kb: 15360, description: "Image manipulation tools", deps: &[] },
+    PackageInfo { name: "mpv", version: "0.37.0-r0", size_kb: 5120, description: "Media player", deps: &[] },
+    // Modern CLI tools
+    PackageInfo { name: "ripgrep", version: "14.1.0-r0", size_kb: 6144, description: "Fast recursive grep alternative (rg)", deps: &[] },
+    PackageInfo { name: "fd", version: "9.0.0-r0", size_kb: 3072, description: "Simple fast alternative to find", deps: &[] },
+    PackageInfo { name: "bat", version: "0.24.0-r0", size_kb: 5120, description: "Cat clone with syntax highlighting", deps: &[] },
+    PackageInfo { name: "exa", version: "0.10.1-r3", size_kb: 1536, description: "Modern replacement for ls", deps: &[] },
+    PackageInfo { name: "fzf", version: "0.44.1-r0", size_kb: 3072, description: "Fuzzy finder", deps: &[] },
+    PackageInfo { name: "dust", version: "0.8.6-r0", size_kb: 2048, description: "Intuitive version of du", deps: &[] },
+    PackageInfo { name: "hyperfine", version: "1.18.0-r0", size_kb: 2048, description: "Command-line benchmarking tool", deps: &[] },
+    PackageInfo { name: "tokei", version: "12.1.2-r4", size_kb: 3072, description: "Code statistics tool", deps: &[] },
+    // VCS
+    PackageInfo { name: "mercurial", version: "6.6.3-r0", size_kb: 7680, description: "Mercurial version control", deps: &[] },
+    PackageInfo { name: "subversion", version: "1.14.3-r0", size_kb: 5120, description: "Subversion version control", deps: &[] },
+    PackageInfo { name: "fossil", version: "2.23-r0", size_kb: 3072, description: "Fossil version control", deps: &[] },
+    // Misc
     PackageInfo { name: "htop", version: "3.3.0-r0", size_kb: 216, description: "Interactive process viewer", deps: &["ncurses-libs"] },
     PackageInfo { name: "neofetch", version: "7.1.0-r3", size_kb: 76, description: "CLI system information tool", deps: &["bash"] },
-    PackageInfo { name: "openssh", version: "9.6_p1-r0", size_kb: 3072, description: "Port of OpenBSD's free SSH release", deps: &["openssl"] },
-    PackageInfo { name: "nginx", version: "1.24.0-r15", size_kb: 2048, description: "HTTP and reverse proxy server", deps: &["openssl"] },
-    PackageInfo { name: "nodejs", version: "20.11.1-r0", size_kb: 30720, description: "JavaScript runtime built on V8", deps: &["openssl", "libffi"] },
-    PackageInfo { name: "rust", version: "1.75.0-r0", size_kb: 204800, description: "The Rust programming language", deps: &["gcc", "musl-dev"] },
     PackageInfo { name: "tree", version: "2.1.1-r0", size_kb: 48, description: "Directory listing in tree-like format", deps: &[] },
     PackageInfo { name: "jq", version: "1.7.1-r0", size_kb: 312, description: "Lightweight JSON processor", deps: &[] },
-    PackageInfo { name: "strace", version: "6.7-r0", size_kb: 580, description: "Diagnostic, debugging and instructional userspace tracer", deps: &[] },
     PackageInfo { name: "tmux", version: "3.3a-r5", size_kb: 424, description: "Terminal multiplexer", deps: &["ncurses-libs"] },
+    PackageInfo { name: "screen", version: "4.9.1-r0", size_kb: 640, description: "Terminal multiplexer", deps: &[] },
+    PackageInfo { name: "bc", version: "1.07.1-r4", size_kb: 128, description: "Calculator language", deps: &[] },
+    PackageInfo { name: "ncdu", version: "2.3-r0", size_kb: 192, description: "NCurses disk usage", deps: &[] },
+    PackageInfo { name: "ranger", version: "1.9.3-r6", size_kb: 640, description: "Console file manager", deps: &[] },
+    PackageInfo { name: "mc", version: "4.8.31-r0", size_kb: 3072, description: "Midnight Commander file manager", deps: &[] },
+    PackageInfo { name: "cowsay", version: "3.04-r2", size_kb: 24, description: "Talking cow", deps: &[] },
+    PackageInfo { name: "figlet", version: "2.2.5-r3", size_kb: 128, description: "Large text banners", deps: &[] },
+    PackageInfo { name: "sl", version: "5.05-r0", size_kb: 24, description: "Steam locomotive", deps: &[] },
+    PackageInfo { name: "fortune", version: "0.1-r2", size_kb: 1024, description: "Fortune cookie program", deps: &[] },
+    PackageInfo { name: "py3-pip", version: "23.3.2-r0", size_kb: 5120, description: "Python package installer", deps: &["python3"] },
+    PackageInfo { name: "certbot", version: "2.8.0-r0", size_kb: 3072, description: "ACME client for Let's Encrypt", deps: &[] },
+    PackageInfo { name: "fail2ban", version: "1.0.2-r0", size_kb: 2048, description: "Intrusion prevention", deps: &[] },
 ];
 
 fn find_package(name: &str) -> Option<&'static PackageInfo> {
@@ -1006,7 +1113,23 @@ Note: Running in simulated mode (no real Linux kernel)")
                 out.push_str("Reading package lists... Done\n");
                 out.push_str("Building dependency tree... Done\n");
                 if self.online_mode {
-                    out.push_str(&format!("{} packages available (live).\n", REPO_PACKAGES.len()));
+                    // Query server for total available packages
+                    let mut total_avail = REPO_PACKAGES.len();
+                    if let Some(ref srv) = self.pkg_server {
+                        let info_url = alloc::format!("{}/repo", srv);
+                        if let Ok(resp) = crate::netstack::http::get(&info_url) {
+                            // Parse "total_available" from JSON response
+                            if let Some(pos) = resp.body.windows(17).position(|w| w == b"total_available\":") {
+                                let rest = &resp.body[pos + 17..];
+                                let num_end = rest.iter().position(|&b| !b.is_ascii_digit() && b != b' ').unwrap_or(rest.len());
+                                let num_str = core::str::from_utf8(&rest[..num_end]).unwrap_or("").trim();
+                                if let Ok(n) = num_str.parse::<usize>() {
+                                    total_avail = n;
+                                }
+                            }
+                        }
+                    }
+                    out.push_str(&format!("{} packages available (live).\n", total_avail));
                 } else {
                     out.push_str(&format!("{} packages can be upgraded. Run 'apt-get upgrade' to see them.\n",
                         REPO_PACKAGES.len().saturating_sub(self.installed_packages.len()).min(8)));
@@ -1033,6 +1156,7 @@ Note: Running in simulated mode (no real Linux kernel)")
                 // Resolve all requested packages + deps
                 let mut to_install: Vec<&'static PackageInfo> = Vec::new();
                 let mut not_found: Vec<&str> = Vec::new();
+                let mut dynamic_pkgs: Vec<&str> = Vec::new(); // packages to fetch from server
 
                 for &name in pkg_args {
                     // skip flags like -y
@@ -1054,6 +1178,9 @@ Note: Running in simulated mode (no real Linux kernel)")
                         {
                             to_install.push(pkg);
                         }
+                    } else if self.online_mode && self.pkg_server.is_some() {
+                        // Package not in local repo — try downloading from server (Alpine CDN proxy)
+                        dynamic_pkgs.push(name);
                     } else {
                         not_found.push(name);
                     }
@@ -1063,12 +1190,43 @@ Note: Running in simulated mode (no real Linux kernel)")
                     out.push_str(&format!("E: Unable to locate package {}\n", nf));
                 }
 
-                if to_install.is_empty() && not_found.is_empty() {
+                // Try dynamic download for packages not in local repo
+                let mut dynamic_installed = 0u32;
+                if !dynamic_pkgs.is_empty() {
+                    let srv = self.pkg_server.clone().unwrap_or_default();
+                    for &dyn_name in &dynamic_pkgs {
+                        out.push_str(&format!("Resolving {} via package server...\n", dyn_name));
+                        if let Some(data) = self.download_package(&srv, dyn_name) {
+                            let dl_size = data.len();
+                            self.total_bytes_downloaded += dl_size;
+                            let files = self.extract_package_to_ramfs(&data);
+                            if files > 0 {
+                                out.push_str(&format!("Get:1 {}/repo/pool/{}.pkg [{} B]\n", srv, dyn_name, dl_size));
+                                out.push_str(&format!("  -> Downloaded {} bytes, extracted {} files\n", dl_size, files));
+                                // Extract version from first line of data ("PKG name version")
+                                let ver_str = core::str::from_utf8(&data).unwrap_or("")
+                                    .lines().next().unwrap_or("")
+                                    .splitn(3, ' ').nth(2).unwrap_or("latest");
+                                // Store as installed (we leak the string since installed_packages takes &'static str)
+                                let name_box = alloc::boxed::Box::leak(String::from(dyn_name).into_boxed_str());
+                                let ver_box = alloc::boxed::Box::leak(String::from(ver_str).into_boxed_str());
+                                self.installed_packages.push((name_box, ver_box));
+                                dynamic_installed += 1;
+                            } else {
+                                out.push_str(&format!("E: Unable to locate package {}\n", dyn_name));
+                            }
+                        } else {
+                            out.push_str(&format!("E: Unable to locate package {}\n", dyn_name));
+                        }
+                    }
+                }
+
+                if to_install.is_empty() && dynamic_installed == 0 && not_found.is_empty() && dynamic_pkgs.is_empty() {
                     out.push_str("All requested packages are already installed.\n");
                     return Ok(CommandResult::success(out));
                 }
 
-                if to_install.is_empty() {
+                if to_install.is_empty() && dynamic_installed == 0 {
                     return Ok(CommandResult::error(1, out));
                 }
 
@@ -1201,6 +1359,7 @@ Note: Running in simulated mode (no real Linux kernel)")
                 // keyword is lowercase String, we need to compare against &str
                 let mut out = String::new();
                 let mut count = 0;
+                // Search local repo
                 for pkg in REPO_PACKAGES {
                     if pkg.name.contains(keyword.as_str()) || pkg.description.to_lowercase().contains(keyword.as_str()) {
                         let installed = if self.installed_packages.iter().any(|(n, _)| *n == pkg.name) {
@@ -1213,8 +1372,39 @@ Note: Running in simulated mode (no real Linux kernel)")
                         count += 1;
                     }
                 }
+                // Search server (Alpine CDN proxy) for more results
+                if self.online_mode {
+                    if let Some(ref srv) = self.pkg_server {
+                        let search_url = alloc::format!("{}/repo/search?q={}", srv, pkg_args[0]);
+                        if let Ok(resp) = crate::netstack::http::get(&search_url) {
+                            if resp.status_code == 200 {
+                                let text = core::str::from_utf8(&resp.body).unwrap_or("");
+                                for line in text.lines() {
+                                    if line.is_empty() || line == "No results" { continue; }
+                                    // Format: "name version size_kb arch nfiles deps description"
+                                    let parts: Vec<&str> = line.splitn(7, ' ').collect();
+                                    if parts.len() >= 7 {
+                                        let pname = parts[0];
+                                        // Skip if already shown from local repo
+                                        if REPO_PACKAGES.iter().any(|p| p.name == pname) { continue; }
+                                        let installed = if self.installed_packages.iter().any(|(n, _)| *n == pname) {
+                                            " [installed]"
+                                        } else {
+                                            ""
+                                        };
+                                        out.push_str(&format!("{}/{} {} {}{}\n  {}\n\n",
+                                            pname, parts[1], parts[2], parts[3], installed, parts[6]));
+                                        count += 1;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 if count == 0 {
                     out.push_str(&format!("No packages found matching '{}'.\n", pkg_args[0]));
+                } else {
+                    out.push_str(&format!("{} packages found.\n", count));
                 }
                 Ok(CommandResult::success(out))
             }

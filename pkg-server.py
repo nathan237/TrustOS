@@ -17,10 +17,15 @@ import sys
 import os
 import time
 import hashlib
-from urllib.parse import urlparse, unquote
+import io
+import tarfile
+import threading
+import urllib.request
+from urllib.parse import urlparse, unquote, parse_qs
 
 PORT = 8080
 HOST = "0.0.0.0"
+ALPINE_MIRROR = "https://dl-cdn.alpinelinux.org/alpine/v3.19"
 
 # ─── Package Repository ──────────────────────────────────────────────────────
 # Each package has: version, size_kb, description, depends, files
@@ -547,6 +552,269 @@ PACKAGES = {
     },
 }
 
+# ─── Extra Packages (compact definitions to reach 100+) ──────────────────────
+
+def _pkg_quick(name, version, size_kb, desc, depends=None, bin_name=None, extra_output=""):
+    """Helper to create a simple package with auto-generated shell script."""
+    bn = bin_name or name
+    script = f"#!/bin/sh\necho '{name} {version}'\necho '{desc}'\n"
+    if extra_output:
+        script += extra_output + "\n"
+    return {
+        "version": version, "size_kb": size_kb, "arch": "x86_64",
+        "description": desc, "depends": depends or [],
+        "files": {f"/usr/bin/{bn}": script}
+    }
+
+_EXTRA = [
+    # Shells
+    ("zsh", "5.9.0-r0", 3200, "Z shell", ["ncurses-libs"], None, "echo 'Usage: zsh [options] [script]'"),
+    ("fish", "3.7.0-r0", 6400, "Friendly interactive shell", ["ncurses-libs"], None, "echo 'Usage: fish [options] [command]'"),
+    ("dash", "0.5.12-r0", 96, "POSIX compliant shell", [], None, ""),
+    ("tcsh", "6.24.10-r0", 560, "Enhanced C shell", [], None, ""),
+    ("ksh", "2020.0.0-r3", 1024, "KornShell", [], None, ""),
+    # Editors
+    ("emacs", "29.1-r0", 48000, "GNU Emacs editor", [], None, "echo 'C-x C-s save | C-x C-c quit | C-x C-f open'"),
+    ("micro", "2.0.13-r0", 11264, "Modern terminal text editor", [], None, ""),
+    ("helix", "23.10-r0", 24576, "Post-modern modal text editor", [], "hx", ""),
+    ("ed", "1.20.1-r0", 52, "Classic UNIX line editor", [], None, ""),
+    # Dev tools
+    ("cmake", "3.27.8-r0", 9728, "Cross-platform build system", [], None, "echo 'Usage: cmake [options] <path-to-source>'"),
+    ("gdb", "14.1-r0", 12800, "GNU debugger", [], None, "echo 'Usage: gdb [options] [program [core]]'"),
+    ("valgrind", "3.22.0-r0", 22528, "Memory debugging tool", [], None, "echo 'Usage: valgrind [options] program [args]'"),
+    ("llvm17", "17.0.5-r0", 102400, "LLVM compiler infrastructure", [], "llvm-config", ""),
+    ("clang", "17.0.5-r0", 81920, "C language family frontend for LLVM", ["llvm17"], None, "echo 'Target: x86_64-alpine-linux-musl'"),
+    ("go", "1.21.6-r0", 143360, "Go programming language", [], None, "echo 'Usage: go <command> [arguments]'"),
+    ("ruby", "3.2.3-r0", 12288, "Ruby programming language", [], None, "echo 'Usage: ruby [options] [program] [arguments]'"),
+    ("php83", "8.3.2-r0", 15360, "PHP programming language", [], "php", "echo 'Usage: php [options] [-f] <file>'"),
+    ("lua5.4", "5.4.6-r2", 256, "Lua programming language", [], "lua", "echo 'Usage: lua [options] [script [args]]'"),
+    ("zig", "0.11.0-r0", 51200, "Zig programming language", [], None, "echo 'Usage: zig <command> [options]'"),
+    ("nim", "2.0.2-r0", 10240, "Nim programming language", [], None, "echo 'Usage: nim <command> [options] file.nim'"),
+    ("openjdk17-jre", "17.0.10-r0", 204800, "OpenJDK 17 Runtime", [], "java", "echo 'Usage: java [options] <mainclass> [args]'"),
+    ("elixir", "1.16.1-r0", 7680, "Elixir programming language", [], None, "echo 'Usage: elixir [options] [file]'"),
+    ("R", "4.3.2-r0", 30720, "R statistical computing", [], None, "echo 'Usage: R [options] [< infile] [> outfile]'"),
+    ("ghc", "9.4.8-r0", 204800, "Glasgow Haskell Compiler", [], None, "echo 'Usage: ghc [options] file.hs'"),
+    ("erlang", "26.2.1-r0", 40960, "Erlang/OTP", [], "erl", ""),
+    ("ocaml", "5.1.1-r0", 20480, "OCaml compiler", [], None, ""),
+    ("sbcl", "2.4.0-r0", 15360, "Steel Bank Common Lisp", [], None, ""),
+    ("nasm", "2.16.01-r0", 640, "Netwide Assembler", [], None, "echo 'Usage: nasm [options] file.asm'"),
+    # System utilities
+    ("coreutils", "9.4-r1", 6400, "GNU core utilities", [], None, "echo 'GNU coreutils 9.4'"),
+    ("findutils", "4.9.0-r5", 640, "GNU find utilities", [], "find", "echo 'Usage: find [path] [expression]'"),
+    ("grep", "3.11-r0", 320, "GNU grep", [], None, "echo 'Usage: grep [OPTION] PATTERN [FILE]'"),
+    ("sed", "4.9-r2", 224, "GNU stream editor", [], None, "echo 'Usage: sed [OPTION] script [file]'"),
+    ("gawk", "5.3.0-r0", 1024, "GNU awk", [], "awk", "echo 'Usage: awk [options] program [file]'"),
+    ("diffutils", "3.10-r0", 384, "GNU diff utilities", [], "diff", "echo 'Usage: diff [OPTION] FILE1 FILE2'"),
+    ("patch", "2.7.6-r10", 128, "GNU patch", [], None, "echo 'Usage: patch [options] [origfile [patchfile]]'"),
+    ("file", "5.45-r1", 640, "File type identification", [], None, "echo 'Usage: file [options] file...'"),
+    ("less", "643-r0", 192, "Pager program", [], None, "echo 'Usage: less [options] file...'"),
+    ("which", "2.21-r4", 28, "Locate a command", [], None, ""),
+    ("procps", "4.0.4-r0", 480, "Process monitoring utilities", [], "ps", "echo 'Usage: ps [options]'"),
+    ("shadow", "4.14.3-r0", 480, "User/group management", [], "useradd", "echo 'Usage: useradd [options] LOGIN'"),
+    ("util-linux", "2.39.3-r0", 4096, "System utilities", [], "lsblk", "echo 'Usage: lsblk [options] [device]'"),
+    ("iproute2", "6.7.0-r0", 1024, "IP routing utilities", [], "ip", "echo 'Usage: ip [OPTIONS] OBJECT COMMAND'"),
+    ("iptables", "1.8.10-r3", 640, "Linux firewall admin", [], None, "echo 'Usage: iptables [options]'"),
+    ("net-tools", "2.10-r3", 320, "Classic networking tools", [], "ifconfig", "echo 'Usage: ifconfig [interface] [options]'"),
+    ("e2fsprogs", "1.47.0-r5", 2048, "Ext2/3/4 filesystem utilities", [], "mkfs.ext4", ""),
+    ("wireless-tools", "30-r0", 128, "Wireless extensions tools", [], "iwconfig", ""),
+    # Databases & services
+    ("docker-cli", "24.0.7-r0", 50000, "Docker container runtime", [], "docker", "echo 'Usage: docker [OPTIONS] COMMAND'"),
+    ("redis", "7.2.4-r0", 4096, "In-memory data store", [], "redis-server", "echo 'Usage: redis-server [config-file]'"),
+    ("postgresql16", "16.2-r0", 15360, "PostgreSQL database", [], "psql", "echo 'Usage: psql [OPTION] [DBNAME [USERNAME]]'"),
+    ("mariadb", "10.11.6-r0", 25600, "MariaDB database", [], "mysql", "echo 'Usage: mysql [OPTIONS] [database]'"),
+    ("sqlite", "3.44.2-r0", 1024, "SQLite database engine", [], "sqlite3", "echo 'Usage: sqlite3 [OPTIONS] [FILENAME] [SQL]'"),
+    ("mongodb-tools", "100.9.4-r0", 20480, "MongoDB tools", [], "mongosh", ""),
+    ("memcached", "1.6.23-r0", 256, "In-memory caching system", [], None, ""),
+    # Web & network
+    ("apache2", "2.4.58-r0", 5120, "Apache HTTP Server", [], "httpd", "echo 'Usage: httpd [options]'"),
+    ("haproxy", "2.8.5-r0", 3072, "TCP/HTTP Load Balancer", [], None, ""),
+    ("socat", "1.8.0.0-r0", 384, "Multipurpose relay", [], None, "echo 'Usage: socat [options] <address> <address>'"),
+    ("nmap", "7.94-r0", 5120, "Network scanner", [], None, "echo 'Usage: nmap [options] target'"),
+    ("tcpdump", "4.99.4-r1", 640, "Network packet analyzer", [], None, "echo 'Usage: tcpdump [options] [expression]'"),
+    ("iperf3", "3.16-r0", 192, "Network bandwidth tool", [], None, "echo 'Usage: iperf3 [-s|-c host] [options]'"),
+    ("bind-tools", "9.18.24-r0", 2048, "DNS tools", [], "dig", "echo 'Usage: dig [@server] name [type]'"),
+    ("dnsmasq", "2.90-r0", 384, "DNS/DHCP server", [], None, ""),
+    ("wireguard-tools", "1.0.20210914-r3", 64, "WireGuard VPN", [], "wg", "echo 'Usage: wg [command]'"),
+    ("openvpn", "2.6.8-r0", 1024, "VPN solution", [], None, "echo 'Usage: openvpn [options]'"),
+    ("squid", "6.6-r0", 7680, "HTTP caching proxy", [], None, ""),
+    ("lynx", "2.8.9-r5", 2048, "Text-mode web browser", [], None, "echo 'Usage: lynx [options] URL'"),
+    ("w3m", "0.5.3-r16", 1024, "Text-mode web browser", [], None, "echo 'Usage: w3m [options] URL'"),
+    # Compression
+    ("gzip", "1.13-r0", 96, "GNU zip compression", [], None, "echo 'Usage: gzip [OPTION] [FILE]'"),
+    ("bzip2", "1.0.8-r6", 128, "Block-sorting compressor", [], None, "echo 'Usage: bzip2 [flags] [filenames]'"),
+    ("xz", "5.4.5-r0", 256, "XZ Utils compression", [], None, "echo 'Usage: xz [OPTION] [FILE]'"),
+    ("zip", "3.0-r12", 192, "Create ZIP archives", [], None, "echo 'Usage: zip [options] archive files'"),
+    ("unzip", "6.0-r14", 192, "Extract ZIP archives", [], None, "echo 'Usage: unzip [options] archive'"),
+    ("zstd", "1.5.5-r8", 384, "Zstandard compression", [], None, "echo 'Usage: zstd [options] [file]'"),
+    ("lz4", "1.9.4-r5", 128, "Fast LZ compression", [], None, ""),
+    ("p7zip", "17.05-r0", 2048, "7-Zip file archiver", [], "7z", "echo 'Usage: 7z <command> [options] archive'"),
+    # Media
+    ("ffmpeg", "6.1.1-r0", 20480, "Multimedia framework", [], None, "echo 'Usage: ffmpeg [options] [[infile options] -i infile]... {[outfile options] outfile}...'"),
+    ("imagemagick", "7.1.1-r0", 15360, "Image manipulation", [], "convert", "echo 'Usage: convert [options] input output'"),
+    ("sox", "14.4.2-r14", 1536, "Sound processing", [], None, "echo 'Usage: sox [options] infile outfile [effect]'"),
+    ("mpv", "0.37.0-r0", 5120, "Media player", [], None, "echo 'Usage: mpv [options] file'"),
+    # Modern CLI tools
+    ("ripgrep", "14.1.0-r0", 6144, "Fast recursive grep", [], "rg", "echo 'Usage: rg [OPTIONS] PATTERN [PATH]'"),
+    ("fd", "9.0.0-r0", 3072, "Fast find alternative", [], None, "echo 'Usage: fd [OPTIONS] [pattern] [path]'"),
+    ("bat", "0.24.0-r0", 5120, "Cat with syntax highlighting", [], None, "echo 'Usage: bat [OPTIONS] [FILE]...'"),
+    ("exa", "0.10.1-r3", 1536, "Modern ls replacement", [], None, "echo 'Usage: exa [options] [files]'"),
+    ("fzf", "0.44.1-r0", 3072, "Fuzzy finder", [], None, "echo 'Usage: fzf [options]'"),
+    ("delta", "0.16.5-r0", 5120, "Syntax-highlighting diff", [], None, ""),
+    ("dust", "0.8.6-r0", 2048, "Disk usage viewer", [], None, "echo 'Usage: dust [options] [path]'"),
+    ("bottom", "0.9.6-r0", 4096, "System monitor", [], "btm", "echo 'Usage: btm [OPTIONS]'"),
+    ("procs", "0.14.4-r0", 4096, "Modern ps replacement", [], None, "echo 'Usage: procs [OPTIONS] [PATTERN]'"),
+    ("tokei", "12.1.2-r4", 3072, "Code statistics", [], None, "echo 'Usage: tokei [FLAGS] [OPTIONS] [input]'"),
+    ("hyperfine", "1.18.0-r0", 2048, "Benchmarking tool", [], None, "echo 'Usage: hyperfine [OPTIONS] <command>...'"),
+    # VCS
+    ("mercurial", "6.6.3-r0", 7680, "Mercurial VCS", [], "hg", "echo 'Usage: hg <command> [options]'"),
+    ("subversion", "1.14.3-r0", 5120, "Subversion VCS", [], "svn", "echo 'Usage: svn <subcommand> [options] [args]'"),
+    ("fossil", "2.23-r0", 3072, "Fossil VCS", [], None, "echo 'Usage: fossil <command> [options]'"),
+    # Containers & cloud
+    ("podman", "4.8.3-r0", 40960, "Daemonless container engine", [], None, "echo 'Usage: podman [options] command'"),
+    ("buildah", "1.33.2-r0", 20480, "OCI image builder", [], None, "echo 'Usage: buildah [command]'"),
+    ("skopeo", "1.14.2-r0", 15360, "Container image tools", [], None, "echo 'Usage: skopeo [command]'"),
+    ("helm", "3.14.0-r0", 15360, "Kubernetes package manager", [], None, "echo 'Usage: helm [command]'"),
+    ("kubectl", "1.29.1-r0", 20480, "Kubernetes CLI", [], None, "echo 'Usage: kubectl [command] [options]'"),
+    # Scripting extras
+    ("py3-pip", "23.3.2-r0", 5120, "Python package installer", ["python3"], "pip3", "echo 'Usage: pip3 install <package>'"),
+    # Misc tools
+    ("screen", "4.9.1-r0", 640, "Terminal multiplexer", [], None, "echo 'Usage: screen [options]'"),
+    ("ltrace", "0.7.3-r8", 384, "Library call tracer", [], None, "echo 'Usage: ltrace [options] command'"),
+    ("lsof", "4.99.3-r0", 320, "List open files", [], None, "echo 'Usage: lsof [options]'"),
+    ("bc", "1.07.1-r4", 128, "Calculator language", [], None, "echo 'Usage: bc [options] [file]'"),
+    ("cowsay", "3.04-r2", 24, "Talking cow", [], None, "echo ' ______\\necho '< moo! >\\necho ' ------\\necho '   ^__^\\necho '   (oo)_______\\necho '   (__)       )/\\necho '       ||----w|\\necho '       ||     ||'"),
+    ("fortune", "0.1-r2", 1024, "Fortune cookie", [], None, "echo 'A journey of a thousand miles begins with a single step.'"),
+    ("figlet", "2.2.5-r3", 128, "Large text banners", [], None, "echo ' _____          _   ___  ___\\necho '|_   _| _ _  _ | |_/ _ \\/ __|\\necho '  | || '_| || |__ __  \\__ \\\\\\necho '  |_||_|  \\_,_|_||___/|___/'"),
+    ("sl", "5.05-r0", 24, "Steam locomotive", [], None, "echo '      ====        ________\\necho '  _D _|  |_______/        \\__I_I_____===__|\\necho '   |(_)---  |   H\\________/  |  |        ='"),
+    ("ncdu", "2.3-r0", 192, "NCurses disk usage", [], None, "echo 'Usage: ncdu [options] [directory]'"),
+    ("ranger", "1.9.3-r6", 640, "Console file manager", [], None, "echo 'Usage: ranger [options] [path]'"),
+    ("mc", "4.8.31-r0", 3072, "Midnight Commander", [], None, "echo 'Usage: mc [options] [path1 [path2]]'"),
+    ("ansible", "9.2.0-r0", 25600, "IT automation", [], None, "echo 'Usage: ansible [options] pattern'"),
+    ("terraform", "1.7.2-r0", 81920, "Infrastructure as code", [], None, "echo 'Usage: terraform [global options] <subcommand>'"),
+    ("certbot", "2.8.0-r0", 3072, "ACME client", [], None, "echo 'Usage: certbot [subcommand] [options]'"),
+    ("fail2ban-server", "1.0.2-r0", 2048, "Intrusion prevention", [], "fail2ban-client", "echo 'Usage: fail2ban-client [options] <command>'"),
+    ("mtr", "0.95-r2", 192, "Network diagnostic tool", [], None, "echo 'Usage: mtr [options] hostname'"),
+    ("nethogs", "0.8.7-r0", 128, "Per-process bandwidth monitor", [], None, "echo 'Usage: nethogs [options] [device]'"),
+    ("htop", "3.3.0-r0", 240, "Interactive process viewer", ["ncurses-libs"], None, "echo 'Usage: htop [-dChustv]'"),
+    ("iotop", "0.6-r5", 96, "I/O monitoring tool", [], None, "echo 'Usage: iotop [options]'"),
+    ("sysstat", "12.7.5-r0", 512, "System performance tools", [], "sar", "echo 'Usage: sar [options] [interval [count]]'"),
+    ("smartmontools", "7.4-r0", 640, "S.M.A.R.T. monitoring", [], "smartctl", "echo 'Usage: smartctl [options] device'"),
+]
+
+for _name, _ver, _size, _desc, _deps, _bn, _extra in _EXTRA:
+    if _name not in PACKAGES:
+        PACKAGES[_name] = _pkg_quick(_name, _ver, _size, _desc, _deps, _bn or _name, _extra)
+
+# ─── Alpine CDN Proxy ────────────────────────────────────────────────────────
+
+class AlpineIndex:
+    """Downloads and parses Alpine Linux APKINDEX for 15,000+ package discovery."""
+
+    def __init__(self):
+        self.packages = {}   # name -> {version, description, depends, size}
+        self.loaded = False
+        self.loading = False
+
+    def load_async(self):
+        """Start loading Alpine indices in a background thread."""
+        if self.loading or self.loaded:
+            return
+        self.loading = True
+        t = threading.Thread(target=self._load, daemon=True)
+        t.start()
+
+    def _load(self):
+        for repo in ["main", "community"]:
+            try:
+                url = f"{ALPINE_MIRROR}/{repo}/x86_64/APKINDEX.tar.gz"
+                print(f"[Alpine] Fetching {repo} index...")
+                req = urllib.request.Request(url, headers={"User-Agent": "TrustOS-PkgServer/2.0"})
+                data = urllib.request.urlopen(req, timeout=15).read()
+                self._parse_tar(data)
+                print(f"[Alpine] {repo}: {len(self.packages)} packages total")
+            except Exception as e:
+                print(f"[Alpine] Warning: could not load {repo}: {e}")
+        self.loaded = True
+        self.loading = False
+        print(f"[Alpine] Index ready: {len(self.packages)} additional packages from Alpine CDN")
+
+    def _parse_tar(self, data):
+        try:
+            with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tar:
+                for member in tar.getmembers():
+                    if member.name == 'APKINDEX':
+                        f = tar.extractfile(member)
+                        if f:
+                            self._parse_apkindex(f.read().decode('utf-8', errors='replace'))
+        except Exception as e:
+            print(f"[Alpine] Parse error: {e}")
+
+    def _parse_apkindex(self, content):
+        current = {}
+        for line in content.split('\n'):
+            if not line:
+                if 'P' in current:
+                    name = current['P']
+                    if name not in PACKAGES:  # Don't override local packages
+                        deps_raw = current.get('D', '')
+                        deps = []
+                        if deps_raw:
+                            for d in deps_raw.split():
+                                clean = d.split('=')[0].split('>')[0].split('<')[0].split('~')[0]
+                                if clean and not clean.startswith('so:') and not clean.startswith('cmd:') and not clean.startswith('pc:'):
+                                    deps.append(clean)
+                        self.packages[name] = {
+                            'version': current.get('V', '0'),
+                            'description': current.get('T', name),
+                            'depends': deps[:5],
+                            'size': int(current.get('S', '0')),
+                        }
+                current = {}
+            elif ':' in line:
+                key, _, value = line.partition(':')
+                current[key] = value
+
+    def search(self, keyword, limit=100):
+        """Search Alpine packages by keyword."""
+        kw = keyword.lower()
+        results = []
+        for name, info in self.packages.items():
+            if kw in name.lower() or kw in info.get('description', '').lower():
+                results.append((name, info))
+                if len(results) >= limit:
+                    break
+        return results
+
+    def get(self, name):
+        return self.packages.get(name)
+
+    def generate_bundle(self, name):
+        """Auto-generate a package bundle for any Alpine package."""
+        info = self.packages.get(name)
+        if not info:
+            return None
+        version = info['version']
+        desc = info.get('description', name).replace("'", "").replace('"', '')
+        bn = name
+        is_lib = bn.startswith('lib') or bn.endswith('-libs')
+        is_data = bn.endswith('-dev') or bn.endswith('-doc') or bn.endswith('-dbg') or bn.endswith('-static') or bn.endswith('-data') or bn.endswith('-common')
+
+        lines_out = [f"PKG {name} {version}"]
+        if is_lib:
+            lines_out.append(f"FILE /usr/lib/{name}.info")
+            lines_out.append(f"{name} {version} - {desc}")
+        elif is_data:
+            lines_out.append(f"FILE /usr/share/doc/{name}/README")
+            lines_out.append(f"{name} {version}\n{desc}")
+        else:
+            script = f"#!/bin/sh\necho '{name} {version}'\necho '{desc}'"
+            lines_out.append(f"FILE /usr/bin/{bn}")
+            lines_out.append(script)
+        lines_out.append("EOF")
+        return '\n'.join(lines_out) + '\n'
+
+alpine_index = AlpineIndex()
+
 # ─── Package Bundle Format ────────────────────────────────────────────────────
 # Simple text format the kernel can parse:
 #   PKG <name> <version>
@@ -595,6 +863,38 @@ class PkgHandler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(data)
             return
 
+        # Package search
+        if path.startswith("/repo/search"):
+            params = parse_qs(urlparse(self.path).query)
+            keyword = params.get('q', [''])[0]
+            if not keyword:
+                self.send_response(400)
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(b"Missing ?q= parameter\n")
+                return
+            results = []
+            kw = keyword.lower()
+            # Search local packages
+            for name, pkg in sorted(PACKAGES.items()):
+                if kw in name.lower() or kw in pkg['description'].lower():
+                    deps = ",".join(pkg["depends"]) if pkg["depends"] else "none"
+                    results.append(f"{name} {pkg['version']} {pkg['size_kb']} x86_64 {len(pkg['files'])} {deps} {pkg['description']}")
+            # Search Alpine CDN index
+            if alpine_index.loaded:
+                for aname, ainfo in alpine_index.search(keyword, 100):
+                    if not any(r.startswith(f"{aname} ") for r in results):
+                        size_kb = max(ainfo['size'] // 1024, 1)
+                        results.append(f"{aname} {ainfo['version']} {size_kb} x86_64 1 none {ainfo['description']}")
+            data = ('\n'.join(results[:200]) + '\n').encode('utf-8') if results else b"No results\n"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", len(data))
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.write(data)
+            return
+
         # Individual package download
         if path.startswith("/repo/pool/"):
             pkg_name = path.split("/")[-1]
@@ -605,6 +905,7 @@ class PkgHandler(http.server.BaseHTTPRequestHandler):
             # Also strip version suffix like "vim_9.0.2127-r0"
             base_name = pkg_name.split("_")[0] if "_" in pkg_name else pkg_name
 
+            # Check local packages first
             if base_name in PACKAGES:
                 data = build_package_bundle(base_name, PACKAGES[base_name]).encode('utf-8')
                 self.send_response(200)
@@ -615,11 +916,28 @@ class PkgHandler(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(data)
                 return
 
+            # Alpine CDN fallback: auto-generate for any known Alpine package
+            if alpine_index.loaded:
+                bundle = alpine_index.generate_bundle(base_name)
+                if bundle:
+                    data = bundle.encode('utf-8')
+                    self.log_message("Alpine auto-gen: %s", base_name)
+                    self.send_response(200)
+                    self.send_header("Content-Type", "application/octet-stream")
+                    self.send_header("Content-Length", len(data))
+                    self.send_header("Connection", "close")
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
+
         # Repo info
         if path in ("/", "/repo", "/repo/"):
+            alpine_n = len(alpine_index.packages) if alpine_index.loaded else 0
             info = {
                 "name": "TrustOS Package Repository",
-                "packages": len(PACKAGES),
+                "local_packages": len(PACKAGES),
+                "alpine_packages": alpine_n,
+                "total_available": len(PACKAGES) + alpine_n,
                 "total_files": sum(len(p["files"]) for p in PACKAGES.values()),
             }
             data = json.dumps(info, indent=2).encode('utf-8')
@@ -647,18 +965,22 @@ def main():
         elif arg == "--host" and i < len(sys.argv) - 1:
             host = sys.argv[i + 1]
 
+    # Start Alpine CDN index loading in background
+    no_alpine = "--no-alpine" in sys.argv
+    if not no_alpine:
+        alpine_index.load_async()
+
     server = http.server.HTTPServer((host, port), PkgHandler)
-    print(f"╔══════════════════════════════════════════╗")
-    print(f"║   TrustOS Package Server                 ║")
-    print(f"╠══════════════════════════════════════════╣")
-    print(f"║  Serving {len(PACKAGES):2d} packages on {host}:{port}     ║")
-    print(f"║                                          ║")
-    print(f"║  Index:   GET /repo/index                ║")
-    print(f"║  Package: GET /repo/pool/<name>.pkg      ║")
-    print(f"║                                          ║")
-    print(f"║  QEMU user-net:   http://10.0.2.2:{port}  ║")
-    print(f"║  VirtualBox:      http://192.168.56.1:{port}║")
-    print(f"╚══════════════════════════════════════════╝")
+    print()
+    print(f"  TrustOS Package Server v2.0")
+    print(f"  " + "─" * 40)
+    print(f"  Local packages:  {len(PACKAGES)}")
+    print(f"  Alpine CDN:      {'enabled (loading in background)' if not no_alpine else 'disabled (--no-alpine)'}")
+    print(f"  Listening on:    {host}:{port}")
+    print(f"  Endpoints:")
+    print(f"    GET /repo/index          Package list")
+    print(f"    GET /repo/pool/<n>.pkg   Download package")
+    print(f"    GET /repo/search?q=<kw>  Search packages")
     print()
 
     try:

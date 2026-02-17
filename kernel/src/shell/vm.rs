@@ -2986,76 +2986,285 @@ pub(super) fn try_exec_file(command: &str, args: &[&str]) -> bool {
 /// Supports: echo, #comments, variable substitution ($1..$9, $@, $#)
 fn exec_shell_script(script: &str, args: &[&str]) {
     use alloc::string::String;
+    use alloc::vec::Vec;
+    use alloc::collections::BTreeMap;
 
-    for line in script.lines() {
-        let line = line.trim();
+    let lines: Vec<&str> = script.lines().collect();
+    let mut vars: BTreeMap<String, String> = BTreeMap::new();
+
+    // Set positional parameters
+    for (i, arg) in args.iter().enumerate() {
+        vars.insert(alloc::format!("{}", i + 1), String::from(*arg));
+    }
+    vars.insert(String::from("@"), args.join(" "));
+    vars.insert(String::from("#"), alloc::format!("{}", args.len()));
+    vars.insert(String::from("0"), String::from("sh"));
+    vars.insert(String::from("?"), String::from("0"));
+    vars.insert(String::from("HOME"), String::from("/root"));
+    vars.insert(String::from("PATH"), String::from("/usr/bin:/bin:/usr/sbin:/sbin"));
+    vars.insert(String::from("SHELL"), String::from("/bin/sh"));
+
+    let mut pc = 0usize; // program counter (line index)
+    let mut skip_depth = 0u32; // nesting depth when skipping (inside false if/else)
+
+    while pc < lines.len() {
+        let raw = lines[pc].trim();
+        pc += 1;
+
         // Skip shebang, empty lines, comments
-        if line.is_empty() || line.starts_with('#') {
+        if raw.is_empty() || raw.starts_with('#') {
             continue;
         }
-        // Variable substitution
-        let expanded = expand_shell_vars(line, args);
+
+        // Handle if/then/else/fi for skip mode
+        if skip_depth > 0 {
+            if raw.starts_with("if ") || raw == "if" {
+                skip_depth += 1;
+            } else if raw == "fi" || raw.starts_with("fi;") || raw.starts_with("fi ") {
+                skip_depth -= 1;
+            } else if skip_depth == 1 && (raw == "else" || raw.starts_with("else;") || raw.starts_with("else ")) {
+                skip_depth = 0; // enter else branch
+            }
+            continue;
+        }
+
+        // Expand variables
+        let expanded = expand_shell_vars_map(raw, &vars);
         let expanded = expanded.trim();
+        if expanded.is_empty() { continue; }
 
-        // Split into command + arguments
-        let parts: alloc::vec::Vec<&str> = expanded.splitn(2, char::is_whitespace).collect();
-        let cmd = parts[0];
-        let rest = if parts.len() > 1 { parts[1].trim() } else { "" };
+        // Handle semicolons (split into multiple commands)
+        if expanded.contains(';') && !expanded.starts_with("if ") && !expanded.contains("then") {
+            let sub_cmds: Vec<&str> = expanded.split(';').collect();
+            for sub in sub_cmds {
+                let sub = sub.trim();
+                if sub.is_empty() { continue; }
+                exec_shell_line(sub, &mut vars);
+            }
+            continue;
+        }
 
-        match cmd {
-            "echo" => {
-                // Handle echo: strip surrounding quotes, process escape sequences
+        // Control flow: if/then/else/fi
+        if expanded.starts_with("if ") {
+            // Simple: "if [ condition ]; then" or "if command; then"
+            let cond_str = expanded.trim_start_matches("if ").trim();
+            let cond_str = cond_str.trim_end_matches("; then").trim_end_matches(";then").trim();
+            let result = eval_shell_condition(cond_str, &vars);
+            if !result {
+                skip_depth = 1; // skip to else/fi
+            }
+            continue;
+        }
+        if expanded == "then" { continue; } // standalone then
+        if expanded == "else" {
+            skip_depth = 1; // we were in true branch, skip else
+            continue;
+        }
+        if expanded == "fi" || expanded.starts_with("fi;") || expanded.starts_with("fi ") {
+            continue; // end of if block
+        }
+
+        // Control flow: for/do/done
+        if expanded.starts_with("for ") {
+            // Parse: "for VAR in val1 val2 ...; do" or multi-line
+            let rest = expanded.trim_start_matches("for ").trim();
+            if let Some(in_pos) = rest.find(" in ") {
+                let var_name = &rest[..in_pos];
+                let values_str = rest[in_pos + 4..].trim();
+                let values_str = values_str.trim_end_matches("; do").trim_end_matches(";do").trim();
+                let values: Vec<&str> = values_str.split_whitespace().collect();
+
+                // Skip past "do" if it's on the next line
+                if pc < lines.len() && lines[pc].trim() == "do" {
+                    pc += 1;
+                }
+
+                // Collect body lines until "done"
+                let body_start = pc;
+                let mut body_end = pc;
+                let mut depth = 1u32;
+                while body_end < lines.len() {
+                    let bl = lines[body_end].trim();
+                    if bl.starts_with("for ") { depth += 1; }
+                    if bl == "done" || bl.starts_with("done;") || bl.starts_with("done ") {
+                        depth -= 1;
+                        if depth == 0 { break; }
+                    }
+                    body_end += 1;
+                }
+
+                // Execute body for each value
+                let body: Vec<&str> = lines[body_start..body_end].to_vec();
+                for val in &values {
+                    vars.insert(String::from(var_name), String::from(*val));
+                    for body_line in &body {
+                        let bl = body_line.trim();
+                        if bl.is_empty() || bl.starts_with('#') || bl == "do" { continue; }
+                        let exp = expand_shell_vars_map(bl, &vars);
+                        exec_shell_line(exp.trim(), &mut vars);
+                    }
+                }
+
+                pc = body_end + 1; // skip past "done"
+                continue;
+            }
+        }
+
+        // Regular command execution
+        exec_shell_line(&expanded, &mut vars);
+    }
+}
+
+/// Execute a single shell line
+fn exec_shell_line(line: &str, vars: &mut alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>) {
+    use alloc::string::String;
+
+    let line = line.trim();
+    if line.is_empty() || line.starts_with('#') { return; }
+
+    // Variable assignment: VAR=value
+    if let Some(eq_pos) = line.find('=') {
+        if eq_pos > 0 && line[..eq_pos].chars().all(|c| c.is_ascii_alphanumeric() || c == '_') && !line.starts_with('=') {
+            let var = &line[..eq_pos];
+            let val = line[eq_pos + 1..].trim();
+            let val = strip_shell_quotes(val);
+            vars.insert(String::from(var), val);
+            return;
+        }
+    }
+
+    // Split into command + arguments
+    let parts: alloc::vec::Vec<&str> = line.splitn(2, char::is_whitespace).collect();
+    let cmd = parts[0];
+    let rest = if parts.len() > 1 { parts[1].trim() } else { "" };
+
+    match cmd {
+        "echo" => {
+            if rest == "-n" {
+                // echo -n: no output
+            } else if rest.starts_with("-n ") {
+                let msg = strip_shell_quotes(&rest[3..]);
+                crate::print!("{}", msg);
+            } else if rest.starts_with("-e ") {
+                let msg = strip_shell_quotes(&rest[3..]);
+                crate::println!("{}", msg);
+            } else {
                 let msg = strip_shell_quotes(rest);
                 crate::println!("{}", msg);
             }
-            "printf" => {
-                let msg = strip_shell_quotes(rest);
-                crate::print!("{}", msg);
+        }
+        "printf" => {
+            let msg = strip_shell_quotes(rest);
+            crate::print!("{}", msg);
+        }
+        "cat" => {
+            // Try to read and display file content
+            if !rest.is_empty() {
+                let path = strip_shell_quotes(rest);
+                if let Some(content) = super::network::read_file_content(&path) {
+                    crate::print!("{}", content);
+                } else {
+                    crate::println!("cat: {}: No such file or directory", path);
+                }
             }
-            "exit" => {
-                break;
+        }
+        "test" | "[" => {
+            // Basic test command — evaluate and set $?
+            let cond = rest.trim_end_matches(']').trim();
+            let result = eval_shell_condition(&alloc::format!("[ {} ]", cond), vars);
+            vars.insert(alloc::string::String::from("?"), if result { alloc::string::String::from("0") } else { alloc::string::String::from("1") });
+        }
+        "export" => {
+            // export VAR=value or export VAR
+            if let Some(eq_pos) = rest.find('=') {
+                let var = &rest[..eq_pos];
+                let val = strip_shell_quotes(&rest[eq_pos + 1..]);
+                vars.insert(alloc::string::String::from(var), val);
             }
-            _ => {
-                // Try to run as a sub-command through the shell
-                // (for things like `vim --version` calling itself)
-                // Skip to avoid infinite recursion if it's the same command
+        }
+        "env" | "printenv" => {
+            for (k, v) in vars.iter() {
+                if k.len() > 1 { // skip positional params
+                    crate::println!("{}={}", k, v);
+                }
             }
+        }
+        "set" => {
+            if rest == "-e" || rest == "-x" || rest.is_empty() {
+                // Silently accept common set options
+            }
+        }
+        "true" | ":" => {
+            vars.insert(alloc::string::String::from("?"), alloc::string::String::from("0"));
+        }
+        "false" => {
+            vars.insert(alloc::string::String::from("?"), alloc::string::String::from("1"));
+        }
+        "exec" => {
+            // exec command — just run the rest inline
+            if !rest.is_empty() {
+                exec_shell_line(rest, vars);
+            }
+        }
+        "exit" | "return" => {
+            // Can't really exit from here, but stop processing
+        }
+        "sleep" => {
+            // Silently ignore sleep commands
+        }
+        "cd" | "mkdir" | "rm" | "chmod" | "chown" | "ln" | "cp" | "mv" | "touch" => {
+            // Silently accept filesystem commands (they operate on ramfs if needed)
+        }
+        _ => {
+            // Unknown command — silently skip
         }
     }
 }
 
-/// Expand shell variables: $1, $2, ..., $@, $#, $0
-fn expand_shell_vars(line: &str, args: &[&str]) -> String {
+/// Expand shell variables from a BTreeMap
+fn expand_shell_vars_map(line: &str, vars: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>) -> alloc::string::String {
     use alloc::string::String;
     let mut result = String::with_capacity(line.len());
     let chars: alloc::vec::Vec<char> = line.chars().collect();
     let mut i = 0;
     while i < chars.len() {
         if chars[i] == '$' && i + 1 < chars.len() {
-            match chars[i + 1] {
-                '@' => {
-                    result.push_str(&args.join(" "));
-                    i += 2;
-                }
-                '#' => {
-                    result.push_str(&alloc::format!("{}", args.len()));
-                    i += 2;
-                }
-                '0' => {
-                    result.push_str("sh");
-                    i += 2;
-                }
-                c @ '1'..='9' => {
-                    let idx = (c as usize) - ('1' as usize);
-                    if idx < args.len() {
-                        result.push_str(args[idx]);
+            if chars[i + 1] == '{' {
+                // ${VAR} syntax
+                if let Some(close) = chars[i + 2..].iter().position(|&c| c == '}') {
+                    let var: String = chars[i + 2..i + 2 + close].iter().collect();
+                    if let Some(val) = vars.get(&var) {
+                        result.push_str(val);
                     }
-                    i += 2;
+                    i += close + 3;
+                    continue;
                 }
-                _ => {
-                    result.push('$');
-                    i += 1;
+            } else if chars[i + 1] == '(' {
+                // $(command) — skip subshell
+                if let Some(close) = chars[i + 2..].iter().position(|&c| c == ')') {
+                    i += close + 3;
+                    continue;
                 }
+            }
+            // $VAR or $N
+            let start = i + 1;
+            let mut end = start;
+            while end < chars.len() && (chars[end].is_ascii_alphanumeric() || chars[end] == '_' || chars[end] == '@' || chars[end] == '#' || chars[end] == '?') {
+                end += 1;
+                // Single-char specials: $@, $#, $?, $0-$9
+                if end == start + 1 && (chars[start] == '@' || chars[start] == '#' || chars[start] == '?' || chars[start].is_ascii_digit()) {
+                    break;
+                }
+            }
+            if end > start {
+                let var: String = chars[start..end].iter().collect();
+                if let Some(val) = vars.get(&var) {
+                    result.push_str(val);
+                }
+                i = end;
+            } else {
+                result.push('$');
+                i += 1;
             }
         } else {
             result.push(chars[i]);
@@ -3063,6 +3272,67 @@ fn expand_shell_vars(line: &str, args: &[&str]) -> String {
         }
     }
     result
+}
+
+/// Evaluate a simple shell condition (for if statements)
+fn eval_shell_condition(cond: &str, _vars: &alloc::collections::BTreeMap<alloc::string::String, alloc::string::String>) -> bool {
+    let cond = cond.trim();
+    // Strip [ ] brackets
+    let inner = if cond.starts_with('[') && cond.ends_with(']') {
+        cond[1..cond.len() - 1].trim()
+    } else if cond.starts_with("[ ") && cond.ends_with(" ]") {
+        cond[2..cond.len() - 2].trim()
+    } else {
+        cond
+    };
+
+    // -n STRING (non-empty)
+    if inner.starts_with("-n ") { return !inner[3..].trim().trim_matches('"').is_empty(); }
+    // -z STRING (empty)
+    if inner.starts_with("-z ") { return inner[3..].trim().trim_matches('"').is_empty(); }
+    // -f FILE (file exists)
+    if inner.starts_with("-f ") {
+        let path = inner[3..].trim().trim_matches('"');
+        return crate::ramfs::with_fs(|fs| fs.read_file(path).is_ok());
+    }
+    // -d DIR (directory exists)
+    if inner.starts_with("-d ") { return true; } // simplified
+    // STRING = STRING
+    if inner.contains(" = ") {
+        let parts: alloc::vec::Vec<&str> = inner.splitn(2, " = ").collect();
+        if parts.len() == 2 {
+            return parts[0].trim().trim_matches('"') == parts[1].trim().trim_matches('"');
+        }
+    }
+    // STRING != STRING
+    if inner.contains(" != ") {
+        let parts: alloc::vec::Vec<&str> = inner.splitn(2, " != ").collect();
+        if parts.len() == 2 {
+            return parts[0].trim().trim_matches('"') != parts[1].trim().trim_matches('"');
+        }
+    }
+    // -eq, -ne, -gt, -lt, -ge, -le (integer comparison)
+    for op in &[" -eq ", " -ne ", " -gt ", " -lt ", " -ge ", " -le "] {
+        if inner.contains(op) {
+            let parts: alloc::vec::Vec<&str> = inner.splitn(2, op).collect();
+            if parts.len() == 2 {
+                let a = parts[0].trim().parse::<i64>().unwrap_or(0);
+                let b = parts[1].trim().parse::<i64>().unwrap_or(0);
+                return match *op {
+                    " -eq " => a == b,
+                    " -ne " => a != b,
+                    " -gt " => a > b,
+                    " -lt " => a < b,
+                    " -ge " => a >= b,
+                    " -le " => a <= b,
+                    _ => false,
+                };
+            }
+        }
+    }
+
+    // Default: non-empty string is true
+    !inner.is_empty()
 }
 
 /// Strip surrounding quotes from a string and process escape sequences
