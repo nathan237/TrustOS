@@ -39,6 +39,9 @@ pub mod branding;
 // Phase 6: Virtual Machine Introspection
 pub mod vmi;
 
+// Phase 7: Linux Boot Protocol
+pub mod linux_loader;
+
 // Phase 5: Linux Subsystem (TSL)
 pub mod virtio_console;
 pub mod linux_subsystem;

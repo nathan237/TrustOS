@@ -905,9 +905,10 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
                 vm::cmd_linux_shell();
             } else {
                 match args[0] {
+                    // Real hypervisor VM commands
+                    "create" | "run" | "start" | "guests" | "inspect" | "mount" | "input" => vm::cmd_vm(args),
                     "status" => vm::cmd_gui_status(),
                     "install" => vm::cmd_gui_install(),
-                    "start" | "run" => vm::cmd_gui_start(),
                     "console" | "shell" => vm::cmd_linux_shell(),
                     "stop" => vm::cmd_vm_stop(),
                     "list" => vm::cmd_vm_list(),

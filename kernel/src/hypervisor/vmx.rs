@@ -4,6 +4,8 @@
 //! - Détection du support VMX
 //! - VMXON / VMXOFF
 //! - Instructions VMX
+//! - MSR-based control field adjustment
+//! - Physical address translation for hardware structures
 
 use core::arch::asm;
 use alloc::boxed::Box;
@@ -18,16 +20,73 @@ pub struct VmxonRegion {
 
 impl VmxonRegion {
     pub fn new(revision_id: u32) -> Self {
-        let mut region = VmxonRegion {
+        VmxonRegion {
             revision_id,
             data: [0; 4092],
-        };
-        region
+        }
     }
 }
 
-/// Région VMXON allouée
+/// Région VMXON allouée (keep Box alive so memory isn't freed)
 static mut VMXON_REGION: Option<Box<VmxonRegion>> = None;
+
+// ============================================================================
+// MSR CONSTANTS
+// ============================================================================
+
+pub const IA32_VMX_BASIC: u32 = 0x480;
+pub const IA32_VMX_PINBASED_CTLS: u32 = 0x481;
+pub const IA32_VMX_PROCBASED_CTLS: u32 = 0x482;
+pub const IA32_VMX_EXIT_CTLS: u32 = 0x483;
+pub const IA32_VMX_ENTRY_CTLS: u32 = 0x484;
+pub const IA32_VMX_PROCBASED_CTLS2: u32 = 0x48B;
+pub const IA32_VMX_TRUE_PINBASED_CTLS: u32 = 0x48D;
+pub const IA32_VMX_TRUE_PROCBASED_CTLS: u32 = 0x48E;
+pub const IA32_VMX_TRUE_EXIT_CTLS: u32 = 0x48F;
+pub const IA32_VMX_TRUE_ENTRY_CTLS: u32 = 0x490;
+pub const IA32_FEATURE_CONTROL: u32 = 0x3A;
+
+/// Adjust a VMX control field value according to the allowed 0/1 settings MSR.
+/// Low 32 bits of the MSR = "allowed 0-settings" (bits that MUST be 1)
+/// High 32 bits of the MSR = "allowed 1-settings" (bits that MAY be 1)
+pub fn adjust_vmx_control(msr: u32, desired: u32) -> u32 {
+    let msr_val = read_msr(msr);
+    let must_be_1 = msr_val as u32;        // Low 32 bits
+    let may_be_1 = (msr_val >> 32) as u32; // High 32 bits
+    // Set all bits that must be 1, clear bits that must be 0
+    (desired | must_be_1) & may_be_1
+}
+
+/// Check if "true" MSR controls are supported (bit 55 of IA32_VMX_BASIC)
+pub fn has_true_msrs() -> bool {
+    let vmx_basic = read_msr(IA32_VMX_BASIC);
+    (vmx_basic & (1u64 << 55)) != 0
+}
+
+/// Get the appropriate pin-based controls MSR
+pub fn pinbased_ctls_msr() -> u32 {
+    if has_true_msrs() { IA32_VMX_TRUE_PINBASED_CTLS } else { IA32_VMX_PINBASED_CTLS }
+}
+
+/// Get the appropriate primary proc-based controls MSR
+pub fn procbased_ctls_msr() -> u32 {
+    if has_true_msrs() { IA32_VMX_TRUE_PROCBASED_CTLS } else { IA32_VMX_PROCBASED_CTLS }
+}
+
+/// Get the appropriate exit controls MSR
+pub fn exit_ctls_msr() -> u32 {
+    if has_true_msrs() { IA32_VMX_TRUE_EXIT_CTLS } else { IA32_VMX_EXIT_CTLS }
+}
+
+/// Get the appropriate entry controls MSR
+pub fn entry_ctls_msr() -> u32 {
+    if has_true_msrs() { IA32_VMX_TRUE_ENTRY_CTLS } else { IA32_VMX_ENTRY_CTLS }
+}
+
+/// Convert a virtual (HHDM) address to physical for VMX hardware structures
+pub fn virt_to_phys_vmx(virt: u64) -> u64 {
+    crate::memory::virt_to_phys(virt).unwrap_or(virt)
+}
 
 /// Vérifier le support VMX via CPUID
 pub fn check_vmx_support() -> Result<VmxCapabilities> {
@@ -62,16 +121,16 @@ pub fn check_vmx_support() -> Result<VmxCapabilities> {
     }
     
     // Lire IA32_VMX_BASIC MSR pour obtenir le revision ID
-    let vmx_basic = read_msr(0x480); // IA32_VMX_BASIC
+    let vmx_basic = read_msr(IA32_VMX_BASIC);
     caps.vmcs_revision_id = (vmx_basic & 0x7FFF_FFFF) as u32;
     
     // Vérifier EPT et autres fonctionnalités via IA32_VMX_PROCBASED_CTLS2
     // D'abord vérifier si secondary controls sont supportés
-    let procbased_ctls = read_msr(0x482); // IA32_VMX_PROCBASED_CTLS
+    let procbased_ctls = read_msr(IA32_VMX_PROCBASED_CTLS);
     let secondary_ctls_allowed = (procbased_ctls >> 32) & (1 << 31) != 0;
     
     if secondary_ctls_allowed {
-        let procbased_ctls2 = read_msr(0x48B); // IA32_VMX_PROCBASED_CTLS2
+        let procbased_ctls2 = read_msr(IA32_VMX_PROCBASED_CTLS2);
         let allowed_1 = (procbased_ctls2 >> 32) as u32;
         
         caps.ept_supported = (allowed_1 & (1 << 1)) != 0;           // Enable EPT
@@ -85,7 +144,7 @@ pub fn check_vmx_support() -> Result<VmxCapabilities> {
 /// Activer VMX dans CR4
 pub fn enable_vmx() -> Result<()> {
     // Vérifier IA32_FEATURE_CONTROL MSR
-    let feature_control = read_msr(0x3A); // IA32_FEATURE_CONTROL
+    let feature_control = read_msr(IA32_FEATURE_CONTROL);
     
     // Bit 0: Lock bit
     // Bit 2: Enable VMX outside SMX
@@ -120,35 +179,38 @@ pub fn enable_vmx() -> Result<()> {
 /// Exécuter VMXON
 pub fn vmxon() -> Result<()> {
     // Lire le revision ID
-    let vmx_basic = read_msr(0x480);
+    let vmx_basic = read_msr(IA32_VMX_BASIC);
     let revision_id = (vmx_basic & 0x7FFF_FFFF) as u32;
     
     // Allouer la région VMXON (4KB alignée)
     let region = Box::new(VmxonRegion::new(revision_id));
-    let region_phys = region.as_ref() as *const VmxonRegion as u64;
+    let region_virt = region.as_ref() as *const VmxonRegion as u64;
+    let region_phys = virt_to_phys_vmx(region_virt);
     
-    crate::serial_println!("[VMX] VMXON region at 0x{:016X}, revision 0x{:08X}", 
-                          region_phys, revision_id);
+    crate::serial_println!("[VMX] VMXON region virt=0x{:016X} phys=0x{:016X}, revision 0x{:08X}", 
+                          region_virt, region_phys, revision_id);
     
-    // Sauvegarder la région
+    // Sauvegarder la région (keep alive)
     unsafe {
         VMXON_REGION = Some(region);
     }
     
-    // Exécuter VMXON
-    let result: u8;
+    // Exécuter VMXON — operand is pointer to memory containing the physical address
+    let cf: u8;
+    let zf: u8;
     unsafe {
         asm!(
-            "vmxon [{0}]",
-            "setc {1}",      // CF=1 si échec
-            "setz {1}",      // ZF=1 si échec avec erreur
-            in(reg) &region_phys,
-            out(reg_byte) result,
+            "vmxon [{addr}]",
+            "setc {cf}",
+            "setz {zf}",
+            addr = in(reg) &region_phys,
+            cf = out(reg_byte) cf,
+            zf = out(reg_byte) zf,
         );
     }
     
-    if result != 0 {
-        crate::serial_println!("[VMX] VMXON failed!");
+    if cf != 0 || zf != 0 {
+        crate::serial_println!("[VMX] VMXON failed! CF={} ZF={}", cf, zf);
         return Err(HypervisorError::VmxonFailed);
     }
     
@@ -184,18 +246,23 @@ pub fn vmxoff() -> Result<()> {
 }
 
 /// VMCLEAR - Initialiser/nettoyer une VMCS
+/// `vmcs_phys` is the physical address of the VMCS region.
 pub fn vmclear(vmcs_phys: u64) -> Result<()> {
-    let result: u8;
+    let cf: u8;
+    let zf: u8;
     unsafe {
         asm!(
-            "vmclear [{0}]",
-            "setc {1}",
-            in(reg) &vmcs_phys,
-            out(reg_byte) result,
+            "vmclear [{addr}]",
+            "setc {cf}",
+            "setz {zf}",
+            addr = in(reg) &vmcs_phys,
+            cf = out(reg_byte) cf,
+            zf = out(reg_byte) zf,
         );
     }
     
-    if result != 0 {
+    if cf != 0 || zf != 0 {
+        crate::serial_println!("[VMX] VMCLEAR failed for phys=0x{:X} CF={} ZF={}", vmcs_phys, cf, zf);
         return Err(HypervisorError::VmclearFailed);
     }
     
@@ -203,18 +270,23 @@ pub fn vmclear(vmcs_phys: u64) -> Result<()> {
 }
 
 /// VMPTRLD - Charger une VMCS comme courante
+/// `vmcs_phys` is the physical address of the VMCS region.
 pub fn vmptrld(vmcs_phys: u64) -> Result<()> {
-    let result: u8;
+    let cf: u8;
+    let zf: u8;
     unsafe {
         asm!(
-            "vmptrld [{0}]",
-            "setc {1}",
-            in(reg) &vmcs_phys,
-            out(reg_byte) result,
+            "vmptrld [{addr}]",
+            "setc {cf}",
+            "setz {zf}",
+            addr = in(reg) &vmcs_phys,
+            cf = out(reg_byte) cf,
+            zf = out(reg_byte) zf,
         );
     }
     
-    if result != 0 {
+    if cf != 0 || zf != 0 {
+        crate::serial_println!("[VMX] VMPTRLD failed for phys=0x{:X} CF={} ZF={}", vmcs_phys, cf, zf);
         return Err(HypervisorError::VmptrldFailed);
     }
     
@@ -224,19 +296,22 @@ pub fn vmptrld(vmcs_phys: u64) -> Result<()> {
 /// VMREAD - Lire un champ de la VMCS
 pub fn vmread(field: u64) -> Result<u64> {
     let value: u64;
-    let result: u8;
+    let cf: u8;
+    let zf: u8;
     
     unsafe {
         asm!(
-            "vmread {0}, {1}",
-            "setc {2}",
-            out(reg) value,
-            in(reg) field,
-            out(reg_byte) result,
+            "vmread {val}, {field}",
+            "setc {cf}",
+            "setz {zf}",
+            val = out(reg) value,
+            field = in(reg) field,
+            cf = out(reg_byte) cf,
+            zf = out(reg_byte) zf,
         );
     }
     
-    if result != 0 {
+    if cf != 0 || zf != 0 {
         return Err(HypervisorError::VmreadFailed);
     }
     
@@ -245,68 +320,69 @@ pub fn vmread(field: u64) -> Result<u64> {
 
 /// VMWRITE - Écrire un champ dans la VMCS
 pub fn vmwrite(field: u64, value: u64) -> Result<()> {
-    let result: u8;
+    let cf: u8;
+    let zf: u8;
     
     unsafe {
         asm!(
-            "vmwrite {0}, {1}",
-            "setc {2}",
-            in(reg) field,
-            in(reg) value,
-            out(reg_byte) result,
+            "vmwrite {field}, {val}",
+            "setc {cf}",
+            "setz {zf}",
+            field = in(reg) field,
+            val = in(reg) value,
+            cf = out(reg_byte) cf,
+            zf = out(reg_byte) zf,
         );
     }
     
-    if result != 0 {
+    if cf != 0 || zf != 0 {
         return Err(HypervisorError::VmwriteFailed);
     }
     
     Ok(())
 }
 
-/// VMLAUNCH - Lancer une VM pour la première fois
+/// VMLAUNCH attempt — returns Ok(()) only if it fails (because success = we're in the guest).
+/// On a real VM exit, HOST_RIP takes control, not this function.
+/// This is used in the run loop: vmlaunch → guest runs → VM exit → host_rip handler.
 pub fn vmlaunch() -> Result<()> {
-    let result: u8;
+    let cf: u8;
+    let zf: u8;
     
     unsafe {
         asm!(
             "vmlaunch",
-            "setc {0}",
-            out(reg_byte) result,
+            "setc {cf}",
+            "setz {zf}",
+            cf = out(reg_byte) cf,
+            zf = out(reg_byte) zf,
         );
     }
     
-    // Si on arrive ici, c'est que VMLAUNCH a échoué
-    // (sinon on serait dans le guest)
-    
-    if result != 0 {
-        let error_code = vmread(0x4400)?; // VM_INSTRUCTION_ERROR
-        crate::serial_println!("[VMX] VMLAUNCH failed with error: {}", error_code);
-        return Err(HypervisorError::VmlaunchFailed);
-    }
-    
-    Ok(())
+    // If we get here, VMLAUNCH failed (on success, we'd be in the guest)
+    let error_code = vmread(0x4400).unwrap_or(0xFFFF); // VM_INSTRUCTION_ERROR
+    crate::serial_println!("[VMX] VMLAUNCH failed! CF={} ZF={} error={}", cf, zf, error_code);
+    Err(HypervisorError::VmlaunchFailed)
 }
 
-/// VMRESUME - Reprendre une VM après un VM exit
+/// VMRESUME attempt — same semantics as vmlaunch
 pub fn vmresume() -> Result<()> {
-    let result: u8;
+    let cf: u8;
+    let zf: u8;
     
     unsafe {
         asm!(
             "vmresume",
-            "setc {0}",
-            out(reg_byte) result,
+            "setc {cf}",
+            "setz {zf}",
+            cf = out(reg_byte) cf,
+            zf = out(reg_byte) zf,
         );
     }
     
-    if result != 0 {
-        let error_code = vmread(0x4400)?;
-        crate::serial_println!("[VMX] VMRESUME failed with error: {}", error_code);
-        return Err(HypervisorError::VmresumeFailed);
-    }
-    
-    Ok(())
+    let error_code = vmread(0x4400).unwrap_or(0xFFFF);
+    crate::serial_println!("[VMX] VMRESUME failed! CF={} ZF={} error={}", cf, zf, error_code);
+    Err(HypervisorError::VmresumeFailed)
 }
 
 /// Lire un MSR

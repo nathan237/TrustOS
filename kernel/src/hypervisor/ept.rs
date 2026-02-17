@@ -2,10 +2,14 @@
 //!
 //! Second Level Address Translation pour la virtualisation mémoire
 //! Permet de mapper la mémoire physique du guest vers la mémoire physique réelle
+//!
+//! All EPT table entries contain PHYSICAL addresses (hardware walks EPT).
+//! We use virt_to_phys_vmx() to convert Box pointers to physical addresses.
 
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 use super::{HypervisorError, Result};
+use super::vmx::virt_to_phys_vmx;
 
 /// EPT Pointer format
 /// Bits 2:0  = Memory type (0 = UC, 6 = WB)
@@ -136,9 +140,11 @@ impl EptManager {
         Ok(manager)
     }
     
-    /// Obtenir l'EPT pointer
+    /// Obtenir l'EPT pointer (uses physical address of PML4)
     pub fn ept_pointer(&self) -> EptPointer {
-        let pml4_phys = self.pml4.as_ref() as *const EptTable as u64;
+        let pml4_virt = self.pml4.as_ref() as *const EptTable as u64;
+        let pml4_phys = virt_to_phys_vmx(pml4_virt);
+        crate::serial_println!("[EPT] PML4 virt=0x{:016X} phys=0x{:016X}", pml4_virt, pml4_phys);
         EptPointer::new(pml4_phys)
     }
     
@@ -146,19 +152,14 @@ impl EptManager {
     fn setup_identity_mapping(&mut self, size: usize) -> Result<()> {
         crate::serial_println!("[EPT] Setting up identity mapping for {} MB", size / (1024 * 1024));
         
-        // Pour simplifier, utiliser des pages de 2MB
-        // Chaque entrée PD couvre 2MB
-        // Chaque entrée PDPT couvre 1GB (512 * 2MB)
-        // Chaque entrée PML4 couvre 512GB
-        
-        let pages_2mb = (size + 0x1FFFFF) / 0x200000; // Nombre de pages 2MB
+        // For simplicity, use 2MB large pages
+        let pages_2mb = (size + 0x1FFFFF) / 0x200000;
         let pdpts_needed = ((pages_2mb + 511) / 512).max(1);
         
-        // Créer les PDPT et PD tables nécessaires
         for pdpt_idx in 0..pdpts_needed {
             let mut pd = Box::new(EptTable::new());
             
-            // Remplir le PD avec des pages 2MB
+            // Fill PD with 2MB large pages
             let start_page = pdpt_idx * 512;
             for pd_idx in 0..512 {
                 let page_num = start_page + pd_idx;
@@ -167,21 +168,22 @@ impl EptManager {
                 }
                 
                 let phys_addr = (page_num * 0x200000) as u64;
-                // 2MB large page avec RWX + WB memory type
                 pd.entries[pd_idx] = EptEntry::new_large_page(phys_addr);
             }
             
-            let pd_phys = pd.as_ref() as *const EptTable as u64;
+            let pd_virt = pd.as_ref() as *const EptTable as u64;
+            let pd_phys = virt_to_phys_vmx(pd_virt);
             self.pds.push(pd);
             
-            // Créer le PDPT et pointer vers le PD
+            // Create PDPT entry pointing to PD (physical address!)
             let mut pdpt = Box::new(EptTable::new());
             pdpt.entries[0] = EptEntry::new_table(pd_phys);
             
-            let pdpt_phys = pdpt.as_ref() as *const EptTable as u64;
+            let pdpt_virt = pdpt.as_ref() as *const EptTable as u64;
+            let pdpt_phys = virt_to_phys_vmx(pdpt_virt);
             self.pdpts.push(pdpt);
             
-            // Configurer PML4 -> PDPT
+            // PML4 entry pointing to PDPT (physical address!)
             self.pml4.entries[pdpt_idx] = EptEntry::new_table(pdpt_phys);
         }
         
@@ -193,7 +195,6 @@ impl EptManager {
     
     /// Mapper une page physique du guest vers une page physique de l'host
     pub fn map_page(&mut self, guest_phys: u64, host_phys: u64, _flags: u64) -> Result<()> {
-        // Calculer les indices dans chaque niveau
         let pml4_idx = ((guest_phys >> 39) & 0x1FF) as usize;
         let pdpt_idx = ((guest_phys >> 30) & 0x1FF) as usize;
         let pd_idx = ((guest_phys >> 21) & 0x1FF) as usize;
@@ -201,25 +202,28 @@ impl EptManager {
         // Ensure PML4 entry exists → PDPT
         if !self.pml4.entries[pml4_idx].is_present() {
             let pdpt = Box::new(EptTable::new());
-            let pdpt_phys = pdpt.as_ref() as *const EptTable as u64;
+            let pdpt_virt = pdpt.as_ref() as *const EptTable as u64;
+            let pdpt_phys = virt_to_phys_vmx(pdpt_virt);
             self.pml4.entries[pml4_idx] = EptEntry::new_table(pdpt_phys);
             self.pdpts.push(pdpt);
         }
         
-        // For 2MB large page mapping: write directly into PD
-        // Get PDPT physical, find/create PD
+        // Get PDPT table via HHDM (physical → virtual conversion)
         let pdpt_table_phys = self.pml4.entries[pml4_idx].phys_addr();
-        let pdpt_table = unsafe { &mut *(pdpt_table_phys as *mut EptTable) };
+        let pdpt_table_virt = crate::memory::phys_to_virt(pdpt_table_phys);
+        let pdpt_table = unsafe { &mut *(pdpt_table_virt as *mut EptTable) };
         
         if !pdpt_table.entries[pdpt_idx].is_present() {
             let pd = Box::new(EptTable::new());
-            let pd_phys = pd.as_ref() as *const EptTable as u64;
+            let pd_virt = pd.as_ref() as *const EptTable as u64;
+            let pd_phys = virt_to_phys_vmx(pd_virt);
             pdpt_table.entries[pdpt_idx] = EptEntry::new_table(pd_phys);
             self.pds.push(pd);
         }
         
         let pd_table_phys = pdpt_table.entries[pdpt_idx].phys_addr();
-        let pd_table = unsafe { &mut *(pd_table_phys as *mut EptTable) };
+        let pd_table_virt = crate::memory::phys_to_virt(pd_table_phys);
+        let pd_table = unsafe { &mut *(pd_table_virt as *mut EptTable) };
         
         // Map as 2MB large page (aligned)
         let aligned_host = host_phys & !0x1FFFFF;

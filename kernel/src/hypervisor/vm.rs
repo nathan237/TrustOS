@@ -4,6 +4,9 @@
 //! - Création et destruction
 //! - État et contrôle
 //! - Handler de VM exit
+//!
+//! Architecture: The run loop uses a proper VM exit handler that saves
+//! guest registers, returns to Rust code for handling, and then resumes.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -124,7 +127,7 @@ impl VirtualMachine {
         crate::serial_println!("[VM {}] Initializing VMCS and EPT", self.id);
         
         // Obtenir le revision ID
-        let vmx_basic = vmx::read_msr(0x480);
+        let vmx_basic = vmx::read_msr(vmx::IA32_VMX_BASIC);
         let revision_id = (vmx_basic & 0x7FFF_FFFF) as u32;
         
         // Créer la VMCS
@@ -180,39 +183,114 @@ impl VirtualMachine {
         // Configurer l'état du guest
         vmcs.setup_guest_state(entry_point, stack_ptr)?;
         
-        // Configurer l'état de l'host
-        let exit_handler = vm_exit_handler as *const () as u64;
-        let host_stack = alloc::vec![0u8; 8192];
-        let host_stack_ptr = host_stack.as_ptr() as u64 + 8192;
-        core::mem::forget(host_stack); // Ne pas libérer le stack
+        // Configurer l'état de l'host — RIP = vm_exit_stub (naked handler for VM exits)
+        let exit_handler = vm_exit_stub as *const () as u64;
         
-        vmcs.setup_host_state(exit_handler, host_stack_ptr)?;
+        // Allocate a host stack for VM exit handler (16KB, 16-byte aligned)
+        let host_stack = alloc::vec![0u8; 16384];
+        let host_stack_top = (host_stack.as_ptr() as u64 + 16384) & !0xF;
+        core::mem::forget(host_stack); // Must not be freed
+        
+        vmcs.setup_host_state(exit_handler, host_stack_top)?;
         
         self.state = VmState::Running;
         
         crate::serial_println!("[VM {}] Starting at RIP=0x{:X}, RSP=0x{:X}", 
                               self.id, entry_point, stack_ptr);
+        crate::serial_println!("[VM {}] Host exit handler=0x{:X}, host stack=0x{:X}",
+                              self.id, exit_handler, host_stack_top);
         
-        // Lancer la VM !
+        // Lancer la VM
+        self.run_loop()?;
+        
+        Ok(())
+    }
+    
+    /// Start a Linux kernel in this VM.
+    ///
+    /// Parses the bzImage, loads it into guest memory with boot_params,
+    /// page tables, GDT, and configures VMCS for 64-bit Linux boot.
+    pub fn start_linux(
+        &mut self,
+        bzimage_data: &[u8],
+        cmdline: &str,
+        initrd: Option<&[u8]>,
+    ) -> Result<()> {
+        use super::linux_loader;
+        
+        crate::serial_println!("[VM {}] Starting Linux kernel ({} bytes)", self.id, bzimage_data.len());
+        
+        // Prepare guest memory with kernel + boot structures
+        let setup = linux_loader::prepare_linux_vm(
+            &mut self.guest_memory,
+            bzimage_data,
+            cmdline,
+            initrd,
+        )?;
+        
+        // Initialize VMCS/EPT if not done
+        if self.vmcs.is_none() {
+            self.initialize()?;
+        }
+        
+        let vmcs = self.vmcs.as_ref().unwrap();
+        
+        // Configure VMCS with Linux-specific guest state
+        linux_loader::configure_vmcs_for_linux(vmcs, &setup)?;
+        
+        // Set RSI = boot_params address (Linux boot protocol requirement)
+        self.guest_regs.rsi = setup.boot_params_addr;
+        self.save_guest_regs_for_entry();
+        
+        // Set up host state for VM exits
+        let exit_handler = vm_exit_stub as *const () as u64;
+        let host_stack = alloc::vec![0u8; 16384];
+        let host_stack_top = (host_stack.as_ptr() as u64 + 16384) & !0xF;
+        core::mem::forget(host_stack);
+        
+        vmcs.setup_host_state(exit_handler, host_stack_top)?;
+        
+        self.state = VmState::Running;
+        
+        crate::serial_println!("[VM {}] Linux: RIP=0x{:X} RSP=0x{:X} RSI(boot_params)=0x{:X} CR3=0x{:X}",
+                              self.id, setup.entry_point, setup.stack_ptr,
+                              setup.boot_params_addr, setup.cr3);
+        
         self.run_loop()?;
         
         Ok(())
     }
     
     /// Boucle d'exécution de la VM
+    ///
+    /// Architecture: vmx_entry_trampoline (naked) → vmlaunch/vmresume → guest
+    /// On VM exit: vm_exit_stub saves guest regs, restores host stack, returns to here.
     fn run_loop(&mut self) -> Result<()> {
+        let mut launched = false;
+        
         loop {
-            // VM Entry
-            let first_launch = self.stats.vm_exits == 0;
+            // Enter the guest
+            let result = vmx_enter_guest(launched);
             
-            if first_launch {
-                vmx::vmlaunch()?;
-            } else {
-                vmx::vmresume()?;
+            if result != 0 {
+                // VMLAUNCH/VMRESUME failed
+                let err = vmx::vmread(fields::VM_INSTRUCTION_ERROR).unwrap_or(0xFFFF);
+                crate::serial_println!("[VM {}] VM entry failed! error={}", self.id, err);
+                self.state = VmState::Crashed;
+                return if launched {
+                    Err(HypervisorError::VmresumeFailed)
+                } else {
+                    Err(HypervisorError::VmlaunchFailed)
+                };
             }
             
-            // Si on arrive ici, c'est un VM exit
+            launched = true;
+            
+            // If we get here, a VM exit happened and we're back in host mode
             self.stats.vm_exits += 1;
+            
+            // Read guest GPRs from the saved area
+            self.load_guest_regs_from_exit();
             
             // Traiter le VM exit
             let continue_running = self.handle_vm_exit()?;
@@ -220,10 +298,61 @@ impl VirtualMachine {
             if !continue_running {
                 break;
             }
+            
+            // Save guest regs back before resume
+            self.save_guest_regs_for_entry();
         }
         
         self.state = VmState::Stopped;
+        crate::serial_println!("[VM {}] Stopped after {} exits (cpuid={} io={} hlt={} ept={})",
+                              self.id, self.stats.vm_exits, self.stats.cpuid_exits,
+                              self.stats.io_exits, self.stats.hlt_exits,
+                              self.stats.ept_violations);
         Ok(())
+    }
+    
+    /// Load guest register values from the exit save area
+    fn load_guest_regs_from_exit(&mut self) {
+        unsafe {
+            let area = &VM_EXIT_GUEST_REGS;
+            self.guest_regs.rax = area.rax;
+            self.guest_regs.rbx = area.rbx;
+            self.guest_regs.rcx = area.rcx;
+            self.guest_regs.rdx = area.rdx;
+            self.guest_regs.rsi = area.rsi;
+            self.guest_regs.rdi = area.rdi;
+            self.guest_regs.rbp = area.rbp;
+            self.guest_regs.r8  = area.r8;
+            self.guest_regs.r9  = area.r9;
+            self.guest_regs.r10 = area.r10;
+            self.guest_regs.r11 = area.r11;
+            self.guest_regs.r12 = area.r12;
+            self.guest_regs.r13 = area.r13;
+            self.guest_regs.r14 = area.r14;
+            self.guest_regs.r15 = area.r15;
+        }
+    }
+    
+    /// Save guest register values for the next VM entry
+    fn save_guest_regs_for_entry(&self) {
+        unsafe {
+            let area = &mut VM_EXIT_GUEST_REGS;
+            area.rax = self.guest_regs.rax;
+            area.rbx = self.guest_regs.rbx;
+            area.rcx = self.guest_regs.rcx;
+            area.rdx = self.guest_regs.rdx;
+            area.rsi = self.guest_regs.rsi;
+            area.rdi = self.guest_regs.rdi;
+            area.rbp = self.guest_regs.rbp;
+            area.r8  = self.guest_regs.r8;
+            area.r9  = self.guest_regs.r9;
+            area.r10 = self.guest_regs.r10;
+            area.r11 = self.guest_regs.r11;
+            area.r12 = self.guest_regs.r12;
+            area.r13 = self.guest_regs.r13;
+            area.r14 = self.guest_regs.r14;
+            area.r15 = self.guest_regs.r15;
+        }
     }
     
     /// Gérer un VM exit
@@ -526,7 +655,17 @@ pub fn start_vm_with_guest(id: u64, guest_name: &str) -> Result<()> {
     
     for vm in vms.iter_mut() {
         if vm.id == id {
-            // Charger le guest demandé
+            // Check if this is a Linux-type guest
+            if guest_name == "linux-test" || guest_name.ends_with(".bzimage") {
+                let bzimage = super::guests::get_guest(guest_name)
+                    .unwrap_or_else(|| super::linux_loader::create_test_linux_kernel());
+                crate::serial_println!("[VM {}] Loading Linux guest '{}' ({} bytes)", 
+                                      id, guest_name, bzimage.len());
+                vm.start_linux(&bzimage, "console=ttyS0 earlyprintk=serial nokaslr", None)?;
+                return Ok(());
+            }
+            
+            // Standard flat-binary guest
             let code = super::guests::get_guest(guest_name)
                 .unwrap_or_else(|| super::guests::hello_guest());
             
@@ -555,68 +694,187 @@ pub fn stop_vm(id: u64) -> Result<()> {
     Err(HypervisorError::VmNotFound)
 }
 
-/// Handler de VM exit (appelé par le CPU après un VM exit)
+// ============================================================================
+// VMX LAUNCH/RESUME + VM EXIT MECHANISM
+// ============================================================================
+
+use core::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+
+/// Guest register save area (filled by vm_exit_stub on VM exit)
+static mut VM_EXIT_GUEST_REGS: GuestRegs = GuestRegs {
+    rax: 0, rbx: 0, rcx: 0, rdx: 0,
+    rsi: 0, rdi: 0, rbp: 0,
+    r8: 0, r9: 0, r10: 0, r11: 0,
+    r12: 0, r13: 0, r14: 0, r15: 0,
+};
+
+/// Saved host RSP (from vmx_entry_trampoline, used by vm_exit_stub to return).
+/// This points into the trampoline's stack frame where callee-saved regs are pushed.
+static mut HOST_SAVED_RSP: u64 = 0;
+
+/// Flag: 0 = VMLAUNCH, 1 = VMRESUME
+static VMX_USE_RESUME: AtomicU8 = AtomicU8::new(0);
+
+/// Enter the guest VM via VMLAUNCH or VMRESUME.
+///
+/// This is the clean entry point called from the Rust run loop.
+/// Returns 0 on successful VM exit, 1 on vmlaunch/vmresume failure.
+///
+/// Architecture:
+/// 1. vmx_entry_trampoline (naked): saves host callee-saved regs on stack,
+///    saves RSP to HOST_SAVED_RSP, loads guest GPRs, does vmlaunch/vmresume.
+/// 2. On success: CPU enters guest. On VM exit, CPU jumps to HOST_RIP = vm_exit_stub.
+/// 3. vm_exit_stub (naked): saves guest GPRs to VM_EXIT_GUEST_REGS, restores
+///    host RSP from HOST_SAVED_RSP, pops callee-saved, returns 0.
+/// 4. On failure: trampoline pops callee-saved, returns 1.
+fn vmx_enter_guest(use_resume: bool) -> u64 {
+    VMX_USE_RESUME.store(use_resume as u8, Ordering::SeqCst);
+    unsafe { vmx_entry_trampoline() }
+}
+
+/// Naked trampoline that performs the actual VMX entry.
+/// Returns 0 if a VM exit occurred (success), 1 if vmlaunch/vmresume failed.
 #[unsafe(naked)]
-extern "C" fn vm_exit_handler() {
-    // Sauvegarder tous les registres du guest
+unsafe extern "C" fn vmx_entry_trampoline() -> u64 {
     core::arch::naked_asm!(
-        // Sauvegarder les registres généraux
-        "push rax",
-        "push rcx",  // Note: Pas de rbx qui est réservé par LLVM
-        "push rdx",
-        "push rsi",
-        "push rdi",
+        // ── Save host callee-saved registers on stack ──
+        "push rbx",
         "push rbp",
-        "push r8",
-        "push r9",
-        "push r10",
-        "push r11",
         "push r12",
         "push r13",
         "push r14",
         "push r15",
+        "pushfq",
         
-        // Appeler le handler Rust
-        "mov rdi, rsp",  // Pointeur vers les registres sauvegardés
-        "call {handler}",
+        // Save current RSP so vm_exit_stub can restore it
+        "lea rax, [{host_rsp}]",
+        "mov [rax], rsp",
         
-        // Restaurer les registres
+        // ── Check VMLAUNCH vs VMRESUME BEFORE loading guest regs ──
+        "lea rax, [{flag}]",
+        "movzx eax, byte ptr [rax]",
+        "push rax",   // save flag on stack (will pop after loading guest regs)
+        
+        // ── Load guest GPRs from save area ──
+        "lea rcx, [{gregs}]",
+        "mov rbx, [rcx + 8]",
+        "mov rdx, [rcx + 24]",
+        "mov rsi, [rcx + 32]",
+        "mov rdi, [rcx + 40]",
+        "mov rbp, [rcx + 48]",
+        "mov r8,  [rcx + 56]",
+        "mov r9,  [rcx + 64]",
+        "mov r10, [rcx + 72]",
+        "mov r11, [rcx + 80]",
+        "mov r12, [rcx + 88]",
+        "mov r13, [rcx + 96]",
+        "mov r14, [rcx + 104]",
+        "mov r15, [rcx + 112]",
+        "mov rax, [rcx + 0]",    // guest rax
+        "mov rcx, [rcx + 16]",   // guest rcx (must be last — we used it as pointer)
+        
+        // ── Pop flag and branch ──
+        // Problem: popping destroys RSP alignment and a guest register.
+        // Instead, let's read the saved flag from the stack without popping,
+        // using a different approach.
+        //
+        // Actually, the flag is still on the stack at [rsp]. But all guest
+        // regs are loaded. We can't use any register to test without losing
+        // a guest value. Solution: use the stack-based test.
+        //
+        // Use: compare the value at [rsp] and conditional jump, then adjust RSP.
+        "cmp qword ptr [rsp], 0",
+        "jne 20f",
+        
+        // ── VMLAUNCH path ──
+        "add rsp, 8",    // pop the flag (clean stack for VMLAUNCH)
+        "vmlaunch",
+        "jmp 30f",       // failure
+        
+        // ── VMRESUME path ──
+        "20:",
+        "add rsp, 8",    // pop the flag
+        "vmresume",
+        // fall-through to failure
+        
+        // ── VMLAUNCH/VMRESUME failed ──
+        "30:",
+        // We need to restore host stack. HOST_SAVED_RSP still has our saved value.
+        "lea rax, [{host_rsp}]",
+        "mov rsp, [rax]",
+        // Pop callee-saved and return 1.
+        "popfq",
         "pop r15",
         "pop r14",
         "pop r13",
         "pop r12",
-        "pop r11",
-        "pop r10",
-        "pop r9",
-        "pop r8",
         "pop rbp",
-        "pop rdi",
-        "pop rsi",
-        "pop rdx",
-        "pop rcx",
-        "pop rax",
+        "pop rbx",
+        "mov rax, 1",
+        "ret",
         
-        // VMRESUME pour retourner dans le guest
-        "vmresume",
-        
-        // Si vmresume échoue, on arrive ici
-        "jmp {error}",
-        
-        handler = sym vm_exit_handler_rust,
-        error = sym vm_exit_error,
+        host_rsp = sym HOST_SAVED_RSP,
+        gregs = sym VM_EXIT_GUEST_REGS,
+        flag = sym VMX_USE_RESUME,
     );
 }
 
-/// Handler Rust pour les VM exits
-extern "C" fn vm_exit_handler_rust(_regs: *mut GuestRegs) {
-    // Cette fonction sera appelée à chaque VM exit
-    // Le traitement réel est fait dans VirtualMachine::handle_vm_exit
-}
-
-/// Gestion des erreurs de VMRESUME
-extern "C" fn vm_exit_error() {
-    crate::serial_println!("[HV] VMRESUME failed in exit handler!");
-    loop {
-        unsafe { core::arch::asm!("hlt"); }
-    }
+/// VM exit stub — HOST_RIP points here.
+///
+/// Called by CPU after a VM exit. CPU has loaded host segment selectors,
+/// CR0/CR3/CR4, RSP=HOST_RSP, RIP=this function.
+///
+/// We:
+/// 1. Save all guest GPRs to VM_EXIT_GUEST_REGS
+/// 2. Switch RSP to the trampoline's saved RSP (HOST_SAVED_RSP)
+/// 3. Pop callee-saved registers (mirror of trampoline's pushes)
+/// 4. Return 0 (back to caller of vmx_entry_trampoline)
+#[unsafe(naked)]
+extern "C" fn vm_exit_stub() {
+    core::arch::naked_asm!(
+        // ── Save guest GPRs ──
+        // We're on the HOST_RSP stack. Use it temporarily.
+        "push rax",
+        "lea rax, [{gregs}]",
+        
+        // Save all guest GPRs except rax (saved on stack)
+        "mov [rax + 8],   rbx",
+        "mov [rax + 16],  rcx",
+        "mov [rax + 24],  rdx",
+        "mov [rax + 32],  rsi",
+        "mov [rax + 40],  rdi",
+        "mov [rax + 48],  rbp",
+        "mov [rax + 56],  r8",
+        "mov [rax + 64],  r9",
+        "mov [rax + 72],  r10",
+        "mov [rax + 80],  r11",
+        "mov [rax + 88],  r12",
+        "mov [rax + 96],  r13",
+        "mov [rax + 104], r14",
+        "mov [rax + 112], r15",
+        
+        // Save guest rax (was pushed on HOST_RSP stack)
+        "pop rbx",
+        "mov [rax], rbx",
+        
+        // ── Switch to trampoline's stack ──
+        "lea rax, [{host_rsp}]",
+        "mov rsp, [rax]",
+        
+        // ── Pop callee-saved registers (mirror of trampoline's pushes) ──
+        "popfq",
+        "pop r15",
+        "pop r14",
+        "pop r13",
+        "pop r12",
+        "pop rbp",
+        "pop rbx",
+        
+        // ── Return 0 (success: VM exit handled) ──
+        "xor eax, eax",
+        "ret",
+        
+        gregs = sym VM_EXIT_GUEST_REGS,
+        host_rsp = sym HOST_SAVED_RSP,
+    );
 }

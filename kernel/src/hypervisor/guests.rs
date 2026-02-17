@@ -373,11 +373,12 @@ pub fn get_guest(name: &str) -> Option<Vec<u8>> {
         "shell" => Some(shell_guest()),
         "hello64" => Some(guest_64bit_hello()),
         "pm-test" | "protected" => Some(guest_protected_mode_test()),
+        "linux-test" => Some(super::linux_loader::create_test_linux_kernel()),
         _ => None,
     }
 }
 
 /// List available guests
 pub fn list_guests() -> &'static [&'static str] {
-    &["hello", "counter", "hypercall", "cpuid", "shell", "hello64", "pm-test"]
+    &["hello", "counter", "hypercall", "cpuid", "shell", "hello64", "pm-test", "linux-test"]
 }

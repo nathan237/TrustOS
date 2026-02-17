@@ -5,9 +5,11 @@
 //! - État de l'host
 //! - Contrôles d'exécution
 //! - Informations sur les VM exits
+//!
+//! Physical address translation and MSR-adjusted control fields.
 
 use super::{HypervisorError, Result};
-use super::vmx::{vmclear, vmptrld, vmread, vmwrite};
+use super::vmx::{self, vmclear, vmptrld, vmread, vmwrite};
 use alloc::boxed::Box;
 
 /// VMCS Field Encodings (Intel SDM Vol. 3, Appendix B)
@@ -244,7 +246,11 @@ impl Vmcs {
     /// Créer une nouvelle VMCS
     pub fn new(revision_id: u32) -> Result<Self> {
         let region = Box::new(VmcsRegion::new(revision_id));
-        let phys_addr = region.as_ref() as *const VmcsRegion as u64;
+        let virt_addr = region.as_ref() as *const VmcsRegion as u64;
+        let phys_addr = vmx::virt_to_phys_vmx(virt_addr);
+        
+        crate::serial_println!("[VMCS] Allocated virt=0x{:016X} phys=0x{:016X} rev=0x{:08X}",
+                              virt_addr, phys_addr, revision_id);
         
         // VMCLEAR pour initialiser
         vmclear(phys_addr)?;
@@ -279,35 +285,59 @@ impl Vmcs {
         vmread(field)
     }
     
-    /// Configurer les contrôles d'exécution de base
+    /// Configurer les contrôles d'exécution de base (MSR-adjusted)
     pub fn setup_execution_controls(&self) -> Result<()> {
         use fields::*;
         
-        // Pin-based controls
-        let pin_based = 0u64; // Minimal pour commencer
-        self.write(PIN_BASED_VM_EXEC_CONTROLS, pin_based)?;
+        // Pin-based controls — MSR-adjusted
+        let pin_desired = 0u32; // No extra pin-based features
+        let pin_based = vmx::adjust_vmx_control(vmx::pinbased_ctls_msr(), pin_desired);
+        self.write(PIN_BASED_VM_EXEC_CONTROLS, pin_based as u64)?;
+        crate::serial_println!("[VMCS] Pin-based controls: 0x{:08X}", pin_based);
         
-        // CPU-based controls
-        let cpu_based = (1 << 7)   // HLT exiting
-                      | (1 << 31); // Activate secondary controls
-        self.write(CPU_BASED_VM_EXEC_CONTROLS, cpu_based)?;
+        // CPU-based primary controls — MSR-adjusted
+        let cpu_desired = (1u32 << 7)   // HLT exiting
+                        | (1u32 << 24)  // I/O exiting (for port I/O interception)
+                        | (1u32 << 31); // Activate secondary controls
+        let cpu_based = vmx::adjust_vmx_control(vmx::procbased_ctls_msr(), cpu_desired);
+        self.write(CPU_BASED_VM_EXEC_CONTROLS, cpu_based as u64)?;
+        crate::serial_println!("[VMCS] Primary proc-based controls: 0x{:08X}", cpu_based);
         
-        // Secondary controls with EPT and VPID
-        let mut secondary = 0u64;
+        // Secondary controls — only if activated
+        if cpu_based & (1 << 31) != 0 {
+            let mut sec_desired = 0u32;
+            
+            // Enable EPT (bit 1) - if supported
+            sec_desired |= 1 << 1;
+            
+            // Enable VPID (bit 5)
+            sec_desired |= super::vpid::get_secondary_controls_vpid() as u32;
+            
+            // Unrestricted guest (bit 7) — allows real mode in guest
+            // sec_desired |= 1 << 7;
+            
+            let secondary = vmx::adjust_vmx_control(vmx::IA32_VMX_PROCBASED_CTLS2, sec_desired);
+            self.write(SECONDARY_VM_EXEC_CONTROLS, secondary as u64)?;
+            crate::serial_println!("[VMCS] Secondary controls: 0x{:08X}", secondary);
+        }
         
-        // Enable EPT (bit 1) - always if supported
-        secondary |= 1 << 1;
-        
-        // Enable VPID (bit 5) - if supported and enabled
-        secondary |= super::vpid::get_secondary_controls_vpid();
-        
-        // Enable unrestricted guest (bit 7) - allows real mode
-        // secondary |= 1 << 7; // Optional
-        
-        self.write(SECONDARY_VM_EXEC_CONTROLS, secondary)?;
-        
-        // Exception bitmap (intercepter aucune exception pour l'instant)
+        // Exception bitmap — intercept no exceptions by default
         self.write(EXCEPTION_BITMAP, 0)?;
+        
+        // CR0/CR4 guest/host masks and read shadows
+        self.write(CR0_GUEST_HOST_MASK, 0)?;
+        self.write(CR4_GUEST_HOST_MASK, 0)?;
+        self.write(CR0_READ_SHADOW, 0)?;
+        self.write(CR4_READ_SHADOW, 0)?;
+        
+        // CR3 target count
+        self.write(CR3_TARGET_COUNT, 0)?;
+        
+        // MSR bitmap, I/O bitmaps — set to 0 address (all cause exits)
+        // In the future, allocate proper bitmap pages
+        // self.write(MSR_BITMAP, 0)?;
+        // self.write(IO_BITMAP_A, 0)?;
+        // self.write(IO_BITMAP_B, 0)?;
         
         Ok(())
     }
@@ -326,39 +356,57 @@ impl Vmcs {
         Ok(())
     }
     
-    /// Configurer les contrôles de sortie VM
+    /// Configurer les contrôles de sortie VM (MSR-adjusted)
     pub fn setup_exit_controls(&self) -> Result<()> {
         use fields::*;
         
-        let exit_controls = (1 << 9)   // Host address-space size (64-bit host)
-                          | (1 << 15); // Acknowledge interrupt on exit
-        self.write(VM_EXIT_CONTROLS, exit_controls)?;
+        let exit_desired = (1u32 << 9)   // Host address-space size (64-bit host)
+                         | (1u32 << 15)  // Acknowledge interrupt on exit
+                         | (1u32 << 20)  // Save IA32_PAT on exit
+                         | (1u32 << 21); // Load IA32_PAT on exit
+        let exit_controls = vmx::adjust_vmx_control(vmx::exit_ctls_msr(), exit_desired);
+        self.write(VM_EXIT_CONTROLS, exit_controls as u64)?;
+        crate::serial_println!("[VMCS] Exit controls: 0x{:08X}", exit_controls);
+        
+        // No MSR store/load on exit
+        self.write(VM_EXIT_MSR_STORE_COUNT, 0)?;
+        self.write(VM_EXIT_MSR_LOAD_COUNT, 0)?;
         
         Ok(())
     }
     
-    /// Configurer les contrôles d'entrée VM
+    /// Configurer les contrôles d'entrée VM (MSR-adjusted)
     pub fn setup_entry_controls(&self) -> Result<()> {
         use fields::*;
         
-        let entry_controls = (1 << 9); // IA-32e mode guest
-        self.write(VM_ENTRY_CONTROLS, entry_controls)?;
+        let entry_desired = (1u32 << 9)   // IA-32e mode guest (64-bit)
+                          | (1u32 << 14)  // Load IA32_PAT on entry
+                          ;
+        let entry_controls = vmx::adjust_vmx_control(vmx::entry_ctls_msr(), entry_desired);
+        self.write(VM_ENTRY_CONTROLS, entry_controls as u64)?;
+        crate::serial_println!("[VMCS] Entry controls: 0x{:08X}", entry_controls);
+        
+        // No MSR load on entry
+        self.write(VM_ENTRY_MSR_LOAD_COUNT, 0)?;
+        
+        // No event injection on entry
+        self.write(VM_ENTRY_INTERRUPTION_INFO, 0)?;
         
         Ok(())
     }
     
-    /// Configurer l'état du guest
+    /// Configurer l'état du guest (64-bit long mode)
     pub fn setup_guest_state(&self, entry_point: u64, stack_ptr: u64) -> Result<()> {
         use fields::*;
         
         // Segments (mode 64-bit)
-        // CS
+        // CS — 64-bit code segment
         self.write(GUEST_CS_SELECTOR, 0x08)?;
         self.write(GUEST_CS_BASE, 0)?;
         self.write(GUEST_CS_LIMIT, 0xFFFFFFFF)?;
-        self.write(GUEST_CS_ACCESS_RIGHTS, 0xA09B)?; // 64-bit code, present, DPL0
+        self.write(GUEST_CS_ACCESS_RIGHTS, 0xA09B)?; // L=1, D=0, P=1, S=1, Type=11(exec/read)
         
-        // DS, ES, SS
+        // DS, ES, SS — 64-bit data segments
         for (sel, base, limit, ar) in [
             (GUEST_DS_SELECTOR, GUEST_DS_BASE, GUEST_DS_LIMIT, GUEST_DS_ACCESS_RIGHTS),
             (GUEST_ES_SELECTOR, GUEST_ES_BASE, GUEST_ES_LIMIT, GUEST_ES_ACCESS_RIGHTS),
@@ -367,14 +415,14 @@ impl Vmcs {
             self.write(sel, 0x10)?;
             self.write(base, 0)?;
             self.write(limit, 0xFFFFFFFF)?;
-            self.write(ar, 0xC093)?; // Data, present, DPL0
+            self.write(ar, 0xC093)?; // G=1, DB=1, P=1, S=1, Type=3(read/write)
         }
         
-        // FS, GS (base 0 pour l'instant)
+        // FS, GS — unusable in basic guest
         self.write(GUEST_FS_SELECTOR, 0)?;
         self.write(GUEST_FS_BASE, 0)?;
         self.write(GUEST_FS_LIMIT, 0xFFFF)?;
-        self.write(GUEST_FS_ACCESS_RIGHTS, 0x10000)?; // Unusable
+        self.write(GUEST_FS_ACCESS_RIGHTS, 0x10000)?; // Unusable bit
         
         self.write(GUEST_GS_SELECTOR, 0)?;
         self.write(GUEST_GS_BASE, 0)?;
@@ -387,31 +435,60 @@ impl Vmcs {
         self.write(GUEST_LDTR_LIMIT, 0)?;
         self.write(GUEST_LDTR_ACCESS_RIGHTS, 0x10000)?;
         
-        // TR (Task Register - requis)
+        // TR (Task Register - required even if unused)
         self.write(GUEST_TR_SELECTOR, 0)?;
         self.write(GUEST_TR_BASE, 0)?;
         self.write(GUEST_TR_LIMIT, 0x67)?;
-        self.write(GUEST_TR_ACCESS_RIGHTS, 0x8B)?; // 64-bit TSS, busy
+        self.write(GUEST_TR_ACCESS_RIGHTS, 0x8B)?; // Type=11(64-bit TSS busy), P=1
         
-        // Control registers
-        self.write(GUEST_CR0, 0x80050033)?; // PE, MP, ET, NE, WP, AM, PG
-        self.write(GUEST_CR3, 0)?; // À configurer avec les page tables du guest
-        self.write(GUEST_CR4, 0x2620)?; // PAE, MCE, PGE, OSFXSR, OSXMMEXCPT
+        // Control registers — 64-bit long mode guest
+        let guest_cr0 = 0x80050033u64; // PE, MP, ET, NE, WP, AM, PG
+        let guest_cr4 = 0x2620u64;     // PAE, MCE, PGE, OSFXSR, OSXMMEXCPT
+        self.write(GUEST_CR0, guest_cr0)?;
+        self.write(GUEST_CR3, 0)?; // Guest page tables — set by caller if needed
+        self.write(GUEST_CR4, guest_cr4)?;
+        
+        // EFER — IA32e mode enabled
+        let guest_efer = 0x500u64; // LME (bit 8) + LMA (bit 10)
+        self.write(GUEST_IA32_EFER, guest_efer)?;
+        
+        // PAT — default value
+        self.write(GUEST_IA32_PAT, 0x0007040600070406u64)?;
         
         // RIP, RSP, RFLAGS
         self.write(GUEST_RIP, entry_point)?;
         self.write(GUEST_RSP, stack_ptr)?;
-        self.write(GUEST_RFLAGS, 0x2)?; // Reserved bit 1 = 1
+        self.write(GUEST_RFLAGS, 0x2)?; // Reserved bit 1 must be 1
         
-        // VMCS link pointer (required, -1 for no nested virtualization)
+        // VMCS link pointer (required, -1 for no shadow VMCS)
         self.write(VMCS_LINK_POINTER, 0xFFFFFFFF_FFFFFFFF)?;
         
-        // Activity state (active)
+        // Activity state (active) and interruptibility
         self.write(GUEST_ACTIVITY_STATE, 0)?;
         self.write(GUEST_INTERRUPTIBILITY_STATE, 0)?;
         
+        // SYSENTER MSRs (set to 0)
+        self.write(GUEST_SYSENTER_CS, 0)?;
+        self.write(GUEST_SYSENTER_ESP, 0)?;
+        self.write(GUEST_SYSENTER_EIP, 0)?;
+        
         // DR7
         self.write(GUEST_DR7, 0x400)?;
+        
+        // Debug control
+        self.write(GUEST_IA32_DEBUGCTL, 0)?;
+        
+        // Pending debug exceptions
+        self.write(GUEST_PENDING_DEBUG_EXCEPTIONS, 0)?;
+        
+        // GDTR/IDTR for guest (minimal)
+        self.write(GUEST_GDTR_BASE, 0)?;
+        self.write(GUEST_GDTR_LIMIT, 0)?;
+        self.write(GUEST_IDTR_BASE, 0)?;
+        self.write(GUEST_IDTR_LIMIT, 0)?;
+        
+        crate::serial_println!("[VMCS] Guest state: RIP=0x{:X} RSP=0x{:X} CR0=0x{:X} CR4=0x{:X} EFER=0x{:X}",
+                              entry_point, stack_ptr, guest_cr0, guest_cr4, guest_efer);
         
         Ok(())
     }
@@ -421,7 +498,7 @@ impl Vmcs {
         use fields::*;
         use core::arch::asm;
         
-        // Lire les valeurs actuelles de l'host
+        // Read current host CRs
         let cr0: u64;
         let cr3: u64;
         let cr4: u64;
@@ -436,8 +513,8 @@ impl Vmcs {
         self.write(HOST_CR3, cr3)?;
         self.write(HOST_CR4, cr4)?;
         
-        // Segments (CS, SS, DS, ES, FS, GS, TR)
-        // Lire les sélecteurs actuels
+        // Segment selectors — read current values and clear RPL bits [1:0]
+        // VMX requires host selectors to have RPL=0
         let cs: u16;
         let ss: u16;
         let ds: u16;
@@ -456,34 +533,80 @@ impl Vmcs {
             asm!("str {:x}", out(reg) tr);
         }
         
-        self.write(HOST_CS_SELECTOR, cs as u64)?;
-        self.write(HOST_SS_SELECTOR, ss as u64)?;
-        self.write(HOST_DS_SELECTOR, ds as u64)?;
-        self.write(HOST_ES_SELECTOR, es as u64)?;
-        self.write(HOST_FS_SELECTOR, fs as u64)?;
-        self.write(HOST_GS_SELECTOR, gs as u64)?;
-        self.write(HOST_TR_SELECTOR, tr as u64)?;
+        self.write(HOST_CS_SELECTOR, (cs & !3) as u64)?;
+        self.write(HOST_SS_SELECTOR, (ss & !3) as u64)?;
+        self.write(HOST_DS_SELECTOR, (ds & !3) as u64)?;
+        self.write(HOST_ES_SELECTOR, (es & !3) as u64)?;
+        self.write(HOST_FS_SELECTOR, (fs & !3) as u64)?;
+        self.write(HOST_GS_SELECTOR, (gs & !3) as u64)?;
+        self.write(HOST_TR_SELECTOR, (tr & !3) as u64)?;
         
-        // Bases
-        self.write(HOST_FS_BASE, 0)?;
-        self.write(HOST_GS_BASE, 0)?;
+        // FS/GS bases
+        let fs_base = vmx::read_msr(0xC000_0100); // IA32_FS_BASE
+        let gs_base = vmx::read_msr(0xC000_0101); // IA32_GS_BASE
+        self.write(HOST_FS_BASE, fs_base)?;
+        self.write(HOST_GS_BASE, gs_base)?;
         
-        // GDTR et IDTR bases
-        let mut gdtr: [u64; 2] = [0; 2];
-        let mut idtr: [u64; 2] = [0; 2];
-        
-        unsafe {
-            asm!("sgdt [{}]", in(reg) gdtr.as_mut_ptr());
-            asm!("sidt [{}]", in(reg) idtr.as_mut_ptr());
+        // GDTR and IDTR bases — stored as [u16 limit][u64 base] = 10 bytes
+        #[repr(C, packed)]
+        struct DescriptorTablePtr {
+            limit: u16,
+            base: u64,
         }
         
-        self.write(HOST_GDTR_BASE, gdtr[1])?;
-        self.write(HOST_IDTR_BASE, idtr[1])?;
-        self.write(HOST_TR_BASE, 0)?; // À configurer correctement
+        let mut gdtr = DescriptorTablePtr { limit: 0, base: 0 };
+        let mut idtr = DescriptorTablePtr { limit: 0, base: 0 };
+        
+        unsafe {
+            asm!("sgdt [{}]", in(reg) &mut gdtr as *mut DescriptorTablePtr, options(nostack));
+            asm!("sidt [{}]", in(reg) &mut idtr as *mut DescriptorTablePtr, options(nostack));
+        }
+        
+        self.write(HOST_GDTR_BASE, gdtr.base)?;
+        self.write(HOST_IDTR_BASE, idtr.base)?;
+        
+        // TR base — read from GDT
+        let tr_index = (tr >> 3) as usize;
+        let gdt_ptr = gdtr.base as *const u64;
+        let tr_base = if tr != 0 && tr_index > 0 {
+            unsafe {
+                let low = *gdt_ptr.add(tr_index);
+                let high = *gdt_ptr.add(tr_index + 1);
+                // TSS descriptor is 16 bytes in long mode
+                let base_low = ((low >> 16) & 0xFFFF)
+                             | (((low >> 32) & 0xFF) << 16)
+                             | (((low >> 56) & 0xFF) << 24);
+                let base_high = high & 0xFFFFFFFF;
+                base_low | (base_high << 32)
+            }
+        } else {
+            0u64
+        };
+        self.write(HOST_TR_BASE, tr_base)?;
+        
+        // SYSENTER MSRs
+        self.write(HOST_SYSENTER_CS, vmx::read_msr(0x174) as u64)?;  // IA32_SYSENTER_CS
+        self.write(HOST_SYSENTER_ESP, vmx::read_msr(0x175))?; // IA32_SYSENTER_ESP
+        self.write(HOST_SYSENTER_EIP, vmx::read_msr(0x176))?; // IA32_SYSENTER_EIP
+        
+        // Host EFER and PAT
+        let host_efer = vmx::read_msr(0xC000_0080); // IA32_EFER
+        let host_pat = vmx::read_msr(0x277);        // IA32_PAT
+        self.write(HOST_IA32_EFER, host_efer)?;
+        self.write(HOST_IA32_PAT, host_pat)?;
         
         // RIP et RSP pour le handler de sortie
         self.write(HOST_RIP, exit_handler)?;
         self.write(HOST_RSP, stack)?;
+        
+        crate::serial_println!("[VMCS] Host state: CR0=0x{:X} CR3=0x{:X} CR4=0x{:X}", cr0, cr3, cr4);
+        crate::serial_println!("[VMCS] Host state: CS=0x{:X} SS=0x{:X} TR=0x{:X} TR_BASE=0x{:X}",
+                              cs & !3, ss & !3, tr & !3, tr_base);
+        let gdt_base = unsafe { core::ptr::addr_of!(gdtr.base).read_unaligned() };
+        let idt_base = unsafe { core::ptr::addr_of!(idtr.base).read_unaligned() };
+        crate::serial_println!("[VMCS] Host state: GDT_BASE=0x{:X} IDT_BASE=0x{:X}", gdt_base, idt_base);
+        crate::serial_println!("[VMCS] Host state: RIP=0x{:X} RSP=0x{:X} EFER=0x{:X}",
+                              exit_handler, stack, host_efer);
         
         Ok(())
     }

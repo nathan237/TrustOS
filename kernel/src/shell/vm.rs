@@ -3662,13 +3662,20 @@ pub(super) fn cmd_vm(args: &[&str]) {
                 crate::print_color!(COLOR_YELLOW, "Note: ");
                 crate::println!("Initializing hypervisor first...");
                 if let Err(e) = crate::hypervisor::init() {
-                    crate::print_color!(COLOR_RED, "? ");
+                    crate::print_color!(COLOR_RED, "✗ ");
                     crate::println!("Failed to init hypervisor: {:?}", e);
                     return;
                 }
             }
             
-            match crate::hypervisor::create_vm(guest, 4) {
+            // Linux guests need more memory
+            let mem_mb = if guest.starts_with("linux") || guest.ends_with(".bzimage") {
+                64
+            } else {
+                4
+            };
+            
+            match crate::hypervisor::create_vm(guest, mem_mb) {
                 Ok(id) => {
                     crate::println!("Running guest '{}'...", guest);
                     match crate::hypervisor::start_vm_with_guest(id, guest) {
