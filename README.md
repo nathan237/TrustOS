@@ -4,7 +4,7 @@
 
 ### **Trust** the code. **Rust** is the reason.
 
-**A fully auditable, bare-metal operating system — 131,000+ lines of pure Rust. Zero C. Zero secrets.**
+**A fully auditable, bare-metal operating system — 143,000+ lines of pure Rust. Zero C. Zero secrets.**
 
 *One dev. One OS. Nothing to hide.*
 
@@ -12,9 +12,9 @@
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-131%2C000%2B%20lines-blue?style=for-the-badge)]()
-[![ISO](https://img.shields.io/badge/ISO-8.45%20MB-purple?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.3.3-orange?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-143%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![ISO](https://img.shields.io/badge/ISO-8.95%20MB-purple?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.3.4-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -33,6 +33,7 @@
 
 | Date | Changes |
 |------|----------|
+| **2026-02-16** | **v0.3.4 — POSIX Process Model + Real Disk Swap** — PTY/TTY subsystem with POSIX line discipline (canonical mode, echo, signal chars), pseudo-terminal pairs (master/slave), job control syscalls (SETPGID/SETSID/GETPGID/GETSID), `/etc/passwd` persistence (load/sync to filesystem), ELF improvements (PATH search across 5 dirs, shebang `#!` support, auxiliary vector on stack), `chroot` syscall with per-process root dir, NVMe-backed swap (last 64MB of disk, 8 sectors/page, in-memory fallback), kernel stacks 16KB→64KB. 96/96 tests. 143K lines, 262 source files. |
 | **2026-02-16** | **v0.3.3 — Cinematic Trailer + Visual Overhaul** — Beat-synced 128 BPM trailer (`trailer` command) with 14 scenes, 1984/Big Brother theme, feature showcase crescendo (17 cards with decreasing delay), glow/vignette/CRT effects, XOR plasma, optimized fire. SMP: APs safely parked (cli;hlt), BSP-only mode. 131K lines, 253 source files. |
 | **2026-02-14** | **v0.2.0 — Ring 3 Userspace Execution** — Real CPL-3 process execution via IRETQ with clean kernel return. Embedded ELF64 binary loader. `exec test` and `exec hello` shell commands. TrustFS block freeing fixes (unlink, truncate). 130K+ lines. |
 | **2026-02-14** | **TrustLab v3 — UX Overhaul** — Full mouse/click support on all 7 panels, structured syscall tracing (50+ syscall names, args, return values in Kernel Trace), event detail panel, in-kernel UX auto-test suite (9 tests via `labtest` command). 136K+ lines. |
@@ -53,7 +54,7 @@ In a world where your operating system is a black box — millions of lines of l
 
 TrustOS is the answer: **every single line is open, readable, and auditable.**
 
-- 🔍 **Fully auditable** — 120,000 lines of Rust, all on GitHub. No binary blobs. No hidden code.
+- 🔍 **Fully auditable** — 143,000 lines of Rust, all on GitHub. No binary blobs. No hidden code.
 - 🦀 **Memory safe by design** — Rust's ownership model prevents entire categories of vulnerabilities (buffer overflows, use-after-free, data races).
 - 🧩 **Zero dependencies on C** — no libc, no glibc, no C runtime. Every driver, every protocol, every pixel is Rust.
 - 📖 **Readable** — one person wrote it in 8 days. If one person can build it, one person can understand it.
@@ -64,10 +65,10 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 
 | Metric | Value |
 |--------|-------|
-| **Total code** | 131,000+ lines of Rust |
-| **Source files** | 253 `.rs` files |
-| **Kernel modules** | 35 independent modules |
-| **ISO size** | 8.45 MB |
+| **Total code** | 143,000+ lines of Rust |
+| **Source files** | 262 `.rs` files |
+| **Kernel modules** | 37 independent modules |
+| **ISO size** | 8.95 MB |
 | **Boot time** | < 1 second |
 | **Desktop FPS** | 144 FPS (SSE2 SIMD) |
 | **C code** | 0 lines |
@@ -79,7 +80,7 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 | | Traditional OS | TrustOS |
 |---|:---:|:---:|
 | **Language** | C/C++ with 40 years of memory bugs | 100% Rust — memory safe by design |
-| Codebase | Millions of lines, impossible to audit | 131K lines, one person can read it all |
+| Codebase | Millions of lines, impossible to audit | 143K lines, one person can read it all |
 | **Binary blobs** | Everywhere | None. Zero. |
 | **Telemetry** | Opt-out (maybe) | Doesn't exist — verify it yourself |
 | **Build** | Complex cross-compilation toolchains | `cargo build` — that's it |
@@ -196,10 +197,13 @@ TrustOS is being built **with Linux binary compatibility in mind**. The infrastr
 
 | Component | Status | What exists |
 |-----------|--------|-------------|
-| **Syscall interface** | ✅ Functional | 60+ Linux syscalls dispatched (read, write, mmap, fork, socket, exec, uname...) |
-| **ELF64 loader** | ✅ Functional | Parses and loads static ELF binaries with correct segment mapping |
+| **Syscall interface** | ✅ Functional | 70+ Linux syscalls dispatched (read, write, mmap, fork, socket, exec, uname, setpgid, setsid, chroot...) |
+| **ELF64 loader** | ✅ Functional | Parses and loads static ELF binaries, PATH search (5 dirs), shebang `#!` support, auxiliary vector (AT_PAGESZ, AT_PHDR, AT_ENTRY...) |
 | **Ring 3 (userland)** | ✅ Working | Real SYSCALL/SYSRET mechanism, IRETQ to Ring 3, kernel stack switching |
-| **Process table** | ✅ Working | Full PCB, PID management, fork/exit/wait, state machine |
+| **Process table** | ✅ Working | Full PCB, PID management, fork/exit/wait, state machine, process groups, sessions, controlling TTY |
+| **PTY/TTY subsystem** | ✅ Working | POSIX line discipline, pseudo-terminal master/slave pairs, termios, ioctls (TIOCGPGRP, TCGETS, TIOCGWINSZ...) |
+| **Job control** | ✅ Working | SETPGID, GETPGRP, SETSID, GETPGID, GETSID syscalls, kill_process_group() |
+| **chroot** | ✅ Working | Per-process root directory, sys_chroot syscall |
 | **Wayland compositor** | 🔨 Internal | 2,700-line in-kernel compositor with surface management, window decorations, VT100 terminal. Protocol opcodes defined but no IPC socket transport — external Wayland clients can't connect yet |
 | **x86_64 interpreter** | 🧪 Proof of concept | ~15 opcodes implemented (mov, push, jmp, call, syscall). Cannot run real binaries |
 | **Alpine subsystem** | 📋 Planned | Infrastructure exists, needs full syscall coverage |
@@ -435,6 +439,9 @@ TrustOS includes a **built-in cinematic animated explainer** — a 2-minute film
 | `hypervisor/` | ~2,000 | VT-x/SVM, EPT, guest VM isolation |
 | `tls13/` | ~2,000 | TLS 1.3, crypto, X.509 certs |
 | `ed25519.rs` | ~720 | Ed25519 asymmetric signatures (RFC 8032) |
+| `tty.rs` | ~330 | POSIX TTY layer with line discipline |
+| `pty.rs` | ~196 | Pseudo-terminal master/slave pairs |
+| `swap.rs` | ~466 | NVMe-backed page swap with fallback |
 
 ---
 
@@ -524,6 +531,8 @@ kernel/src/
 ├── chess.rs             # Chess engine (rules, AI, game state)
 ├── chess3d.rs           # 3D Chess renderer (camera, meshes)
 ├── model_editor.rs      # TrustEdit 3D model editor
+├── tty.rs               # POSIX TTY layer + line discipline
+├── pty.rs               # Pseudo-terminal master/slave pairs
 ├── signature.rs         # Kernel signatures (HMAC-SHA256 + Ed25519)
 ├── ed25519.rs           # Ed25519 digital signatures (RFC 8032)
 ├── formula3d.rs         # Wireframe 3D engine
@@ -549,7 +558,7 @@ kernel/src/
 | Feature | TrustOS | SerenityOS | Redox OS | TempleOS | Linux |
 |---------|---------|------------|----------|----------|-------|
 | Language | **Rust** | C++ | Rust | HolyC | C |
-| Lines of code | **136K** | 800K+ | 200K+ | 100K | Millions |
+| Lines of code | **143K** | 800K+ | 200K+ | 100K | Millions |
 | Contributors | **1** | 1,141 | Community | 1 | Thousands |
 | Development time | **10 days** | 6+ years | 10+ years | ~10 years | 35+ years |
 | GUI Desktop | ✅ (144 FPS) | ✅ | ✅ | ✅ (16 colors) | Via X11/Wayland |
@@ -568,6 +577,17 @@ kernel/src/
 ---
 
 ## 📋 Changelog
+
+### v0.3.4 — February 2026
+- **PTY/TTY Subsystem** — Full POSIX TTY layer with line discipline (canonical mode, echo, ISIG signal chars ^C/^Z/^\\). TTY_TABLE with named devices, ioctls (TIOCGPGRP, TIOCSPGRP, TIOCSCTTY, TIOCGSID, TIOCGWINSZ, TIOCSWINSZ, TCGETS, TCSETS). Termios struct with ECHO, ICANON, ISIG flags.
+- **Pseudo-Terminal Pairs** — PTY master/slave architecture. `alloc_pty()` creates linked pairs with ring buffers. Master write → slave read (with line discipline), slave write → master read.
+- **Job Control** — Process groups (pgid) and sessions (sid) on every PCB. New syscalls: SETPGID, GETPGRP, SETSID, GETPGID, GETSID. `kill_process_group()` for signal delivery to process groups. Controlling TTY per process.
+- **`/etc/passwd` Persistence** — `load_from_filesystem()` reads `/etc/passwd` from ramfs on boot, parses `UserEntry` records, merges with defaults. `sync_to_filesystem()` writes current user database back to `/etc/passwd`.
+- **ELF Improvements** — `resolve_path()` searches PATH across 5 directories (`/bin`, `/usr/bin`, `/sbin`, `/usr/sbin`, `/usr/local/bin`). `check_shebang()` for `#!` script detection. Auxiliary vector on user stack (AT_PAGESZ, AT_PHDR, AT_PHENT, AT_PHNUM, AT_ENTRY, AT_RANDOM, AT_NULL). Proper envp NULL terminator and argv parsing.
+- **`chroot` Syscall** — Per-process `root_dir` field. `sys_chroot()` validates directory and updates process root. Inherited on `fork()`.
+- **NVMe-Backed Swap** — Swap pages to last 64MB of NVMe disk (8 sectors/page). `write_swap_slot()` / `read_swap_slot()` try NVMe first, fallback to BTreeMap in-memory.
+- **Kernel Stack Hardening** — All kernel stacks increased from 16KB to 64KB (GDT, thread, userland syscall stacks).
+- **96/96 integration tests passing.** 143K+ lines, 262 source files.
 
 ### v0.2.0 — February 2026
 - **Ring 3 Userspace Execution** — Real CPL-3 process execution via `IRETQ` with setjmp/longjmp-style kernel return (`exec_ring3_process` / `return_from_ring3`). Page-aligned physical memory allocation. SYSCALL/SYSRET for fast system calls. EXIT/EXIT_GROUP handlers for clean process termination.
@@ -660,7 +680,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 - GitHub: [@nathan237](https://github.com/nathan237)
 - Project: [TrustOS](https://github.com/nathan237/TrustOS)
 
-> Every line of TrustOS — 136,000+ lines of Rust — was designed, written, and tested by a single developer in 11 days.
+> Every line of TrustOS — 143,000+ lines of Rust — was designed, written, and tested by a single developer in 11 days.
 
 ---
 
@@ -670,7 +690,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 Created with ❤️ by [Nated0ge](https://github.com/nathan237)
 
-136,000 lines · 11 days · Zero C · Fully auditable
+143,000 lines · 11 days · Zero C · Fully auditable
 
 ⭐ **Star this repo** if you believe in transparent, auditable operating systems.
 
