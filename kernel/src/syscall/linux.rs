@@ -669,6 +669,54 @@ pub fn sys_umask(mask: u32) -> i64 {
     crate::process::set_umask(pid, mask) as i64
 }
 
+// ============================================================================
+// Process groups, sessions, chroot
+// ============================================================================
+
+/// sys_setpgid - Set process group ID
+pub fn sys_setpgid(pid: u32, pgid: u32) -> i64 {
+    match crate::process::set_pgid(pid, pgid) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
+/// sys_getpgrp - Get process group of calling process
+pub fn sys_getpgrp() -> i64 {
+    crate::process::get_pgid(0) as i64
+}
+
+/// sys_setsid - Create a new session
+pub fn sys_setsid() -> i64 {
+    match crate::process::setsid() {
+        Ok(sid) => sid as i64,
+        Err(_) => -1,
+    }
+}
+
+/// sys_getpgid - Get process group of a process
+pub fn sys_getpgid(pid: u32) -> i64 {
+    crate::process::get_pgid(pid) as i64
+}
+
+/// sys_getsid - Get session ID
+pub fn sys_getsid(pid: u32) -> i64 {
+    crate::process::get_sid(pid) as i64
+}
+
+/// sys_chroot - Change root directory
+pub fn sys_chroot(path_ptr: u64) -> i64 {
+    let path = match read_user_string(path_ptr, 256) {
+        Some(s) => s,
+        None => return -14, // EFAULT
+    };
+    let pid = crate::process::current_pid();
+    match crate::process::chroot(pid, &path) {
+        Ok(()) => 0,
+        Err(_) => -1, // EPERM
+    }
+}
+
 /// sys_chmod - Change file mode
 pub fn sys_chmod(path_ptr: u64, mode: u32) -> i64 {
     let path = match read_user_string(path_ptr, 256) {

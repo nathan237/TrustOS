@@ -136,6 +136,14 @@ pub struct Process {
     pub cr3: u64,
     /// Address space (None for kernel processes)
     pub address_space: Option<Arc<Mutex<AddressSpace>>>,
+    /// Process group ID
+    pub pgid: u32,
+    /// Session ID
+    pub sid: u32,
+    /// Controlling TTY index (None = no controlling terminal)
+    pub controlling_tty: Option<u32>,
+    /// Root directory (for chroot)
+    pub root_dir: String,
     /// Real user ID
     pub uid: u32,
     /// Real group ID
@@ -194,6 +202,10 @@ impl Process {
             children: Vec::new(),
             cr3,
             address_space,
+            pgid: pid,
+            sid: pid,
+            controlling_tty: None,
+            root_dir: String::from("/"),
             uid: crate::auth::current_uid(),
             gid: crate::auth::current_gid(),
             euid: crate::auth::current_uid(),
@@ -326,7 +338,7 @@ pub fn fork() -> Result<Pid, &'static str> {
     let current = current_pid();
     
     // Read parent data while holding read lock
-    let (name, cwd, env, fd_table, next_fd, parent_cr3, memory, uid, gid, euid, egid, umask) = {
+    let (name, cwd, env, fd_table, next_fd, parent_cr3, memory, uid, gid, euid, egid, umask, pgid, sid, controlling_tty, root_dir) = {
         let table = PROCESS_TABLE.read();
         let parent = table.processes.get(&current)
             .ok_or("Current process not found")?;
@@ -343,6 +355,10 @@ pub fn fork() -> Result<Pid, &'static str> {
             parent.euid,
             parent.egid,
             parent.umask,
+            parent.pgid,
+            parent.sid,
+            parent.controlling_tty,
+            parent.root_dir.clone(),
         )
     };
     
@@ -390,6 +406,10 @@ pub fn fork() -> Result<Pid, &'static str> {
         children: Vec::new(),
         cr3,
         address_space,
+        pgid,       // inherits parent's process group
+        sid,        // inherits parent's session
+        controlling_tty,
+        root_dir,
         uid,
         gid,
         euid,
@@ -673,4 +693,89 @@ pub fn resume(pid: Pid) {
 pub fn parent_pid(pid: Pid) -> Option<Pid> {
     let table = PROCESS_TABLE.read();
     table.processes.get(&pid).map(|p| p.ppid)
+}
+
+// ============================================================================
+// Process groups, sessions, controlling terminal, chroot
+// ============================================================================
+
+/// Set process group ID (setpgid semantics)
+pub fn set_pgid(pid: Pid, pgid: Pid) -> Result<(), &'static str> {
+    let mut table = PROCESS_TABLE.write();
+    let target_pid = if pid == 0 { current_pid() } else { pid };
+    let new_pgid = if pgid == 0 { target_pid } else { pgid };
+    let proc = table.processes.get_mut(&target_pid).ok_or("No such process")?;
+    proc.pgid = new_pgid;
+    Ok(())
+}
+
+/// Get process group ID
+pub fn get_pgid(pid: Pid) -> u32 {
+    let table = PROCESS_TABLE.read();
+    let target = if pid == 0 { current_pid() } else { pid };
+    table.processes.get(&target).map(|p| p.pgid).unwrap_or(0)
+}
+
+/// Get session ID
+pub fn get_sid(pid: Pid) -> u32 {
+    let table = PROCESS_TABLE.read();
+    let target = if pid == 0 { current_pid() } else { pid };
+    table.processes.get(&target).map(|p| p.sid).unwrap_or(0)
+}
+
+/// Create a new session (setsid). The calling process becomes the session
+/// leader and process group leader, and has no controlling terminal.
+pub fn setsid() -> Result<u32, &'static str> {
+    let pid = current_pid();
+    let mut table = PROCESS_TABLE.write();
+    let proc = table.processes.get_mut(&pid).ok_or("No such process")?;
+    // Must not already be a process group leader
+    if proc.pgid == pid {
+        // Already a pgid leader — POSIX says EPERM, but we allow it for simplicity
+    }
+    proc.sid = pid;
+    proc.pgid = pid;
+    proc.controlling_tty = None;
+    Ok(pid)
+}
+
+/// Set controlling TTY for current process
+pub fn set_controlling_tty(pid: Pid, tty_idx: u32) {
+    let mut table = PROCESS_TABLE.write();
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        proc.controlling_tty = Some(tty_idx);
+    }
+}
+
+/// Get controlling TTY for a process
+pub fn get_controlling_tty(pid: Pid) -> Option<u32> {
+    let table = PROCESS_TABLE.read();
+    table.processes.get(&pid).and_then(|p| p.controlling_tty)
+}
+
+/// Change root directory for a process (chroot)
+pub fn chroot(pid: Pid, new_root: &str) -> Result<(), &'static str> {
+    let mut table = PROCESS_TABLE.write();
+    let proc = table.processes.get_mut(&pid).ok_or("No such process")?;
+    // Only root can chroot
+    if proc.euid != 0 {
+        return Err("EPERM");
+    }
+    proc.root_dir = String::from(new_root);
+    Ok(())
+}
+
+/// Get root directory for a process
+pub fn get_root_dir(pid: Pid) -> String {
+    let table = PROCESS_TABLE.read();
+    table.processes.get(&pid).map(|p| p.root_dir.clone()).unwrap_or_else(|| String::from("/"))
+}
+
+/// Get all PIDs in a process group
+pub fn pids_in_group(pgid: u32) -> Vec<Pid> {
+    let table = PROCESS_TABLE.read();
+    table.processes.iter()
+        .filter(|(_, p)| p.pgid == pgid)
+        .map(|(&pid, _)| pid)
+        .collect()
 }

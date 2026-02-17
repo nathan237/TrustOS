@@ -322,7 +322,7 @@ extern "C" fn syscall_entry() {
 static mut USER_RSP_TEMP: u64 = 0;
 
 /// Kernel stack for syscall handling (separate from interrupt stacks)
-static mut KERNEL_SYSCALL_STACK: [u8; 16384] = [0; 16384]; // 16 KB
+static mut KERNEL_SYSCALL_STACK: [u8; 65536] = [0; 65536]; // 64 KB
 /// Pointer to top of kernel syscall stack
 #[no_mangle]
 static mut KERNEL_SYSCALL_STACK_TOP: u64 = 0;
@@ -331,7 +331,7 @@ static mut KERNEL_SYSCALL_STACK_TOP: u64 = 0;
 pub fn init_syscall_stack() {
     unsafe {
         let stack_bottom = KERNEL_SYSCALL_STACK.as_ptr() as u64;
-        KERNEL_SYSCALL_STACK_TOP = stack_bottom + 16384;
+        KERNEL_SYSCALL_STACK_TOP = stack_bottom + 65536;
         crate::log_debug!("[USERLAND] Syscall stack at {:#x}", KERNEL_SYSCALL_STACK_TOP);
     }
 }

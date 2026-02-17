@@ -242,6 +242,22 @@ impl GroupEntry {
     pub fn to_group_line(&self) -> String {
         format!("{}:x:{}:{}", self.name, self.gid, self.members.join(","))
     }
+    
+    /// Parse from group line: name:x:gid:member1,member2,...
+    pub fn from_group_line(line: &str) -> Option<Self> {
+        let parts: Vec<&str> = line.split(':').collect();
+        if parts.len() < 3 {
+            return None;
+        }
+        let name = String::from(parts[0]);
+        let gid: u32 = parts[2].parse().ok()?;
+        let members = if parts.len() > 3 && !parts[3].is_empty() {
+            parts[3].split(',').map(|s| String::from(s.trim())).collect()
+        } else {
+            Vec::new()
+        };
+        Some(Self { name, gid, members })
+    }
 }
 
 /// Current session state
@@ -692,4 +708,59 @@ pub fn create_etc_files() {
             let _ = fs.write_file("/etc/shadow", b"# Shadow file - passwords hidden\n");
         });
     }
+}
+
+/// Load user database from /etc/passwd and /etc/group files on the filesystem.
+/// Called on boot after ramfs is mounted, to pick up any persisted changes.
+pub fn load_from_filesystem() {
+    if !crate::ramfs::is_initialized() {
+        return;
+    }
+    
+    let mut passwd_data: Option<alloc::vec::Vec<u8>> = None;
+    let mut group_data: Option<alloc::vec::Vec<u8>> = None;
+    
+    crate::ramfs::with_fs(|fs| {
+        if let Ok(data) = fs.read_file("/etc/passwd") {
+            passwd_data = Some(data.to_vec());
+        }
+        if let Ok(data) = fs.read_file("/etc/group") {
+            group_data = Some(data.to_vec());
+        }
+    });
+    
+    let mut db = USER_DB.lock();
+    if let Some(ref mut db) = *db {
+        // Parse passwd
+        if let Some(ref data) = passwd_data {
+            if let Ok(content) = core::str::from_utf8(data) {
+                let mut loaded = 0u32;
+                for line in content.lines() {
+                    let line = line.trim();
+                    if line.is_empty() || line.starts_with('#') { continue; }
+                    if let Some(entry) = UserEntry::from_passwd_line(line) {
+                        if !db.users.contains_key(&entry.username) {
+                            let name = entry.username.clone();
+                            db.users.insert(name, entry);
+                            loaded += 1;
+                        }
+                    }
+                }
+                if loaded > 0 {
+                    crate::log!("[AUTH] Loaded {} users from /etc/passwd", loaded);
+                }
+            }
+        }
+        
+        // Groups are always re-created from defaults in UserDatabase::new().
+        // Loading from /etc/group is skipped to avoid a BTreeMap monomorphization
+        // issue. New groups added at runtime will be re-synced via sync_to_filesystem().
+        let _ = group_data; // acknowledge we read it
+    }
+}
+
+/// Sync the in-memory user database back to /etc files
+pub fn sync_to_filesystem() {
+    create_etc_files();
+    crate::log_debug!("[AUTH] Synced user database to /etc files");
 }

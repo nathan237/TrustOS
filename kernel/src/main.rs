@@ -140,6 +140,10 @@ pub mod ed25519;
 mod sync;
 // POSIX signals
 mod signals;
+// TTY subsystem (line discipline, sessions)
+mod tty;
+// Pseudo-terminal (PTY) pairs
+mod pty;
 // Process tracing (debugging)
 mod ptrace;
 // Safe user/kernel memory copy
@@ -840,6 +844,12 @@ pub unsafe extern "C" fn kmain() -> ! {
     auth::create_etc_files();
     framebuffer::print_boot_status("Authentication ready", BootStatus::Ok);
     
+    // Phase 14b: TTY / PTY subsystem
+    serial_println!("[PHASE] TTY/PTY init");
+    tty::init();
+    pty::init();
+    framebuffer::print_boot_status("TTY/PTY subsystem ready", BootStatus::Ok);
+    
     // ========================================================================
     // Phase 15: Init Process (PID 1)
     // ========================================================================
@@ -863,6 +873,9 @@ pub unsafe extern "C" fn kmain() -> ! {
         let _ = fs.mkdir("/etc");
     });
     framebuffer::print_boot_status("RAM filesystem ready", BootStatus::Ok);
+
+    // Load user/group data from /etc files (if persisted from previous boot)
+    auth::load_from_filesystem();
 
     // ========================================================================
     // Phase 17: Persistence System

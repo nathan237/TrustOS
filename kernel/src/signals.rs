@@ -257,6 +257,19 @@ pub fn kill(target_pid: u32, signo: u32, sender_pid: u32) -> Result<(), i32> {
     Ok(())
 }
 
+/// Send a signal to all processes in a process group
+pub fn kill_process_group(pgid: u32, signo: u32) -> Result<(), i32> {
+    let sender = crate::process::current_pid();
+    let pids = crate::process::pids_in_group(pgid);
+    if pids.is_empty() {
+        return Err(-3); // ESRCH
+    }
+    for pid in pids {
+        let _ = kill(pid, signo, sender);
+    }
+    Ok(())
+}
+
 /// Handle fatal signal (SIGKILL, SIGSTOP)
 fn handle_fatal_signal(pid: u32, signo: u32) {
     match signo {

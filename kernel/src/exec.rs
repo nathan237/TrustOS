@@ -80,14 +80,65 @@ pub fn execve(path: &str, argv: &[&str], _envp: &[&str]) -> Result<(), ExecResul
     }
 }
 
-/// Execute an ELF file from path
+/// Search $PATH for an executable. Returns the resolved full path.
+pub fn resolve_path(name: &str) -> Option<String> {
+    // If path contains '/', use as-is
+    if name.contains('/') {
+        // Check if file exists
+        if crate::vfs::stat(name).is_ok() {
+            return Some(String::from(name));
+        }
+        return None;
+    }
+    
+    // Search PATH directories
+    let search_dirs = ["/bin", "/usr/bin", "/sbin", "/usr/sbin", "/usr/local/bin"];
+    for dir in &search_dirs {
+        let full = alloc::format!("{}/{}", dir, name);
+        if crate::vfs::stat(&full).is_ok() {
+            return Some(full);
+        }
+    }
+    None
+}
+
+/// Check for shebang (#!) and return interpreter + script path
+fn check_shebang(data: &[u8]) -> Option<(String, String)> {
+    if data.len() < 4 || data[0] != b'#' || data[1] != b'!' {
+        return None;
+    }
+    // Read until newline
+    let end = data.iter().position(|&b| b == b'\n').unwrap_or(data.len().min(256));
+    let line = core::str::from_utf8(&data[2..end]).ok()?;
+    let line = line.trim();
+    // Split into interpreter and optional argument
+    let mut parts = line.splitn(2, ' ');
+    let interp = parts.next()?.trim();
+    if interp.is_empty() { return None; }
+    Some((String::from(interp), String::new()))
+}
+
+/// Execute an ELF file from path (with PATH search and shebang support)
 pub fn exec_path(path: &str, args: &[&str]) -> ExecResult {
     crate::log!("[EXEC] Loading: {}", path);
     
+    // Try PATH resolution
+    let resolved = resolve_path(path).unwrap_or_else(|| String::from(path));
+    
     // Load ELF file
-    let elf = match crate::elf::load_from_path(path) {
+    let elf = match crate::elf::load_from_path(&resolved) {
         Ok(e) => e,
         Err(e) => {
+            // Check for shebang script
+            if let Ok(data) = crate::vfs::read_file(&resolved) {
+                if let Some((interp, _extra)) = check_shebang(&data) {
+                    // Re-exec with interpreter: interp script_path args...
+                    let mut new_args = alloc::vec![interp.as_str(), resolved.as_str()];
+                    new_args.extend_from_slice(args);
+                    // Leak strings for lifetime (exec replaces process anyway)
+                    return exec_path(&interp, &new_args[1..]);
+                }
+            }
             crate::log_error!("[EXEC] Failed to load ELF: {:?}", e);
             return ExecResult::LoadError(e);
         }
@@ -278,6 +329,36 @@ fn exec_elf(elf: &LoadedElf, args: &[&str]) -> ExecResult {
     
     // Step 2: Align SP to 8 bytes
     sp &= !7;
+    
+    // Step 2b: Build auxiliary vector (AT_* entries for ELF loader)
+    // Linux ABI stack layout: argc, argv[], NULL, envp[], NULL, auxv[], AT_NULL
+    let auxv_entries: [(u64, u64); 7] = [
+        (6,  4096),                  // AT_PAGESZ
+        (3,  elf.min_vaddr + 0x40),  // AT_PHDR (program headers, typically at ELF base + 0x40)
+        (4,  56),                    // AT_PHENT (sizeof Elf64_Phdr)
+        (5,  elf.segments.len() as u64), // AT_PHNUM
+        (9,  elf.entry_point),       // AT_ENTRY
+        (25, 0),                     // AT_RANDOM (pointer to 16 random bytes — 0 = not provided)
+        (0,  0),                     // AT_NULL (terminator)
+    ];
+    
+    // Push auxiliary vector (from end to start)
+    for &(atype, aval) in auxv_entries.iter().rev() {
+        sp -= 8;
+        if let Some(phys) = address_space.translate(sp) {
+            unsafe { *((phys + hhdm) as *mut u64) = aval; }
+        }
+        sp -= 8;
+        if let Some(phys) = address_space.translate(sp) {
+            unsafe { *((phys + hhdm) as *mut u64) = atype; }
+        }
+    }
+    
+    // Step 2c: Push NULL terminator for envp array (no env vars on stack for now)
+    sp -= 8;
+    if let Some(phys) = address_space.translate(sp) {
+        unsafe { *((phys + hhdm) as *mut u64) = 0; }
+    }
     
     // Step 3: Push null terminator for argv array
     sp -= 8;

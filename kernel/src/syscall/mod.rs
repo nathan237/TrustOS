@@ -137,6 +137,12 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         SETGID => linux::sys_setgid(a1 as u32),
         SETREUID => linux::sys_setreuid(a1 as u32, a2 as u32),
         SETREGID => linux::sys_setregid(a1 as u32, a2 as u32),
+        SETPGID => linux::sys_setpgid(a1 as u32, a2 as u32),
+        GETPGRP => linux::sys_getpgrp(),
+        SETSID => linux::sys_setsid(),
+        GETPGID => linux::sys_getpgid(a1 as u32),
+        GETSID => linux::sys_getsid(a1 as u32),
+        CHROOT => linux::sys_chroot(a1),
         UMASK => linux::sys_umask(a1 as u32),
         CHMOD => linux::sys_chmod(a1, a2 as u32),
         FCHMOD => linux::sys_fchmod(a1 as i32, a2 as u32),
@@ -504,8 +510,27 @@ fn sys_execve(pathname: u64, _argv: u64, _envp: u64) -> i64 {
         None => return errno::EFAULT,
     };
     
-    // TODO: Parse argv and envp
-    match crate::exec::execve(&path, &[], &[]) {
+    // Parse argv from user memory (null-terminated array of char*)
+    let mut argv_strs: alloc::vec::Vec<alloc::string::String> = alloc::vec::Vec::new();
+    if _argv != 0 && is_user_address(_argv) {
+        for i in 0..256u64 {
+            let ptr_addr = _argv + i * 8;
+            if !is_user_address(ptr_addr) { break; }
+            let ptr = unsafe { *(ptr_addr as *const u64) };
+            if ptr == 0 { break; }
+            if let Some(s) = read_cstring(ptr, 256) {
+                argv_strs.push(s);
+            } else {
+                break;
+            }
+        }
+    }
+    if argv_strs.is_empty() {
+        argv_strs.push(path.clone());
+    }
+    let argv_refs: alloc::vec::Vec<&str> = argv_strs.iter().map(|s| s.as_str()).collect();
+    
+    match crate::exec::execve(&path, &argv_refs, &[]) {
         Ok(()) => 0, // Never returns on success
         Err(_) => errno::ENOENT,
     }

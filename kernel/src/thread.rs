@@ -124,7 +124,7 @@ pub struct Thread {
 }
 
 /// Kernel stack size per thread
-const KERNEL_STACK_SIZE: usize = 16 * 1024; // 16 KB
+const KERNEL_STACK_SIZE: usize = 64 * 1024; // 64 KB
 
 impl Thread {
     /// Create a new kernel thread

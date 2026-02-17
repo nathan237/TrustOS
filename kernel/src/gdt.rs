@@ -278,7 +278,7 @@ pub fn init() {
 fn alloc_kernel_stack() -> u64 {
     use alloc::vec::Vec;
     
-    const STACK_SIZE: usize = 16 * 1024; // 16 KB kernel stack
+    const STACK_SIZE: usize = 64 * 1024; // 64 KB kernel stack
     
     let stack: Vec<u8> = alloc::vec![0u8; STACK_SIZE];
     let stack_top = stack.as_ptr() as u64 + STACK_SIZE as u64;

@@ -327,15 +327,41 @@ pub struct SwapStats {
 // Swap I/O — in-memory swap buffer
 // ============================================================================
 // For a real disk-backed swap, these would do block I/O.
-// For now we use an in-memory buffer (still useful for page eviction demo
-// and reclaiming physical frames when memory is tight).
+// If NVMe is available, swap I/O goes to disk. Otherwise, falls back to
+// an in-memory buffer (still useful for page eviction and reclaiming frames).
 
-/// In-memory swap storage (one Vec<u8> per slot)
+/// In-memory swap storage fallback (one Vec<u8> per slot, used when NVMe unavailable)
 static SWAP_PAGES: Mutex<BTreeMap<SwapSlot, Vec<u8>>> = Mutex::new(BTreeMap::new());
+
+/// Base LBA on NVMe where the swap partition starts.
+/// We reserve the last portion of the NVMe drive for swap.
+/// Each page = 8 sectors (4096 / 512).
+const SECTORS_PER_PAGE: u64 = 8;
+
+/// Get the swap base LBA (last 64 MB of NVMe)
+fn swap_base_lba() -> u64 {
+    let cap = crate::nvme::capacity();
+    let swap_sectors = (MAX_SWAP_SLOTS as u64) * SECTORS_PER_PAGE;
+    if cap > swap_sectors {
+        cap - swap_sectors
+    } else {
+        0 // Drive too small — use start (or fallback in-memory)
+    }
+}
 
 fn write_swap_slot(_state: &SwapState, slot: SwapSlot, phys_addr: u64) {
     let hhdm = crate::memory::hhdm_offset();
     let src = unsafe { core::slice::from_raw_parts((phys_addr + hhdm) as *const u8, PAGE_SIZE as usize) };
+    
+    // Try NVMe first
+    if crate::nvme::is_initialized() {
+        let lba = swap_base_lba() + ((slot as u64 - 1) * SECTORS_PER_PAGE);
+        if crate::nvme::write_sectors(lba, SECTORS_PER_PAGE as usize, src).is_ok() {
+            return;
+        }
+    }
+    
+    // Fallback: in-memory
     let mut pages = SWAP_PAGES.lock();
     pages.insert(slot, src.to_vec());
 }
@@ -343,6 +369,16 @@ fn write_swap_slot(_state: &SwapState, slot: SwapSlot, phys_addr: u64) {
 fn read_swap_slot(_state: &SwapState, slot: SwapSlot, phys_addr: u64) {
     let hhdm = crate::memory::hhdm_offset();
     let dst = unsafe { core::slice::from_raw_parts_mut((phys_addr + hhdm) as *mut u8, PAGE_SIZE as usize) };
+    
+    // Try NVMe first
+    if crate::nvme::is_initialized() {
+        let lba = swap_base_lba() + ((slot as u64 - 1) * SECTORS_PER_PAGE);
+        if crate::nvme::read_sectors(lba, SECTORS_PER_PAGE as usize, dst).is_ok() {
+            return;
+        }
+    }
+    
+    // Fallback: in-memory
     let pages = SWAP_PAGES.lock();
     if let Some(data) = pages.get(&slot) {
         dst[..data.len()].copy_from_slice(data);
