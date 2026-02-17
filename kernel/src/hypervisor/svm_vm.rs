@@ -19,6 +19,7 @@ use super::svm::vmcb::{Vmcb, control_offsets, state_offsets, clean_bits};
 use super::svm::npt::{Npt, flags as npt_flags};
 use super::mmio::{self, MmioDecoded};
 use super::ioapic::IoApicState;
+use super::hpet::HpetState;
 
 /// VM ID counter
 static NEXT_VM_ID: AtomicU64 = AtomicU64::new(1);
@@ -106,6 +107,8 @@ pub struct SvmVirtualMachine {
     cmos_index: u8,
     /// I/O APIC emulation state
     pub ioapic: IoApicState,
+    /// HPET (High Precision Event Timer) emulation state
+    pub hpet: HpetState,
 }
 
 /// Emulated Local APIC timer state
@@ -294,6 +297,7 @@ impl SvmVirtualMachine {
             pm_timer_start: 0,
             cmos_index: 0,
             ioapic: IoApicState::default(),
+            hpet: HpetState::default(),
         })
     }
     
@@ -646,6 +650,26 @@ impl SvmVirtualMachine {
                                            | (0u64 << 8)
                                            | (1u64 << 31);
                         vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
+                    }
+                }
+                
+                // Check HPET timers → I/O APIC routing → interrupt injection
+                // Only inject if no LAPIC timer interrupt was injected this iteration
+                {
+                    let current_event = vmcb.read_control(control_offsets::EVENT_INJ);
+                    let already_injecting = (current_event & (1u64 << 31)) != 0;
+                    
+                    if !already_injecting {
+                        if let Some(vector) = self.check_hpet_interrupts() {
+                            let vmcb = self.vmcb.as_mut().unwrap();
+                            let rflags = vmcb.read_state(state_offsets::RFLAGS);
+                            if (rflags & 0x200) != 0 { // IF set
+                                let event_inj: u64 = vector
+                                                   | (0u64 << 8)    // Type 0 = external interrupt
+                                                   | (1u64 << 31);  // V = valid
+                                vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
+                            }
+                        }
                     }
                 }
             }
@@ -1302,13 +1326,9 @@ impl SvmVirtualMachine {
                 self.handle_ioapic_mmio(guest_phys, error_code, decoded);
                 true
             }
-            // HPET MMIO
+            // HPET MMIO (0xFED00000 - 0xFED00FFF)
             HPET_BASE..=HPET_END => {
-                if self.stats.npf_exits < 20 {
-                    crate::serial_println!("[SVM-VM {}] HPET access at 0x{:X} (emulated)", self.id, guest_phys);
-                }
-                // HPET: return zero on reads; for writes, use decoded register but absorb
-                self.mmio_complete_read(decoded, 0);
+                self.handle_hpet_mmio(guest_phys, error_code, decoded);
                 true
             }
             // VGA framebuffer (0xA0000 - 0xBFFFF) — map if within guest memory
@@ -1539,6 +1559,68 @@ impl SvmVirtualMachine {
             }
             self.mmio_complete_read(decoded, value);
         }
+    }
+    
+    /// Handle HPET MMIO access (0xFED00000 - 0xFED00FFF)
+    fn handle_hpet_mmio(&mut self, gpa: u64, error_code: u64, decoded: Option<&MmioDecoded>) {
+        let offset = gpa - super::hpet::HPET_BASE;
+        let is_write = (error_code & 0x2) != 0;
+        
+        // Determine operand size from decoded instruction
+        let size = decoded.map(|d| d.operand_size).unwrap_or(4);
+        
+        if is_write {
+            let value = self.mmio_get_write_value(decoded) as u64;
+            self.hpet.write(offset, value, size);
+            if self.stats.npf_exits < 50 {
+                crate::serial_println!("[SVM-VM {}] HPET write offset=0x{:X} val=0x{:X} size={}", 
+                    self.id, offset, value, size);
+            }
+        } else {
+            let value = self.hpet.read(offset, size);
+            if self.stats.npf_exits < 50 {
+                crate::serial_println!("[SVM-VM {}] HPET read offset=0x{:X} -> 0x{:X} size={}", 
+                    self.id, offset, value, size);
+            }
+            self.mmio_complete_read(decoded, value as u32);
+        }
+    }
+    
+    /// Check HPET timers and inject interrupts via I/O APIC routing.
+    /// Returns the vector to inject (if any).
+    fn check_hpet_interrupts(&mut self) -> Option<u64> {
+        let timer_status = self.hpet.check_timers();
+        
+        for (i, &(fired, irq_route)) in timer_status.iter().enumerate() {
+            if !fired {
+                continue;
+            }
+            
+            // Look up the route in the I/O APIC redirection table
+            if let Some(route) = self.ioapic.get_irq_route(irq_route) {
+                if !route.masked && route.vector > 0 {
+                    // Set interrupt status bit for this timer
+                    self.hpet.isr |= 1 << i;
+                    
+                    // For edge-triggered: reset comparator to avoid re-firing
+                    let config = self.hpet.timers[i].config;
+                    let periodic = (config >> 3) & 1 != 0;
+                    if periodic {
+                        // In periodic mode, add comparator value to itself
+                        let comp = self.hpet.timers[i].comparator;
+                        if comp > 0 {
+                            self.hpet.timers[i].comparator = self.hpet.timers[i].comparator.wrapping_add(comp);
+                        }
+                    } else {
+                        // One-shot: disable timer by clearing enable bit
+                        self.hpet.timers[i].config &= !(1 << 2);
+                    }
+                    
+                    return Some(route.vector as u64);
+                }
+            }
+        }
+        None
     }
     
     /// Handle I/O instruction exit

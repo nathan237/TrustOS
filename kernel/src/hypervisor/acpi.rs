@@ -50,10 +50,11 @@ const OEM_TABLE_ID: &[u8; 8] = b"TRUSTVM\0";
 ///
 /// Memory layout at ACPI_TABLES_ADDR:
 ///   +0x000: RSDP (36 bytes)
-///   +0x040: XSDT (36 + 8*2 = 52 bytes) — points to MADT and FADT
+///   +0x040: XSDT (36 + 8*3 = 60 bytes) — points to MADT, FADT, HPET
 ///   +0x080: MADT (44 + 8 + 12 = 64 bytes) — LAPIC #0 + I/O APIC
 ///   +0x100: FADT (276 bytes) — minimal fixed description table
 ///   +0x200: DSDT (36 bytes) — empty AML definition block
+///   +0x240: HPET (56 bytes) — HPET description table
 pub fn install_acpi_tables(guest_memory: &mut [u8]) -> u64 {
     let base = ACPI_TABLES_ADDR as usize;
     
@@ -70,6 +71,7 @@ pub fn install_acpi_tables(guest_memory: &mut [u8]) -> u64 {
     let madt_addr = base + 0x080;   // 0x50080
     let fadt_addr = base + 0x100;   // 0x50100
     let dsdt_addr = base + 0x200;   // 0x50200
+    let hpet_addr = base + 0x240;   // 0x50240
     
     // 1. Build DSDT (empty AML stub — just a header)
     let dsdt_len = build_dsdt(guest_memory, dsdt_addr);
@@ -80,16 +82,20 @@ pub fn install_acpi_tables(guest_memory: &mut [u8]) -> u64 {
     // 3. Build FADT (points to DSDT)
     let fadt_len = build_fadt(guest_memory, fadt_addr, dsdt_addr as u64);
     
-    // 4. Build XSDT (points to MADT and FADT)
+    // 4. Build HPET
+    let hpet_len = build_hpet(guest_memory, hpet_addr);
+    
+    // 5. Build XSDT (points to MADT, FADT, and HPET)
     let xsdt_len = build_xsdt(guest_memory, xsdt_addr, &[
         madt_addr as u64,
         fadt_addr as u64,
+        hpet_addr as u64,
     ]);
     
-    // 5. Build RSDP (points to XSDT)
+    // 6. Build RSDP (points to XSDT)
     build_rsdp(guest_memory, rsdp_addr, xsdt_addr as u64);
     
-    // 6. Also copy RSDP to BIOS ROM scan area (0xE0000) for firmware-based discovery
+    // 7. Also copy RSDP to BIOS ROM scan area (0xE0000) for firmware-based discovery
     // Linux scans 0xE0000-0xFFFFF in 16-byte increments looking for "RSD PTR "
     let bios_rsdp = RSDP_BIOS_ADDR as usize;
     if bios_rsdp + RSDP_SIZE <= guest_memory.len() {
@@ -101,9 +107,10 @@ pub fn install_acpi_tables(guest_memory: &mut [u8]) -> u64 {
     
     crate::serial_println!("[ACPI] Tables installed at GPA 0x{:X}:", ACPI_TABLES_ADDR);
     crate::serial_println!("[ACPI]   RSDP: 0x{:X} (also at 0x{:X})", rsdp_addr, RSDP_BIOS_ADDR);
-    crate::serial_println!("[ACPI]   XSDT: 0x{:X} ({} bytes, {} entries)", xsdt_addr, xsdt_len, 2);
+    crate::serial_println!("[ACPI]   XSDT: 0x{:X} ({} bytes, {} entries)", xsdt_addr, xsdt_len, 3);
     crate::serial_println!("[ACPI]   MADT: 0x{:X} ({} bytes)", madt_addr, madt_len);
     crate::serial_println!("[ACPI]   FADT: 0x{:X} ({} bytes)", fadt_addr, fadt_len);
+    crate::serial_println!("[ACPI]   HPET: 0x{:X} ({} bytes)", hpet_addr, hpet_len);
     crate::serial_println!("[ACPI]   DSDT: 0x{:X} ({} bytes)", dsdt_addr, dsdt_len);
     
     // Return RSDP address (for boot_params)
@@ -512,6 +519,96 @@ fn write_u32(mem: &mut [u8], offset: usize, value: u32) {
 fn write_u64(mem: &mut [u8], offset: usize, value: u64) {
     let bytes = value.to_le_bytes();
     mem[offset..offset + 8].copy_from_slice(&bytes);
+}
+
+// ============================================================================
+// HPET — High Precision Event Timer Description Table
+// ============================================================================
+
+/// Build HPET ACPI table at the given offset.
+///
+/// Layout (56 bytes total):
+///   [0..4]   Signature "HPET"
+///   [4..8]   Length
+///   [8]      Revision
+///   [9]      Checksum
+///   [10..16] OEM ID
+///   [16..24] OEM Table ID
+///   [24..28] OEM Revision
+///   [28..32] Creator ID
+///   [32..36] Creator Revision
+///   — HPET-specific fields —
+///   [36..40] Event Timer Block ID (hardware rev, num comparators, counter size, etc.)
+///   [40..52] Base Address (GAS: Generic Address Structure, 12 bytes)
+///   [52]     HPET Sequence Number
+///   [53..55] Minimum Clock Tick
+///   [55]     Page Protection and OEM Attribute
+fn build_hpet(mem: &mut [u8], offset: usize) -> usize {
+    let total_len: usize = 56;
+    
+    // Signature
+    mem[offset..offset + 4].copy_from_slice(b"HPET");
+    
+    // Length
+    write_u32(mem, offset + 4, total_len as u32);
+    
+    // Revision
+    mem[offset + 8] = 1;
+    
+    // OEM ID
+    mem[offset + 10..offset + 16].copy_from_slice(OEM_ID);
+    
+    // OEM Table ID  
+    mem[offset + 16..offset + 24].copy_from_slice(OEM_TABLE_ID);
+    
+    // OEM Revision
+    write_u32(mem, offset + 24, 1);
+    
+    // Creator ID
+    mem[offset + 28..offset + 32].copy_from_slice(b"TROS");
+    
+    // Creator Revision
+    write_u32(mem, offset + 32, 1);
+    
+    // Event Timer Block ID:
+    //   Bits [31:16] = PCI Vendor ID (0x8086 = Intel, standard)
+    //   Bits [15]    = Legacy Replacement IRQ Routing Capable
+    //   Bits [14]    = reserved
+    //   Bits [13]    = COUNT_SIZE_CAP (1 = 64-bit counter)
+    //   Bits [12:8]  = Number of comparators - 1 (2 = 3 timers)
+    //   Bits [7:0]   = Hardware Rev ID
+    let block_id: u32 = (0x8086 << 16)  // PCI Vendor ID = Intel
+                       | (1 << 15)       // Legacy replacement capable
+                       | (1 << 13)       // 64-bit counter
+                       | (2 << 8)        // 3 comparators (num - 1 = 2)
+                       | 0x01;           // Hardware revision 1
+    write_u32(mem, offset + 36, block_id);
+    
+    // Base Address — Generic Address Structure (12 bytes):
+    //   [0]     Address Space ID (0 = System Memory)
+    //   [1]     Register Bit Width (64)
+    //   [2]     Register Bit Offset (0)
+    //   [3]     Access Size (0 = undefined)
+    //   [4..12] Address (0xFED00000)
+    mem[offset + 40] = 0;   // Memory space
+    mem[offset + 41] = 64;  // 64-bit registers
+    mem[offset + 42] = 0;   // No offset
+    mem[offset + 43] = 0;   // Access size undefined
+    write_u64(mem, offset + 44, 0xFED0_0000); // HPET MMIO base
+    
+    // HPET Number (sequence)
+    mem[offset + 52] = 0;
+    
+    // Minimum Clock Tick (in periodic mode, minimum ticks between interrupts)
+    write_u16(mem, offset + 53, 128);
+    
+    // Page Protection
+    mem[offset + 55] = 0;
+    
+    // Fixup checksum
+    fixup_checksum(mem, offset, total_len);
+    
+    total_len
 }
 
 // ============================================================================

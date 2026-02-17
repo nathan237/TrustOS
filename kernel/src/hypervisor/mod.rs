@@ -47,6 +47,10 @@ pub mod acpi;
 pub mod mmio;
 pub mod ioapic;
 
+// Phase 9: Unified backend trait + HPET
+pub mod backend;
+pub mod hpet;
+
 // Self-tests for hypervisor subsystems
 pub mod tests;
 

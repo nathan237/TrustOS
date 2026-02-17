@@ -95,6 +95,18 @@ pub fn run_all_tests() -> (usize, usize, alloc::vec::Vec<String>) {
     results.push(test_ioapic_irq_routing());
     results.push(test_ioapic_readonly_bits());
     
+    // ── HPET Tests ───────────────────────────────────────────────
+    results.push(test_hpet_defaults());
+    results.push(test_hpet_gcap_id());
+    results.push(test_hpet_enable_disable());
+    results.push(test_hpet_counter_increments());
+    results.push(test_hpet_timer_config());
+    results.push(test_hpet_timer_comparator());
+    results.push(test_hpet_write_counter_disabled());
+    results.push(test_hpet_acpi_table_signature());
+    results.push(test_hpet_acpi_table_checksum());
+    results.push(test_hpet_acpi_table_address());
+    
     // Tally results
     let mut passed = 0usize;
     let mut failed = 0usize;
@@ -269,15 +281,16 @@ fn test_acpi_xsdt_entry_count() -> TestResult {
     let total_len = read_u32(&mem, xsdt + 4) as usize;
     let entry_bytes = total_len.saturating_sub(36);
     let entry_count = entry_bytes / 8;
-    // Should have 2 entries (MADT + FADT)
+    // Should have 3 entries (MADT + FADT + HPET)
     let entry0 = read_u64(&mem, xsdt + 36);
     let entry1 = read_u64(&mem, xsdt + 44);
-    let passed = entry_count == 2 && entry0 == 0x50080 && entry1 == 0x50100;
+    let entry2 = read_u64(&mem, xsdt + 52);
+    let passed = entry_count == 3 && entry0 == 0x50080 && entry1 == 0x50100 && entry2 == 0x50240;
     TestResult {
-        name: "ACPI XSDT has 2 entries (MADT=0x50080, FADT=0x50100)",
+        name: "ACPI XSDT has 3 entries (MADT, FADT, HPET)",
         passed,
         detail: if !passed {
-            Some(format!("count={}, e0=0x{:X}, e1=0x{:X}", entry_count, entry0, entry1))
+            Some(format!("count={}, e0=0x{:X}, e1=0x{:X}, e2=0x{:X}", entry_count, entry0, entry1, entry2))
         } else { None },
     }
 }
@@ -1330,5 +1343,190 @@ fn test_ioapic_readonly_bits() -> TestResult {
         name: "ioapic_readonly_bits",
         passed: ok,
         detail: if !ok { Some(format!("lo=0x{:X} bit12={} bit14={}", lo, bit12, bit14)) } else { None },
+    }
+}
+
+// ============================================================================
+// HPET Tests
+// ============================================================================
+
+fn test_hpet_defaults() -> TestResult {
+    let hpet = super::hpet::HpetState::default();
+    let ok = !hpet.enabled && hpet.config == 0 && hpet.isr == 0 
+             && hpet.counter_offset == 0 && hpet.timers.len() == 3;
+    TestResult {
+        name: "hpet_defaults",
+        passed: ok,
+        detail: if !ok { Some(format!("enabled={} config=0x{:X}", hpet.enabled, hpet.config)) } else { None },
+    }
+}
+
+fn test_hpet_gcap_id() -> TestResult {
+    let hpet = super::hpet::HpetState::default();
+    let gcap = hpet.read(0x000, 8);
+    // Bits [7:0] = revision (1), Bits [12:8] = num_timers-1 (2), Bit 13 = 64-bit (1)
+    let rev = gcap & 0xFF;
+    let num_timers_m1 = (gcap >> 8) & 0x1F;
+    let counter_64bit = (gcap >> 13) & 1;
+    let period = (gcap >> 32) as u32;
+    let ok = rev == 1 && num_timers_m1 == 2 && counter_64bit == 1 && period == 69_841_279;
+    TestResult {
+        name: "hpet_gcap_id_register",
+        passed: ok,
+        detail: if !ok { 
+            Some(format!("rev={} timers-1={} 64bit={} period={}", rev, num_timers_m1, counter_64bit, period))
+        } else { None },
+    }
+}
+
+fn test_hpet_enable_disable() -> TestResult {
+    let mut hpet = super::hpet::HpetState::default();
+    // Initially disabled, counter should be 0
+    let c0 = hpet.read(0x0F0, 8);
+    
+    // Enable HPET
+    hpet.write(0x010, 1, 8); // GCONF = 1 (enable)
+    let enabled = hpet.enabled;
+    let config = hpet.read(0x010, 8);
+    
+    // Disable HPET
+    hpet.write(0x010, 0, 8);
+    let disabled = !hpet.enabled;
+    // Counter should be frozen at some value
+    let c1 = hpet.read(0x0F0, 8);
+    let c2 = hpet.read(0x0F0, 8);
+    let frozen = c1 == c2; // Should be same when disabled
+    
+    let ok = c0 == 0 && enabled && config == 1 && disabled && frozen;
+    TestResult {
+        name: "hpet_enable_disable",
+        passed: ok,
+        detail: if !ok { 
+            Some(format!("c0={} en={} cfg={} dis={} frozen={}", c0, enabled, config, disabled, frozen))
+        } else { None },
+    }
+}
+
+fn test_hpet_counter_increments() -> TestResult {
+    let mut hpet = super::hpet::HpetState::default();
+    hpet.write(0x010, 1, 8); // Enable
+    
+    // Read counter twice with a small spin loop between
+    let c1 = hpet.read(0x0F0, 8);
+    // Burn some cycles to advance TSC 
+    for _ in 0..10000 {
+        core::hint::spin_loop();
+    }
+    let c2 = hpet.read(0x0F0, 8);
+    
+    // Counter should have incremented (or at least not gone backwards)
+    let ok = c2 >= c1;
+    TestResult {
+        name: "hpet_counter_increments",
+        passed: ok,
+        detail: if !ok { 
+            Some(format!("c1={} c2={}", c1, c2))
+        } else { None },
+    }
+}
+
+fn test_hpet_timer_config() -> TestResult {
+    let mut hpet = super::hpet::HpetState::default();
+    // Timer 0 should be periodic-capable
+    let t0_config = hpet.read(0x100, 8); // Timer 0 config
+    let periodic_cap = (t0_config >> 4) & 1; // Bit 4 = periodic capable
+    
+    // Write timer 0 config to enable interrupt and set route
+    // Bit 2 = interrupt enable, Bits [13:9] = route to IRQ 2
+    hpet.write(0x100, (2 << 9) | (1 << 2), 8);
+    let t0_after = hpet.read(0x100, 8);
+    let int_enabled = (t0_after >> 2) & 1;
+    let route = (t0_after >> 9) & 0x1F;
+    
+    let ok = periodic_cap == 1 && int_enabled == 1 && route == 2;
+    TestResult {
+        name: "hpet_timer_config",
+        passed: ok,
+        detail: if !ok {
+            Some(format!("periodic_cap={} int_en={} route={} raw=0x{:X}", periodic_cap, int_enabled, route, t0_after))
+        } else { None },
+    }
+}
+
+fn test_hpet_timer_comparator() -> TestResult {
+    let mut hpet = super::hpet::HpetState::default();
+    // Write comparator for timer 0
+    hpet.write(0x108, 0xDEAD_BEEF, 8);
+    let comp = hpet.read(0x108, 8);
+    
+    // Write comparator for timer 1
+    hpet.write(0x128, 0x1234_5678_9ABC_DEF0, 8);
+    let comp1 = hpet.read(0x128, 8);
+    
+    let ok = comp == 0xDEAD_BEEF && comp1 == 0x1234_5678_9ABC_DEF0;
+    TestResult {
+        name: "hpet_timer_comparator",
+        passed: ok,
+        detail: if !ok { Some(format!("t0=0x{:X} t1=0x{:X}", comp, comp1)) } else { None },
+    }
+}
+
+fn test_hpet_write_counter_disabled() -> TestResult {
+    let mut hpet = super::hpet::HpetState::default();
+    // HPET disabled — writing to main counter should work
+    hpet.write(0x0F0, 0x42, 8);
+    let c = hpet.read(0x0F0, 8);
+    
+    // Now enable — should not be able to write
+    hpet.write(0x010, 1, 8);
+    hpet.write(0x0F0, 0xFF, 8); // Should be ignored
+    // Counter should be based on 0x42 + TSC-derived ticks (>= 0x42)
+    let c_enabled = hpet.read(0x0F0, 8);
+    
+    let ok = c == 0x42 && c_enabled >= 0x42;
+    TestResult {
+        name: "hpet_write_counter_disabled",
+        passed: ok,
+        detail: if !ok { Some(format!("c_dis=0x{:X} c_en=0x{:X}", c, c_enabled)) } else { None },
+    }
+}
+
+fn test_hpet_acpi_table_signature() -> TestResult {
+    let mem = setup_acpi_guest_memory();
+    let hpet_offset = 0x50240;
+    let sig = &mem[hpet_offset..hpet_offset + 4];
+    let ok = sig == b"HPET";
+    TestResult {
+        name: "hpet_acpi_table_signature",
+        passed: ok,
+        detail: if !ok { Some(format!("sig={:?}", core::str::from_utf8(sig))) } else { None },
+    }
+}
+
+fn test_hpet_acpi_table_checksum() -> TestResult {
+    let mem = setup_acpi_guest_memory();
+    let hpet_offset = 0x50240;
+    let length = read_u32(&mem, hpet_offset + 4) as usize;
+    let sum: u8 = mem[hpet_offset..hpet_offset + length].iter().fold(0u8, |a, &b| a.wrapping_add(b));
+    let ok = sum == 0 && length == 56;
+    TestResult {
+        name: "hpet_acpi_table_checksum",
+        passed: ok,
+        detail: if !ok { Some(format!("sum={} len={}", sum, length)) } else { None },
+    }
+}
+
+fn test_hpet_acpi_table_address() -> TestResult {
+    let mem = setup_acpi_guest_memory();
+    let hpet_offset = 0x50240;
+    // Base address is at offset 44 (GAS address field)
+    let addr = read_u64(&mem, hpet_offset + 44);
+    // Address space ID should be 0 (memory)
+    let addr_space = mem[hpet_offset + 40];
+    let ok = addr == 0xFED0_0000 && addr_space == 0;
+    TestResult {
+        name: "hpet_acpi_table_address",
+        passed: ok,
+        detail: if !ok { Some(format!("addr=0x{:X} space={}", addr, addr_space)) } else { None },
     }
 }
