@@ -43,6 +43,9 @@ pub mod vmi;
 pub mod linux_loader;
 pub mod acpi;
 
+// Self-tests for hypervisor subsystems
+pub mod tests;
+
 // Phase 5: Linux Subsystem (TSL)
 pub mod virtio_console;
 pub mod linux_subsystem;

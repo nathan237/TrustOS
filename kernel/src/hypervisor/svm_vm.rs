@@ -2152,3 +2152,99 @@ pub fn destroy_vm(id: u64) -> Result<()> {
         Err(HypervisorError::VmNotFound)
     }
 }
+
+// ============================================================================
+// UNIT TESTS (documentation / future test framework)
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pic_default_state() {
+        let pic = PicState::default();
+        assert_eq!(pic.master_imr, 0xFF);
+        assert_eq!(pic.slave_imr, 0xFF);
+        assert_eq!(pic.master_vector_base, 0x08);
+        assert_eq!(pic.slave_vector_base, 0x70);
+        assert_eq!(pic.master_icw_phase, 0);
+        assert!(!pic.initialized);
+    }
+
+    #[test]
+    fn test_pic_icw_sequence() {
+        let mut pic = PicState::default();
+        // ICW1
+        pic.master_icw_phase = 1;
+        pic.master_isr = 0;
+        // ICW2: vector base 0x20
+        pic.master_vector_base = 0x20;
+        pic.master_icw_phase = 2;
+        // ICW3: cascade
+        pic.master_icw_phase = 3;
+        // ICW4: done
+        pic.master_icw_phase = 0;
+        pic.initialized = true;
+        assert_eq!(pic.master_vector_base, 0x20);
+        assert!(pic.initialized);
+    }
+
+    #[test]
+    fn test_pit_default_state() {
+        let pit = PitState::default();
+        assert_eq!(pit.channels[0].reload, 0xFFFF);
+        assert_eq!(pit.channels[0].count, 0xFFFF);
+        assert_eq!(pit.channels[0].access, 3);
+        assert!(!pit.channels[0].latched);
+        assert_eq!(pit.channels.len(), 3);
+    }
+
+    #[test]
+    fn test_pit_lohi_write() {
+        let mut ch = PitChannel::default();
+        ch.access = 3;
+        // Low byte
+        ch.reload = (ch.reload & 0xFF00) | 0x9C;
+        ch.write_hi_pending = true;
+        // High byte
+        ch.reload = (ch.reload & 0x00FF) | (0x2E << 8);
+        ch.count = ch.reload;
+        ch.write_hi_pending = false;
+        assert_eq!(ch.reload, 0x2E9C);
+        assert_eq!(ch.count, 0x2E9C);
+    }
+
+    #[test]
+    fn test_lapic_default_state() {
+        let lapic = LapicState::default();
+        assert_eq!(lapic.icr, 0);
+        assert!(!lapic.enabled);
+        assert_ne!(lapic.timer_lvt & 0x0001_0000, 0); // masked
+        assert_eq!(lapic.svr, 0x1FF);
+    }
+
+    #[test]
+    fn test_lapic_enable_disable() {
+        let mut lapic = LapicState::default();
+        lapic.svr = 0x1FF;
+        lapic.enabled = (lapic.svr & 0x100) != 0;
+        assert!(lapic.enabled);
+        lapic.svr = 0x0FF;
+        lapic.enabled = (lapic.svr & 0x100) != 0;
+        assert!(!lapic.enabled);
+    }
+
+    #[test]
+    fn test_lapic_divider_decode() {
+        let map = [(0x0u32, 2u64), (0x1, 4), (0x2, 8), (0x3, 16),
+                    (0x8, 32), (0x9, 64), (0xA, 128), (0xB, 1)];
+        for &(dcr, expected) in &map {
+            let d = match dcr & 0xB {
+                0x0 => 2u64, 0x1 => 4, 0x2 => 8, 0x3 => 16,
+                0x8 => 32, 0x9 => 64, 0xA => 128, 0xB => 1, _ => 1,
+            };
+            assert_eq!(d, expected, "dcr=0x{:X}", dcr);
+        }
+    }
+}

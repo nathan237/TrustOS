@@ -3558,6 +3558,29 @@ pub(super) fn cmd_hypervisor(args: &[&str]) {
         "logo" => {
             crate::println!("{}", crate::hypervisor::logo());
         }
+        "test" | "selftest" => {
+            crate::println_color!(COLOR_CYAN, "╔══════════════════════════════════════════════════════╗");
+            crate::println_color!(COLOR_CYAN, "║         TrustVM Hypervisor Self-Test Suite           ║");
+            crate::println_color!(COLOR_CYAN, "╚══════════════════════════════════════════════════════╝");
+            crate::println!();
+            
+            let (passed, failed, log) = crate::hypervisor::tests::run_all_tests();
+            
+            for line in &log {
+                if line.contains("[PASS]") {
+                    crate::println_color!(COLOR_GREEN, "{}", line);
+                } else {
+                    crate::println_color!(COLOR_RED, "{}", line);
+                }
+            }
+            
+            crate::println!();
+            if failed == 0 {
+                crate::println_color!(COLOR_GREEN, "Result: {}/{} tests passed — ALL OK ✓", passed, passed + failed);
+            } else {
+                crate::println_color!(COLOR_RED, "Result: {}/{} tests passed, {} FAILED ✗", passed, passed + failed, failed);
+            }
+        }
         "help" | _ => print_hv_help(),
     }
 }
@@ -3587,6 +3610,7 @@ fn print_hv_help() {
     crate::println!("  hv violations - Show EPT/NPT violations");
     crate::println!("  hv version    - Show TrustVM version");
     crate::println!("  hv logo       - Display TrustVM logo");
+    crate::println!("  hv test       - Run hypervisor self-tests");
     crate::println!();
     crate::println!("VM Management:");
     crate::println!("  vm create <name> <mem_mb>  - Create a new VM");

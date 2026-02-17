@@ -513,3 +513,93 @@ fn write_u64(mem: &mut [u8], offset: usize, value: u64) {
     let bytes = value.to_le_bytes();
     mem[offset..offset + 8].copy_from_slice(&bytes);
 }
+
+// ============================================================================
+// UNIT TESTS (documentation / future test framework)
+// ============================================================================
+// These tests validate ACPI table generation on pure byte arrays.
+// They can run when a custom test framework is added, or are exercised
+// by the in-kernel `hv test` command via hypervisor::tests module.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read_u32_le(mem: &[u8], offset: usize) -> u32 {
+        u32::from_le_bytes([mem[offset], mem[offset+1], mem[offset+2], mem[offset+3]])
+    }
+    fn read_u64_le(mem: &[u8], offset: usize) -> u64 {
+        u64::from_le_bytes([
+            mem[offset], mem[offset+1], mem[offset+2], mem[offset+3],
+            mem[offset+4], mem[offset+5], mem[offset+6], mem[offset+7],
+        ])
+    }
+    fn checksum_ok(mem: &[u8], offset: usize, len: usize) -> bool {
+        let mut sum: u8 = 0;
+        for i in 0..len { sum = sum.wrapping_add(mem[offset + i]); }
+        sum == 0
+    }
+
+    #[test]
+    fn test_rsdp_signature_and_checksums() {
+        let mut mem = vec![0u8; 0xF0000];
+        install_acpi_tables(&mut mem);
+        assert_eq!(&mem[0x50000..0x50008], b"RSD PTR ");
+        assert!(checksum_ok(&mem, 0x50000, 20), "RSDP v1 checksum");
+        assert!(checksum_ok(&mem, 0x50000, 36), "RSDP v2 checksum");
+        assert_eq!(mem[0x50000 + 15], 2, "RSDP revision");
+    }
+
+    #[test]
+    fn test_xsdt_structure() {
+        let mut mem = vec![0u8; 0xF0000];
+        install_acpi_tables(&mut mem);
+        let xsdt = 0x50040;
+        assert_eq!(&mem[xsdt..xsdt+4], b"XSDT");
+        let len = read_u32_le(&mem, xsdt + 4) as usize;
+        assert!(checksum_ok(&mem, xsdt, len));
+        assert_eq!(read_u64_le(&mem, xsdt + 36), 0x50080); // MADT
+        assert_eq!(read_u64_le(&mem, xsdt + 44), 0x50100); // FADT
+    }
+
+    #[test]
+    fn test_madt_lapic_and_ioapic() {
+        let mut mem = vec![0u8; 0xF0000];
+        install_acpi_tables(&mut mem);
+        let madt = 0x50080;
+        assert_eq!(&mem[madt..madt+4], b"APIC");
+        let len = read_u32_le(&mem, madt + 4) as usize;
+        assert!(checksum_ok(&mem, madt, len));
+        assert_eq!(read_u32_le(&mem, madt + 36), 0xFEE0_0000);
+    }
+
+    #[test]
+    fn test_fadt_fields() {
+        let mut mem = vec![0u8; 0xF0000];
+        install_acpi_tables(&mut mem);
+        let fadt = 0x50100;
+        assert_eq!(&mem[fadt..fadt+4], b"FACP");
+        let len = read_u32_le(&mem, fadt + 4) as usize;
+        assert_eq!(len, 276);
+        assert!(checksum_ok(&mem, fadt, len));
+        assert_eq!(read_u32_le(&mem, fadt + 76), 0xB008); // PM timer
+    }
+
+    #[test]
+    fn test_dsdt_stub() {
+        let mut mem = vec![0u8; 0xF0000];
+        install_acpi_tables(&mut mem);
+        let dsdt = 0x50200;
+        assert_eq!(&mem[dsdt..dsdt+4], b"DSDT");
+        let len = read_u32_le(&mem, dsdt + 4) as usize;
+        assert_eq!(len, 36);
+        assert!(checksum_ok(&mem, dsdt, len));
+    }
+
+    #[test]
+    fn test_bios_rsdp_copy() {
+        let mut mem = vec![0u8; 0xF0000];
+        install_acpi_tables(&mut mem);
+        assert_eq!(&mem[0x50000..0x50024], &mem[0xE0000..0xE0024]);
+    }
+}
