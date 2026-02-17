@@ -20,6 +20,7 @@ use super::svm::npt::{Npt, flags as npt_flags};
 use super::mmio::{self, MmioDecoded};
 use super::ioapic::IoApicState;
 use super::hpet::HpetState;
+use super::pci::PciBus;
 
 /// VM ID counter
 static NEXT_VM_ID: AtomicU64 = AtomicU64::new(1);
@@ -109,6 +110,10 @@ pub struct SvmVirtualMachine {
     pub ioapic: IoApicState,
     /// HPET (High Precision Event Timer) emulation state
     pub hpet: HpetState,
+    /// PCI bus emulation state
+    pub pci: PciBus,
+    /// VMEXIT count at last PIT IRQ0 injection (for periodic timing)
+    pub pit_last_inject: u64,
 }
 
 /// Emulated Local APIC timer state
@@ -298,6 +303,8 @@ impl SvmVirtualMachine {
             cmos_index: 0,
             ioapic: IoApicState::default(),
             hpet: HpetState::default(),
+            pci: PciBus::default(),
+            pit_last_inject: 0,
         })
     }
     
@@ -606,7 +613,11 @@ impl SvmVirtualMachine {
                           | clean_bits::AVIC;     // AVIC didn't change
                 vmcb.set_clean_bits(clean);
                 
-                // Inject periodic timer interrupt based on LAPIC state
+                // ── Timer interrupt injection ──────────────────────────────
+                // Priority: LAPIC timer → PIT IRQ0 → HPET (checked below)
+                let mut injected_timer = false;
+                
+                // 1) LAPIC timer (when programmed by the guest)
                 if self.lapic.enabled && self.lapic.icr > 0 {
                     let masked = (self.lapic.timer_lvt >> 16) & 1;
                     if masked == 0 {
@@ -621,41 +632,73 @@ impl SvmVirtualMachine {
                         let ticks = (elapsed * 256) / divider;
                         
                         if ticks >= self.lapic.icr as u64 {
-                            // Timer fired!
                             let rflags = vmcb.read_state(state_offsets::RFLAGS);
-                            if (rflags & 0x200) != 0 && vector > 0 { // IF set and valid vector
+                            if (rflags & 0x200) != 0 && vector > 0 {
                                 let event_inj: u64 = vector
-                                                   | (0u64 << 8)    // Type 0 = external interrupt
-                                                   | (1u64 << 31);  // V = valid
+                                                   | (0u64 << 8)
+                                                   | (1u64 << 31);
                                 vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
+                                injected_timer = true;
                             }
-                            // Reset for periodic mode, stop for one-shot
                             match timer_mode {
-                                1 => { // Periodic
+                                1 => {
                                     self.lapic.last_tick_exit = self.stats.vmexits;
                                     self.lapic.ccr = self.lapic.icr;
                                 }
-                                _ => { // One-shot or TSC-deadline
+                                _ => {
                                     self.lapic.icr = 0;
                                     self.lapic.ccr = 0;
                                 }
                             }
                         }
                     }
-                } else if self.stats.vmexits > 0 && self.stats.vmexits % 5000 == 0 {
-                    // Fallback: if LAPIC timer not yet programmed, inject timer periodically
-                    let rflags = vmcb.read_state(state_offsets::RFLAGS);
-                    if (rflags & 0x200) != 0 {
-                        let event_inj: u64 = 0x20
-                                           | (0u64 << 8)
-                                           | (1u64 << 31);
-                        vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
+                }
+                
+                // 2) PIT IRQ0 — periodic injection for early boot (before LAPIC)
+                //    Linux relies on IRQ0 (PIT channel 0) for jiffies/scheduler.
+                //    Inject through PIC vector base or I/O APIC routing.
+                //    Frequency: ~100 Hz equivalent → every ~500 VMEXITs
+                if !injected_timer {
+                    let pit_interval = if self.pit.channels[0].reload > 0 {
+                        // Scale reload value: PIT freq=1.193182 MHz, typical HZ=100 → reload=11932
+                        // We map reload values to VMEXIT intervals: smaller reload = more frequent
+                        let reload = self.pit.channels[0].reload as u64;
+                        // ~500 VMEXITs for default 100Hz, scale proportionally
+                        (reload / 24).max(100).min(2000)
+                    } else {
+                        500 // Default ~100 Hz
+                    };
+                    
+                    let since_last = self.stats.vmexits.saturating_sub(self.pit_last_inject);
+                    if since_last >= pit_interval {
+                        let rflags = vmcb.read_state(state_offsets::RFLAGS);
+                        if (rflags & 0x200) != 0 {
+                            // Route PIT IRQ0 through I/O APIC if configured, else PIC
+                            let vector = if let Some(route) = self.ioapic.get_irq_route(0) {
+                                if !route.masked && route.vector > 0 {
+                                    route.vector as u64
+                                } else {
+                                    // Fall back to PIC: master base + IRQ0
+                                    self.pic.master_vector_base as u64
+                                }
+                            } else {
+                                self.pic.master_vector_base as u64
+                            };
+                            
+                            if vector > 0 {
+                                let event_inj: u64 = vector
+                                                   | (0u64 << 8)
+                                                   | (1u64 << 31);
+                                vmcb.write_control(control_offsets::EVENT_INJ, event_inj);
+                                injected_timer = true;
+                            }
+                        }
+                        self.pit_last_inject = self.stats.vmexits;
                     }
                 }
                 
-                // Check HPET timers → I/O APIC routing → interrupt injection
-                // Only inject if no LAPIC timer interrupt was injected this iteration
-                {
+                // 3) HPET timers → I/O APIC routing → interrupt injection
+                if !injected_timer {
                     let current_event = vmcb.read_control(control_offsets::EVENT_INJ);
                     let already_injecting = (current_event & (1u64 << 31)) != 0;
                     
@@ -1721,8 +1764,11 @@ impl SvmVirtualMachine {
                 0x3B0..=0x3DF => 0,             // VGA registers
                 
                 // ── PCI config space ──────────────────────────────
-                0xCF8 => 0xFFFF_FFFF,           // PCI config addr (no devices)
-                0xCFC..=0xCFF => 0xFFFF_FFFF,   // PCI config data (no devices)
+                0xCF8 => self.pci.read_config_address(),
+                0xCFC..=0xCFF => {
+                    let byte_offset = (port - 0xCFC) as u8;
+                    self.pci.read_config_data(byte_offset)
+                }
                 
                 // ── ACPI / power management ───────────────────────
                 0xB000 => 0,           // PM1a_EVT_STS (no events)
@@ -1930,7 +1976,24 @@ impl SvmVirtualMachine {
                 0x3B0..=0x3DF => {}
                 
                 // PCI config
-                0xCF8..=0xCFF => {}
+                0xCF8 => {
+                    self.pci.write_config_address(value);
+                    if self.stats.io_exits < 200 {
+                        crate::serial_println!("[SVM-VM {}] PCI CFG ADDR = 0x{:08X}", self.id, value);
+                    }
+                }
+                0xCFC..=0xCFF => {
+                    let byte_offset = (port - 0xCFC) as u8;
+                    self.pci.write_config_data(byte_offset, value);
+                    if self.stats.io_exits < 200 {
+                        let (_, bus, dev, func, reg) = {
+                            let addr = self.pci.config_addr;
+                            (addr >> 31 != 0, (addr >> 16) as u8 & 0xFF, (addr >> 11) as u8 & 0x1F, (addr >> 8) as u8 & 0x7, addr as u8 & 0xFC)
+                        };
+                        crate::serial_println!("[SVM-VM {}] PCI CFG WRITE {:02X}:{:02X}.{} reg=0x{:02X} val=0x{:X}", 
+                            self.id, bus, dev, func, reg, value);
+                    }
+                }
                 
                 // Fast A20 gate
                 0x92 => {}

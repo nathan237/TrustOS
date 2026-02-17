@@ -51,6 +51,9 @@ pub mod ioapic;
 pub mod backend;
 pub mod hpet;
 
+// Phase 10: PCI bus emulation + periodic timer injection
+pub mod pci;
+
 // Self-tests for hypervisor subsystems
 pub mod tests;
 

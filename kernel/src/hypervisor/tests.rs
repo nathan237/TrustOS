@@ -107,6 +107,15 @@ pub fn run_all_tests() -> (usize, usize, alloc::vec::Vec<String>) {
     results.push(test_hpet_acpi_table_checksum());
     results.push(test_hpet_acpi_table_address());
     
+    // ── PCI Bus Tests ────────────────────────────────────────────
+    results.push(test_pci_bus_defaults());
+    results.push(test_pci_host_bridge_vendor_device());
+    results.push(test_pci_isa_bridge_class());
+    results.push(test_pci_config_read_no_device());
+    results.push(test_pci_config_read_disabled());
+    results.push(test_pci_config_addr_readback());
+    results.push(test_pci_bar_probing());
+    
     // Tally results
     let mut passed = 0usize;
     let mut failed = 0usize;
@@ -1528,5 +1537,107 @@ fn test_hpet_acpi_table_address() -> TestResult {
         name: "hpet_acpi_table_address",
         passed: ok,
         detail: if !ok { Some(format!("addr=0x{:X} space={}", addr, addr_space)) } else { None },
+    }
+}
+
+// ============================================================================
+// PCI Bus Tests
+// ============================================================================
+
+fn test_pci_bus_defaults() -> TestResult {
+    let bus = super::pci::PciBus::default();
+    let host_exists = bus.device_exists(0, 0, 0);
+    let isa_exists = bus.device_exists(0, 1, 0);
+    let no_dev2 = !bus.device_exists(0, 2, 0);
+    let no_bus1 = !bus.device_exists(1, 0, 0);
+    let ok = host_exists && isa_exists && no_dev2 && no_bus1;
+    TestResult {
+        name: "pci_bus_defaults",
+        passed: ok,
+        detail: if !ok { Some(format!("host={} isa={} no2={} nob1={}", host_exists, isa_exists, no_dev2, no_bus1)) } else { None },
+    }
+}
+
+fn test_pci_host_bridge_vendor_device() -> TestResult {
+    let mut bus = super::pci::PciBus::default();
+    // Select bus 0, dev 0, fn 0, reg 0 (vendor+device)
+    bus.write_config_address(0x8000_0000);
+    let val = bus.read_config_data(0);
+    let vendor = (val & 0xFFFF) as u16;
+    let device = ((val >> 16) & 0xFFFF) as u16;
+    let ok = vendor == 0x8086 && device == 0x1237;
+    TestResult {
+        name: "pci_host_bridge_ids",
+        passed: ok,
+        detail: if !ok { Some(format!("vendor=0x{:04X} device=0x{:04X}", vendor, device)) } else { None },
+    }
+}
+
+fn test_pci_isa_bridge_class() -> TestResult {
+    let mut bus = super::pci::PciBus::default();
+    // Select bus 0, dev 1, fn 0, reg 0x08 (revision + class)
+    bus.write_config_address(0x8000_0808);
+    let val = bus.read_config_data(0);
+    let class_code = ((val >> 24) & 0xFF) as u8;
+    let subclass = ((val >> 16) & 0xFF) as u8;
+    let ok = class_code == 0x06 && subclass == 0x01;
+    TestResult {
+        name: "pci_isa_bridge_class",
+        passed: ok,
+        detail: if !ok { Some(format!("class=0x{:02X} sub=0x{:02X}", class_code, subclass)) } else { None },
+    }
+}
+
+fn test_pci_config_read_no_device() -> TestResult {
+    let mut bus = super::pci::PciBus::default();
+    // Bus 0, dev 31, fn 0 — no device
+    bus.write_config_address(0x8000_F800);
+    let val = bus.read_config_data(0);
+    let ok = val == 0xFFFF_FFFF;
+    TestResult {
+        name: "pci_config_no_device",
+        passed: ok,
+        detail: if !ok { Some(format!("val=0x{:08X}", val)) } else { None },
+    }
+}
+
+fn test_pci_config_read_disabled() -> TestResult {
+    let mut bus = super::pci::PciBus::default();
+    // Bit 31 not set = disabled
+    bus.write_config_address(0x0000_0000);
+    let val = bus.read_config_data(0);
+    let ok = val == 0xFFFF_FFFF;
+    TestResult {
+        name: "pci_config_disabled",
+        passed: ok,
+        detail: if !ok { Some(format!("val=0x{:08X}", val)) } else { None },
+    }
+}
+
+fn test_pci_config_addr_readback() -> TestResult {
+    let mut bus = super::pci::PciBus::default();
+    bus.write_config_address(0x8000_1234);
+    let readback = bus.read_config_address();
+    let ok = readback == 0x8000_1234;
+    TestResult {
+        name: "pci_config_addr_readback",
+        passed: ok,
+        detail: if !ok { Some(format!("read=0x{:08X}", readback)) } else { None },
+    }
+}
+
+fn test_pci_bar_probing() -> TestResult {
+    let mut bus = super::pci::PciBus::default();
+    // Select host bridge BAR0 (reg 0x10)
+    bus.write_config_address(0x8000_0010);
+    // Write all 1s (BAR size probe)
+    bus.write_config_data(0, 0xFFFF_FFFF);
+    let val = bus.read_config_data(0);
+    // Host bridge has no real BAR, should read back 0xFFFF_FFFF
+    let ok = val == 0xFFFF_FFFF;
+    TestResult {
+        name: "pci_bar_probing",
+        passed: ok,
+        detail: if !ok { Some(format!("val=0x{:08X}", val)) } else { None },
     }
 }
