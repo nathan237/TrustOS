@@ -155,3 +155,10 @@ docs/DEVELOPER_GUIDE.md
 
 # Local planning docs (not for GitHub)
 showcaseplan.md
+
+# ROM files (user must supply their own legally-owned ROMs)
+kernel/roms/*.gb
+kernel/roms/*.gbc
+kernel/roms/*.nes
+kernel/roms/*.sfc
+kernel/roms/*.smc

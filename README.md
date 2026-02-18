@@ -4,7 +4,7 @@
 
 ### **Trust** the code. **Rust** is the reason.
 
-**A fully auditable, bare-metal operating system — 143,000+ lines of pure Rust. Zero C. Zero secrets.**
+**A fully auditable, bare-metal operating system — 165,000+ lines of pure Rust. Zero C. Zero secrets.**
 
 *One dev. One OS. Nothing to hide.*
 
@@ -12,9 +12,9 @@
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-143%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-165%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![ISO](https://img.shields.io/badge/ISO-8.95%20MB-purple?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.3.5-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.4.0-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -32,6 +32,7 @@
 
 | Date | Changes |
 |------|----------|
+| **2026-02-18** | **v0.4.0 — Game Boy Color Emulator + GameLab + NES + Mario 64** — Full CGB emulator (LR35902 CPU, all 245+256 CB opcodes, scanline-accurate PPU with CGB dual VRAM banks & 8+8 color palettes, MBC1/3/5, timer, joypad, OAM/HDMA DMA). NES emulator (6502 CPU with unofficial opcodes, 2C02 PPU, mappers 0-3). TrustMario64 3D platformer (software-rendered, 23 player actions, Bob-omb Battlefield, 3 enemy types, TAS engine). **GameLab** — 2,000-line real-time analysis dashboard for the GB emulator: 5-tab UI (Analyze, Search, Watch, Tiles, Trace), memory search (Cheat Engine-style), 16-slot watch list, save/load state, breakpoints + single-step, tile/sprite viewer, speed control (0.25x–4x), trace log (last 64 instructions), memory diff highlighting. ~9,200 new lines across 23 files. 165K total, 296 source files. |
 | **2026-02-17** | **v0.3.5 — ACPI + Device Emulation** — Full ACPI table generation (RSDP v2, XSDT, MADT, FADT w/ PM timer + SCI, DSDT with AML bytecode), Intel 8259A PIC emulation (ICW1-4, OCW1-3, edge-triggered IRQs, cascaded master/slave, spurious IRQ detection), Intel 8254 PIT emulation (modes 0/2/3, channel 0-2, 1.193182 MHz, lobyte/hibyte access), CMOS RTC emulation (BCD time registers 0x00-0x09, Status A/B/C, NMI masking, century register), ACPI PM Timer (3.579545 MHz, 24/32-bit). Phase 0 infrastructure: setup.sh, setup.ps1, CI release workflow, Makefile auto-Limine, repo cleanup. |
 | **2026-02-16** | **v0.3.4 — POSIX Process Model + Real Disk Swap** — PTY/TTY subsystem with POSIX line discipline (canonical mode, echo, signal chars), pseudo-terminal pairs (master/slave), job control syscalls (SETPGID/SETSID/GETPGID/GETSID), `/etc/passwd` persistence (load/sync to filesystem), ELF improvements (PATH search across 5 dirs, shebang `#!` support, auxiliary vector on stack), `chroot` syscall with per-process root dir, NVMe-backed swap (last 64MB of disk, 8 sectors/page, in-memory fallback), kernel stacks 16KB→64KB. 96/96 tests. 143K lines, 262 source files. |
 | **2026-02-16** | **v0.3.3 — Cinematic Trailer + Visual Overhaul** — Beat-synced 128 BPM trailer (`trailer` command) with 14 scenes, 1984/Big Brother theme, feature showcase crescendo (17 cards with decreasing delay), glow/vignette/CRT effects, XOR plasma, optimized fire. SMP: APs safely parked (cli;hlt), BSP-only mode. 131K lines, 253 source files. |
@@ -54,7 +55,7 @@ In a world where your operating system is a black box — millions of lines of l
 
 TrustOS is the answer: **every single line is open, readable, and auditable.**
 
-- 🔍 **Fully auditable** — 143,000 lines of Rust, all on GitHub. No binary blobs. No hidden code.
+- 🔍 **Fully auditable** — 165,000 lines of Rust, all on GitHub. No binary blobs. No hidden code.
 - 🦀 **Memory safe by design** — Rust's ownership model prevents entire categories of vulnerabilities (buffer overflows, use-after-free, data races).
 - 🧩 **Zero dependencies on C** — no libc, no glibc, no C runtime. Every driver, every protocol, every pixel is Rust.
 - 📖 **Readable** — one person wrote it in 8 days. If one person can build it, one person can understand it.
@@ -65,22 +66,22 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 
 | Metric | Value |
 |--------|-------|
-| **Total code** | 143,000+ lines of Rust |
-| **Source files** | 262 `.rs` files |
+| **Total code** | 165,000+ lines of Rust |
+| **Source files** | 296 `.rs` files |
 | **Kernel modules** | 37 independent modules |
 | **ISO size** | 8.95 MB |
 | **Boot time** | < 1 second |
 | **Desktop FPS** | 144 FPS (SSE2 SIMD) |
 | **C code** | 0 lines |
 | **External dependencies** | 0 (everything from scratch) |
-| **Development time** | 11 days |
+| **Development time** | 12 days |
 
 ### TrustOS vs The World
 
 | | Traditional OS | TrustOS |
 |---|:---:|:---:|
 | **Language** | C/C++ with 40 years of memory bugs | 100% Rust — memory safe by design |
-| Codebase | Millions of lines, impossible to audit | 143K lines, one person can read it all |
+| Codebase | Millions of lines, impossible to audit | 165K lines, one person can read it all |
 | **Binary blobs** | Everywhere | None. Zero. |
 | **Telemetry** | Opt-out (maybe) | Doesn't exist — verify it yourself |
 | **Build** | Complex cross-compilation toolchains | `cargo build` — that's it |
@@ -176,6 +177,49 @@ TrustLab is a 7-panel interactive workspace that lets you **watch the OS kernel 
 - **Interactive controls** — Mouse piece selection, scroll zoom, camera orbit
 - **Matrix theme** — Green wireframe aesthetic matching TrustOS visual identity
 - Launch with `chess3d` command or from the desktop
+
+### 🎮 Game Boy Color Emulator + GameLab
+
+> **A complete CGB emulator running bare-metal — with a built-in real-time analysis dashboard.**
+
+**Game Boy Color Emulator:**
+- **Sharp LR35902 CPU** — All 245 base opcodes + 256 CB-prefix bit/shift/rotate ops, interrupt handling (5 vectors), HALT, DI/EI, DAA
+- **Scanline-accurate PPU** — 160×144, 4-mode dot-cycle timing (OAM Search / Pixel Transfer / HBlank / VBlank), background + window + sprite rendering
+- **Full CGB support** — Dual VRAM banks, per-tile attributes, 8 BG + 8 OBJ color palettes (RGB555), BCPS/BCPD/OCPS/OCPD auto-increment
+- **4 MBC mappers** — MBC0, MBC1 (banking modes), MBC3 (ROM/RAM banks), MBC5 (9-bit ROM)
+- **Timer, joypad, OAM DMA, HDMA, WRAM banking (32KB CGB), HRAM**
+- ROM embedding at compile time via `include_bytes!()` — drop a `.gb` file in `kernel/roms/` and rebuild
+
+**GameLab — Real-Time Analysis Dashboard (2,000 lines):**
+
+| Tab | Feature | Description |
+|-----|---------|-------------|
+| **ANALYZE** | 6-panel live view | CPU registers/flags, GPU state (mode/LY/LCDC), memory hex dump, I/O registers, cartridge info, input display |
+| **SEARCH** | Memory search | Cheat Engine-style: exact value, changed, unchanged, greater, less — snapshot-based narrowing, up to 256 results |
+| **WATCH** | Watch list | Pin up to 16 addresses with labels, previous/current value tracking, change highlighting |
+| **TILES** | Tile/Sprite viewer | 3 pages: tiles at $8000, tiles at $8800, OAM sprites — rendered from VRAM |
+| **TRACE** | Trace log | Last 64 executed instructions with PC, opcode, A, F, SP |
+
+**Additional toolbar features:**
+- **Speed control** — 0.25×, 0.5×, 1×, 2×, 4× emulation speed
+- **Breakpoints** — Up to 8 PC breakpoints, single-step, frame advance, pause/resume
+- **Save/Load state** — Full snapshot/restore (CPU, GPU, VRAM×2, OAM, palettes, timer, cart RAM, WRAM, HRAM)
+- **Memory diff** — Highlights changed bytes in the hex dump view
+
+### 🕹️ NES Emulator
+- **MOS 6502 CPU** — All 151 official opcodes + 8 common unofficial opcodes (LAX, SAX, DCP, ISB, SLO, RLA, SRE, RRA), correct cycle counts
+- **2C02 PPU** — 256×240, scanline-accurate background + sprite rendering, scroll registers, sprite 0 hit, 64-color system palette
+- **4 mappers** — NROM (0), MMC1 (1), UxROM (2), CNROM (3) — covers most common NES games
+- **Controller input**, OAM DMA, nametable mirroring (horizontal/vertical/single/four-screen)
+- Drop a `.nes` file in `kernel/roms/` to embed at compile time
+
+### 🏔️ TrustMario64 — 3D Platformer
+- **Software-rendered 3D** — No GPU, pure CPU rendering with perspective projection
+- **23 player actions** — walk, run, jump, double/triple jump, long jump, backflip, side flip, wall kick, ground pound, dive, swim, ledge grab, and more
+- **Bob-omb Battlefield** — 32×32 heightmap terrain with mountain, water, bridge, trees, coins, stars
+- **3 enemy types** — Goomba (patrol/chase), Bob-omb (fuse/explode), Chain Chomp (tethered lunge)
+- **TAS engine** — Save/load state (F1/F2), frame advance (F3), record/replay inputs (F5/F6), rewind (F7), ghost playback (F8), hitbox visualization (F10)
+- **Lakitu camera** — Mouse orbit + scroll zoom + E/Q rotation
 
 ### 🎮 Interactive Desktop Apps
 - **Calculator** — Full arithmetic with chained operations, keyboard & mouse input
@@ -321,6 +365,9 @@ cargo build --release -p trustos_kernel
 | `trustlab` | Open the real-time kernel introspection laboratory |
 | `neofetch` | System info display |
 | `chess3d` | Play 3D chess against AI |
+| `gameboy` | Launch the Game Boy Color emulator |
+| `nes` | Launch the NES emulator |
+| `mario64` | Launch the 3D Mario platformer |
 | `help` | Show all 200+ commands |
 
 ---
@@ -433,6 +480,7 @@ TrustOS includes a **built-in cinematic animated explainer** — a 2-minute film
 ┌─────────────────────────────────────────────────────────────┐
 │                     Applications                            │
 │  TrustCode · TrustLang · TrustBrowser · Games · Terminal    │
+│  Game Boy Color · NES · Mario64 · GameLab                   │
 ├─────────────────────────────────────────────────────────────┤
 │              COSMIC2 Desktop Compositor                     │
 │     8-layer GPU compositing · SSE2 SIMD · 144 FPS          │
@@ -467,6 +515,10 @@ TrustOS includes a **built-in cinematic animated explainer** — a 2-minute film
 | `formula3d.rs` | ~1,500 | Wireframe 3D engine with per-edge colors |
 | `chess.rs` | ~1,030 | Full chess engine: rules, AI minimax, game state |
 | `chess3d.rs` | ~1,093 | 3D chess renderer: look-at camera, low-poly meshes |
+| `gameboy/` | ~1,870 | Game Boy Color emulator: CPU, PPU, MBC1/3/5, timer, CGB color |
+| `game_lab.rs` | ~2,025 | GameLab analysis dashboard: search, watch, tiles, trace, breakpoints |
+| `nes/` | ~1,466 | NES emulator: 6502 CPU, 2C02 PPU, mappers 0-3 |
+| `mario64/` | ~3,840 | 3D platformer: player, physics, enemies, renderer, TAS engine |
 | `model_editor.rs` | ~750 | TrustEdit 3D wireframe model editor |
 | `video/` | ~1,500 | TrustVideo codec & player |
 | `framebuffer/` | ~1,500 | SSE2 SIMD rendering |
@@ -565,6 +617,11 @@ kernel/src/
 ├── desktop.rs           # COSMIC2 desktop manager
 ├── chess.rs             # Chess engine (rules, AI, game state)
 ├── chess3d.rs           # 3D Chess renderer (camera, meshes)
+├── gameboy/             # Game Boy Color emulator (CPU, PPU, MBC, CGB)
+├── game_lab.rs          # GameLab real-time analysis dashboard
+├── nes/                 # NES emulator (6502, 2C02 PPU, mappers)
+├── mario64/             # 3D platformer (player, physics, TAS, renderer)
+├── embedded_roms.rs     # Compile-time ROM embedding
 ├── model_editor.rs      # TrustEdit 3D model editor
 ├── tty.rs               # POSIX TTY layer + line discipline
 ├── pty.rs               # Pseudo-terminal master/slave pairs
@@ -593,7 +650,7 @@ kernel/src/
 | Feature | TrustOS | SerenityOS | Redox OS | TempleOS | Linux |
 |---------|---------|------------|----------|----------|-------|
 | Language | **Rust** | C++ | Rust | HolyC | C |
-| Lines of code | **143K** | 800K+ | 200K+ | 100K | Millions |
+| Lines of code | **165K** | 800K+ | 200K+ | 100K | Millions |
 | Contributors | **1** | 1,141 | Community | 1 | Thousands |
 | Development time | **10 days** | 6+ years | 10+ years | ~10 years | 35+ years |
 | GUI Desktop | ✅ (144 FPS) | ✅ | ✅ | ✅ (16 colors) | Via X11/Wayland |
@@ -601,8 +658,9 @@ kernel/src/
 | Built-in IDE | ✅ (TrustCode) | ✅ (HackStudio) | ❌ | ✅ | ❌ |
 | Built-in Language | ✅ (TrustLang) | ❌ | ❌ | ✅ (HolyC) | ❌ |
 | **Kernel Introspection Lab** | **✅ (FIRST)** | ❌ | ❌ | ❌ | ❌ (external tools) |
-| 3D Games | ✅ (FPS + Chess3D) | ❌ (2D only) | ❌ | ✅ (16 colors) | Ported |
+| 3D Games | ✅ (FPS + Chess3D + Mario64) | ❌ (2D only) | ❌ | ✅ (16 colors) | Ported |
 | Audio Synthesizer | ✅ (8-voice poly) | ❌ | ❌ | ❌ (single voice) | ❌ |
+| **Built-in Emulators** | **✅ (GBC + NES + GameLab)** | ❌ | ❌ | ❌ | ❌ |
 | TLS 1.3 from scratch | ✅ | ❌ | ❌ | ❌ | Via OpenSSL |
 | Binary Analyzer | ✅ (TrustView) | ❌ | ❌ | ❌ | External (Ghidra) |
 | Hypervisor + VMI | ✅ (VT-x/SVM + introspection) | ❌ | ❌ | ❌ | Via KVM (no VMI) |
@@ -612,6 +670,14 @@ kernel/src/
 ---
 
 ## 📋 Changelog
+
+### v0.4.0 — February 2026
+- **Game Boy Color Emulator** — Complete CGB emulator running bare-metal. Sharp LR35902 CPU with all 245 base opcodes + 256 CB-prefix operations. Scanline-accurate PPU (160×144) with proper dot-cycle timing across 4 modes. Full CGB extensions: dual VRAM banks, per-tile attributes (palette, bank, flip), 8 BG + 8 OBJ color palettes (RGB555) via BCPS/BCPD/OCPS/OCPD. MBC0/MBC1/MBC3/MBC5 cartridge mappers (up to 4MB ROM, 128KB RAM). Timer (DIV/TIMA/TMA/TAC) with correct falling-edge detection. Joypad, OAM DMA, HDMA, 32KB WRAM with CGB bank switching, HRAM. Compile-time ROM embedding via `include_bytes!()`.
+- **GameLab — Real-Time GB Analysis Dashboard** — 2,000-line interactive debugger/analysis tool with 5 tabs: **Analyze** (6-panel live view: CPU regs/flags, GPU state, memory hex dump, I/O regs, cart info, input), **Search** (Cheat Engine-style memory search: exact value, changed, unchanged, greater, less — snapshot-based narrowing, 256 results), **Watch** (16-slot address watch list with labels, previous/current values, change highlighting), **Tiles** (tile/sprite viewer: tiles $8000, tiles $8800, OAM sprites), **Trace** (last 64 instructions with PC, opcode, A, F, SP). Toolbar: speed control (0.25×–4×), breakpoints (8 PC breakpoints + single-step + frame advance), save/load state (full CPU/GPU/VRAM/OAM/palettes/timer/RAM snapshot), memory diff (highlights changed bytes in hex dump).
+- **NES Emulator** — MOS 6502 CPU with all 151 official opcodes + common unofficial opcodes (LAX, SAX, DCP, ISB, SLO, RLA, SRE, RRA). 2C02 PPU with scanline-accurate background/sprite rendering, scroll registers, sprite 0 hit, 64-color palette. Mappers 0 (NROM), 1 (MMC1), 2 (UxROM), 3 (CNROM). Controller input, OAM DMA, nametable mirroring.
+- **TrustMario64 — 3D Platformer** — Software-rendered 3D platformer with 23 player actions (walking, running, jumping, double/triple jump, long jump, backflip, side flip, wall kick, ground pound, dive, swim, ledge grab...), Bob-omb Battlefield level (32×32 heightmap, central mountain, water, bridge, trees, 6 stars, 24 coins), 3 enemy types (Goomba, Bob-omb, Chain Chomp with AI behaviors), TAS engine (save/load state, frame advance, record/replay, rewind, ghost playback, hitbox visualization), Lakitu-style camera with mouse orbit.
+- **Desktop integration** — Game Boy, NES, and Mario64 run as windowed desktop apps. GameLab opens as a side panel next to the GB window. Desktop icons for all emulators. Multi-pass rendering keeps emulator content z-order consistent.
+- ~9,200 new lines across 23 files. 165K total, 296 source files.
 
 ### v0.3.5 — February 2026
 - **ACPI Table Generation** — Full RSDP v2 (20+16 byte structure with extended checksum), XSDT (dynamic entry array), MADT (Local APIC + I/O APIC + ISO entries, LINT0/1 NMI), FADT (PM timer port 0x608, SCI IRQ 9, SMI CMD, ACPI enable/disable, PM1a event/control blocks, GPE0, FACS + DSDT pointers, x_ 64-bit generic addresses), DSDT (minimal valid AML: `_S5` sleep object for clean ACPI shutdown).
@@ -723,7 +789,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 - GitHub: [@nathan237](https://github.com/nathan237)
 - Project: [TrustOS](https://github.com/nathan237/TrustOS)
 
-> Every line of TrustOS — 143,000+ lines of Rust — was designed, written, and tested by a single developer. 11 days. Zero C. Zero compromises.
+> Every line of TrustOS — 165,000+ lines of Rust — was designed, written, and tested by a single developer. 12 days. Zero C. Zero compromises.
 
 ---
 
@@ -733,7 +799,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 Created with ❤️ by [Nated0ge](https://github.com/nathan237)
 
-143,000 lines · 11 days · Zero C · Fully auditable
+165,000 lines · 12 days · Zero C · Fully auditable
 
 ⭐ **Star this repo** if you believe in transparent, auditable operating systems.
 
