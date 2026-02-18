@@ -60,6 +60,9 @@ pub mod virtio_blk;
 // Self-tests for hypervisor subsystems
 pub mod tests;
 
+// Phase 12: Real-time VM debug monitor
+pub mod debug_monitor;
+
 // Phase 5: Linux Subsystem (TSL)
 pub mod virtio_console;
 pub mod linux_subsystem;

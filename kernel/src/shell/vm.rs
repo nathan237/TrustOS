@@ -4478,6 +4478,7 @@ fn print_hv_help() {
     crate::println!("  vm list                    - List all VMs");
     crate::println!("  vm guests                  - List available guests");
     crate::println!("  vm inspect [id]            - Inspect VM state (regs, exits, mem)");
+    crate::println!("  vm debug [cmd]             - Real-time debug monitor (gaps, io, msr, timeline)");
     crate::println!("  vm mount <id> <host> <guest> - Mount shared folder");
 }
 
@@ -4485,7 +4486,7 @@ fn print_hv_help() {
 pub(super) fn cmd_vm(args: &[&str]) {
     if args.is_empty() {
         crate::println!("Usage: vm <command> [args]");
-        crate::println!("Commands: create, start, run, stop, list, guests, inspect, mount");
+        crate::println!("Commands: create, start, run, stop, list, guests, inspect, debug, mount");
         return;
     }
     
@@ -5031,6 +5032,84 @@ pub(super) fn cmd_vm(args: &[&str]) {
                 }
                 _ => {
                     crate::println!("vm stack requires AMD SVM.");
+                }
+            }
+        }
+        
+        // ── VM Debug Monitor ─────────────────────────────────────
+        "debug" => {
+            let sub = if args.len() > 1 { args[1] } else { "" };
+            match sub {
+                "init" | "start" => {
+                    crate::hypervisor::debug_monitor::init();
+                    crate::println!("\x01G✓ Debug monitor started\x01W — all VM exits will be recorded.");
+                    crate::println!("  Run a VM, then use 'vm debug' to see the dashboard.");
+                }
+                "stop" => {
+                    crate::hypervisor::debug_monitor::stop();
+                    crate::println!("Debug monitor stopped.");
+                }
+                "reset" => {
+                    crate::hypervisor::debug_monitor::reset();
+                    crate::println!("Debug monitor data cleared.");
+                }
+                "gaps" => {
+                    let report = crate::hypervisor::debug_monitor::get_gaps_report();
+                    crate::println!("{}", report);
+                }
+                "io" => {
+                    let report = crate::hypervisor::debug_monitor::get_io_heatmap();
+                    crate::println!("{}", report);
+                }
+                "msr" => {
+                    let report = crate::hypervisor::debug_monitor::get_msr_report();
+                    crate::println!("{}", report);
+                }
+                "timeline" => {
+                    let count = if args.len() > 2 { args[2].parse().unwrap_or(30) } else { 30 };
+                    let report = crate::hypervisor::debug_monitor::get_timeline(count);
+                    crate::println!("{}", report);
+                }
+                "serial" => {
+                    let enabled = args.len() <= 2 || args[2] != "off";
+                    crate::hypervisor::debug_monitor::set_serial_log(enabled);
+                    crate::println!("Serial logging: {}", if enabled { "ON" } else { "OFF" });
+                }
+                "status" => {
+                    let active = crate::hypervisor::debug_monitor::is_active();
+                    let total = crate::hypervisor::debug_monitor::total_events();
+                    let unhandled = crate::hypervisor::debug_monitor::unhandled_count();
+                    crate::println!("\x01CDebug Monitor Status:\x01W");
+                    crate::println!("  Active: {}", if active { "\x01Gyes\x01W" } else { "\x01Rno\x01W" });
+                    crate::println!("  Total events: {}", total);
+                    crate::println!("  Unhandled: {}{}\x01W", 
+                        if unhandled > 0 { "\x01R" } else { "\x01G" }, unhandled);
+                }
+                "" => {
+                    // Default: show full dashboard
+                    if !crate::hypervisor::debug_monitor::is_initialized() {
+                        // Auto-init if not yet started
+                        crate::hypervisor::debug_monitor::init();
+                        crate::println!("Debug monitor auto-initialized. Run a VM to collect data.\n");
+                    }
+                    let dashboard = crate::hypervisor::debug_monitor::get_dashboard();
+                    crate::println!("{}", dashboard);
+                }
+                _ => {
+                    crate::println!("\x01CVM Debug Monitor\x01W — Real-time VM analysis");
+                    crate::println!();
+                    crate::println!("Usage: vm debug [command]");
+                    crate::println!();
+                    crate::println!("  vm debug           Show full debug dashboard");
+                    crate::println!("  vm debug init      Start recording VM exits");
+                    crate::println!("  vm debug stop      Stop recording");
+                    crate::println!("  vm debug reset     Clear all recorded data");
+                    crate::println!("  vm debug gaps      Show unhandled operations only");
+                    crate::println!("  vm debug io        Show I/O port heatmap");
+                    crate::println!("  vm debug msr       Show MSR access log");
+                    crate::println!("  vm debug timeline  Show recent exit timeline");
+                    crate::println!("  vm debug serial    Enable serial logging of unhandled exits");
+                    crate::println!("  vm debug status    Show monitor status");
                 }
             }
         }

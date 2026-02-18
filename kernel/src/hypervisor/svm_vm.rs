@@ -902,6 +902,13 @@ impl SvmVirtualMachine {
                     self.id, "CPUID", guest_rip,
                     &alloc::format!("EAX=0x{:X} ECX=0x{:X}", self.guest_regs.rax, self.guest_regs.rcx)
                 );
+                // Debug monitor
+                super::debug_monitor::record_event(
+                    self.id, super::debug_monitor::DebugCategory::CpuidLeaf,
+                    self.guest_regs.rax, super::debug_monitor::HandleStatus::Handled,
+                    guest_rip, self.stats.vmexits,
+                    &alloc::format!("ECX=0x{:X}", self.guest_regs.rcx),
+                );
                 self.handle_cpuid();
                 let vmcb = self.vmcb.as_mut().ok_or(HypervisorError::VmcbNotLoaded)?;
                 vmcb.write_state(state_offsets::RIP, next_rip);
@@ -1018,6 +1025,12 @@ impl SvmVirtualMachine {
                     crate::lab_mode::trace_bus::emit_vm_memory(
                         self.id, "NPF_VIOLATION", guest_phys, error_code
                     );
+                    super::debug_monitor::record_event(
+                        self.id, super::debug_monitor::DebugCategory::NpfFault,
+                        guest_phys, super::debug_monitor::HandleStatus::Fatal,
+                        guest_rip, self.stats.vmexits,
+                        &alloc::format!("err=0x{:X}", error_code),
+                    );
                     crate::serial_println!("[SVM-VM {}] FATAL NPF: GPA=0x{:X}, Error=0x{:X}, RIP=0x{:X}", 
                                           self.id, guest_phys, error_code, guest_rip);
                     
@@ -1050,6 +1063,11 @@ impl SvmVirtualMachine {
             
             SvmExitCode::Shutdown => {
                 crate::lab_mode::trace_bus::emit_vm_lifecycle(self.id, "TRIPLE FAULT (shutdown)");
+                super::debug_monitor::record_event(
+                    self.id, super::debug_monitor::DebugCategory::Exception,
+                    0xFF, super::debug_monitor::HandleStatus::Fatal,
+                    guest_rip, self.stats.vmexits, "TRIPLE FAULT",
+                );
                 crate::serial_println!("[SVM-VM {}] Guest SHUTDOWN (triple fault)", self.id);
                 self.state = SvmVmState::Crashed;
                 Ok(false)
@@ -1896,6 +1914,12 @@ impl SvmVirtualMachine {
                     if self.stats.io_exits < 50 {
                         crate::serial_println!("[SVM-VM {}] Unhandled IN port 0x{:X}", self.id, port);
                     }
+                    super::debug_monitor::record_event(
+                        self.id, super::debug_monitor::DebugCategory::IoPortIn,
+                        port as u64, super::debug_monitor::HandleStatus::Unhandled,
+                        self.vmcb.as_ref().map(|v| v.read_state(state_offsets::RIP)).unwrap_or(0),
+                        self.stats.vmexits, "",
+                    );
                     0xFF
                 }
             };
@@ -2174,6 +2198,12 @@ impl SvmVirtualMachine {
                     if self.stats.io_exits < 50 {
                         crate::serial_println!("[SVM-VM {}] Unhandled OUT port 0x{:X} val=0x{:X}", self.id, port, value);
                     }
+                    super::debug_monitor::record_event(
+                        self.id, super::debug_monitor::DebugCategory::IoPortOut,
+                        port as u64, super::debug_monitor::HandleStatus::Unhandled,
+                        self.vmcb.as_ref().map(|v| v.read_state(state_offsets::RIP)).unwrap_or(0),
+                        self.stats.vmexits, &alloc::format!("val=0x{:X}", value),
+                    );
                 }
             }
         }
@@ -2270,6 +2300,12 @@ impl SvmVirtualMachine {
                     if self.stats.msr_exits < 100 {
                         crate::serial_println!("[SVM-VM {}] WRMSR 0x{:X} = 0x{:X} (ignored)", self.id, msr, value);
                     }
+                    super::debug_monitor::record_event(
+                        self.id, super::debug_monitor::DebugCategory::MsrWrite,
+                        msr as u64, super::debug_monitor::HandleStatus::Unhandled,
+                        self.vmcb.as_ref().map(|v| v.read_state(state_offsets::RIP)).unwrap_or(0),
+                        self.stats.vmexits, &alloc::format!("val=0x{:X}", value),
+                    );
                 }
             }
         } else {
@@ -2345,6 +2381,12 @@ impl SvmVirtualMachine {
                     if self.stats.msr_exits < 100 {
                         crate::serial_println!("[SVM-VM {}] RDMSR 0x{:X} = 0 (default)", self.id, msr);
                     }
+                    super::debug_monitor::record_event(
+                        self.id, super::debug_monitor::DebugCategory::MsrRead,
+                        msr as u64, super::debug_monitor::HandleStatus::Unhandled,
+                        self.vmcb.as_ref().map(|v| v.read_state(state_offsets::RIP)).unwrap_or(0),
+                        self.stats.vmexits, "returned 0",
+                    );
                     0
                 }
             };
