@@ -1,9 +1,24 @@
-//! Minimal DNS resolver (A records only)
+//! Minimal DNS resolver (A records only) with caching
 
 use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicU16, Ordering};
+use spin::Mutex;
 
 static NEXT_ID: AtomicU16 = AtomicU16::new(1);
+
+/// DNS cache entry
+struct DnsCacheEntry {
+    ip: [u8; 4],
+    expire_tick: u64,
+}
+
+/// Simple DNS cache — avoids repeated network round-trips for the same host
+static DNS_CACHE: Mutex<BTreeMap<String, DnsCacheEntry>> = Mutex::new(BTreeMap::new());
+
+/// Default cache TTL in ticks (~60 seconds at 1ms/tick)
+const DNS_CACHE_TTL: u64 = 60_000;
 
 fn write_qname(buf: &mut Vec<u8>, name: &str) -> bool {
     for label in name.split('.') {
@@ -38,6 +53,17 @@ fn skip_name(data: &[u8], mut idx: usize) -> Option<usize> {
 }
 
 pub fn resolve(name: &str) -> Option<[u8; 4]> {
+    // Check cache first
+    {
+        let now = crate::logger::get_ticks();
+        let cache = DNS_CACHE.lock();
+        if let Some(entry) = cache.get(name) {
+            if now < entry.expire_tick {
+                return Some(entry.ip);
+            }
+        }
+    }
+
     // Use DHCP-provided DNS, or platform-detected default
     let dns_server = crate::network::get_dns_server();
     let src_port = crate::netstack::udp::alloc_ephemeral_port();
@@ -97,7 +123,14 @@ pub fn resolve(name: &str) -> Option<[u8; 4]> {
                     return None;
                 }
                 if rtype == 1 && rclass == 1 && rdlen == 4 {
-                    return Some([resp[idx], resp[idx + 1], resp[idx + 2], resp[idx + 3]]);
+                    let ip = [resp[idx], resp[idx + 1], resp[idx + 2], resp[idx + 3]];
+                    // Cache the result
+                    let expire = crate::logger::get_ticks() + DNS_CACHE_TTL;
+                    DNS_CACHE.lock().insert(
+                        String::from(name),
+                        DnsCacheEntry { ip, expire_tick: expire },
+                    );
+                    return Some(ip);
                 }
                 idx += rdlen;
             }

@@ -571,8 +571,7 @@ pub fn sys_getpid() -> i64 {
 
 /// sys_getppid - Get parent process ID
 pub fn sys_getppid() -> i64 {
-    crate::process::current()
-        .map(|p| p.ppid as i64)
+    crate::process::with_current(|p| p.ppid as i64)
         .unwrap_or(0)
 }
 

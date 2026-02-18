@@ -567,13 +567,17 @@ pub fn read_notify_off_multiplier(dev: &PciDevice, cap_offset: u8) -> u32 {
 pub fn hardware_summary() -> String {
     let devices = DEVICES.lock();
     
-    let storage = devices.iter().filter(|d| d.class_code == class::MASS_STORAGE).count();
-    let network = devices.iter().filter(|d| d.class_code == class::NETWORK).count();
-    let display = devices.iter().filter(|d| d.class_code == class::DISPLAY).count();
-    let usb = devices.iter().filter(|d| 
-        d.class_code == class::SERIAL_BUS && d.subclass == serial::USB
-    ).count();
-    let bridges = devices.iter().filter(|d| d.class_code == class::BRIDGE).count();
+    let (mut storage, mut network, mut display, mut usb, mut bridges) = (0, 0, 0, 0, 0);
+    for d in devices.iter() {
+        match d.class_code {
+            class::MASS_STORAGE => storage += 1,
+            class::NETWORK => network += 1,
+            class::DISPLAY => display += 1,
+            class::BRIDGE => bridges += 1,
+            class::SERIAL_BUS if d.subclass == serial::USB => usb += 1,
+            _ => {}
+        }
+    }
     
     format!(
         "PCI: {} devices (Storage:{}, Network:{}, Display:{}, USB:{}, Bridges:{})",

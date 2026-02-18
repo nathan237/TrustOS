@@ -530,14 +530,29 @@ pub fn set_umask(pid: Pid, mask: u32) -> u32 {
     }
 }
 
-/// Get process by PID
+/// Get process by PID (clones entire PCB — prefer `with_process` for read access)
 pub fn get(pid: Pid) -> Option<Process> {
     PROCESS_TABLE.read().processes.get(&pid).cloned()
 }
 
-/// Get current process
+/// Get current process (clones entire PCB — prefer `with_current` for read access)
 pub fn current() -> Option<Process> {
     get(current_pid())
+}
+
+/// Zero-copy read access to a process by PID.
+/// The closure receives a `&Process` reference while the read-lock is held.
+/// Returns `None` if the PID does not exist.
+#[inline]
+pub fn with_process<R, F: FnOnce(&Process) -> R>(pid: Pid, f: F) -> Option<R> {
+    let table = PROCESS_TABLE.read();
+    table.processes.get(&pid).map(f)
+}
+
+/// Zero-copy read access to the current process.
+#[inline]
+pub fn with_current<R, F: FnOnce(&Process) -> R>(f: F) -> Option<R> {
+    with_process(current_pid(), f)
 }
 
 /// Check if a process is in Running state

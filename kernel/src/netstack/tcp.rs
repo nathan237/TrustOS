@@ -1,6 +1,6 @@
 //! TCP Protocol (minimal scaffolding)
 
-use alloc::collections::BTreeMap;
+use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU16, AtomicU32, AtomicU64, Ordering};
 use spin::Mutex;
@@ -56,14 +56,14 @@ struct TcpConnection {
 }
 
 static CONNECTIONS: Mutex<BTreeMap<ConnectionId, TcpConnection>> = Mutex::new(BTreeMap::new());
-static RX_DATA: Mutex<BTreeMap<ConnectionId, Vec<Vec<u8>>>> = Mutex::new(BTreeMap::new());
+static RX_DATA: Mutex<BTreeMap<ConnectionId, VecDeque<Vec<u8>>>> = Mutex::new(BTreeMap::new());
 static NEXT_EPHEMERAL_PORT: AtomicU16 = AtomicU16::new(49152);
 static NEXT_SEQ: AtomicU32 = AtomicU32::new(1);
 
 /// Listener for server-side TCP (tracks port → accept queue)
 struct Listener {
     backlog: u32,
-    accept_queue: Vec<ConnectionId>,
+    accept_queue: VecDeque<ConnectionId>,
 }
 
 /// Active listeners keyed by port
@@ -71,7 +71,7 @@ static LISTENERS: Mutex<BTreeMap<u16, Listener>> = Mutex::new(BTreeMap::new());
 
 /// Register a listening port
 pub fn listen_on(port: u16, backlog: u32) {
-    LISTENERS.lock().insert(port, Listener { backlog, accept_queue: Vec::new() });
+    LISTENERS.lock().insert(port, Listener { backlog, accept_queue: VecDeque::new() });
     crate::serial_println!("[TCP] Listening on port {}", port);
 }
 
@@ -85,8 +85,7 @@ pub fn stop_listening(port: u16) {
 pub fn accept_connection(listen_port: u16) -> Option<(u16, [u8; 4], u16)> {
     let mut listeners = LISTENERS.lock();
     let listener = listeners.get_mut(&listen_port)?;
-    if listener.accept_queue.is_empty() { return None; }
-    let conn_id = listener.accept_queue.remove(0);
+    let conn_id = listener.accept_queue.pop_front()?;
     let remote_ip = [
         ((conn_id.dst_ip >> 24) & 0xFF) as u8,
         ((conn_id.dst_ip >> 16) & 0xFF) as u8,
@@ -215,7 +214,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
                     // Move connection to the accept queue
                     let mut listeners = LISTENERS.lock();
                     if let Some(listener) = listeners.get_mut(&listen_port) {
-                        listener.accept_queue.push(conn_id);
+                        listener.accept_queue.push_back(conn_id);
                     }
                 }
             }
@@ -228,7 +227,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
                     if new_ack > conn.ack {
                         conn.ack = new_ack;
                         let mut rx = RX_DATA.lock();
-                        rx.entry(conn_id).or_insert_with(Vec::new).push(payload.to_vec());
+                        rx.entry(conn_id).or_insert_with(VecDeque::new).push_back(payload.to_vec());
                     }
                 }
 
@@ -305,7 +304,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
                 if !payload.is_empty() {
                     conn.ack = seq.wrapping_add(payload_len);
                     let mut rx = RX_DATA.lock();
-                    rx.entry(conn_id).or_insert_with(Vec::new).push(payload.to_vec());
+                    rx.entry(conn_id).or_insert_with(VecDeque::new).push_back(payload.to_vec());
                 }
             }
 
@@ -583,7 +582,7 @@ pub fn recv_data(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Option<Vec<
         let mut rx = RX_DATA.lock();
         if let Some(queue) = rx.get_mut(&conn_id) {
             if !queue.is_empty() {
-                return Some(queue.remove(0));
+                return queue.pop_front();
             }
         }
     }
@@ -695,11 +694,14 @@ pub fn is_connected(dest_ip: [u8; 4], dest_port: u16) -> bool {
     let src_ip = get_source_ip();
     let conns = CONNECTIONS.lock();
     
+    // Direct lookup: try all known src_ports for this dest
+    // (more efficient than iterating all connections)
     for (id, conn) in conns.iter() {
-        if id.dst_ip == ip_to_u32(dest_ip) && id.dst_port == dest_port {
-            if conn.state == TcpState::Established {
-                return true;
-            }
+        if id.dst_ip == ip_to_u32(dest_ip) && id.dst_port == dest_port
+            && id.src_ip == ip_to_u32(src_ip)
+            && conn.state == TcpState::Established
+        {
+            return true;
         }
     }
     false

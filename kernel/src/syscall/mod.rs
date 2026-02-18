@@ -224,12 +224,6 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         nr::SYS_TRUSTOS_IPC_RECV => crate::ipc::receive_raw(a1) as i64,
         nr::SYS_TRUSTOS_IPC_CREATE => crate::ipc::create_channel_raw() as i64,
         
-        // Legacy compatibility
-        1 if num < 10 => { crate::ipc::send_raw(a1); 0 },
-        2 if num < 10 => crate::ipc::receive_raw(a1) as i64,
-        3 if num < 10 => crate::ipc::create_channel_raw() as i64,
-        4 if num < 10 => crate::scheduler::spawn_task(a1) as i64,
-        
         _ => {
             crate::log_debug!("[SYSCALL] Unknown: {} (0x{:x})", num, num);
             errno::ENOSYS

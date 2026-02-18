@@ -66,6 +66,20 @@ pub enum Op {
     Halt,       // stop execution
 }
 
+impl Op {
+    /// Convert a raw u8 opcode to Op enum for jump-table dispatch.
+    /// Returns None for invalid opcodes.
+    #[inline(always)]
+    fn from_u8(v: u8) -> Option<Op> {
+        if v <= Op::Halt as u8 {
+            // SAFETY: Op is #[repr(u8)] and we checked bounds
+            Some(unsafe { core::mem::transmute(v) })
+        } else {
+            None
+        }
+    }
+}
+
 /// A runtime value on the stack
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -216,51 +230,60 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
             continue;
         }
 
-        let op = func.code[frame.ip];
+        let op_byte = func.code[frame.ip];
         frame.ip += 1;
 
+        let op = match Op::from_u8(op_byte) {
+            Some(o) => o,
+            None => return Err(format!("unknown opcode: {}", op_byte)),
+        };
+
         match op {
-            x if x == Op::PushI64 as u8 => {
+            Op::PushI64 => {
                 let bytes = read_bytes(&func.code, &mut frame.ip, 8);
                 let v = i64::from_le_bytes(bytes.try_into().unwrap());
                 stack.push(Value::I64(v));
             }
-            x if x == Op::PushF64 as u8 => {
+            Op::PushF64 => {
                 let bytes = read_bytes(&func.code, &mut frame.ip, 8);
                 let v = f64::from_le_bytes(bytes.try_into().unwrap());
                 stack.push(Value::F64(v));
             }
-            x if x == Op::PushBool as u8 => {
+            Op::PushBool => {
                 let v = func.code[frame.ip] != 0;
                 frame.ip += 1;
                 stack.push(Value::Bool(v));
             }
-            x if x == Op::PushStr as u8 => {
+            Op::PushStr => {
                 let idx = read_u16(&func.code, &mut frame.ip) as usize;
                 let s = bytecode.strings.get(idx).cloned().unwrap_or_default();
                 stack.push(Value::Str(s));
             }
-            x if x == Op::Pop as u8 => { stack.pop(); }
-            x if x == Op::Dup as u8 => {
+            Op::Pop => { stack.pop(); }
+            Op::Dup => {
                 let v = stack.last().cloned().unwrap_or(Value::Void);
                 stack.push(v);
             }
-            x if x == Op::LoadLocal as u8 => {
+            Op::LoadLocal => {
                 let slot = func.code[frame.ip] as usize;
                 frame.ip += 1;
                 stack.push(frame.locals[slot].clone());
             }
-            x if x == Op::StoreLocal as u8 => {
+            Op::StoreLocal => {
                 let slot = func.code[frame.ip] as usize;
                 frame.ip += 1;
                 let val = stack.pop().unwrap_or(Value::Void);
                 frame.locals[slot] = val;
             }
+            Op::LoadGlobal | Op::StoreGlobal => {
+                // Globals not yet implemented — skip 2 bytes
+                frame.ip += 2;
+            }
             // Integer arithmetic (auto-promotes to f64 if operands are float)
-            x if x == Op::AddI as u8 => { bin_op_i64(&mut stack, |a, b| a.wrapping_add(b), |a, b| a + b)?; }
-            x if x == Op::SubI as u8 => { bin_op_i64(&mut stack, |a, b| a.wrapping_sub(b), |a, b| a - b)?; }
-            x if x == Op::MulI as u8 => { bin_op_i64(&mut stack, |a, b| a.wrapping_mul(b), |a, b| a * b)?; }
-            x if x == Op::DivI as u8 => {
+            Op::AddI => { bin_op_i64(&mut stack, |a, b| a.wrapping_add(b), |a, b| a + b)?; }
+            Op::SubI => { bin_op_i64(&mut stack, |a, b| a.wrapping_sub(b), |a, b| a - b)?; }
+            Op::MulI => { bin_op_i64(&mut stack, |a, b| a.wrapping_mul(b), |a, b| a * b)?; }
+            Op::DivI => {
                 let b_val = stack.pop().unwrap_or(Value::I64(0));
                 let a_val = stack.pop().unwrap_or(Value::I64(0));
                 match (&a_val, &b_val) {
@@ -275,7 +298,7 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                     }
                 }
             }
-            x if x == Op::ModI as u8 => {
+            Op::ModI => {
                 let b_val = stack.pop().unwrap_or(Value::I64(0));
                 let a_val = stack.pop().unwrap_or(Value::I64(0));
                 match (&a_val, &b_val) {
@@ -290,7 +313,7 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                     }
                 }
             }
-            x if x == Op::NegI as u8 => {
+            Op::NegI => {
                 let v = stack.pop().unwrap_or(Value::I64(0));
                 match v {
                     Value::F64(f) => stack.push(Value::F64(-f)),
@@ -298,69 +321,69 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                 }
             }
             // Float arithmetic
-            x if x == Op::AddF as u8 => { bin_op_f64(&mut stack, |a, b| a + b)?; }
-            x if x == Op::SubF as u8 => { bin_op_f64(&mut stack, |a, b| a - b)?; }
-            x if x == Op::MulF as u8 => { bin_op_f64(&mut stack, |a, b| a * b)?; }
-            x if x == Op::DivF as u8 => { bin_op_f64(&mut stack, |a, b| a / b)?; }
-            x if x == Op::NegF as u8 => {
+            Op::AddF => { bin_op_f64(&mut stack, |a, b| a + b)?; }
+            Op::SubF => { bin_op_f64(&mut stack, |a, b| a - b)?; }
+            Op::MulF => { bin_op_f64(&mut stack, |a, b| a * b)?; }
+            Op::DivF => { bin_op_f64(&mut stack, |a, b| a / b)?; }
+            Op::NegF => {
                 let v = stack.pop().unwrap_or(Value::F64(0.0)).as_f64()?;
                 stack.push(Value::F64(-v));
             }
             // Integer comparisons (auto-promotes to f64 if operands are float)
-            x if x == Op::EqI as u8 => { cmp_i64(&mut stack, |a, b| a == b, |a, b| a == b)?; }
-            x if x == Op::NeI as u8 => { cmp_i64(&mut stack, |a, b| a != b, |a, b| a != b)?; }
-            x if x == Op::LtI as u8 => { cmp_i64(&mut stack, |a, b| a < b, |a, b| a < b)?; }
-            x if x == Op::GtI as u8 => { cmp_i64(&mut stack, |a, b| a > b, |a, b| a > b)?; }
-            x if x == Op::LeI as u8 => { cmp_i64(&mut stack, |a, b| a <= b, |a, b| a <= b)?; }
-            x if x == Op::GeI as u8 => { cmp_i64(&mut stack, |a, b| a >= b, |a, b| a >= b)?; }
+            Op::EqI => { cmp_i64(&mut stack, |a, b| a == b, |a, b| a == b)?; }
+            Op::NeI => { cmp_i64(&mut stack, |a, b| a != b, |a, b| a != b)?; }
+            Op::LtI => { cmp_i64(&mut stack, |a, b| a < b, |a, b| a < b)?; }
+            Op::GtI => { cmp_i64(&mut stack, |a, b| a > b, |a, b| a > b)?; }
+            Op::LeI => { cmp_i64(&mut stack, |a, b| a <= b, |a, b| a <= b)?; }
+            Op::GeI => { cmp_i64(&mut stack, |a, b| a >= b, |a, b| a >= b)?; }
             // Float comparisons
-            x if x == Op::EqF as u8 => { cmp_f64(&mut stack, |a, b| a == b)?; }
-            x if x == Op::NeF as u8 => { cmp_f64(&mut stack, |a, b| a != b)?; }
-            x if x == Op::LtF as u8 => { cmp_f64(&mut stack, |a, b| a < b)?; }
-            x if x == Op::GtF as u8 => { cmp_f64(&mut stack, |a, b| a > b)?; }
-            x if x == Op::LeF as u8 => { cmp_f64(&mut stack, |a, b| a <= b)?; }
-            x if x == Op::GeF as u8 => { cmp_f64(&mut stack, |a, b| a >= b)?; }
+            Op::EqF => { cmp_f64(&mut stack, |a, b| a == b)?; }
+            Op::NeF => { cmp_f64(&mut stack, |a, b| a != b)?; }
+            Op::LtF => { cmp_f64(&mut stack, |a, b| a < b)?; }
+            Op::GtF => { cmp_f64(&mut stack, |a, b| a > b)?; }
+            Op::LeF => { cmp_f64(&mut stack, |a, b| a <= b)?; }
+            Op::GeF => { cmp_f64(&mut stack, |a, b| a >= b)?; }
             // Logical
-            x if x == Op::And as u8 => {
+            Op::And => {
                 let b = stack.pop().unwrap_or(Value::Bool(false)).as_bool()?;
                 let a = stack.pop().unwrap_or(Value::Bool(false)).as_bool()?;
                 stack.push(Value::Bool(a && b));
             }
-            x if x == Op::Or as u8 => {
+            Op::Or => {
                 let b = stack.pop().unwrap_or(Value::Bool(false)).as_bool()?;
                 let a = stack.pop().unwrap_or(Value::Bool(false)).as_bool()?;
                 stack.push(Value::Bool(a || b));
             }
-            x if x == Op::Not as u8 => {
+            Op::Not => {
                 let v = stack.pop().unwrap_or(Value::Bool(false)).as_bool()?;
                 stack.push(Value::Bool(!v));
             }
             // Bitwise (convert floats to i64 if needed)
-            x if x == Op::BitAnd as u8 => { bin_op_i64(&mut stack, |a, b| a & b, |a, b| (a as i64 & b as i64) as f64)?; }
-            x if x == Op::BitOr as u8 => { bin_op_i64(&mut stack, |a, b| a | b, |a, b| (a as i64 | b as i64) as f64)?; }
-            x if x == Op::BitXor as u8 => { bin_op_i64(&mut stack, |a, b| a ^ b, |a, b| (a as i64 ^ b as i64) as f64)?; }
-            x if x == Op::Shl as u8 => { bin_op_i64(&mut stack, |a, b| a << (b & 63), |a, b| ((a as i64) << (b as i64 & 63)) as f64)?; }
-            x if x == Op::Shr as u8 => { bin_op_i64(&mut stack, |a, b| a >> (b & 63), |a, b| ((a as i64) >> (b as i64 & 63)) as f64)?; }
+            Op::BitAnd => { bin_op_i64(&mut stack, |a, b| a & b, |a, b| (a as i64 & b as i64) as f64)?; }
+            Op::BitOr => { bin_op_i64(&mut stack, |a, b| a | b, |a, b| (a as i64 | b as i64) as f64)?; }
+            Op::BitXor => { bin_op_i64(&mut stack, |a, b| a ^ b, |a, b| (a as i64 ^ b as i64) as f64)?; }
+            Op::Shl => { bin_op_i64(&mut stack, |a, b| a << (b & 63), |a, b| ((a as i64) << (b as i64 & 63)) as f64)?; }
+            Op::Shr => { bin_op_i64(&mut stack, |a, b| a >> (b & 63), |a, b| ((a as i64) >> (b as i64 & 63)) as f64)?; }
             // Conversion
-            x if x == Op::I64toF64 as u8 => {
+            Op::I64toF64 => {
                 let v = stack.pop().unwrap_or(Value::I64(0)).as_i64()?;
                 stack.push(Value::F64(v as f64));
             }
-            x if x == Op::F64toI64 as u8 => {
+            Op::F64toI64 => {
                 let v = stack.pop().unwrap_or(Value::F64(0.0)).as_f64()?;
                 stack.push(Value::I64(v as i64));
             }
             // Control flow
-            x if x == Op::Jump as u8 => {
+            Op::Jump => {
                 let off = read_u16(&func.code, &mut frame.ip) as usize;
                 frame.ip = off;
             }
-            x if x == Op::JumpIfFalse as u8 => {
+            Op::JumpIfFalse => {
                 let off = read_u16(&func.code, &mut frame.ip) as usize;
                 let cond = stack.pop().unwrap_or(Value::Bool(false)).as_bool()?;
                 if !cond { frame.ip = off; }
             }
-            x if x == Op::Call as u8 => {
+            Op::Call => {
                 let func_idx = read_u16(&func.code, &mut frame.ip) as usize;
                 let argc = func.code[frame.ip] as usize;
                 frame.ip += 1;
@@ -377,7 +400,7 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                 }
                 frames.push(new_frame);
             }
-            x if x == Op::CallBuiltin as u8 => {
+            Op::CallBuiltin => {
                 let builtin = func.code[frame.ip];
                 frame.ip += 1;
                 let argc = func.code[frame.ip] as usize;
@@ -390,7 +413,7 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                 let result = exec_builtin(builtin, &args, &mut output)?;
                 stack.push(result);
             }
-            x if x == Op::Return as u8 => {
+            Op::Return => {
                 let ret = stack.pop().unwrap_or(Value::Void);
                 if frames.len() <= 1 {
                     stack.push(ret);
@@ -400,7 +423,7 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                 stack.push(ret);
             }
             // Array
-            x if x == Op::NewArray as u8 => {
+            Op::NewArray => {
                 let count = read_u16(&func.code, &mut frame.ip) as usize;
                 let mut arr = Vec::with_capacity(count);
                 for _ in 0..count {
@@ -409,7 +432,7 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                 arr.reverse();
                 stack.push(Value::Array(arr));
             }
-            x if x == Op::ArrayGet as u8 => {
+            Op::ArrayGet => {
                 let idx = stack.pop().unwrap_or(Value::I64(0)).as_i64()? as usize;
                 let arr = stack.pop().unwrap_or(Value::Array(Vec::new()));
                 match arr {
@@ -424,7 +447,7 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                     _ => return Err(String::from("index on non-array")),
                 }
             }
-            x if x == Op::ArraySet as u8 => {
+            Op::ArraySet => {
                 let val = stack.pop().unwrap_or(Value::Void);
                 let idx = stack.pop().unwrap_or(Value::I64(0)).as_i64()? as usize;
                 let arr = stack.pop().unwrap_or(Value::Array(Vec::new()));
@@ -436,7 +459,7 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                     _ => return Err(String::from("index-set on non-array")),
                 }
             }
-            x if x == Op::ArrayLen as u8 => {
+            Op::ArrayLen => {
                 let v = stack.pop().unwrap_or(Value::Void);
                 let len = match &v {
                     Value::Array(a) => a.len() as i64,
@@ -445,13 +468,23 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
                 };
                 stack.push(Value::I64(len));
             }
-            x if x == Op::StrConcat as u8 => {
+            Op::ArrayPush => {
+                let val = stack.pop().unwrap_or(Value::Void);
+                let arr = stack.pop().unwrap_or(Value::Array(Vec::new()));
+                match arr {
+                    Value::Array(mut a) => {
+                        a.push(val);
+                        stack.push(Value::Array(a));
+                    }
+                    _ => return Err(String::from("push on non-array")),
+                }
+            }
+            Op::StrConcat => {
                 let b = stack.pop().unwrap_or(Value::Str(String::new())).to_display();
                 let a = stack.pop().unwrap_or(Value::Str(String::new())).to_display();
                 stack.push(Value::Str(format!("{}{}", a, b)));
             }
-            x if x == Op::Halt as u8 => break,
-            _ => return Err(format!("unknown opcode: {}", op)),
+            Op::Halt => break,
         }
     }
 

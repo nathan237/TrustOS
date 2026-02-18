@@ -87,7 +87,7 @@ pub fn reap_zombies() {
         .iter()
         .filter_map(|(pid, _, state)| {
             if *state == ProcessState::Zombie {
-                process::get(*pid).map(|p| (*pid, p.ppid))
+                process::with_process(*pid, |p| (*pid, p.ppid))
             } else {
                 None
             }
@@ -96,7 +96,7 @@ pub fn reap_zombies() {
     
     for (pid, ppid) in zombies {
         // If parent is init (or parent doesn't exist), reap it
-        if ppid == PID_INIT || process::get(ppid).is_none() {
+        if ppid == PID_INIT || process::with_process(ppid, |_| ()).is_none() {
             if let Ok(code) = process::wait(pid) {
                 crate::log_debug!("[INIT] Reaped zombie process {} (exit code {})", pid, code);
             }
