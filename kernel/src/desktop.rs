@@ -455,6 +455,10 @@ pub enum IconAction {
     OpenBrowser,
     OpenModelEditor,
     OpenGame3D,
+    OpenMario64,
+    OpenNes,
+    OpenGameBoy,
+    OpenGameLab,
 }
 
 /// Window type for content
@@ -479,8 +483,13 @@ pub enum WindowType {
     Game3D,  // 3D FPS raycasting game
     Chess,   // Chess game vs AI
     Chess3D, // 3D Matrix-style chess
+    Mario64, // Super Mario 64 clone with TAS
+    NesEmu,  // NES emulator
+    GameBoyEmu, // Game Boy emulator
+    GameBoyInput, // Game Boy input display (separate window)
     BinaryViewer, // TrustView binary analyzer
     LabMode,      // TrustLab introspection laboratory
+    GameLab,      // Game Boy emulator analysis dashboard
 }
 
 /// Window structure
@@ -786,8 +795,18 @@ pub struct Desktop {
     pub chess3d_states: BTreeMap<u32, crate::chess3d::Chess3DState>,
     // Binary viewer states (window_id -> BinaryViewerState)
     pub binary_viewer_states: BTreeMap<u32, crate::apps::binary_viewer::BinaryViewerState>,
+    // Mario64 states (window_id -> Mario64Game)
+    pub mario64_states: BTreeMap<u32, crate::mario64::Mario64Game>,
+    // NES emulator states
+    pub nes_states: BTreeMap<u32, crate::nes::NesEmulator>,
+    // Game Boy emulator states
+    pub gameboy_states: BTreeMap<u32, crate::gameboy::GameBoyEmulator>,
     // Lab mode states (window_id -> LabState)
     pub lab_states: BTreeMap<u32, crate::lab_mode::LabState>,
+    // GameLab states (window_id -> GameLabState)
+    pub gamelab_states: BTreeMap<u32, crate::game_lab::GameLabState>,
+    // GameBoy Input window links (input_window_id -> gb_window_id)
+    pub gb_input_links: BTreeMap<u32, u32>,
     // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
     pub scale_factor: u32,
     // Matrix rain state (depth-parallax advancing effect)
@@ -798,6 +817,8 @@ pub struct Desktop {
     matrix_initialized: bool,
     // Terminal auto-suggestions: how many suggestion lines added after prompt
     terminal_suggestion_count: usize,
+    // Start menu search
+    pub start_menu_search: String,
 }
 
 /// Calculator state for interactive calculator windows
@@ -1099,8 +1120,13 @@ impl Desktop {
             game3d_states: BTreeMap::new(),
             chess_states: BTreeMap::new(),
             chess3d_states: BTreeMap::new(),
+            mario64_states: BTreeMap::new(),
+            nes_states: BTreeMap::new(),
+            gameboy_states: BTreeMap::new(),
             binary_viewer_states: BTreeMap::new(),
             lab_states: BTreeMap::new(),
+            gamelab_states: BTreeMap::new(),
+            gb_input_links: BTreeMap::new(),
             scale_factor: 1,
             matrix_chars: Vec::new(),
             matrix_heads: Vec::new(),
@@ -1108,6 +1134,7 @@ impl Desktop {
             matrix_seeds: Vec::new(),
             matrix_initialized: false,
             terminal_suggestion_count: 0,
+            start_menu_search: String::new(),
         }
     }
     
@@ -1126,6 +1153,9 @@ impl Desktop {
         self.snake_states.clear();
         self.game3d_states.clear();
         self.chess3d_states.clear();
+        self.mario64_states.clear();
+        self.nes_states.clear();
+        self.gameboy_states.clear();
         self.binary_viewer_states.clear();
         self.lab_states.clear();
         // Browser
@@ -1136,6 +1166,7 @@ impl Desktop {
         // Input / UI state
         self.input_buffer.clear();
         self.start_menu_open = false;
+        self.start_menu_search.clear();
         self.cursor_blink = false;
         self.context_menu.visible = false;
         self.context_menu.items.clear();
@@ -1348,6 +1379,8 @@ struct AppConfig {
             ("TrustEd", IconType::ModelEditor, IconAction::OpenModelEditor),
             ("Settings", IconType::Settings, IconAction::OpenSettings),
             ("About", IconType::About, IconAction::OpenAbout),
+            ("GameBoy", IconType::GameBoy, IconAction::OpenGameBoy),
+            ("GameLab", IconType::GameLab, IconAction::OpenGameLab),
         ];
         
         for (i, (name, icon_type, action)) in dock_items.iter().enumerate() {
@@ -1554,11 +1587,33 @@ struct AppConfig {
             WindowType::Chess3D => {
                 self.chess3d_states.insert(window.id, crate::chess3d::Chess3DState::new());
             },
+            WindowType::Mario64 => {
+                self.mario64_states.insert(window.id, crate::mario64::Mario64Game::new());
+            },
+            WindowType::NesEmu => {
+                let mut emu = crate::nes::NesEmulator::new();
+                // Auto-load embedded ROM if available
+                if let Some(rom_data) = crate::embedded_roms::nes_rom() {
+                    emu.load_rom(rom_data);
+                }
+                self.nes_states.insert(window.id, emu);
+            },
+            WindowType::GameBoyEmu => {
+                let mut emu = crate::gameboy::GameBoyEmulator::new();
+                // Auto-load embedded ROM if available
+                if let Some(rom_data) = crate::embedded_roms::gb_rom() {
+                    emu.load_rom(rom_data);
+                }
+                self.gameboy_states.insert(window.id, emu);
+            },
             WindowType::BinaryViewer => {
                 // State is inserted externally via open_binary_viewer()
             },
             WindowType::LabMode => {
                 self.lab_states.insert(window.id, crate::lab_mode::LabState::new());
+            },
+            WindowType::GameLab => {
+                self.gamelab_states.insert(window.id, crate::game_lab::GameLabState::new());
             },
             _ => {}
         }
@@ -1575,7 +1630,15 @@ struct AppConfig {
     pub fn close_window(&mut self, id: u32) {
         if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
             if w.animate_close() {
-                // Animation started, window will be removed after animation
+                // Animation started — immediately free heavyweight emulator/game states
+                // (the window chrome will still animate, but we don't need the state)
+                self.gameboy_states.remove(&id);
+                self.nes_states.remove(&id);
+                self.mario64_states.remove(&id);
+                self.game3d_states.remove(&id);
+                self.chess3d_states.remove(&id);
+                self.gamelab_states.remove(&id);
+                self.lab_states.remove(&id);
                 return;
             }
         }
@@ -1589,8 +1652,13 @@ struct AppConfig {
         self.game3d_states.remove(&id);
         self.chess_states.remove(&id);
         self.chess3d_states.remove(&id);
+        self.mario64_states.remove(&id);
+        self.nes_states.remove(&id);
+        self.gameboy_states.remove(&id);
         self.binary_viewer_states.remove(&id);
         self.lab_states.remove(&id);
+        self.gamelab_states.remove(&id);
+        self.gb_input_links.remove(&id);
     }
     
     /// Minimize/restore a window (with animation)
@@ -1622,6 +1690,10 @@ struct AppConfig {
             self.model_editor_states.remove(&id);
             self.game3d_states.remove(&id);
             self.chess3d_states.remove(&id);
+            self.mario64_states.remove(&id);
+            self.nes_states.remove(&id);
+            self.gameboy_states.remove(&id);
+            self.gamelab_states.remove(&id);
         }
     }
     
@@ -1752,12 +1824,14 @@ struct AppConfig {
             if self.start_menu_open {
                 if let Some(action) = self.check_start_menu_click(x, y) {
                     self.start_menu_open = false;
+                    self.start_menu_search.clear();
                     self.handle_menu_action(action);
                     return;
                 }
                 // Click outside menu (but not on taskbar TrustOS button) → close menu
                 if y < (self.height - TASKBAR_HEIGHT) as i32 || x >= 108 {
                     self.start_menu_open = false;
+                    self.start_menu_search.clear();
                     return;
                 }
             }
@@ -1895,6 +1969,122 @@ struct AppConfig {
                         }
                     }
 
+                    // Handle Game Boy menu bar clicks (LAB / INPUT buttons)
+                    if self.windows[i].window_type == WindowType::GameBoyEmu {
+                        let win = &self.windows[i];
+                        let content_x = win.x as u32;
+                        let content_y = (win.y + TITLE_BAR_HEIGHT as i32) as u32;
+                        let content_w = win.width;
+                        let menu_h: u32 = 22;
+                        let win_id = win.id;
+                        let win_x = win.x;
+                        let win_y = win.y;
+                        let win_w = win.width;
+                        let win_h = win.height;
+                        let mx = x as u32;
+                        let my = y as u32;
+                        
+                        // Check if click is in menu bar area
+                        if my >= content_y && my < content_y + menu_h {
+                            // [INPUT] button (right side)
+                            let inp_btn_w: u32 = 48;
+                            let inp_btn_x = content_x + content_w - inp_btn_w - 4;
+                            if mx >= inp_btn_x && mx < inp_btn_x + inp_btn_w {
+                                // Open input window below the GB window
+                                let inp_x = win_x;
+                                let inp_y = win_y + win_h as i32 + 2;
+                                let inp_id = self.create_window("GB Input", inp_x, inp_y, win_w.min(480), 160, WindowType::GameBoyInput);
+                                self.gb_input_links.insert(inp_id, win_id);
+                            }
+                            
+                            // [LAB] button
+                            let lab_btn_w: u32 = 32;
+                            let lab_btn_x = inp_btn_x - lab_btn_w - 6;
+                            if mx >= lab_btn_x && mx < lab_btn_x + lab_btn_w {
+                                // Open GameLab to the right of the Game Boy window
+                                let sw = self.width;
+                                let sh = self.height;
+                                let lab_x = win_x + win_w as i32 + 4;
+                                let lab_w = (sw as i32 - lab_x).max(400) as u32;
+                                let lab_h = sh - TASKBAR_HEIGHT;
+                                let lab_id = self.create_window("Game Lab", lab_x, 0, lab_w, lab_h, WindowType::GameLab);
+                                if let Some(lab) = self.gamelab_states.get_mut(&lab_id) {
+                                    lab.linked_gb_id = Some(win_id);
+                                }
+                                self.focus_window(lab_id);
+                            }
+                        }
+                    }
+
+                    // Handle Game Boy Input window clicks (forward to linked emulator)
+                    if self.windows[i].window_type == WindowType::GameBoyInput {
+                        let win = &self.windows[i];
+                        let cx = win.x as u32;
+                        let cy = (win.y + TITLE_BAR_HEIGHT as i32) as u32;
+                        let cw = win.width;
+                        let ch = win.height.saturating_sub(TITLE_BAR_HEIGHT);
+                        let win_id = win.id;
+                        let mx = x as u32;
+                        let my = y as u32;
+                        
+                        let linked_id = self.gb_input_links.get(&win_id).copied();
+                        let buttons = crate::game_lab::get_input_buttons(cx, cy, cw, ch);
+                        for &(bx, by, bw, bh, key) in &buttons {
+                            if mx >= bx && mx < bx + bw && my >= by && my < by + bh {
+                                // Find the linked GB emulator
+                                let emu_id = linked_id.or_else(|| self.gameboy_states.keys().next().copied());
+                                if let Some(eid) = emu_id {
+                                    if let Some(emu) = self.gameboy_states.get_mut(&eid) {
+                                        emu.handle_key(key);
+                                    }
+                                }
+                                break;
+                            }
+                        }
+                    }
+
+                    // Handle GameLab panel clicks
+                    if self.windows[i].window_type == WindowType::GameLab {
+                        let win = &self.windows[i];
+                        let rel_x = x - win.x;
+                        let rel_y = y - win.y;
+                        let win_id = win.id;
+                        let ww = win.width;
+                        let wh = win.height;
+                        if let Some(lab) = self.gamelab_states.get_mut(&win_id) {
+                            // Check Save/Load header button clicks
+                            let save_rx = ww as i32 - 120;
+                            if rel_y >= TITLE_BAR_HEIGHT as i32 + 2 && rel_y < TITLE_BAR_HEIGHT as i32 + 18 {
+                                if rel_x >= save_rx && rel_x < save_rx + 48 {
+                                    // SAVE click
+                                    let emu_id = lab.linked_gb_id
+                                        .or_else(|| self.gameboy_states.keys().next().copied());
+                                    if let Some(eid) = emu_id {
+                                        if let Some(emu) = self.gameboy_states.get(&eid) {
+                                            self.gamelab_states.get_mut(&win_id).unwrap().save_from(emu);
+                                            crate::serial_println!("[GameLab] State saved (click)");
+                                        }
+                                    }
+                                } else if rel_x >= save_rx + 54 && rel_x < save_rx + 102 {
+                                    // LOAD click
+                                    let emu_id = lab.linked_gb_id
+                                        .or_else(|| self.gameboy_states.keys().next().copied());
+                                    if let Some(eid) = emu_id {
+                                        let lab = self.gamelab_states.get(&win_id).unwrap();
+                                        if lab.save_state.valid {
+                                            if let Some(emu) = self.gameboy_states.get_mut(&eid) {
+                                                self.gamelab_states.get(&win_id).unwrap().load_into(emu);
+                                                crate::serial_println!("[GameLab] State loaded (click)");
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                lab.handle_click(rel_x, rel_y, ww, wh);
+                            }
+                        }
+                    }
+
                     // Handle binary viewer clicks
                     if self.windows[i].window_type == WindowType::BinaryViewer {
                         let win = &self.windows[i];
@@ -1975,6 +2165,7 @@ struct AppConfig {
             }
             
             self.start_menu_open = false;
+            self.start_menu_search.clear();
         } else {
             // Mouse released - stop dragging and resizing
             for w in &mut self.windows {
@@ -2028,6 +2219,27 @@ struct AppConfig {
                     state.handle_mouse_release();
                 }
             }
+            
+            // Release all input buttons on Game Boy Input windows on mouse up
+            let input_ids: Vec<(u32, Option<u32>)> = self.windows.iter()
+                .filter(|w| w.window_type == WindowType::GameBoyInput && w.focused)
+                .map(|w| (w.id, self.gb_input_links.get(&w.id).copied()))
+                .collect();
+            for (_iid, linked_id) in input_ids {
+                let emu_id = linked_id.or_else(|| self.gameboy_states.keys().next().copied());
+                if let Some(eid) = emu_id {
+                    if let Some(emu) = self.gameboy_states.get_mut(&eid) {
+                        emu.handle_key_release(b'w');
+                        emu.handle_key_release(b'a');
+                        emu.handle_key_release(b's');
+                        emu.handle_key_release(b'd');
+                        emu.handle_key_release(b'x');
+                        emu.handle_key_release(b'z');
+                        emu.handle_key_release(b'c');
+                        emu.handle_key_release(b'\r');
+                    }
+                }
+            }
         }
     }
     
@@ -2040,6 +2252,7 @@ struct AppConfig {
         // Close any existing context menu
         self.context_menu.visible = false;
         self.start_menu_open = false;
+        self.start_menu_search.clear();
         
         // Check if right-click on desktop icon
         if let Some(idx) = self.check_icon_index(x, y) {
@@ -2265,6 +2478,25 @@ struct AppConfig {
             IconAction::OpenGame3D => {
                 self.create_window("TrustDoom 3D", 80 + offset, 50 + offset, 640, 480, WindowType::Game3D)
             },
+            IconAction::OpenMario64 => {
+                self.create_window("TrustMario64", 60 + offset, 40 + offset, 640, 480, WindowType::Mario64)
+            },
+            IconAction::OpenNes => {
+                self.create_window("NES Emulator", 80 + offset, 50 + offset, 512, 480, WindowType::NesEmu)
+            },
+            IconAction::OpenGameBoy => {
+                self.create_window("Game Boy", 100 + offset, 60 + offset, 480, 432, WindowType::GameBoyEmu)
+            },
+            IconAction::OpenGameLab => {
+                let sw = self.width;
+                let sh = self.height;
+                // Open on the right side, leaving room for Game Boy (480px)
+                let lab_x = 490i32;
+                let lab_w = (sw as i32 - lab_x).max(400) as u32;
+                let lab_h = sh - TASKBAR_HEIGHT;
+                let lab_id = self.create_window("Game Lab", lab_x, 0, lab_w, lab_h, WindowType::GameLab);
+                lab_id
+            },
         };
         // Auto-focus newly created window
         self.focus_window(id);
@@ -2274,6 +2506,9 @@ struct AppConfig {
         // TrustOS button (left side, matches draw_taskbar)
         if x >= 4 && x < 112 {
             self.start_menu_open = !self.start_menu_open;
+            if !self.start_menu_open {
+                self.start_menu_search.clear();
+            }
             return;
         }
         
@@ -2326,8 +2561,8 @@ struct AppConfig {
     /// Menu actions enum — must match draw_start_menu layout exactly
     fn check_start_menu_click(&self, x: i32, y: i32) -> Option<u8> {
         // Same dimensions as draw_start_menu()
-        let menu_w = 280u32;
-        let menu_h = 504u32;
+        let menu_w = 420u32;
+        let menu_h = 640u32;
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
@@ -2336,21 +2571,46 @@ struct AppConfig {
             return None;
         }
         
-        // 15 list items at menu_y + 30 + (i * 32), each 30px tall
+        // Search bar is at menu_y + 30, height 32 — clicking there focuses search (no action)
+        let search_bar_bottom = menu_y + 66;
+        
+        // 18 list items at search_bar_bottom + 4 + (i * 28), each 26px tall
         // Matches draw_start_menu items array:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=TrustLab, 11=Settings, 12=Exit Desktop, 13=Shutdown, 14=Reboot
-        let items_start_y = menu_y + 30;
-        let item_spacing = 32;
-        let item_h = 30;
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=Mario64,
+        // 11=NES, 12=GameBoy, 13=TrustLab, 14=Settings, 15=Exit Desktop, 16=Shutdown, 17=Reboot
+        let items_start_y = search_bar_bottom + 4;
+        let item_spacing = 28;
+        let item_h = 26;
+        
+        // Build filtered items list to match draw_start_menu filtering
+        let all_labels: [&str; 18] = [
+            "Terminal", "Files", "Calculator", "Network", "Text Editor",
+            "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
+            "Mario 64", "NES Emulator", "Game Boy", "TrustLab",
+            "Settings", "Exit Desktop", "Shutdown", "Reboot",
+        ];
+        let all_indices: [u8; 18] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17];
+        
+        // Filter by search
+        let search = self.start_menu_search.trim();
+        let filtered: alloc::vec::Vec<u8> = if search.is_empty() {
+            all_indices.to_vec()
+        } else {
+            let search_lower: String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+            all_indices.iter().filter(|&&idx| {
+                let label: String = all_labels[idx as usize].chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                label.contains(search_lower.as_str())
+            }).copied().collect()
+        };
         
         if y >= items_start_y {
-            let idx = ((y - items_start_y) / item_spacing) as u8;
-            if idx < 15 {
+            let clicked_row = ((y - items_start_y) / item_spacing) as usize;
+            if clicked_row < filtered.len() {
                 // Verify within item height (not in gap)
-                let item_top = items_start_y + (idx as i32 * item_spacing);
+                let item_top = items_start_y + (clicked_row as i32 * item_spacing);
                 if y < item_top + item_h {
-                    return Some(idx);
+                    return Some(filtered[clicked_row]);
                 }
             }
         }
@@ -2361,7 +2621,7 @@ struct AppConfig {
     fn handle_menu_action(&mut self, action: u8) {
         // Matches draw_start_menu items array order:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=TrustLab, 11=Settings, 12=Exit Desktop, 13=Shutdown, 14=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=Mario64, 11=TrustLab, 12=Settings, 13=Exit Desktop, 14=Shutdown, 15=Reboot
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
@@ -2401,22 +2661,31 @@ struct AppConfig {
                     w.maximized = true;
                 }
             },
-            10 => { // TrustLab
+            10 => { // Mario 64
+                self.create_window("TrustMario64", 60, 40, 640, 480, WindowType::Mario64);
+            },
+            11 => { // NES Emulator
+                self.create_window("NES Emulator", 80, 50, 512, 480, WindowType::NesEmu);
+            },
+            12 => { // Game Boy
+                self.create_window("Game Boy", 100, 60, 480, 432, WindowType::GameBoyEmu);
+            },
+            13 => { // TrustLab
                 self.open_lab_mode();
             },
-            11 => { // Settings
+            14 => { // Settings
                 self.open_settings_panel();
             },
-            12 => { // Exit Desktop
+            15 => { // Exit Desktop
                 crate::serial_println!("[GUI] Exit Desktop from start menu");
                 EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
             },
-            13 => { // Shutdown
+            16 => { // Shutdown
                 crate::println!("\n\n=== SYSTEM SHUTDOWN ===");
                 crate::println!("Goodbye!");
                 loop { x86_64::instructions::hlt(); }
             },
-            14 => { // Reboot
+            17 => { // Reboot
                 crate::serial_println!("[SYSTEM] Reboot requested");
                 // Triple fault reboot
                 unsafe {
@@ -2431,6 +2700,48 @@ struct AppConfig {
     
     /// Handle keyboard input for the focused window
     pub fn handle_keyboard_input(&mut self, key: u8) {
+        // If start menu is open, route keyboard to search bar
+        if self.start_menu_open {
+            match key {
+                0x1B => { // Escape — close menu
+                    self.start_menu_open = false;
+                    self.start_menu_search.clear();
+                },
+                0x08 | 0x7F => { // Backspace / Delete
+                    self.start_menu_search.pop();
+                },
+                0x0D | 0x0A => { // Enter — launch first matching item
+                    // Build filtered list same as draw/click
+                    let all_labels: [&str; 18] = [
+                        "Terminal", "Files", "Calculator", "Network", "Text Editor",
+                        "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
+                        "Mario 64", "NES Emulator", "Game Boy", "TrustLab",
+                        "Settings", "Exit Desktop", "Shutdown", "Reboot",
+                    ];
+                    let search = self.start_menu_search.trim();
+                    if !search.is_empty() {
+                        let search_lower: String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                        for (i, label) in all_labels.iter().enumerate() {
+                            let label_lower: String = label.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                            if label_lower.contains(search_lower.as_str()) {
+                                self.start_menu_open = false;
+                                self.start_menu_search.clear();
+                                self.handle_menu_action(i as u8);
+                                return;
+                            }
+                        }
+                    }
+                },
+                b' '..=b'~' => { // Printable ASCII
+                    if self.start_menu_search.len() < 32 {
+                        self.start_menu_search.push(key as char);
+                    }
+                },
+                _ => {}
+            }
+            return;
+        }
+
         // Extract type and id to avoid borrow conflict
         let focused_info = self.windows.iter().find(|w| w.focused).map(|w| (w.window_type, w.id));
         
@@ -2498,6 +2809,21 @@ struct AppConfig {
                         state.handle_key(key);
                     }
                 },
+                WindowType::Mario64 => {
+                    if let Some(game) = self.mario64_states.get_mut(&win_id) {
+                        game.handle_key(key);
+                    }
+                },
+                WindowType::NesEmu => {
+                    if let Some(emu) = self.nes_states.get_mut(&win_id) {
+                        emu.handle_key(key);
+                    }
+                },
+                WindowType::GameBoyEmu => {
+                    if let Some(emu) = self.gameboy_states.get_mut(&win_id) {
+                        emu.handle_key(key);
+                    }
+                },
                 WindowType::BinaryViewer => {
                     if let Some(viewer) = self.binary_viewer_states.get_mut(&win_id) {
                         use crate::keyboard::{KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_PGUP, KEY_PGDOWN, KEY_HOME, KEY_END};
@@ -2524,6 +2850,32 @@ struct AppConfig {
                         } else {
                             lab.handle_key(key);
                         }
+                    }
+                },
+                WindowType::GameLab => {
+                    if let Some(lab) = self.gamelab_states.get_mut(&win_id) {
+                        // Handle Enter for search scan/filter
+                        if key == 0x0D || key == 0x0A {
+                            if lab.active_tab == crate::game_lab::LabTab::Search {
+                                // Find linked emulator
+                                let emu_id = lab.linked_gb_id
+                                    .or_else(|| self.gameboy_states.keys().next().copied());
+                                if let Some(eid) = emu_id {
+                                    let do_initial = !lab.search_active;
+                                    if do_initial {
+                                        if let Some(emu) = self.gameboy_states.get(&eid) {
+                                            self.gamelab_states.get_mut(&win_id).unwrap().search_initial(emu);
+                                        }
+                                    } else {
+                                        if let Some(emu) = self.gameboy_states.get(&eid) {
+                                            self.gamelab_states.get_mut(&win_id).unwrap().search_filter(emu);
+                                        }
+                                    }
+                                }
+                                return;
+                            }
+                        }
+                        lab.handle_key(key);
                     }
                 },
                 WindowType::Browser => {
@@ -3372,6 +3724,19 @@ struct AppConfig {
                 output.push(String::from("\x01G\u{265A} TrustChess 3D \x01M— Opening 3D chess window..."));
                 output.push(String::from("\x01MWASD:Camera  ZX:Zoom  O:Auto-rotate  Click:Move"));
             },
+            "mario64" | "mario" => {
+                output.push(String::from("\x01G\u{2B50} TrustMario64 \x01M— Opening Mario 64 window..."));
+                output.push(String::from("\x01MWASD:Move Space:Jump Shift:Attack Ctrl:Crouch"));
+                output.push(String::from("\x01MF1:Save F2:Load F3:FrameAdv F5:Record F6:Replay"));
+            },
+            "nes" => {
+                output.push(String::from("\x01G\u{1F3AE} NES Emulator \x01M— Opening NES window..."));
+                output.push(String::from("\x01MWASD:D-Pad X/Space:A Z:B C:Select Enter:Start"));
+            },
+            "gameboy" | "gb" => {
+                output.push(String::from("\x01G\u{1F3AE} Game Boy \x01M— Opening Game Boy window..."));
+                output.push(String::from("\x01MWASD:D-Pad X/Space:A Z:B C:Select Enter:Start"));
+            },
             _ => {
                 output.push(format!("\x01Rbash: \x01Wcommand not found: \x01G{}", cmd));
                 output.push(String::from("\x01MType '\x01Ghelp\x01M' for available commands"));
@@ -3558,6 +3923,150 @@ struct AppConfig {
             }
         }
         
+        // Tick Mario64 — only when window is focused and visible
+        let mario64_ids: Vec<u32> = self.mario64_states.keys().copied().collect();
+        for id in mario64_ids {
+            let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
+            if is_active {
+                if let Some(game) = self.mario64_states.get_mut(&id) {
+                    game.tick();
+                }
+            }
+        }
+        
+        // Tick NES emulator — only when window is focused and visible
+        let nes_ids: Vec<u32> = self.nes_states.keys().copied().collect();
+        for id in nes_ids {
+            let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
+            if is_active {
+                if let Some(emu) = self.nes_states.get_mut(&id) {
+                    emu.tick();
+                }
+            }
+        }
+        
+        // Tick Game Boy emulator — runs whenever visible (not just focused)
+        // Integrates GameLab speed control, pausing, breakpoints, trace
+        let gb_ids: Vec<u32> = self.gameboy_states.keys().copied().collect();
+        for id in gb_ids {
+            let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized && !w.pending_close);
+            if is_active {
+                // Find linked GameLab (if any)
+                let lab_id = self.gamelab_states.iter()
+                    .find(|(_, lab)| lab.linked_gb_id == Some(id))
+                    .map(|(&lid, _)| lid)
+                    .or_else(|| self.gamelab_states.keys().next().copied());
+
+                // Read lab state
+                let (paused, mut step_one, mut step_frame, speed_idx, trace_enabled) =
+                    if let Some(lid) = lab_id {
+                        if let Some(lab) = self.gamelab_states.get(&lid) {
+                            (lab.paused, lab.step_one, lab.step_frame, lab.speed_idx, lab.trace_enabled)
+                        } else { (false, false, false, 2, false) }
+                    } else { (false, false, false, 2, false) };
+
+                // Handle pause
+                if paused && !step_one && !step_frame {
+                    // Still poll key releases
+                    if let Some(emu) = self.gameboy_states.get_mut(&id) {
+                        if !crate::keyboard::is_key_pressed(0x11) { emu.handle_key_release(b'w'); }
+                        if !crate::keyboard::is_key_pressed(0x1E) { emu.handle_key_release(b'a'); }
+                        if !crate::keyboard::is_key_pressed(0x1F) { emu.handle_key_release(b's'); }
+                        if !crate::keyboard::is_key_pressed(0x20) { emu.handle_key_release(b'd'); }
+                        if !crate::keyboard::is_key_pressed(0x2D) { emu.handle_key_release(b'x'); }
+                        if !crate::keyboard::is_key_pressed(0x2C) { emu.handle_key_release(b'z'); }
+                        if !crate::keyboard::is_key_pressed(0x2E) { emu.handle_key_release(b'c'); }
+                        if !crate::keyboard::is_key_pressed(0x1C) { emu.handle_key_release(b'\r'); }
+                    }
+                    continue;
+                }
+
+                // Speed control: accumulate ticks
+                let ticks = match speed_idx {
+                    0 => if self.frame_count % 4 == 0 { 1 } else { 0 }, // 0.25x
+                    1 => if self.frame_count % 2 == 0 { 1 } else { 0 }, // 0.5x
+                    2 => 1, // 1x
+                    3 => 2, // 2x
+                    4 => 4, // 4x
+                    _ => 1,
+                };
+
+                if let Some(emu) = self.gameboy_states.get_mut(&id) {
+                    // Poll keyboard
+                    if !crate::keyboard::is_key_pressed(0x11) { emu.handle_key_release(b'w'); }
+                    if !crate::keyboard::is_key_pressed(0x1E) { emu.handle_key_release(b'a'); }
+                    if !crate::keyboard::is_key_pressed(0x1F) { emu.handle_key_release(b's'); }
+                    if !crate::keyboard::is_key_pressed(0x20) { emu.handle_key_release(b'd'); }
+                    if !crate::keyboard::is_key_pressed(0x2D) { emu.handle_key_release(b'x'); }
+                    if !crate::keyboard::is_key_pressed(0x2C) { emu.handle_key_release(b'z'); }
+                    if !crate::keyboard::is_key_pressed(0x2E) { emu.handle_key_release(b'c'); }
+                    if !crate::keyboard::is_key_pressed(0x1C) { emu.handle_key_release(b'\r'); }
+
+                    // Record trace before tick
+                    if trace_enabled {
+                        if let Some(lid) = lab_id {
+                            // Need to split borrow — record PC info then pass to lab
+                            let pc = emu.cpu.pc;
+                            let a = emu.cpu.a;
+                            let f = emu.cpu.f;
+                            let sp = emu.cpu.sp;
+                            let opcode = crate::game_lab::read_emu_byte(emu, pc);
+                            drop(emu); // release borrow
+                            if let Some(lab) = self.gamelab_states.get_mut(&lid) {
+                                if lab.trace.len() >= 64 { lab.trace.remove(0); }
+                                lab.trace.push(crate::game_lab::TraceEntry { pc, opcode, a, f, sp });
+                            }
+                            // Re-borrow emu for tick
+                            if let Some(emu) = self.gameboy_states.get_mut(&id) {
+                                for _ in 0..ticks { emu.tick(); }
+                            }
+                            // Clear step flags
+                            if step_one || step_frame {
+                                if let Some(lab) = self.gamelab_states.get_mut(&lid) {
+                                    lab.step_one = false;
+                                    lab.step_frame = false;
+                                }
+                            }
+                            // Update watches + mem_diff
+                            if let Some(emu) = self.gameboy_states.get(&id) {
+                                if let Some(lab) = self.gamelab_states.get_mut(&lid) {
+                                    lab.update_watches(emu);
+                                    crate::game_lab::update_mem_diff(lab, emu);
+                                    // Check breakpoints
+                                    if lab.should_break(emu.cpu.pc) {
+                                        lab.paused = true;
+                                    }
+                                }
+                            }
+                            continue; // skip the code below since we handled everything
+                        }
+                    }
+
+                    // Normal tick (no trace)
+                    for _ in 0..ticks { emu.tick(); }
+                }
+
+                // Clear step flags + update watches (no trace path)
+                if let Some(lid) = lab_id {
+                    if step_one || step_frame {
+                        if let Some(lab) = self.gamelab_states.get_mut(&lid) {
+                            lab.step_one = false;
+                            lab.step_frame = false;
+                        }
+                    }
+                    if let Some(emu) = self.gameboy_states.get(&id) {
+                        if let Some(lab) = self.gamelab_states.get_mut(&lid) {
+                            lab.update_watches(emu);
+                            crate::game_lab::update_mem_diff(lab, emu);
+                            if lab.should_break(emu.cpu.pc) {
+                                lab.paused = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
         // Tick chess timers (~60fps → ~16ms per frame)
         let chess_ids: Vec<u32> = self.chess_states.keys().copied().collect();
         for id in chess_ids {
@@ -3575,6 +4084,17 @@ struct AppConfig {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
             if is_active {
                 if let Some(lab) = self.lab_states.get_mut(&id) {
+                    lab.tick();
+                }
+            }
+        }
+        
+        // Tick GameLab states
+        let gamelab_ids: Vec<u32> = self.gamelab_states.keys().copied().collect();
+        for id in gamelab_ids {
+            let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
+            if is_active {
+                if let Some(lab) = self.gamelab_states.get_mut(&id) {
                     lab.tick();
                 }
             }
@@ -3632,6 +4152,13 @@ struct AppConfig {
         
         // Fifth pass: render 3D chess windows (needs &mut for state)
         self.draw_chess3d_windows();
+        
+        // Sixth pass: render Mario64 windows (needs &mut for state)
+        self.draw_mario64_windows();
+        
+        // Seventh pass: render emulator windows
+        self.draw_nes_windows();
+        self.draw_gameboy_windows();
         
         // ALWAYS draw taskbar last (on top of everything, never covered by windows)
         self.draw_taskbar();
@@ -4473,6 +5000,19 @@ struct AppConfig {
                     framebuffer::fill_rect(cx - 10, cy - 1, 20, 2, icon_color);
                     framebuffer::fill_rect(cx - 1, cy - 10, 2, 20, icon_color);
                 },
+                IconType::GameBoy => {
+                    // Game Boy: handheld console shape
+                    framebuffer::draw_rect(cx - 10, cy - 12, 20, 24, icon_color);
+                    // Screen area
+                    framebuffer::fill_rect(cx - 7, cy - 9, 14, 10, icon_color);
+                    framebuffer::fill_rect(cx - 6, cy - 8, 12, 8, 0xFF0A0A0A);
+                    // D-pad
+                    framebuffer::fill_rect(cx - 6, cy + 3, 6, 2, icon_color);
+                    framebuffer::fill_rect(cx - 4, cy + 1, 2, 6, icon_color);
+                    // A/B buttons
+                    framebuffer::fill_rect(cx + 4, cy + 2, 3, 3, icon_color);
+                    framebuffer::fill_rect(cx + 1, cy + 4, 3, 3, icon_color);
+                },
                 _ => {
                     // Generic: bordered square
                     framebuffer::draw_rect(cx - 10, cy - 10, 20, 20, icon_color);
@@ -4608,13 +5148,13 @@ struct AppConfig {
     }
     
     fn draw_start_menu(&self) {
-        let menu_w = 280u32;
-        let menu_h = 504u32;
+        let menu_w = 420u32;
+        let menu_h = 640u32;
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
         // ═══════════════════════════════════════════════════════════════
-        // MATRIX HACKER STYLE START MENU — Frosted glass popup
+        // MATRIX HACKER STYLE START MENU — Wide frosted glass popup with search
         // ═══════════════════════════════════════════════════════════════
         
         // Frosted dark glass background
@@ -4631,8 +5171,48 @@ struct AppConfig {
         // Separator
         framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 26) as u32, menu_w - 4, GREEN_MUTED);
         
-        // Menu items
-        let items: [(&str, &str, bool); 15] = [
+        // ── Search bar ──
+        let search_y = menu_y + 30;
+        let search_h = 32u32;
+        let search_pad = 8i32;
+        // Search bar background
+        framebuffer::fill_rect((menu_x + search_pad) as u32, search_y as u32, menu_w - search_pad as u32 * 2, search_h, 0xFF0A120A);
+        framebuffer::draw_rect((menu_x + search_pad) as u32, search_y as u32, menu_w - search_pad as u32 * 2, search_h, GREEN_MUTED);
+        
+        // Search icon (magnifying glass)
+        let mag_x = menu_x + search_pad + 8;
+        let mag_y = search_y + 8;
+        // Circle part
+        for dy in 0..10u32 {
+            for dx in 0..10u32 {
+                let ddx = dx as i32 - 5;
+                let ddy = dy as i32 - 5;
+                let dist = ddx * ddx + ddy * ddy;
+                if dist >= 12 && dist <= 25 {
+                    framebuffer::put_pixel((mag_x + dx as i32) as u32, (mag_y + dy as i32) as u32, GREEN_TERTIARY);
+                }
+            }
+        }
+        // Handle part
+        framebuffer::fill_rect((mag_x + 8) as u32, (mag_y + 8) as u32, 4, 2, GREEN_TERTIARY);
+        
+        // Search text or placeholder
+        let search_text_x = menu_x + search_pad + 22;
+        if self.start_menu_search.is_empty() {
+            self.draw_text_smooth(search_text_x, search_y + 10, "Search apps...", GREEN_GHOST);
+        } else {
+            self.draw_text_smooth(search_text_x, search_y + 10, &self.start_menu_search, GREEN_PRIMARY);
+            // Cursor blink
+            let cursor_x = search_text_x + (self.start_menu_search.len() as i32 * 8);
+            if (self.frame_count / 30) % 2 == 0 {
+                framebuffer::fill_rect(cursor_x as u32, (search_y + 8) as u32, 2, 16, GREEN_PRIMARY);
+            }
+        }
+        
+        let items_start_y = search_y + search_h as i32 + 4;
+        
+        // Menu items — full list
+        let items: [(&str, &str, bool); 18] = [
             (">_", "Terminal", false),
             ("[]", "Files", false),
             ("##", "Calculator", false),
@@ -4643,6 +5223,9 @@ struct AppConfig {
             ("Sk", "Snake", false),
             ("Kk", "Chess", false),
             ("C3", "Chess 3D", false),
+            ("M6", "Mario 64", false),
+            ("NE", "NES Emulator", false),
+            ("GB", "Game Boy", false),
             ("Lb", "TrustLab", false),
             ("@)", "Settings", false),
             ("<-", "Exit Desktop", true),
@@ -4650,9 +5233,26 @@ struct AppConfig {
             (">>", "Reboot", true),
         ];
         
+        // Filter items by search
+        let search = self.start_menu_search.trim();
+        let search_lower: alloc::string::String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+        
+        let mut drawn = 0usize;
         for (i, (icon, label, is_special)) in items.iter().enumerate() {
-            let item_y = menu_y + 30 + (i as i32 * 32);
-            let item_h = 30u32;
+            // Filter: skip items that don't match search
+            if !search_lower.is_empty() {
+                let label_lower: alloc::string::String = label.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                if !label_lower.contains(search_lower.as_str()) {
+                    continue;
+                }
+            }
+            
+            let item_y = items_start_y + (drawn as i32 * 28);
+            let item_h = 26u32;
+            drawn += 1;
+            
+            // Don't draw past menu bottom
+            if item_y + item_h as i32 > menu_y + menu_h as i32 - 24 { break; }
             
             // Hover detection
             let is_hovered = self.cursor_x >= menu_x 
@@ -4661,10 +5261,8 @@ struct AppConfig {
                 && self.cursor_y < item_y + item_h as i32;
             
             if is_hovered {
-                // Translucent green highlight background
                 framebuffer::fill_rect_alpha((menu_x + 3) as u32, item_y as u32, menu_w - 6, item_h, 0x00AA44, 50);
-                // Left accent bar
-                framebuffer::fill_rect((menu_x + 3) as u32, (item_y + 4) as u32, 2, item_h - 8, 
+                framebuffer::fill_rect((menu_x + 3) as u32, (item_y + 3) as u32, 2, item_h - 6, 
                     if *is_special { ACCENT_RED } else { GREEN_PRIMARY });
             }
             
@@ -4674,7 +5272,7 @@ struct AppConfig {
             } else {
                 if *is_special { 0xFF994444 } else { GREEN_TERTIARY }
             };
-            self.draw_text_smooth(menu_x + 14, item_y + 8, icon, icon_color);
+            self.draw_text_smooth(menu_x + 14, item_y + 6, icon, icon_color);
             
             // Label
             let label_color = if is_hovered {
@@ -4682,7 +5280,20 @@ struct AppConfig {
             } else {
                 if *is_special { 0xFFAA4444 } else { GREEN_SECONDARY }
             };
-            self.draw_text_smooth(menu_x + 40, item_y + 8, label, label_color);
+            self.draw_text_smooth(menu_x + 40, item_y + 6, label, label_color);
+            
+            // Show search match highlight: if search active, highlight matching portion
+            if !search_lower.is_empty() && is_hovered {
+                // Small indicator that this matched
+                let kw_x = menu_x + 40 + (label.len() as i32 * 8) + 8;
+                self.draw_text(kw_x, item_y + 8, "*", GREEN_GHOST);
+            }
+        }
+        
+        // "No results" when search yields nothing
+        if drawn == 0 && !search_lower.is_empty() {
+            let no_y = items_start_y + 12;
+            self.draw_text_smooth(menu_x + 40, no_y, "No results found", GREEN_GHOST);
         }
         
         // Bottom: version info
@@ -4862,6 +5473,15 @@ struct AppConfig {
         if window.window_type == WindowType::Game3D {
             return;
         }
+
+        // Emulator windows are rendered in separate late passes
+        if window.window_type == WindowType::GameBoyEmu
+            || window.window_type == WindowType::GameBoyInput
+            || window.window_type == WindowType::NesEmu
+            || window.window_type == WindowType::Mario64
+        {
+            return;
+        }
         
         // Calculator is handled separately
         if window.window_type == WindowType::Calculator {
@@ -4902,6 +5522,21 @@ struct AppConfig {
         if window.window_type == WindowType::LabMode {
             if let Some(state) = self.lab_states.get(&window.id) {
                 crate::lab_mode::draw_lab(state, window.x, window.y, window.width, window.height);
+            }
+            return;
+        }
+        
+        // GameLab — Game Boy emulator analysis dashboard
+        if window.window_type == WindowType::GameLab {
+            if let Some(lab_state) = self.gamelab_states.get(&window.id) {
+                // Find the linked Game Boy emulator (use linked_gb_id or first available)
+                let emu_ref = if let Some(linked_id) = lab_state.linked_gb_id {
+                    self.gameboy_states.get(&linked_id)
+                } else {
+                    // Auto-link to first active Game Boy emulator
+                    self.gameboy_states.values().next()
+                };
+                crate::game_lab::draw_game_lab(lab_state, emu_ref, window.x, window.y, window.width, window.height);
             }
             return;
         }
@@ -5145,7 +5780,7 @@ struct AppConfig {
     /// Render 3D chess windows (needs &mut self for state mutation during render)
     fn draw_chess3d_windows(&mut self) {
         let chess3d_windows: Vec<(u32, i32, i32, u32, u32)> = self.windows.iter()
-            .filter(|w| w.window_type == WindowType::Chess3D && w.visible && !w.minimized)
+            .filter(|w| w.window_type == WindowType::Chess3D && w.visible && !w.minimized && !w.pending_close)
             .map(|w| (w.id, w.x, w.y, w.width, w.height))
             .collect();
         
@@ -5176,6 +5811,200 @@ struct AppConfig {
                     }
                 }
             }
+        }
+    }
+    
+    /// Render Mario64 windows (needs &mut self for game state)
+    fn draw_mario64_windows(&mut self) {
+        let mario_windows: Vec<(u32, i32, i32, u32, u32)> = self.windows.iter()
+            .filter(|w| w.window_type == WindowType::Mario64 && w.visible && !w.minimized && !w.pending_close)
+            .map(|w| (w.id, w.x, w.y, w.width, w.height))
+            .collect();
+        
+        for (win_id, wx, wy, ww, wh) in mario_windows {
+            if let Some(game) = self.mario64_states.get_mut(&win_id) {
+                let content_x = wx as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_w = ww;
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                
+                if content_w < 80 || content_h < 60 { continue; }
+                
+                let buf_w = content_w as usize;
+                let buf_h = content_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
+                
+                game.render(&mut buf, buf_w, buf_h);
+                
+                // Blit buffer to framebuffer
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
+                        let sy = content_y + py as u32;
+                        framebuffer::put_pixel(sx, sy, color);
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Render NES emulator windows
+    fn draw_nes_windows(&mut self) {
+        let nes_windows: Vec<(u32, i32, i32, u32, u32)> = self.windows.iter()
+            .filter(|w| w.window_type == WindowType::NesEmu && w.visible && !w.minimized && !w.pending_close)
+            .map(|w| (w.id, w.x, w.y, w.width, w.height))
+            .collect();
+        
+        for (win_id, wx, wy, ww, wh) in nes_windows {
+            if let Some(emu) = self.nes_states.get_mut(&win_id) {
+                let content_x = wx as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_w = ww;
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                
+                if content_w < 80 || content_h < 60 { continue; }
+                
+                let buf_w = content_w as usize;
+                let buf_h = content_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
+                
+                emu.render(&mut buf, buf_w, buf_h);
+                
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
+                        let sy = content_y + py as u32;
+                        framebuffer::put_pixel(sx, sy, color);
+                    }
+                }
+            }
+        }
+    }
+    
+    /// Render Game Boy emulator windows
+    fn draw_gameboy_windows(&mut self) {
+        let gb_windows: Vec<(u32, i32, i32, u32, u32, bool)> = self.windows.iter()
+            .filter(|w| w.window_type == WindowType::GameBoyEmu && w.visible && !w.minimized && !w.pending_close)
+            .map(|w| (w.id, w.x, w.y, w.width, w.height, w.focused))
+            .collect();
+        
+        let menu_h: u32 = 22;
+        
+        for (win_id, wx, wy, ww, wh, _focused) in gb_windows {
+            if let Some(emu) = self.gameboy_states.get_mut(&win_id) {
+                let content_x = wx as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_w = ww;
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                
+                if content_w < 80 || content_h < 60 { continue; }
+                
+                // ── Menu bar at top ────────────────────────────────────
+                framebuffer::fill_rect(content_x, content_y, content_w, menu_h, 0xFF0E1418);
+                framebuffer::fill_rect(content_x, content_y + menu_h - 1, content_w, 1, 0xFF1E3028);
+                
+                // Game info (real-time)
+                let pc_s = alloc::format!("PC:{:04X}", emu.cpu.pc);
+                let ly_s = alloc::format!("LY:{:3}", emu.gpu.ly);
+                let mode_s = match emu.gpu.mode {
+                    0 => "HBL",
+                    1 => "VBL",
+                    2 => "OAM",
+                    3 => "DRW",
+                    _ => "???",
+                };
+                let bank_s = alloc::format!("BK:{}", emu.cart.rom_bank);
+                
+                let mut tx = content_x + 4;
+                for ch in pc_s.chars() { framebuffer::draw_char_at(tx, content_y + 4, ch, 0xFF58A6FF); tx += 8; }
+                tx += 8;
+                for ch in ly_s.chars() { framebuffer::draw_char_at(tx, content_y + 4, ch, 0xFF80FFAA); tx += 8; }
+                tx += 8;
+                for ch in mode_s.chars() { framebuffer::draw_char_at(tx, content_y + 4, ch, 0xFFD29922); tx += 8; }
+                tx += 8;
+                for ch in bank_s.chars() { framebuffer::draw_char_at(tx, content_y + 4, ch, 0xFF9CD8B0); tx += 8; }
+                
+                if emu.cgb_mode {
+                    tx += 8;
+                    let spd = if emu.key1 & 0x80 != 0 { "2x" } else { "1x" };
+                    for ch in "CGB".chars() { framebuffer::draw_char_at(tx, content_y + 4, ch, 0xFF00FF88); tx += 8; }
+                    tx += 4;
+                    for ch in spd.chars() { framebuffer::draw_char_at(tx, content_y + 4, ch, 0xFF79C0FF); tx += 8; }
+                }
+                
+                // Menu buttons (right-aligned)
+                // [INPUT] button
+                let inp_btn_w: u32 = 48;
+                let inp_btn_x = content_x + content_w - inp_btn_w - 4;
+                framebuffer::fill_rect(inp_btn_x, content_y + 2, inp_btn_w, menu_h - 4, 0xFF1A3028);
+                framebuffer::fill_rect(inp_btn_x, content_y + 2, inp_btn_w, 1, 0xFF2A4A38);
+                framebuffer::fill_rect(inp_btn_x, content_y + menu_h - 3, inp_btn_w, 1, 0xFF2A4A38);
+                let itx = inp_btn_x + 4;
+                for (i, ch) in "INPUT".chars().enumerate() {
+                    framebuffer::draw_char_at(itx + i as u32 * 8, content_y + 5, ch, 0xFF00FF88);
+                }
+                
+                // [LAB] button
+                let lab_btn_w: u32 = 32;
+                let lab_btn_x = inp_btn_x - lab_btn_w - 6;
+                framebuffer::fill_rect(lab_btn_x, content_y + 2, lab_btn_w, menu_h - 4, 0xFF1A2838);
+                framebuffer::fill_rect(lab_btn_x, content_y + 2, lab_btn_w, 1, 0xFF2A3A58);
+                framebuffer::fill_rect(lab_btn_x, content_y + menu_h - 3, lab_btn_w, 1, 0xFF2A3A58);
+                let ltx = lab_btn_x + 4;
+                for (i, ch) in "LAB".chars().enumerate() {
+                    framebuffer::draw_char_at(ltx + i as u32 * 8, content_y + 5, ch, 0xFF58A6FF);
+                }
+                
+                // ── Game rendering below menu ────────────────────────
+                let game_y = content_y + menu_h;
+                let game_h = content_h.saturating_sub(menu_h);
+                
+                if game_h < 40 { continue; }
+                
+                let buf_w = content_w as usize;
+                let buf_h = game_h as usize;
+                let mut buf = alloc::vec![0u32; buf_w * buf_h];
+                
+                emu.render(&mut buf, buf_w, buf_h);
+                
+                for py in 0..buf_h {
+                    for px in 0..buf_w {
+                        let color = buf[py * buf_w + px];
+                        let sx = content_x + px as u32;
+                        let sy = game_y + py as u32;
+                        framebuffer::put_pixel(sx, sy, color);
+                    }
+                }
+            }
+        }
+        
+        // ── Render GameBoyInput windows ────────────────────────────────
+        let input_windows: Vec<(u32, i32, i32, u32, u32, Option<u32>)> = self.windows.iter()
+            .filter(|w| w.window_type == WindowType::GameBoyInput && w.visible && !w.minimized && !w.pending_close)
+            .map(|w| {
+                let linked = self.gb_input_links.get(&w.id).copied();
+                (w.id, w.x, w.y, w.width, w.height, linked)
+            })
+            .collect();
+        
+        for (_win_id, wx, wy, ww, wh, linked_id) in input_windows {
+            let cx = wx as u32;
+            let cy = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+            let cw = ww;
+            let ch = wh.saturating_sub(TITLE_BAR_HEIGHT);
+            
+            if cw < 60 || ch < 40 { continue; }
+            
+            // Find the linked emulator
+            let emu_opt = if let Some(lid) = linked_id {
+                self.gameboy_states.get(&lid)
+            } else {
+                self.gameboy_states.values().next()
+            };
+            
+            crate::game_lab::draw_input_window(emu_opt, cx, cy, cw, ch);
         }
     }
     
@@ -6494,6 +7323,19 @@ pub fn run() {
     // Initialize GUI timing
     engine::init_timing();
     
+    // Reset mouse button edge-detection state so stale state
+    // from a previous session doesn't trigger false clicks
+    unsafe {
+        // These statics are in the loop body; we mirror-reset here
+        static mut RESET_MOUSE_INIT: bool = true;
+        RESET_MOUSE_INIT = true;
+    }
+    // Also ensure context menu is hidden on fresh entry
+    {
+        let mut d = DESKTOP.lock();
+        d.context_menu.visible = false;
+    }
+    
     crate::serial_println!("[GUI] Starting desktop environment...");
     crate::serial_println!("[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start");
     crate::serial_println!("[GUI] Target: 60 FPS with HLT-based frame limiting");
@@ -6633,8 +7475,14 @@ pub fn run() {
         
         // Handle right mouse button
         static mut LAST_RIGHT: bool = false;
+        static mut RIGHT_INIT: bool = false;
         let right = mouse.right_button;
         unsafe {
+            if !RIGHT_INIT {
+                // Sync initial state to prevent false trigger on first frame
+                LAST_RIGHT = right;
+                RIGHT_INIT = true;
+            }
             if right != LAST_RIGHT {
                 handle_right_click(mouse.x, mouse.y, right);
                 LAST_RIGHT = right;

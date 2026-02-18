@@ -288,6 +288,8 @@ pub enum IconType {
     OpenGL,
     Browser,
     ModelEditor,
+    GameBoy,
+    GameLab,
 }
 
 /// Draw an icon by type
@@ -305,6 +307,8 @@ pub fn draw_icon(icon_type: IconType, x: u32, y: u32, color: u32, bg: u32) {
         IconType::OpenGL => draw_opengl_icon(x, y, color, bg),
         IconType::Browser => draw_browser_icon(x, y, color, bg),
         IconType::ModelEditor => draw_model_editor_icon(x, y, color, bg),
+        IconType::GameBoy => draw_game_icon(x, y, color, bg), // reuse game icon for now
+        IconType::GameLab => draw_gamelab_icon(x, y, color, bg),
     }
 }
 
@@ -480,5 +484,36 @@ pub fn draw_model_editor_icon(x: u32, y: u32, color: u32, _bg: u32) {
     put(cx - s - 2, cy - s + 2, 0xFFFFFF00);
     put(cx + s - 2, cy + s + 2, 0xFFFFFF00);
     put(cx + s + o - 2, cy - s - o + 2, 0xFFFFFF00);
+}
+
+/// Draw a 32x32 GameLab icon (lab flask with game controller elements)
+pub fn draw_gamelab_icon(x: u32, y: u32, color: u32, _bg: u32) {
+    use crate::framebuffer;
+    let bright = 0xFF00FF88u32;
+    let dim = darken(color, 0.5);
+    
+    // Flask body (bottom wider part)
+    framebuffer::fill_rect(x + 8, y + 16, 16, 12, dim);
+    framebuffer::fill_rect(x + 6, y + 20, 20, 8, dim);
+    
+    // Flask neck
+    framebuffer::fill_rect(x + 13, y + 6, 6, 10, dim);
+    
+    // Flask rim
+    framebuffer::fill_rect(x + 11, y + 4, 10, 2, color);
+    
+    // Glowing liquid inside
+    framebuffer::fill_rect(x + 9, y + 22, 14, 4, bright);
+    framebuffer::fill_rect(x + 10, y + 18, 12, 4, 0xFF00CC66);
+    
+    // Small "data" dots floating in liquid  
+    framebuffer::fill_rect(x + 11, y + 19, 2, 2, 0xFFFFFFFF);
+    framebuffer::fill_rect(x + 16, y + 23, 2, 2, 0xFFFFFFFF);
+    framebuffer::fill_rect(x + 19, y + 20, 2, 2, 0xFFFFFFFF);
+    
+    // Outline glow
+    framebuffer::fill_rect(x + 7, y + 16, 1, 12, bright);
+    framebuffer::fill_rect(x + 24, y + 16, 1, 12, bright);
+    framebuffer::fill_rect(x + 6, y + 28, 20, 1, bright);
 }
 
