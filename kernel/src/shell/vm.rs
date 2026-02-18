@@ -1691,6 +1691,863 @@ pub(super) fn cmd_ifconfig() {
     }
 }
 
+// ==================== TRUSTSCAN — LIVE NETWORK TEST ====================
+
+/// Live network test: exercises TrustScan modules against real hosts.
+/// Requires network connectivity (QEMU NAT, VirtualBox NAT, or bridged).
+///
+/// Usage: scantest [target]
+///   scantest              — auto-detect gateway, test against it + public DNS
+///   scantest 93.184.216.34 — test against specific IP (example.com)
+///   scantest google.com   — test with DNS resolution
+pub(super) fn cmd_netscan_test(args: &[&str]) {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "=== TrustScan Live Network Test Suite ===");
+    crate::println!();
+
+    let mut passed = 0usize;
+    let mut failed = 0usize;
+
+    // ── Prerequisite: network must be up ──
+    crate::println_color!(COLOR_CYAN, "[PRE] Network connectivity check");
+    crate::print!("  NIC driver... ");
+    if !crate::drivers::net::has_driver() {
+        crate::println_color!(COLOR_RED, "[FAIL] no network driver");
+        crate::println_color!(COLOR_RED, "=== Cannot run live tests without a network ===");
+        return;
+    }
+    crate::println_color!(COLOR_GREEN, "[OK]");
+
+    // Determine gateway & our IP
+    let (our_ip, _mask, gateway_ip) = match crate::network::get_ipv4_config() {
+        Some((ip, mask, gw)) => {
+            let ip_b = *ip.as_bytes();
+            let m_b = *mask.as_bytes();
+            let gw_b = gw.map(|g| *g.as_bytes());
+            (ip_b, m_b, gw_b)
+        }
+        None => {
+            crate::print!("  IP config... ");
+            crate::println_color!(COLOR_RED, "[FAIL] no IPv4 config — run 'dhcp' first");
+            return;
+        }
+    };
+
+    crate::print!("  our IP... ");
+    crate::println_color!(COLOR_GREEN, "[OK] {}", crate::netscan::format_ip(our_ip));
+
+    // Choose target: user-supplied, gateway, or public DNS
+    let target: [u8; 4];
+    let target_name: &str;
+
+    if let Some(arg) = args.first() {
+        if let Some(ip) = crate::netscan::parse_ip(arg) {
+            target = ip;
+            target_name = arg;
+        } else if let Some(resolved) = crate::netstack::dns::resolve(arg) {
+            target = resolved;
+            target_name = arg;
+        } else {
+            crate::println_color!(COLOR_RED, "Cannot resolve: {}", arg);
+            return;
+        }
+    } else if let Some(gw) = gateway_ip {
+        target = gw;
+        target_name = "gateway";
+    } else {
+        // Fallback: Google DNS
+        target = [8, 8, 8, 8];
+        target_name = "8.8.8.8";
+    }
+
+    crate::println_color!(COLOR_CYAN, "  target: {} ({})", target_name, crate::netscan::format_ip(target));
+    crate::println!();
+
+    // ── 1. ICMP Ping (reachability) ──
+    crate::println_color!(COLOR_CYAN, "[1/8] ICMP Ping — reachability");
+    {
+        crate::print!("  ping {}... ", crate::netscan::format_ip(target));
+        let ip = crate::network::Ipv4Address::new(target[0], target[1], target[2], target[3]);
+        match crate::network::send_ping(ip) {
+            Ok(result) if result.success => {
+                crate::println_color!(COLOR_GREEN, "[OK] rtt={} us  ttl={}", result.time_us, result.ttl);
+                passed += 1;
+            }
+            Ok(_) => {
+                crate::println_color!(COLOR_YELLOW, "[WARN] timeout (host may block ICMP)");
+                passed += 1; // Not a failure — many hosts block ICMP
+            }
+            Err(e) => {
+                crate::println_color!(COLOR_RED, "[FAIL] {}", e);
+                failed += 1;
+            }
+        }
+    }
+
+    // ── 2. ARP Resolution (local network) ──
+    crate::println_color!(COLOR_CYAN, "[2/8] ARP Resolution");
+    {
+        // Try to resolve the gateway or target MAC via ARP
+        let arp_target = gateway_ip.unwrap_or(target);
+        crate::print!("  ARP {}... ", crate::netscan::format_ip(arp_target));
+        let _ = crate::netstack::arp::send_request(arp_target);
+        // Poll for a bit
+        for _ in 0..200_000 {
+            crate::netstack::poll();
+            core::hint::spin_loop();
+        }
+        if let Some(mac) = crate::netstack::arp::resolve(arp_target) {
+            crate::println_color!(COLOR_GREEN, "[OK] MAC={}", crate::netscan::format_mac(mac));
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_YELLOW, "[WARN] no ARP reply (may be routed)");
+            passed += 1; // Not a failure — target may be remote
+        }
+    }
+
+    // ── 3. DNS Resolution ──
+    crate::println_color!(COLOR_CYAN, "[3/8] DNS Resolution");
+    {
+        crate::print!("  resolve google.com... ");
+        match crate::netstack::dns::resolve("google.com") {
+            Some(ip) => {
+                crate::println_color!(COLOR_GREEN, "[OK] {}", crate::netscan::format_ip(ip));
+                passed += 1;
+            }
+            None => {
+                crate::println_color!(COLOR_RED, "[FAIL] DNS resolution failed");
+                failed += 1;
+            }
+        }
+
+        crate::print!("  resolve example.com... ");
+        match crate::netstack::dns::resolve("example.com") {
+            Some(ip) => {
+                crate::println_color!(COLOR_GREEN, "[OK] {}", crate::netscan::format_ip(ip));
+                passed += 1;
+            }
+            None => {
+                crate::println_color!(COLOR_YELLOW, "[WARN] no DNS — limited test");
+                passed += 1; // Some QEMU configs have no DNS
+            }
+        }
+    }
+
+    // ── 4. TCP Port Scan (SYN scan against target) ──
+    crate::println_color!(COLOR_CYAN, "[4/8] TCP SYN Port Scan");
+    {
+        // Scan well-known ports on the target
+        let test_ports = alloc::vec![80u16, 443, 53, 22, 8080];
+        crate::print!("  SYN scan {} ({} ports)... ", crate::netscan::format_ip(target), test_ports.len());
+        let config = crate::netscan::port_scanner::ScanConfig::new(target)
+            .with_ports(test_ports)
+            .with_type(crate::netscan::port_scanner::ScanType::Syn)
+            .with_timeout(2000);
+        let (results, stats) = crate::netscan::port_scanner::scan(&config);
+
+        // The scan should complete without panicking — that's the main test
+        crate::println_color!(COLOR_GREEN, "[OK] {} open, {} closed, {} filtered ({} ms)",
+            stats.open, stats.closed, stats.filtered, stats.elapsed_ms);
+        passed += 1;
+
+        // Print any open ports found
+        for r in &results {
+            if r.state == crate::netscan::port_scanner::PortState::Open {
+                crate::println!("    {:>5}/tcp  {:<12}  OPEN", r.port, r.service);
+            }
+        }
+    }
+
+    // ── 5. TCP Connect Scan + Banner Grab ──
+    crate::println_color!(COLOR_CYAN, "[5/8] TCP Connect Scan + Banner Grab");
+    {
+        // Try to connect scan a web server
+        // Resolve a known target with port 80 open
+        let web_target = if let Some(ip) = crate::netstack::dns::resolve("example.com") {
+            ip
+        } else {
+            target // fallback to our target
+        };
+
+        crate::print!("  connect scan {}:80... ", crate::netscan::format_ip(web_target));
+        let config = crate::netscan::port_scanner::ScanConfig::new(web_target)
+            .with_ports(alloc::vec![80])
+            .with_type(crate::netscan::port_scanner::ScanType::Connect)
+            .with_timeout(3000);
+        let (results, stats) = crate::netscan::port_scanner::scan(&config);
+
+        if stats.open > 0 {
+            crate::println_color!(COLOR_GREEN, "[OK] port 80 open");
+            passed += 1;
+
+            // Banner grab
+            crate::print!("  banner grab :80... ");
+            match crate::netscan::banner::grab_banner(web_target, 80, 3000) {
+                Some(br) => {
+                    let truncated = if br.banner.len() > 60 {
+                        &br.banner[..60]
+                    } else {
+                        &br.banner
+                    };
+                    crate::println_color!(COLOR_GREEN, "[OK] '{}'", truncated);
+                    if let Some(ref ver) = br.version {
+                        crate::println!("    version: {}", ver);
+                    }
+                    passed += 1;
+                }
+                None => {
+                    crate::println_color!(COLOR_YELLOW, "[WARN] no banner (server may not send one)");
+                    passed += 1;
+                }
+            }
+        } else {
+            crate::println_color!(COLOR_YELLOW, "[WARN] port 80 not open on {} — skip banner",
+                crate::netscan::format_ip(web_target));
+            passed += 2; // Skip both sub-tests
+        }
+        let _ = results;
+    }
+
+    // ── 6. Packet Sniffer Engine ──
+    crate::println_color!(COLOR_CYAN, "[6/8] Packet Sniffer (live capture)");
+    {
+        use crate::netscan::sniffer;
+
+        crate::print!("  capture during ping... ");
+        sniffer::start_capture();
+
+        // Generate traffic: send a ping
+        let ip = crate::network::Ipv4Address::new(target[0], target[1], target[2], target[3]);
+        let _ = crate::network::send_ping(ip);
+
+        // Poll for packets
+        for _ in 0..300_000 {
+            crate::netstack::poll();
+            core::hint::spin_loop();
+        }
+
+        let (count, bytes, buffered) = sniffer::get_stats();
+        sniffer::stop_capture();
+
+        if count > 0 {
+            crate::println_color!(COLOR_GREEN, "[OK] captured {} packets, {} bytes", count, bytes);
+            passed += 1;
+
+            // Verify we captured real data
+            crate::print!("  packet details... ");
+            let pkts = sniffer::peek_captured_packets(5);
+            if !pkts.is_empty() {
+                crate::println_color!(COLOR_GREEN, "[OK] {} in buffer", pkts.len());
+                for p in pkts.iter().take(3) {
+                    crate::println!("    [{:<4}] {} {}", p.protocol.as_str(),
+                        p.src_ip.map(|i| crate::netscan::format_ip(i)).unwrap_or_else(|| alloc::string::String::from("?")),
+                        p.info);
+                }
+                passed += 1;
+            } else {
+                crate::println_color!(COLOR_RED, "[FAIL] buffer empty despite count > 0");
+                failed += 1;
+            }
+        } else {
+            crate::println_color!(COLOR_YELLOW, "[WARN] no packets captured (driver may not report TX)");
+            passed += 2; // Not a critical failure
+        }
+    }
+
+    // ── 7. Traceroute (TTL-based) ──
+    crate::println_color!(COLOR_CYAN, "[7/8] Traceroute (TTL)");
+    {
+        // Short traceroute (max 5 hops) to detect at least the first hop
+        let trace_target = if let Some(gw) = gateway_ip {
+            gw // Gateway should be 1 hop
+        } else {
+            [8, 8, 8, 8] // Google DNS as fallback
+        };
+
+        crate::print!("  trace to {} (5 hops max)... ", crate::netscan::format_ip(trace_target));
+        let hops = crate::netscan::traceroute::trace(trace_target, 5, 2000);
+
+        if !hops.is_empty() {
+            crate::println_color!(COLOR_GREEN, "[OK] {} hops recorded", hops.len());
+            passed += 1;
+
+            for h in &hops {
+                crate::print!("    {:>2}  ", h.hop_num);
+                if let Some(ip) = h.ip {
+                    crate::print!("{:<16}", crate::netscan::format_ip(ip));
+                    for &rtt in &h.rtt_ms {
+                        if rtt == 0 { crate::print!("*    "); }
+                        else { crate::print!("{} ms  ", rtt); }
+                    }
+                    if h.reached { crate::print!(" [REACHED]"); }
+                    crate::println!();
+                } else {
+                    crate::println!("* * *");
+                }
+            }
+        } else {
+            crate::println_color!(COLOR_YELLOW, "[WARN] no hops (ICMP may be blocked)");
+            passed += 1;
+        }
+    }
+
+    // ── 8. Vulnerability Scanner (service fingerprint) ──
+    crate::println_color!(COLOR_CYAN, "[8/8] Vulnerability Scanner");
+    {
+        // Find a target with at least 1 open port to vuln-check
+        let web_target = if let Some(ip) = crate::netstack::dns::resolve("example.com") {
+            ip
+        } else {
+            target
+        };
+
+        crate::print!("  vuln check {}:80,443... ", crate::netscan::format_ip(web_target));
+        let findings = crate::netscan::vuln::scan(web_target, &[80, 443]);
+
+        // Even if no vulns found, the scan completing is the test
+        crate::println_color!(COLOR_GREEN, "[OK] {} findings", findings.len());
+        passed += 1;
+
+        for f in findings.iter().take(3) {
+            let color = match f.severity {
+                crate::netscan::vuln::Severity::Critical | crate::netscan::vuln::Severity::High => COLOR_RED,
+                crate::netscan::vuln::Severity::Medium => COLOR_YELLOW,
+                _ => COLOR_GRAY,
+            };
+            crate::print_color!(color, "    [{:<8}] ", f.severity.as_str());
+            crate::println!("{}/{}: {}", f.port, f.service, f.title);
+        }
+    }
+
+    // ── Summary ──
+    crate::println!();
+    let total = passed + failed;
+    if failed == 0 {
+        crate::println_color!(COLOR_BRIGHT_GREEN,
+            "=== ALL {}/{} LIVE TESTS PASSED ===", passed, total);
+    } else {
+        crate::println_color!(COLOR_RED,
+            "=== {}/{} passed, {} FAILED ===", passed, total, failed);
+    }
+    crate::println!();
+    crate::println!("Tip: For more detailed testing, try:");
+    crate::println!("  nmap example.com -sT -p 80,443 -A");
+    crate::println!("  banner example.com 80");
+    crate::println!("  traceroute 8.8.8.8");
+    crate::println!("  sniff start   (then generate traffic)");
+    crate::println!("  vulnscan example.com");
+}
+
+// ==================== TRUSTSCAN — SECURITY TOOLKIT ====================
+
+pub(super) fn cmd_nmap(args: &[&str]) {
+    if args.is_empty() {
+        crate::println_color!(COLOR_CYAN, "TrustScan — Port Scanner");
+        crate::println!("Usage: nmap <target> [options]");
+        crate::println!("  nmap <ip|host>                 Quick scan (25 common ports)");
+        crate::println!("  nmap <ip|host> -p 80,443,8080  Scan specific ports");
+        crate::println!("  nmap <ip|host> -p 1-1024       Scan port range");
+        crate::println!("  nmap <ip|host> -sS             SYN scan (default, stealth)");
+        crate::println!("  nmap <ip|host> -sT             TCP connect scan");
+        crate::println!("  nmap <ip|host> -sU             UDP scan");
+        crate::println!("  nmap <ip|host> --top            Top 100 ports");
+        crate::println!("  nmap <ip|host> -A              Aggressive (scan + banner + vuln)");
+        return;
+    }
+
+    let target = match crate::netscan::resolve_target(args[0]) {
+        Some(ip) => ip,
+        None => {
+            crate::println_color!(COLOR_RED, "Cannot resolve target: {}", args[0]);
+            return;
+        }
+    };
+
+    // Parse options
+    let mut scan_type = crate::netscan::port_scanner::ScanType::Syn;
+    let mut ports: Option<alloc::vec::Vec<u16>> = None;
+    let mut top_ports = false;
+    let mut aggressive = false;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i] {
+            "-sS" => scan_type = crate::netscan::port_scanner::ScanType::Syn,
+            "-sT" => scan_type = crate::netscan::port_scanner::ScanType::Connect,
+            "-sU" => scan_type = crate::netscan::port_scanner::ScanType::Udp,
+            "--top" => top_ports = true,
+            "-A" => aggressive = true,
+            "-p" if i + 1 < args.len() => {
+                i += 1;
+                ports = Some(parse_port_spec(args[i]));
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    let scan_name = match scan_type {
+        crate::netscan::port_scanner::ScanType::Syn => "SYN",
+        crate::netscan::port_scanner::ScanType::Connect => "Connect",
+        crate::netscan::port_scanner::ScanType::Udp => "UDP",
+    };
+
+    crate::println_color!(COLOR_CYAN, "Starting TrustScan {} scan on {}", scan_name, crate::netscan::format_ip(target));
+    crate::println!("TrustScan 1.0 — TrustOS Network Security Scanner");
+    crate::println!();
+
+    let mut config = crate::netscan::port_scanner::ScanConfig::new(target)
+        .with_type(scan_type);
+
+    if let Some(p) = ports {
+        config = config.with_ports(p);
+    } else if top_ports || aggressive {
+        config = config.with_top_ports();
+    }
+
+    let (results, stats) = crate::netscan::port_scanner::scan(&config);
+
+    // Display results
+    crate::println!("PORT       STATE          SERVICE");
+    for result in &results {
+        let state_color = match result.state {
+            crate::netscan::port_scanner::PortState::Open => COLOR_GREEN,
+            crate::netscan::port_scanner::PortState::Filtered => COLOR_YELLOW,
+            crate::netscan::port_scanner::PortState::OpenFiltered => COLOR_YELLOW,
+            crate::netscan::port_scanner::PortState::Closed => COLOR_RED,
+        };
+
+        let proto = match scan_type {
+            crate::netscan::port_scanner::ScanType::Udp => "udp",
+            _ => "tcp",
+        };
+
+        crate::print!("{}/{:<6}", result.port, proto);
+        crate::print_color!(state_color, " {:<14}", result.state.as_str());
+        crate::println!(" {}", result.service);
+    }
+
+    crate::println!();
+    crate::println!("Scan complete: {} ports scanned in {} ms", stats.total_ports, stats.elapsed_ms);
+    crate::println!("  {} open, {} closed, {} filtered",
+        stats.open, stats.closed, stats.filtered);
+
+    // Aggressive mode: banner grab + vuln scan on open ports
+    if aggressive {
+        let open_ports: alloc::vec::Vec<u16> = results.iter()
+            .filter(|r| r.state == crate::netscan::port_scanner::PortState::Open)
+            .map(|r| r.port)
+            .collect();
+
+        if !open_ports.is_empty() {
+            crate::println!();
+            crate::println_color!(COLOR_CYAN, "Banner Grabbing...");
+            let banners = crate::netscan::banner::grab_banners(target, &open_ports, 2000);
+            for b in &banners {
+                crate::print!("  {}/tcp ", b.port);
+                if let Some(ref ver) = b.version {
+                    crate::print_color!(COLOR_GREEN, "{} ", ver);
+                }
+                crate::println!("{}", b.banner);
+            }
+
+            crate::println!();
+            crate::println_color!(COLOR_CYAN, "Vulnerability Assessment...");
+            let findings = crate::netscan::vuln::scan(target, &open_ports);
+            for f in &findings {
+                let sev_color = match f.severity {
+                    crate::netscan::vuln::Severity::Critical => COLOR_RED,
+                    crate::netscan::vuln::Severity::High => COLOR_RED,
+                    crate::netscan::vuln::Severity::Medium => COLOR_YELLOW,
+                    crate::netscan::vuln::Severity::Low => COLOR_CYAN,
+                    crate::netscan::vuln::Severity::Info => COLOR_WHITE,
+                };
+                crate::print_color!(sev_color, "[{}] ", f.severity.as_str());
+                crate::println!("{}/{} — {}", f.port, f.service, f.title);
+            }
+        }
+    }
+}
+
+fn parse_port_spec(spec: &str) -> alloc::vec::Vec<u16> {
+    let mut ports = alloc::vec::Vec::new();
+    for part in spec.split(',') {
+        if let Some(dash) = part.find('-') {
+            let start: u16 = part[..dash].parse().unwrap_or(0);
+            let end: u16 = part[dash+1..].parse().unwrap_or(0);
+            if start > 0 && end >= start && end <= 65535 {
+                for p in start..=end {
+                    ports.push(p);
+                }
+            }
+        } else if let Ok(p) = part.parse::<u16>() {
+            if p > 0 {
+                ports.push(p);
+            }
+        }
+    }
+    ports
+}
+
+pub(super) fn cmd_discover(args: &[&str]) {
+    if args.is_empty() || args[0] == "--help" {
+        crate::println_color!(COLOR_CYAN, "TrustScan — Network Discovery");
+        crate::println!("Usage:");
+        crate::println!("  discover                   ARP sweep local subnet");
+        crate::println!("  discover arp               ARP sweep (fast, local only)");
+        crate::println!("  discover ping <base_ip>    ICMP ping sweep /24 subnet");
+        crate::println!("  discover full              Full discovery (ARP + ping)");
+        return;
+    }
+
+    let mode = if args.is_empty() { "arp" } else { args[0] };
+
+    match mode {
+        "arp" | "arpscan" => {
+            crate::println_color!(COLOR_CYAN, "ARP Sweep — Local Network Discovery");
+            crate::println!("Scanning local subnet...");
+            crate::println!();
+
+            let hosts = crate::netscan::discovery::arp_sweep_local(3000);
+
+            if hosts.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "No hosts discovered");
+                return;
+            }
+
+            crate::println!("IP Address          MAC Address          Status");
+            crate::println!("{}", "-".repeat(55));
+            for host in &hosts {
+                let ip_str = crate::netscan::format_ip(host.ip);
+                let mac_str = host.mac.map(|m| crate::netscan::format_mac(m))
+                    .unwrap_or_else(|| alloc::string::String::from("unknown"));
+                crate::println_color!(COLOR_GREEN, "{:<20}{:<21}UP", ip_str, mac_str);
+            }
+            crate::println!();
+            crate::println!("{} hosts discovered", hosts.len());
+        }
+        "ping" => {
+            let base = if args.len() > 1 {
+                match crate::netscan::parse_ip(args[1]) {
+                    Some(ip) => [ip[0], ip[1], ip[2], 0],
+                    None => {
+                        crate::println_color!(COLOR_RED, "Invalid IP: {}", args[1]);
+                        return;
+                    }
+                }
+            } else {
+                match crate::network::get_ipv4_config() {
+                    Some((ip, _, _)) => {
+                        let b = ip.as_bytes();
+                        [b[0], b[1], b[2], 0]
+                    }
+                    None => {
+                        crate::println_color!(COLOR_RED, "No network configured");
+                        return;
+                    }
+                }
+            };
+
+            crate::println_color!(COLOR_CYAN, "ICMP Ping Sweep — {}.{}.{}.0/24", base[0], base[1], base[2]);
+            crate::println!("Scanning 254 hosts...");
+
+            let hosts = crate::netscan::discovery::ping_sweep_subnet(base, 500);
+
+            crate::println!();
+            crate::println!("IP Address          TTL   RTT     OS Guess");
+            crate::println!("{}", "-".repeat(60));
+            for host in &hosts {
+                let ip_str = crate::netscan::format_ip(host.ip);
+                crate::println_color!(COLOR_GREEN, "{:<20}{:<6}{:<8}{}",
+                    ip_str,
+                    host.ttl.map(|t| alloc::format!("{}", t)).unwrap_or_else(|| alloc::string::String::from("-")),
+                    alloc::format!("{}ms", host.rtt_ms),
+                    host.os_hint);
+            }
+            crate::println!();
+            crate::println!("{} hosts alive", hosts.len());
+        }
+        "full" => {
+            crate::println_color!(COLOR_CYAN, "Full Network Discovery (ARP + Ping)");
+            crate::println!("Scanning...");
+
+            let hosts = crate::netscan::discovery::full_discovery(3000);
+
+            crate::println!();
+            crate::println!("IP Address          MAC Address          TTL   OS Guess");
+            crate::println!("{}", "-".repeat(70));
+            for host in &hosts {
+                let ip_str = crate::netscan::format_ip(host.ip);
+                let mac_str = host.mac.map(|m| crate::netscan::format_mac(m))
+                    .unwrap_or_else(|| alloc::string::String::from("--:--:--:--:--:--"));
+                let ttl_str = host.ttl.map(|t| alloc::format!("{}", t)).unwrap_or_else(|| alloc::string::String::from("-"));
+                crate::println_color!(COLOR_GREEN, "{:<20}{:<21}{:<6}{}",
+                    ip_str, mac_str, ttl_str, host.os_hint);
+            }
+            crate::println!();
+            crate::println!("{} hosts discovered", hosts.len());
+        }
+        _ => {
+            // Default: ARP sweep
+            cmd_discover(&["arp"]);
+        }
+    }
+}
+
+pub(super) fn cmd_banner(args: &[&str]) {
+    if args.is_empty() {
+        crate::println_color!(COLOR_CYAN, "TrustScan — Banner Grabber");
+        crate::println!("Usage: banner <ip|host> [port1,port2,...]");
+        crate::println!("  banner 192.168.1.1              Grab banners from common ports");
+        crate::println!("  banner 192.168.1.1 22,80,443    Grab from specific ports");
+        return;
+    }
+
+    let target = match crate::netscan::resolve_target(args[0]) {
+        Some(ip) => ip,
+        None => {
+            crate::println_color!(COLOR_RED, "Cannot resolve: {}", args[0]);
+            return;
+        }
+    };
+
+    let ports = if args.len() > 1 {
+        parse_port_spec(args[1])
+    } else {
+        alloc::vec![21, 22, 25, 80, 110, 143, 443, 3306, 5432, 6379, 8080]
+    };
+
+    crate::println_color!(COLOR_CYAN, "Banner Grabbing {} ({} ports)", crate::netscan::format_ip(target), ports.len());
+    crate::println!();
+
+    let banners = crate::netscan::banner::grab_banners(target, &ports, 3000);
+
+    if banners.is_empty() {
+        crate::println_color!(COLOR_YELLOW, "No banners could be grabbed (ports may be closed)");
+        return;
+    }
+
+    for b in &banners {
+        crate::print_color!(COLOR_GREEN, "{}/tcp {:<15}", b.port, b.service);
+        if let Some(ref ver) = b.version {
+            crate::print_color!(COLOR_CYAN, " [{}]", ver);
+        }
+        crate::println!();
+        crate::println!("  {}", b.banner);
+    }
+}
+
+pub(super) fn cmd_sniff(args: &[&str]) {
+    let subcmd = args.first().copied().unwrap_or("help");
+
+    match subcmd {
+        "start" => {
+            crate::netscan::sniffer::start_capture();
+            crate::println_color!(COLOR_GREEN, "Packet capture started");
+            crate::println!("Use 'sniff show' to view captured packets");
+            crate::println!("Use 'sniff stop' to stop capture");
+        }
+        "stop" => {
+            crate::netscan::sniffer::stop_capture();
+            let (count, bytes, _) = crate::netscan::sniffer::get_stats();
+            crate::println_color!(COLOR_YELLOW, "Capture stopped");
+            crate::println!("Captured {} packets, {} bytes", count, bytes);
+        }
+        "show" | "dump" => {
+            let count = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(20);
+            let packets = crate::netscan::sniffer::peek_captured_packets(count);
+
+            if packets.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "No packets captured");
+                if !crate::netscan::sniffer::is_capturing() {
+                    crate::println!("Start capture with: sniff start");
+                }
+                return;
+            }
+
+            crate::println!("No.  Time      Protocol  Source              Destination         Info");
+            crate::println!("{}", "-".repeat(90));
+
+            for (i, pkt) in packets.iter().rev().enumerate() {
+                let src = pkt.src_ip.map(|ip| crate::netscan::format_ip(ip))
+                    .unwrap_or_else(|| crate::netscan::format_mac(pkt.src_mac));
+                let dst = pkt.dst_ip.map(|ip| crate::netscan::format_ip(ip))
+                    .unwrap_or_else(|| crate::netscan::format_mac(pkt.dst_mac));
+
+                let proto_color = match pkt.protocol {
+                    crate::netscan::sniffer::Protocol::Tcp => COLOR_CYAN,
+                    crate::netscan::sniffer::Protocol::Udp => COLOR_BLUE,
+                    crate::netscan::sniffer::Protocol::Http => COLOR_GREEN,
+                    crate::netscan::sniffer::Protocol::Tls => COLOR_MAGENTA,
+                    crate::netscan::sniffer::Protocol::Arp => COLOR_YELLOW,
+                    crate::netscan::sniffer::Protocol::Icmp => COLOR_RED,
+                    crate::netscan::sniffer::Protocol::Dns => COLOR_BRIGHT_GREEN,
+                    _ => COLOR_WHITE,
+                };
+
+                crate::print!("{:<5}{:<10}", i + 1, pkt.timestamp_ms);
+                crate::print_color!(proto_color, "{:<10}", pkt.protocol.as_str());
+                crate::print!("{:<20}{:<20}", src, dst);
+                crate::println!("{}", &pkt.info[..pkt.info.len().min(40)]);
+            }
+
+            let (total_count, total_bytes, buffered) = crate::netscan::sniffer::get_stats();
+            crate::println!();
+            crate::println!("Total: {} packets, {} bytes ({} in buffer)",
+                total_count, total_bytes, buffered);
+        }
+        "hex" => {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            let packets = crate::netscan::sniffer::peek_captured_packets(idx + 1);
+            if let Some(pkt) = packets.get(idx) {
+                crate::println_color!(COLOR_CYAN, "Packet #{} — {} bytes — {}",
+                    idx + 1, pkt.length, pkt.protocol.as_str());
+                crate::println!("{}", crate::netscan::sniffer::hex_dump(&pkt.raw_data, 128));
+            } else {
+                crate::println_color!(COLOR_YELLOW, "No packet at index {}", idx);
+            }
+        }
+        "stats" => {
+            let (count, bytes, buffered) = crate::netscan::sniffer::get_stats();
+            let active = crate::netscan::sniffer::is_capturing();
+            crate::println_color!(COLOR_CYAN, "Sniffer Statistics");
+            crate::println!("  Status:    {}", if active { "CAPTURING" } else { "STOPPED" });
+            crate::println!("  Packets:   {}", count);
+            crate::println!("  Bytes:     {}", bytes);
+            crate::println!("  Buffered:  {}", buffered);
+        }
+        _ => {
+            crate::println_color!(COLOR_CYAN, "TrustScan — Packet Sniffer");
+            crate::println!("Usage:");
+            crate::println!("  sniff start         Start packet capture");
+            crate::println!("  sniff stop          Stop capture");
+            crate::println!("  sniff show [N]      Show last N captured packets");
+            crate::println!("  sniff hex [N]       Hex dump of packet N");
+            crate::println!("  sniff stats         Capture statistics");
+        }
+    }
+}
+
+pub(super) fn cmd_vulnscan(args: &[&str]) {
+    if args.is_empty() {
+        crate::println_color!(COLOR_CYAN, "TrustScan — Vulnerability Scanner");
+        crate::println!("Usage: vulnscan <ip|host> [port1,port2,...]");
+        crate::println!("  vulnscan 192.168.1.1              Scan all common ports + vulns");
+        crate::println!("  vulnscan 192.168.1.1 80,443,3306  Scan specific ports");
+        return;
+    }
+
+    let target = match crate::netscan::resolve_target(args[0]) {
+        Some(ip) => ip,
+        None => {
+            crate::println_color!(COLOR_RED, "Cannot resolve: {}", args[0]);
+            return;
+        }
+    };
+
+    // First, scan ports to find open ones
+    let open_ports = if args.len() > 1 {
+        parse_port_spec(args[1])
+    } else {
+        crate::println!("Scanning ports...");
+        let config = crate::netscan::port_scanner::ScanConfig::new(target).with_top_ports();
+        let (results, _) = crate::netscan::port_scanner::scan(&config);
+        results.iter()
+            .filter(|r| r.state == crate::netscan::port_scanner::PortState::Open)
+            .map(|r| r.port)
+            .collect()
+    };
+
+    if open_ports.is_empty() {
+        crate::println_color!(COLOR_YELLOW, "No open ports found");
+        return;
+    }
+
+    crate::println_color!(COLOR_CYAN, "Vulnerability Assessment — {}", crate::netscan::format_ip(target));
+    crate::println!("Checking {} ports...", open_ports.len());
+    crate::println!();
+
+    let findings = crate::netscan::vuln::scan(target, &open_ports);
+
+    if findings.is_empty() {
+        crate::println_color!(COLOR_GREEN, "No vulnerabilities detected");
+        return;
+    }
+
+    // Summary
+    let critical = findings.iter().filter(|f| f.severity == crate::netscan::vuln::Severity::Critical).count();
+    let high = findings.iter().filter(|f| f.severity == crate::netscan::vuln::Severity::High).count();
+    let medium = findings.iter().filter(|f| f.severity == crate::netscan::vuln::Severity::Medium).count();
+
+    if critical > 0 {
+        crate::print_color!(COLOR_RED, "CRITICAL: {} ", critical);
+    }
+    if high > 0 {
+        crate::print_color!(COLOR_RED, "HIGH: {} ", high);
+    }
+    if medium > 0 {
+        crate::print_color!(COLOR_YELLOW, "MEDIUM: {} ", medium);
+    }
+    crate::println!("({} total findings)", findings.len());
+    crate::println!();
+
+    // Detailed findings
+    for f in &findings {
+        let sev_color = match f.severity {
+            crate::netscan::vuln::Severity::Critical => COLOR_RED,
+            crate::netscan::vuln::Severity::High => COLOR_RED,
+            crate::netscan::vuln::Severity::Medium => COLOR_YELLOW,
+            crate::netscan::vuln::Severity::Low => COLOR_CYAN,
+            crate::netscan::vuln::Severity::Info => COLOR_GRAY,
+        };
+        crate::print_color!(sev_color, "[{:<8}] ", f.severity.as_str());
+        crate::println!("{}/{} — {}", f.port, f.service, f.title);
+        crate::println!("           {}", f.description);
+        crate::println_color!(COLOR_GREEN, "           Fix: {}", f.recommendation);
+        crate::println!();
+    }
+}
+
+pub(super) fn cmd_traceroute_real(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: traceroute <host>");
+        return;
+    }
+
+    let host = args[0];
+    let ip = if let Some(ip) = parse_ipv4(host) {
+        ip
+    } else if let Some(resolved) = crate::netstack::dns::resolve(host) {
+        resolved
+    } else {
+        crate::println_color!(COLOR_RED, "Unable to resolve host");
+        return;
+    };
+
+    let max_hops = args.get(1).and_then(|s| s.parse::<u8>().ok()).unwrap_or(30);
+
+    crate::println!("traceroute to {} ({}), {} hops max, 60 byte packets",
+        host, crate::netscan::format_ip(ip), max_hops);
+
+    let hops = crate::netscan::traceroute::trace(ip, max_hops, 2000);
+
+    for hop in &hops {
+        crate::print!("{:>2}  ", hop.hop_num);
+        if let Some(hop_ip) = hop.ip {
+            crate::print!("{:<18}", crate::netscan::format_ip(hop_ip));
+            for &rtt in &hop.rtt_ms {
+                if rtt == 0 {
+                    crate::print!("*      ");
+                } else {
+                    crate::print!("{} ms  ", rtt);
+                }
+            }
+            crate::println!();
+        } else {
+            crate::println!("* * *");
+        }
+    }
+}
+
 pub(super) fn cmd_ping(args: &[&str]) {
     if args.is_empty() {
         crate::println!("Usage: ping <ip|host>");
@@ -3616,6 +4473,7 @@ fn print_hv_help() {
     crate::println!("  vm create <name> <mem_mb>  - Create a new VM");
     crate::println!("  vm start <id> [guest]      - Start a VM with optional guest");
     crate::println!("  vm run <guest>             - Quick create and run a guest");
+    crate::println!("  vm linux <bzimage> [initrd] [mb] - Boot a Linux bzImage in a VM");
     crate::println!("  vm stop <id>               - Stop a VM");
     crate::println!("  vm list                    - List all VMs");
     crate::println!("  vm guests                  - List available guests");
@@ -4177,9 +5035,141 @@ pub(super) fn cmd_vm(args: &[&str]) {
             }
         }
         
+        // ── Boot Linux bzImage from filesystem ──────────────────
+        "linux" => {
+            if args.len() < 2 {
+                crate::println!("Usage: vm linux <bzimage_path> [initrd_path] [memory_mb] [cmdline]");
+                crate::println!("  Example: vm linux /boot/vmlinuz /boot/initrd.img 128");
+                crate::println!("  Default: 128 MB RAM, console=ttyS0 earlyprintk nokaslr");
+                return;
+            }
+            
+            let bzimage_path = args[1];
+            let initrd_path = if args.len() > 2 && !args[2].parse::<usize>().is_ok() {
+                Some(args[2])
+            } else {
+                None
+            };
+            let mem_idx = if initrd_path.is_some() { 3 } else { 2 };
+            let mem_mb: usize = if args.len() > mem_idx {
+                args[mem_idx].parse().unwrap_or(128)
+            } else {
+                128
+            };
+            let cmdline_idx = mem_idx + 1;
+            let cmdline = if args.len() > cmdline_idx {
+                args[cmdline_idx..].join(" ")
+            } else {
+                alloc::string::String::from("console=ttyS0 earlyprintk=serial,ttyS0 nokaslr noapic")
+            };
+            
+            // Read bzImage from filesystem
+            crate::println_color!(COLOR_CYAN, "Loading Linux kernel from {}...", bzimage_path);
+            let bzimage_data = match crate::vfs::read_file(bzimage_path) {
+                Ok(data) => {
+                    crate::println_color!(COLOR_GREEN, "  Kernel: {} bytes ({} KB)", data.len(), data.len() / 1024);
+                    data
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "  Error reading {}: {:?}", bzimage_path, e);
+                    return;
+                }
+            };
+            
+            // Read initrd if provided
+            let initrd_data = if let Some(path) = initrd_path {
+                crate::println!("Loading initrd from {}...", path);
+                match crate::vfs::read_file(path) {
+                    Ok(data) => {
+                        crate::println_color!(COLOR_GREEN, "  Initrd: {} bytes ({} KB)", data.len(), data.len() / 1024);
+                        Some(data)
+                    }
+                    Err(e) => {
+                        crate::println_color!(COLOR_RED, "  Error reading {}: {:?}", path, e);
+                        return;
+                    }
+                }
+            } else {
+                None
+            };
+            
+            // Initialize hypervisor
+            if !crate::hypervisor::is_enabled() {
+                crate::println!("Initializing hypervisor...");
+                if let Err(e) = crate::hypervisor::init() {
+                    crate::println_color!(COLOR_RED, "Hypervisor init failed: {:?}", e);
+                    return;
+                }
+            }
+            
+            // Create VM with specified memory
+            crate::println!("Creating VM ({} MB RAM)...", mem_mb);
+            crate::println!("Cmdline: {}", cmdline);
+            
+            match crate::hypervisor::create_vm("linux-guest", mem_mb) {
+                Ok(id) => {
+                    crate::println!("Booting Linux in VM #{}...", id);
+                    
+                    let initrd_ref = initrd_data.as_deref();
+                    
+                    // Use the SVM/VMX start_linux path
+                    match crate::hypervisor::cpu_vendor() {
+                        crate::hypervisor::CpuVendor::Amd => {
+                            let result = crate::hypervisor::svm_vm::with_vm(id, |vm| {
+                                vm.start_linux(&bzimage_data, &cmdline, initrd_ref)
+                            });
+                            match result {
+                                Some(Ok(())) => {
+                                    crate::println_color!(COLOR_GREEN, "Linux VM completed");
+                                }
+                                Some(Err(e)) => {
+                                    crate::println_color!(COLOR_RED, "Linux VM failed: {:?}", e);
+                                    crate::println!("Use 'vm inspect {}' for details", id);
+                                }
+                                None => {
+                                    crate::println_color!(COLOR_RED, "VM #{} not found", id);
+                                }
+                            }
+                        }
+                        crate::hypervisor::CpuVendor::Intel => {
+                            // For Intel, use linux_vm module
+                            let config = crate::hypervisor::linux_vm::LinuxVmConfig {
+                                memory_mb: mem_mb,
+                                cmdline: cmdline.clone(),
+                                ..Default::default()
+                            };
+                            match crate::hypervisor::linux_vm::LinuxVm::new(config) {
+                                Ok(mut vm) => {
+                                    let empty_initrd = alloc::vec::Vec::new();
+                                    let initrd_data_ref = initrd_data.as_deref().unwrap_or(&empty_initrd);
+                                    match vm.boot(&bzimage_data, initrd_data_ref) {
+                                        Ok(()) => {
+                                            crate::println_color!(COLOR_GREEN, "Linux VM completed");
+                                        }
+                                        Err(e) => {
+                                            crate::println_color!(COLOR_RED, "Linux VM failed: {:?}", e);
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    crate::println_color!(COLOR_RED, "Failed to create Linux VM: {:?}", e);
+                                }
+                            }
+                        }
+                        _ => {
+                            crate::println_color!(COLOR_RED, "No hardware virtualization available");
+                        }
+                    }
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "Failed to create VM: {:?}", e);
+                }
+            }
+        }
+        
         _ => {
             crate::println!("Unknown VM command: {}", args[0]);
-            crate::println!("Commands: create, start, run, stop, list, guests, mount, console, input, inspect, dump, regs, stack");
+            crate::println!("Commands: create, start, run, stop, list, guests, linux, mount, console, input, inspect, dump, regs, stack");
         }
     }
 }

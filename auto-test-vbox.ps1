@@ -335,6 +335,11 @@ Write-Host ""
 Write-Host "  -- SELFTEST --" -ForegroundColor Cyan
 Run-SingleTest "SELFTEST" "builtin self-test" "test" { param($o) $o -match "self-test" -or $o -match "OK" -or $o -match "Done" } 5
 
+# --- INTTEST (25-test integration suite) ---
+Write-Host ""
+Write-Host "  -- INTTEST --" -ForegroundColor Cyan
+Run-SingleTest "INTTEST" "integration test suite" "inttest" { param($o) $o -match "ALL.*TESTS PASSED" } 30
+
 # --- TRUSTLANG ---
 Write-Host ""
 Write-Host "  -- TRUSTLANG --" -ForegroundColor Cyan

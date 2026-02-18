@@ -410,3 +410,185 @@ pub fn signal_name(signo: u32) -> &'static str {
         _ => "UNKNOWN",
     }
 }
+
+// ============================================================================
+// Signal Frame — pushed onto user stack for signal delivery
+// ============================================================================
+
+/// Signal frame pushed onto the user stack when delivering a signal.
+/// The signal handler returns to `pretcode` (sa_restorer) which calls
+/// rt_sigreturn to restore the original context.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct SignalFrame {
+    /// Return address: sa_restorer (calls rt_sigreturn)
+    pub pretcode: u64,
+    /// Signal number (for diagnostics, signo is also passed in RDI)
+    pub signo: u32,
+    /// Padding for alignment
+    pub _pad: u32,
+    /// Saved user RIP (return address after signal handler)
+    pub saved_rip: u64,
+    /// Saved user RSP
+    pub saved_rsp: u64,
+    /// Saved RFLAGS
+    pub saved_rflags: u64,
+    /// Saved RAX (syscall return value)
+    pub saved_rax: u64,
+    /// Saved signal mask (to restore on sigreturn)
+    pub saved_mask: u64,
+}
+
+/// Try to deliver a pending signal to the current process.
+///
+/// Called from the syscall return path. If a signal with a user handler is
+/// pending, this function:
+/// 1. Pushes a `SignalFrame` onto the user stack
+/// 2. Modifies the return context (RIP, RSP) to jump to the handler
+/// 3. Returns `Some((signo, handler))` so the caller can set RDI
+///
+/// Returns `None` if no signal needs delivery.
+pub fn try_deliver_signal(
+    user_rip: &mut u64,
+    user_rsp: &mut u64,
+    user_rflags: &mut u64,
+    syscall_rax: u64,
+) -> Option<u64> {
+    let pid = crate::process::current_pid();
+    
+    let mut states = SIGNAL_STATES.lock();
+    let state = states.get_mut(&pid)?;
+    
+    let signo = state.get_deliverable()?;
+    let action = state.actions[signo as usize];
+    
+    match action.sa_handler {
+        SIG_IGN => {
+            state.clear_pending(signo);
+            None
+        }
+        SIG_DFL => {
+            state.clear_pending(signo);
+            drop(states);
+            handle_default_action(pid, signo);
+            None
+        }
+        handler => {
+            // User handler — deliver the signal
+            state.clear_pending(signo);
+            
+            // Save the old signal mask and apply sa_mask during handler
+            let old_mask = state.blocked.load(Ordering::Relaxed);
+            let mut new_mask = old_mask | action.sa_mask;
+            // Block the signal itself during handler (unless SA_NODEFER)
+            if action.sa_flags & sa_flags::SA_NODEFER == 0 {
+                new_mask |= 1 << signo;
+            }
+            state.blocked.store(new_mask, Ordering::SeqCst);
+            
+            // SA_RESETHAND: reset handler to SIG_DFL after delivery
+            if action.sa_flags & sa_flags::SA_RESETHAND != 0 {
+                state.actions[signo as usize].sa_handler = SIG_DFL;
+            }
+            
+            drop(states);
+            
+            // Build signal frame on the user stack
+            let frame_size = core::mem::size_of::<SignalFrame>() as u64;
+            // Align to 16 bytes, then subtract 8 for the "return address" slot
+            // so that RSP % 16 == 8 when the handler starts (x86_64 ABI)
+            let new_rsp = ((*user_rsp - frame_size) & !0xF) - 8;
+            
+            // Validate user stack pointer
+            if !crate::memory::is_user_address(new_rsp) {
+                // Stack overflow during signal delivery — terminate
+                crate::process::terminate(pid);
+                return None;
+            }
+            
+            // Write signal frame
+            let frame = unsafe { &mut *(new_rsp as *mut SignalFrame) };
+            frame.pretcode = if action.sa_flags & sa_flags::SA_RESTORER != 0 {
+                action.sa_restorer
+            } else {
+                // No restorer — the process should have set one.
+                // We can't provide a kernel trampoline in user space easily,
+                // so terminate if missing.
+                crate::log_debug!("[SIGNAL] No sa_restorer for signal {} — terminating PID {}", signo, pid);
+                crate::process::terminate(pid);
+                return None;
+            };
+            frame.signo = signo;
+            frame._pad = 0;
+            frame.saved_rip = *user_rip;
+            frame.saved_rsp = *user_rsp;
+            frame.saved_rflags = *user_rflags;
+            frame.saved_rax = syscall_rax;
+            frame.saved_mask = old_mask;
+            
+            // Redirect return to the signal handler
+            *user_rip = handler;
+            *user_rsp = new_rsp;
+            // RFLAGS unchanged
+            
+            crate::log_debug!("[SIGNAL] Delivering signal {} to PID {} at handler {:#x}", signo, pid, handler);
+            
+            Some(signo as u64)
+        }
+    }
+}
+
+/// Restore context from a signal frame (called by rt_sigreturn).
+///
+/// Reads the `SignalFrame` from the user stack and restores the saved
+/// execution context. Returns the saved RAX (original syscall result).
+pub fn sigreturn_restore(
+    user_rip: &mut u64,
+    user_rsp: &mut u64,
+    user_rflags: &mut u64,
+) -> i64 {
+    let pid = crate::process::current_pid();
+    
+    // The signal frame is at the current user RSP
+    // (the handler did `ret` which consumed pretcode, so RSP might be off)
+    // Actually, sa_restorer does `mov rax, 15; syscall` directly, so RSP
+    // still points to the signal frame when rt_sigreturn enters.
+    // After the `ret` from the handler, RSP points past pretcode.
+    // But sa_restorer is called via `ret`, so RSP = &frame + 8 = &frame.signo
+    // Wait — the handler RETurns to pretcode value. sa_restorer is a function
+    // that calls rt_sigreturn. During rt_sigreturn syscall, the user RSP is
+    // whatever sa_restorer left it at. We need the frame address.
+    //
+    // The frame starts at RSP - 8 (pretcode was the return address, consumed by RET).
+    // Actually, let's compute: when signal was delivered:
+    //   user_rsp = new_rsp (points to start of frame = pretcode)
+    // When handler executes: RSP = new_rsp, first thing is pretcode at [RSP]
+    // Handler does `ret` → pops pretcode → RSP = new_rsp + 8
+    // sa_restorer runs with RSP = new_rsp + 8
+    // sa_restorer does `mov rax, 15; syscall` → syscall_entry saves RSP
+    // During rt_sigreturn: user_rsp = new_rsp + 8
+    // Frame is at user_rsp - 8
+    
+    let frame_addr = *user_rsp - 8;
+    
+    if !crate::memory::is_user_address(frame_addr) {
+        return -22; // EINVAL
+    }
+    
+    let frame = unsafe { &*(frame_addr as *const SignalFrame) };
+    
+    // Restore saved context
+    *user_rip = frame.saved_rip;
+    *user_rsp = frame.saved_rsp;
+    *user_rflags = frame.saved_rflags;
+    
+    // Restore signal mask
+    if let Some(state) = SIGNAL_STATES.lock().get(&pid) {
+        state.blocked.store(frame.saved_mask, Ordering::SeqCst);
+    }
+    
+    crate::log_debug!("[SIGNAL] sigreturn: restoring RIP={:#x} RSP={:#x} RAX={}", 
+        frame.saved_rip, frame.saved_rsp, frame.saved_rax as i64);
+    
+    frame.saved_rax as i64
+}

@@ -240,6 +240,10 @@ struct Fat32Inode {
     size: u64,
     is_dir: bool,
     name: String,
+    /// Directory cluster containing this entry (0 for root)
+    dir_cluster: u32,
+    /// Byte offset within the directory cluster data
+    dir_entry_offset: usize,
 }
 
 /// Block device reader/writer trait
@@ -353,6 +357,8 @@ impl Fat32Fs {
                 size: 0,
                 is_dir: true,
                 name: String::from("/"),
+                dir_cluster: 0,
+                dir_entry_offset: 0,
             });
         }
         
@@ -751,9 +757,50 @@ impl Fat32Fs {
     
     /// Update directory entry (size, cluster, etc.)
     fn update_dir_entry(&self, ino: Ino, new_cluster: u32, new_size: u64) -> VfsResult<()> {
-        // For now, we need to scan to find and update the entry
-        // This is a simplified version - full implementation would track entry location
-        let _ = (ino, new_cluster, new_size);
+        let inodes = self.inodes.read();
+        let inode = inodes.get(&ino).ok_or(VfsError::NotFound)?;
+        let dir_cluster = inode.dir_cluster;
+        let dir_offset = inode.dir_entry_offset;
+        drop(inodes);
+
+        if dir_cluster == 0 {
+            // Root inode or unknown location — skip
+            return Ok(());
+        }
+
+        let entry_size = core::mem::size_of::<Fat32DirEntry>();
+        let cluster_size = self.bpb.cluster_size();
+        let entries_per_cluster = cluster_size / entry_size;
+
+        // Walk the directory cluster chain to find the right cluster
+        let chain = self.get_cluster_chain(dir_cluster)?;
+        let cluster_index = dir_offset / cluster_size;
+        let offset_in_cluster = dir_offset % cluster_size;
+
+        if cluster_index >= chain.len() {
+            return Err(VfsError::IoError);
+        }
+
+        let target_cluster = chain[cluster_index];
+        let mut data = self.read_cluster(target_cluster)?;
+
+        // Read existing entry
+        let entry = unsafe {
+            &mut *(data.as_mut_ptr().add(offset_in_cluster) as *mut Fat32DirEntry)
+        };
+
+        // Update cluster pointers
+        entry.cluster_lo = (new_cluster & 0xFFFF) as u16;
+        entry.cluster_hi = ((new_cluster >> 16) & 0xFFFF) as u16;
+
+        // Update file size (only for regular files, not directories)
+        if entry.attr & Fat32DirEntry::ATTR_DIRECTORY == 0 {
+            entry.file_size = new_size as u32;
+        }
+
+        // Write cluster back
+        self.write_cluster(target_cluster, &data)?;
+
         Ok(())
     }
     
@@ -811,8 +858,8 @@ impl Fat32Fs {
         Ok(())
     }
     
-    /// Parse directory entries
-    fn parse_directory(&self, cluster: u32) -> VfsResult<Vec<(String, Fat32DirEntry)>> {
+    /// Parse directory entries, returning (name, entry, byte_offset_in_chain)
+    fn parse_directory(&self, cluster: u32) -> VfsResult<Vec<(String, Fat32DirEntry, usize)>> {
         let data = self.read_chain(cluster, None)?;
         let entry_size = core::mem::size_of::<Fat32DirEntry>();
         let mut entries = Vec::new();
@@ -856,7 +903,7 @@ impl Fat32Fs {
                 
                 // Skip . and ..
                 if name != "." && name != ".." {
-                    entries.push((name, entry));
+                    entries.push((name, entry, i));
                 }
             }
             
@@ -883,6 +930,8 @@ impl Clone for Fat32Inode {
             cluster: self.cluster,
             size: self.size,
             is_dir: self.is_dir,
+            dir_cluster: self.dir_cluster,
+            dir_entry_offset: self.dir_entry_offset,
             name: self.name.clone(),
         }
     }
@@ -1018,6 +1067,9 @@ impl FileOps for Fat32File {
             }
         }
         
+        // Persist size+cluster to directory entry on disk
+        let _ = fs.update_dir_entry(self.ino, new_cluster, new_size);
+        
         Ok(buf.len())
     }
     
@@ -1066,7 +1118,7 @@ impl DirOps for Fat32Dir {
         // Parse directory
         let entries = fs.parse_directory(self.cluster)?;
         
-        for (entry_name, entry) in entries {
+        for (entry_name, entry, byte_offset) in entries {
             if entry_name.eq_ignore_ascii_case(name) {
                 let ino = fs.alloc_ino();
                 let inode = Fat32Inode {
@@ -1074,6 +1126,8 @@ impl DirOps for Fat32Dir {
                     size: entry.size() as u64,
                     is_dir: entry.is_directory(),
                     name: entry_name,
+                    dir_cluster: self.cluster,
+                    dir_entry_offset: byte_offset,
                 };
                 fs.inodes.write().insert(ino, inode);
                 return Ok(ino);
@@ -1089,7 +1143,7 @@ impl DirOps for Fat32Dir {
         
         let mut result = Vec::new();
         
-        for (name, entry) in entries {
+        for (name, entry, byte_offset) in entries {
             let ino = fs.alloc_ino();
             let is_dir = entry.is_directory();
             
@@ -1099,6 +1153,8 @@ impl DirOps for Fat32Dir {
                 size: entry.size() as u64,
                 is_dir,
                 name: name.clone(),
+                dir_cluster: self.cluster,
+                dir_entry_offset: byte_offset,
             });
             
             result.push(DirEntry {
@@ -1124,6 +1180,16 @@ impl DirOps for Fat32Dir {
         // Create the entry on disk
         let (cluster, _size) = fs.create_entry(self.cluster, name, is_dir)?;
         
+        // Find the directory entry offset we just created
+        let dir_entry_offset = if let Ok(entries) = fs.parse_directory(self.cluster) {
+            entries.iter()
+                .find(|(n, _, _)| n.eq_ignore_ascii_case(name))
+                .map(|(_, _, off)| *off)
+                .unwrap_or(0)
+        } else {
+            0
+        };
+        
         // Create inode
         let ino = fs.alloc_ino();
         fs.inodes.write().insert(ino, Fat32Inode {
@@ -1131,6 +1197,8 @@ impl DirOps for Fat32Dir {
             size: 0,
             is_dir,
             name: name.to_string(),
+            dir_cluster: self.cluster,
+            dir_entry_offset,
         });
         
         Ok(ino)

@@ -96,6 +96,15 @@ mod transpiler;
 // TrustView — binary analysis engine (ELF parser, disassembler, xrefs)
 mod binary_analysis;
 
+// TrustScan — network security scanning toolkit (port scanner, sniffer, vuln scanner)
+mod netscan;
+
+// HTTP Server — embedded web server
+mod httpd;
+
+// TrustPkg — package manager
+mod trustpkg;
+
 // TrustLab — real-time educational OS introspection laboratory
 mod lab_mode;
 
@@ -760,6 +769,7 @@ pub unsafe extern "C" fn kmain() -> ! {
             
             // Start network stack
             netstack::dhcp::start();
+            netstack::ipv6::init();
         }
     } else {
         framebuffer::print_boot_status("Network disabled", BootStatus::Skip);

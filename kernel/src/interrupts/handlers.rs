@@ -344,3 +344,19 @@ pub extern "x86-interrupt" fn reschedule_ipi_handler(_stack_frame: InterruptStac
     crate::apic::lapic_eoi();
     crate::thread::schedule();
 }
+
+/// VirtIO shared interrupt handler (vector 62)
+/// Checks ISR status on all VirtIO devices and dispatches accordingly.
+pub extern "x86-interrupt" fn virtio_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    // Check virtio-net
+    if crate::virtio_net::is_initialized() {
+        crate::virtio_net::handle_interrupt();
+    }
+    
+    // Check virtio-blk
+    if crate::virtio_blk::is_initialized() {
+        crate::virtio_blk::handle_interrupt();
+    }
+    
+    crate::apic::lapic_eoi();
+}

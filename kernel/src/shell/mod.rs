@@ -219,6 +219,9 @@ pub fn run() -> ! {
     crate::framebuffer::set_matrix_theme();
     crate::framebuffer::clear();
 
+    // Initialize shell scripting engine (variables, etc.)
+    scripting::init();
+
     // Note: ramfs is already initialized in main.rs before persistence restore
 
     // Bootstrapping complete: allow timer handler to run
@@ -703,6 +706,10 @@ pub(super) fn execute_command(cmd: &str) {
     if cmd.is_empty() {
         return;
     }
+
+    // ── Variable expansion ─────────────────────────────────────────
+    let expanded = scripting::expand_variables(cmd);
+    let cmd = expanded.as_str();
     
     // ── Pipeline: split on | (outside quotes) ──────────────────────────
     let pipe_segments = split_pipes(cmd);
@@ -980,7 +987,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "nslookup" | "dig" => vm::cmd_nslookup(args),
         "arp" => vm::cmd_arp(args),
         "route" => vm::cmd_route(args),
-        "traceroute" | "tracert" => vm::cmd_traceroute(args),
+        "traceroute" | "tracert" => vm::cmd_traceroute_real(args),
         "netstat" => vm::cmd_netstat(),
         "exec" | "run" | "./" => vm::cmd_exec(args, command),
         "elfinfo" => vm::cmd_elfinfo(args),
@@ -990,6 +997,23 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "smp" => unix::cmd_smp(args),
         "fontsmooth" => unix::cmd_fontsmooth(args),
         "hv" | "hypervisor" => vm::cmd_hypervisor(args),
+
+        // -- Security Toolkit: TrustScan --
+        "nmap" | "portscan" | "scan" => vm::cmd_nmap(args),
+        "discover" | "hostscan" | "arpscan" => vm::cmd_discover(args),
+        "banner" | "grabber" => vm::cmd_banner(args),
+        "sniff" | "capture" | "tcpdump" => vm::cmd_sniff(args),
+        "vulnscan" | "vuln" => vm::cmd_vulnscan(args),
+        "scantest" | "netscantest" => vm::cmd_netscan_test(args),
+
+        // -- HTTP Server --
+        "httpd" | "httpserv" | "webserv" => commands::cmd_httpd(args),
+
+        // -- Package Manager --
+        "trustpkg" | "pkg" => commands::cmd_trustpkg(args),
+
+        // -- Shell Scripting --
+        "unset" => commands::cmd_unset(args),
 
         // -- network module: Browser, Sandbox, Container --
         "browse" | "www" | "web" => network::cmd_browse(args),
@@ -1104,3 +1128,4 @@ mod unix;           // Unix utility stubs and POSIX commands             (~1160 
 mod apps;           // TrustLang, Film, Transpile, Video, Lab, Gterm    (~3930 lines)
 mod trailer;        // TrustOS Trailer -- 2-min cinematic showcase         (~900 lines)
 mod jarvis;         // Jarvis AI assistant — NLU + planner + executor     (~600 lines)
+pub(crate) mod scripting;  // Shell scripting engine — variables, if/for/while    (~640 lines)

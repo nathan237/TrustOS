@@ -97,6 +97,11 @@ static INITIALIZED: AtomicBool = AtomicBool::new(false);
 /// Received packets queue
 static RX_PACKETS: Mutex<VecDeque<Vec<u8>>> = Mutex::new(VecDeque::new());
 
+/// VirtIO net I/O base (for ISR access without locking DRIVER)
+static VIRTIO_NET_IOBASE: core::sync::atomic::AtomicU16 = core::sync::atomic::AtomicU16::new(0);
+/// Interrupt pending flag (set by ISR, cleared by poll)
+static VIRTIO_NET_IRQ_PENDING: AtomicBool = AtomicBool::new(false);
+
 /// Statistics
 static PACKETS_TX: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 static PACKETS_RX: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
@@ -468,8 +473,18 @@ pub fn init(pci_dev: &PciDevice) -> Result<(), &'static str> {
     driver.setup_rx_buffers()?;
     driver.start()?;
     
+    // Store iobase for ISR access
+    VIRTIO_NET_IOBASE.store(driver.device.iobase, Ordering::SeqCst);
+    
     INITIALIZED.store(true, Ordering::SeqCst);
     *DRIVER.lock() = Some(driver);
+    
+    // Route PCI interrupt through IOAPIC
+    let irq = pci_dev.interrupt_line;
+    if irq > 0 && irq < 255 {
+        crate::apic::route_pci_irq(irq, crate::apic::VIRTIO_VECTOR);
+        crate::serial_println!("[virtio-net] IRQ {} routed to vector {}", irq, crate::apic::VIRTIO_VECTOR);
+    }
     
     Ok(())
 }
@@ -493,6 +508,9 @@ pub fn send_packet(data: &[u8]) -> Result<(), &'static str> {
 
 /// Poll for incoming packets (non-blocking)
 pub fn poll() {
+    // Clear IRQ pending flag if set
+    VIRTIO_NET_IRQ_PENDING.store(false, Ordering::Relaxed);
+    
     let mut driver = DRIVER.lock();
     if let Some(drv) = driver.as_mut() {
         // Check for completed TX
@@ -519,4 +537,27 @@ pub fn get_stats() -> (u64, u64, u64, u64) {
         BYTES_TX.load(Ordering::Relaxed),
         BYTES_RX.load(Ordering::Relaxed),
     )
+}
+
+/// Called from the VirtIO ISR — reads ISR status and sets pending flag.
+/// Safe to call from interrupt context (no mutex locks).
+pub fn handle_interrupt() {
+    let iobase = VIRTIO_NET_IOBASE.load(Ordering::Relaxed);
+    if iobase == 0 { return; }
+    
+    // Read ISR status register (iobase+0x13) — this also acknowledges the interrupt
+    let isr: u8 = unsafe {
+        let mut port = Port::<u8>::new(iobase + 0x13);
+        port.read()
+    };
+    
+    if isr & 1 != 0 {
+        // Bit 0: used ring update (packets ready)
+        VIRTIO_NET_IRQ_PENDING.store(true, Ordering::Release);
+    }
+}
+
+/// Check if there's a pending VirtIO net interrupt
+pub fn irq_pending() -> bool {
+    VIRTIO_NET_IRQ_PENDING.load(Ordering::Relaxed)
 }

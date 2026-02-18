@@ -142,8 +142,9 @@ impl VirtualMachine {
         // Configure VPID if allocated
         vmcs.setup_vpid(self.vpid)?;
         
-        // Créer l'EPT
-        let ept = EptManager::new(self.memory_size)?;
+        // Créer l'EPT — map GPA to actual host physical of guest_memory
+        let mut ept = EptManager::new(self.memory_size)?;
+        ept.setup_guest_memory_mapping(&self.guest_memory)?;
         
         // Configurer l'EPT pointer dans la VMCS
         vmcs.write(fields::EPT_POINTER, ept.ept_pointer().as_u64())?;
@@ -462,6 +463,33 @@ impl VirtualMachine {
                 crate::serial_println!("[VM {}] TRIPLE FAULT! Guest crashed.", self.id);
                 self.state = VmState::Crashed;
                 Ok(false)
+            }
+            
+            exit_reason::XSETBV => {
+                // Guest executing XSETBV (Extended Control Register write)
+                // Linux uses this to enable XSAVE/AVX features
+                let xcr_index = self.guest_regs.rcx as u32;
+                let xcr_value = (self.guest_regs.rdx << 32) | (self.guest_regs.rax & 0xFFFF_FFFF);
+                
+                if xcr_index == 0 {
+                    // XCR0 — sanitize: must keep x87 (bit 0) set, allow SSE (bit 1), AVX (bit 2)
+                    let safe_value = xcr_value | 1; // x87 always required
+                    unsafe {
+                        core::arch::asm!(
+                            "xsetbv",
+                            in("ecx") 0u32,
+                            in("edx") (safe_value >> 32) as u32,
+                            in("eax") safe_value as u32,
+                        );
+                    }
+                    crate::serial_println!("[VM {}] XSETBV XCR0=0x{:X}", self.id, safe_value);
+                } else {
+                    crate::serial_println!("[VM {}] XSETBV ignored XCR{}=0x{:X}", self.id, xcr_index, xcr_value);
+                }
+                
+                let vmcs = self.vmcs.as_ref().unwrap();
+                vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
+                Ok(true)
             }
             
             exit_reason::INVALID_GUEST_STATE => {

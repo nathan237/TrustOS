@@ -245,21 +245,19 @@ extern "C" fn syscall_entry() {
         // - R11 = user RFLAGS
         // 
         // We're still on user stack! Need to switch to kernel stack.
-        // Save user RSP to a temp variable (NOT a register — we must
-        // preserve the user's callee-saved regs R12-R15 across syscalls).
         
-        // Save user RSP in a temp variable
+        // Save user RSP, RIP, RFLAGS to statics (for signal delivery)
         "mov [rip + {user_rsp_temp}], rsp",
+        "mov [rip + {user_return_rip}], rcx",
+        "mov [rip + {user_return_rflags}], r11",
+        
+        // Clear signal delivery flag
+        "mov QWORD PTR [rip + {signal_signo}], 0",
         
         // Load kernel stack
         "mov rsp, [rip + {kernel_stack}]",
         
-        // Push user context from saved location
-        "push QWORD PTR [rip + {user_rsp_temp}]",   // User RSP
-        "push rcx",          // User RIP (saved by SYSCALL)
-        "push r11",          // User RFLAGS (saved by SYSCALL)
-        
-        // Push callee-saved registers (user's original values, unmodified!)
+        // Push callee-saved registers (user's original values)
         "push rbx",
         "push rbp",
         "push r12",
@@ -303,29 +301,52 @@ extern "C" fn syscall_entry() {
         "pop rbp",
         "pop rbx",
         
-        // Restore user RFLAGS and RIP
-        "pop r11",           // User RFLAGS
-        "pop rcx",           // User RIP
-        "pop rsp",           // User RSP
+        // Load return context FROM STATICS (may have been modified by signal delivery)
+        "mov r11, [rip + {user_return_rflags}]",
+        "mov rcx, [rip + {user_return_rip}]",
+        
+        // Check if we need to deliver a signal (set RDI = signo)
+        "mov rdi, [rip + {signal_signo}]",
+        // RDI is now either 0 (no signal) or the signal number
+        // Signal handlers expect signo in RDI; normal returns don't care about RDI
+        
+        // Restore user RSP
+        "mov rsp, [rip + {user_rsp_temp}]",
         
         // Return to Ring 3
         "sysretq",
         
         kernel_stack = sym KERNEL_SYSCALL_STACK_TOP,
         user_rsp_temp = sym USER_RSP_TEMP,
+        user_return_rip = sym USER_RETURN_RIP,
+        user_return_rflags = sym USER_RETURN_RFLAGS,
+        signal_signo = sym SIGNAL_DELIVER_SIGNO,
         handler = sym crate::interrupts::syscall::syscall_handler_rust,
     );
 }
 
 /// Temporary storage for user RSP during syscall entry (before stack switch)
 #[no_mangle]
-static mut USER_RSP_TEMP: u64 = 0;
+pub static mut USER_RSP_TEMP: u64 = 0;
 
-/// Kernel stack for syscall handling (separate from interrupt stacks)
-static mut KERNEL_SYSCALL_STACK: [u8; 65536] = [0; 65536]; // 64 KB
-/// Pointer to top of kernel syscall stack
+/// User RIP saved by SYSCALL (from RCX) — may be modified by signal delivery
 #[no_mangle]
-static mut KERNEL_SYSCALL_STACK_TOP: u64 = 0;
+pub static mut USER_RETURN_RIP: u64 = 0;
+
+/// User RFLAGS saved by SYSCALL (from R11) — may be modified by signal delivery
+#[no_mangle]
+pub static mut USER_RETURN_RFLAGS: u64 = 0;
+
+/// Signal number to deliver (0 = none). When non-zero, the syscall return
+/// path sets RDI = this value so the signal handler receives the signo.
+#[no_mangle]
+pub static mut SIGNAL_DELIVER_SIGNO: u64 = 0;
+
+/// Kernel stack for syscall handling (default/fallback)
+static mut KERNEL_SYSCALL_STACK: [u8; 65536] = [0; 65536]; // 64 KB
+/// Pointer to top of kernel syscall stack (updated per-thread by scheduler)
+#[no_mangle]
+pub static mut KERNEL_SYSCALL_STACK_TOP: u64 = 0;
 
 /// Initialize kernel syscall stack
 pub fn init_syscall_stack() {
@@ -492,4 +513,82 @@ pub unsafe fn return_from_ring3(exit_code: i32) -> ! {
 /// Check if a Ring 3 process is currently executing
 pub fn is_process_active() -> bool {
     unsafe { USERLAND_PROCESS_ACTIVE }
+}
+
+// ───────────────────────────────────────────────────────
+// Thread-based Ring 3 Execution (preemptive multitasking)
+// ───────────────────────────────────────────────────────
+
+use core::sync::atomic::{AtomicI32, AtomicU64, Ordering};
+
+/// Exit code set by a user thread when it calls exit()
+static USER_EXIT_CODE: AtomicI32 = AtomicI32::new(0);
+/// TID of the kernel thread waiting for a user process to finish
+pub static WAITING_KERNEL_TID: AtomicU64 = AtomicU64::new(0);
+
+/// Launch a user process as a schedulable thread.
+///
+/// This is the preemptive alternative to `exec_ring3_process`:
+/// 1. Spawns a user thread via the thread scheduler
+/// 2. Blocks the calling kernel thread until the user process exits
+/// 3. Returns the exit code
+///
+/// The user thread is fully preemptible by the timer interrupt and
+/// can coexist with other kernel (and future user) threads.
+///
+/// # Safety
+/// Same requirements as `exec_ring3_process`.
+pub unsafe fn launch_user_process(entry_point: u64, user_stack: u64) -> i32 {
+    let pid = crate::process::current_pid();
+    let caller_tid = crate::thread::current_tid();
+    
+    // Store the calling thread's TID so the EXIT handler can wake us
+    WAITING_KERNEL_TID.store(caller_tid, Ordering::SeqCst);
+    USER_EXIT_CODE.store(0, Ordering::SeqCst);
+    USERLAND_PROCESS_ACTIVE = true;
+    
+    // Set the syscall stack to the calling thread's kernel stack
+    // (until the scheduler switches to the user thread and updates it)
+    
+    // Spawn the user thread — it will be scheduled and IRETQ to Ring 3
+    let _user_tid = crate::thread::spawn_user(pid, "user_main", entry_point, user_stack, 0);
+    
+    crate::log_debug!("[USERLAND] Launched user thread TID={:#x} for PID {}, waiting on TID={:#x}", 
+        _user_tid, pid, caller_tid);
+    
+    // Block the calling kernel thread and yield
+    crate::thread::block(caller_tid);
+    crate::thread::yield_thread();
+    
+    // When we resume, the user process has exited
+    USERLAND_PROCESS_ACTIVE = false;
+    
+    let code = USER_EXIT_CODE.load(Ordering::SeqCst);
+    crate::log_debug!("[USERLAND] User process exited with code {}", code);
+    code
+}
+
+/// Called by the EXIT syscall handler to terminate a user thread.
+///
+/// Sets the exit code and wakes the waiting kernel thread.
+pub fn user_thread_exit(exit_code: i32) {
+    USER_EXIT_CODE.store(exit_code, Ordering::SeqCst);
+    
+    let waiter = WAITING_KERNEL_TID.load(Ordering::SeqCst);
+    if waiter != 0 {
+        WAITING_KERNEL_TID.store(0, Ordering::SeqCst);
+        crate::thread::wake(waiter);
+    }
+    
+    // Restore kernel CR3 before the thread dies
+    unsafe {
+        core::arch::asm!(
+            "mov cr3, {cr3}",
+            cr3 = in(reg) crate::memory::paging::kernel_cr3(),
+            options(nostack, preserves_flags)
+        );
+    }
+    
+    // Kill the current thread (this never returns)
+    crate::thread::exit(exit_code);
 }

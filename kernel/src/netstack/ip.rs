@@ -71,13 +71,78 @@ pub fn handle_packet(data: &[u8]) {
     // (packet logging removed to keep serial clean)
     
     match protocol {
-        1 => crate::netstack::icmp::handle_packet(payload, ttl), // ICMP
+        1 => crate::netstack::icmp::handle_packet(payload, ttl, source), // ICMP
         6 => crate::netstack::tcp::handle_packet(payload, source, dest), // TCP
         17 => crate::netstack::udp::handle_packet(payload),      // UDP
         _ => {
             crate::serial_println!("[IP] Unsupported protocol {}", protocol);
         }
     }
+}
+
+/// Send IPv4 packet with custom TTL
+pub fn send_packet_with_ttl(dest_ip: [u8; 4], protocol: u8, payload: &[u8], ttl: u8) -> Result<(), &'static str> {
+    let (source_ip, subnet, gateway) = crate::network::get_ipv4_config()
+        .map(|(ip, mask, gw)| (*ip.as_bytes(), *mask.as_bytes(), gw.map(|g| *g.as_bytes())))
+        .unwrap_or(([192, 168, 56, 100], [255, 255, 255, 0], None));
+
+    let on_same_subnet = |ip: [u8; 4]| {
+        (ip[0] & subnet[0]) == (source_ip[0] & subnet[0]) &&
+        (ip[1] & subnet[1]) == (source_ip[1] & subnet[1]) &&
+        (ip[2] & subnet[2]) == (source_ip[2] & subnet[2]) &&
+        (ip[3] & subnet[3]) == (source_ip[3] & subnet[3])
+    };
+
+    let next_hop_ip = if on_same_subnet(dest_ip) {
+        dest_ip
+    } else if let Some(gw) = gateway {
+        if gw != [0, 0, 0, 0] { gw } else { dest_ip }
+    } else {
+        dest_ip
+    };
+
+    let mut header = Vec::new();
+    let total_length = 20 + payload.len();
+    header.push(0x45);
+    header.push(0);
+    header.extend_from_slice(&(total_length as u16).to_be_bytes());
+    header.extend_from_slice(&0u16.to_be_bytes());
+    header.extend_from_slice(&0x4000u16.to_be_bytes());
+    header.push(ttl);
+    header.push(protocol);
+    header.push(0); header.push(0);
+    header.extend_from_slice(&source_ip);
+    header.extend_from_slice(&dest_ip);
+
+    let csum = checksum(&header);
+    header[10] = (csum >> 8) as u8;
+    header[11] = (csum & 0xFF) as u8;
+
+    let mut packet = header;
+    packet.extend_from_slice(payload);
+
+    let dest_mac = match crate::netstack::arp::resolve(next_hop_ip) {
+        Some(mac) => mac,
+        None => {
+            crate::netstack::arp::send_request(next_hop_ip)?;
+            let start = crate::logger::get_ticks();
+            let mut spins: u32 = 0;
+            loop {
+                crate::netstack::poll();
+                if let Some(mac) = crate::netstack::arp::resolve(next_hop_ip) {
+                    break mac;
+                }
+                if crate::logger::get_ticks().saturating_sub(start) > 1000 {
+                    return Err("ARP timeout");
+                }
+                spins = spins.wrapping_add(1);
+                if spins > 2_000_000 { return Err("ARP timeout"); }
+                x86_64::instructions::hlt();
+            }
+        }
+    };
+
+    crate::netstack::send_frame(dest_mac, 0x0800, &packet)
 }
 
 /// Send IPv4 packet

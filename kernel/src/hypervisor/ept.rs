@@ -231,6 +231,61 @@ impl EptManager {
         
         Ok(())
     }
+
+    /// Set up mapping from GPA 0 to the host physical address of a guest memory buffer.
+    ///
+    /// This correctly maps guest physical addresses [0, size) to the host physical
+    /// addresses where `guest_memory` actually resides, instead of identity mapping.
+    pub fn setup_guest_memory_mapping(&mut self, guest_memory: &[u8]) -> Result<()> {
+        let guest_mem_virt = guest_memory.as_ptr() as u64;
+        let guest_mem_phys = virt_to_phys_vmx(guest_mem_virt);
+        let size = guest_memory.len();
+        
+        crate::serial_println!("[EPT] Mapping GPA 0x0 -> HPA 0x{:X} ({} MB)",
+                              guest_mem_phys, size / (1024 * 1024));
+        
+        // Clear old identity mapping
+        self.pml4 = Box::new(EptTable::new());
+        self.pdpts.clear();
+        self.pds.clear();
+        self.pts.clear();
+        
+        // Map using 2MB large pages: GPA [0, size) -> HPA [guest_mem_phys, guest_mem_phys + size)
+        let pages_2mb = (size + 0x1FFFFF) / 0x200000;
+        let pdpts_needed = ((pages_2mb + 511) / 512).max(1);
+        
+        for pdpt_idx in 0..pdpts_needed {
+            let mut pd = Box::new(EptTable::new());
+            
+            let start_page = pdpt_idx * 512;
+            for pd_idx in 0..512 {
+                let page_num = start_page + pd_idx;
+                if page_num >= pages_2mb {
+                    break;
+                }
+                // GPA offset → HPA = guest_mem_phys + offset
+                let host_phys = guest_mem_phys + (page_num * 0x200000) as u64;
+                pd.entries[pd_idx] = EptEntry::new_large_page(host_phys);
+            }
+            
+            let pd_virt = pd.as_ref() as *const EptTable as u64;
+            let pd_phys = virt_to_phys_vmx(pd_virt);
+            self.pds.push(pd);
+            
+            let mut pdpt = Box::new(EptTable::new());
+            pdpt.entries[0] = EptEntry::new_table(pd_phys);
+            
+            let pdpt_virt = pdpt.as_ref() as *const EptTable as u64;
+            let pdpt_phys = virt_to_phys_vmx(pdpt_virt);
+            self.pdpts.push(pdpt);
+            
+            self.pml4.entries[pdpt_idx] = EptEntry::new_table(pdpt_phys);
+        }
+        
+        crate::serial_println!("[EPT] Guest memory mapping: {} 2MB pages, {} PDPT(s)",
+                              pages_2mb, pdpts_needed);
+        Ok(())
+    }
 }
 
 /// Créer un EPT minimal pour un guest "Hello World"

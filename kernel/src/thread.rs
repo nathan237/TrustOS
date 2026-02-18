@@ -584,6 +584,12 @@ fn context_switch(from: Tid, to: Tid) {
     // Update TSS with new kernel stack (for Ring 3 -> Ring 0 transitions)
     if to_kernel_stack != 0 {
         crate::gdt::set_kernel_stack(to_kernel_stack);
+        
+        // Also update the SYSCALL stack pointer so that SYSCALL from Ring 3
+        // uses this thread's kernel stack (not the global one).
+        unsafe {
+            crate::userland::KERNEL_SYSCALL_STACK_TOP = to_kernel_stack;
+        }
     }
     
     // Update current thread (per-CPU)

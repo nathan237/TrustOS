@@ -1114,28 +1114,119 @@ pub mod stat_mode {
     pub const S_IFSOCK: u32 = 0o140000;
 }
 
-/// sys_fstat - Get file status
+/// Convert VFS FileType to Linux stat mode bits
+fn filetype_to_mode(ft: crate::vfs::FileType) -> u32 {
+    match ft {
+        crate::vfs::FileType::Regular    => stat_mode::S_IFREG,
+        crate::vfs::FileType::Directory  => stat_mode::S_IFDIR,
+        crate::vfs::FileType::CharDevice => stat_mode::S_IFCHR,
+        crate::vfs::FileType::BlockDevice => 0o060000, // S_IFBLK
+        crate::vfs::FileType::Symlink    => stat_mode::S_IFLNK,
+        crate::vfs::FileType::Pipe       => stat_mode::S_IFIFO,
+        crate::vfs::FileType::Socket     => stat_mode::S_IFSOCK,
+    }
+}
+
+/// Convert a VFS Stat to a Linux Stat structure
+fn vfs_to_linux_stat(vfs: &crate::vfs::Stat) -> Stat {
+    Stat {
+        st_dev: 1,
+        st_ino: vfs.ino,
+        st_nlink: 1,
+        st_mode: filetype_to_mode(vfs.file_type) | (vfs.mode & 0o7777),
+        st_uid: vfs.uid,
+        st_gid: vfs.gid,
+        _pad0: 0,
+        st_rdev: 0,
+        st_size: vfs.size as i64,
+        st_blksize: vfs.block_size as i64,
+        st_blocks: ((vfs.size + 511) / 512) as i64,
+        st_atime: vfs.atime as i64,
+        st_atime_nsec: 0,
+        st_mtime: vfs.mtime as i64,
+        st_mtime_nsec: 0,
+        st_ctime: vfs.ctime as i64,
+        st_ctime_nsec: 0,
+        _unused: [0; 3],
+    }
+}
+
+/// sys_fstat - Get file status by fd
 pub fn sys_fstat(fd: i32, statbuf: u64) -> i64 {
     if !validate_user_ptr(statbuf, core::mem::size_of::<Stat>(), true) {
         return errno::EFAULT;
     }
     
     let stat = unsafe { &mut *(statbuf as *mut Stat) };
-    *stat = Stat::default();
     
-    // stdin/stdout/stderr
+    // stdin/stdout/stderr — character device
     if fd >= 0 && fd <= 2 {
+        *stat = Stat::default();
         stat.st_mode = stat_mode::S_IFCHR | 0o666;
         stat.st_rdev = 0x0500; // /dev/tty
+        stat.st_blksize = 4096;
         return 0;
     }
     
-    // TODO: Get actual file info from VFS
-    stat.st_mode = stat_mode::S_IFREG | 0o644;
-    stat.st_size = 0;
-    stat.st_blksize = 4096;
+    // Query VFS for real file info
+    match crate::vfs::fstat_fd(fd) {
+        Ok(vfs_stat) => {
+            *stat = vfs_to_linux_stat(&vfs_stat);
+            0
+        }
+        Err(_) => errno::EBADF,
+    }
+}
+
+/// sys_stat - Get file status by pathname
+pub fn sys_stat(pathname: u64, statbuf: u64) -> i64 {
+    let path = match read_user_string(pathname, 4096) {
+        Some(s) => s,
+        None => return errno::EFAULT,
+    };
     
-    0
+    if !validate_user_ptr(statbuf, core::mem::size_of::<Stat>(), true) {
+        return errno::EFAULT;
+    }
+    
+    let stat = unsafe { &mut *(statbuf as *mut Stat) };
+    
+    match crate::vfs::stat(&path) {
+        Ok(vfs_stat) => {
+            *stat = vfs_to_linux_stat(&vfs_stat);
+            0
+        }
+        Err(_) => errno::ENOENT,
+    }
+}
+
+/// sys_newfstatat - Get file status relative to directory fd
+pub fn sys_newfstatat(dirfd: i32, pathname: u64, statbuf: u64, _flags: u32) -> i64 {
+    const AT_FDCWD: i32 = -100;
+    const AT_EMPTY_PATH: u32 = 0x1000;
+    
+    // If AT_EMPTY_PATH and pathname is empty, stat the fd itself
+    if _flags & AT_EMPTY_PATH != 0 {
+        let path = read_user_string(pathname, 4096);
+        if path.is_none() || path.as_ref().map_or(false, |s| s.is_empty()) {
+            if dirfd >= 0 {
+                return sys_fstat(dirfd, statbuf);
+            }
+        }
+    }
+    
+    let path = match read_user_string(pathname, 4096) {
+        Some(s) => s,
+        None => return errno::EFAULT,
+    };
+    
+    // If path is absolute or dirfd is AT_FDCWD, use path directly
+    if path.starts_with('/') || dirfd == AT_FDCWD {
+        return sys_stat(pathname, statbuf);
+    }
+    
+    // Relative path with dirfd — not fully supported yet, treat as absolute
+    sys_stat(pathname, statbuf)
 }
 
 /// sys_access - Check file access

@@ -668,7 +668,7 @@ static LINUX_VM: Mutex<Option<LinuxVm>> = Mutex::new(None);
 /// Create and boot a Linux VM
 pub fn boot_linux(bzimage: &[u8], initramfs: &[u8], cmdline: &str) -> Result<u64> {
     let config = LinuxVmConfig {
-        memory_mb: 64,
+        memory_mb: 128,
         cmdline: String::from(cmdline),
         ..Default::default()
     };

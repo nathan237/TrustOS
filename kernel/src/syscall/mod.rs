@@ -101,7 +101,7 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         WRITE => sys_write(a1 as i32, a2, a3 as usize),
         OPEN => sys_open(a1, a2 as u32),
         CLOSE => sys_close(a1 as i32),
-        STAT | LSTAT => linux::sys_fstat(a1 as i32, a2),
+        STAT | LSTAT => linux::sys_stat(a1, a2),
         FSTAT => linux::sys_fstat(a1 as i32, a2),
         LSEEK => sys_lseek(a1 as i32, a2 as i64, a3 as u32),
         READV => linux::sys_readv(a1 as i32, a2, a3 as u32),
@@ -120,6 +120,7 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         POLL => linux::sys_poll(a1, a2 as u32, a3 as i32),
         GETDENTS64 => linux::sys_getdents64(a1 as i32, a2, a3 as u32),
         OPENAT => linux::sys_openat(a1 as i32, a2, a3 as u32),
+        NEWFSTATAT => linux::sys_newfstatat(a1 as i32, a2, a3, a4 as u32),
         
         // ====== Memory Management ======
         MMAP => linux::sys_mmap(a1, a2, a3, a4, a5 as i64, a6),
@@ -153,8 +154,30 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         VFORK => sys_fork(),
         CLONE => sys_clone(a1, a2, a3),
         EXECVE => sys_execve(a1, a2, a3),
-        EXIT => { crate::process::exit(a1 as i32); if crate::userland::is_process_active() { unsafe { crate::userland::return_from_ring3(a1 as i32); } } 0 }
-        EXIT_GROUP => { crate::process::exit(a1 as i32); if crate::userland::is_process_active() { unsafe { crate::userland::return_from_ring3(a1 as i32); } } 0 }
+        EXIT => { 
+            crate::process::exit(a1 as i32);
+            if crate::userland::is_process_active() { 
+                // Check if this is a scheduler-managed user thread
+                // (has a waiting kernel thread) or a legacy exec_ring3 process
+                if crate::userland::WAITING_KERNEL_TID.load(core::sync::atomic::Ordering::SeqCst) != 0 {
+                    crate::userland::user_thread_exit(a1 as i32);
+                } else {
+                    unsafe { crate::userland::return_from_ring3(a1 as i32); }
+                }
+            }
+            0
+        }
+        EXIT_GROUP => { 
+            crate::process::exit(a1 as i32);
+            if crate::userland::is_process_active() { 
+                if crate::userland::WAITING_KERNEL_TID.load(core::sync::atomic::Ordering::SeqCst) != 0 {
+                    crate::userland::user_thread_exit(a1 as i32);
+                } else {
+                    unsafe { crate::userland::return_from_ring3(a1 as i32); }
+                }
+            }
+            0
+        }
         WAIT4 => sys_wait4(a1 as i32, a2, a3 as u32),
         KILL => sys_kill(a1 as i32, a2 as i32),
         SET_TID_ADDRESS => linux::sys_set_tid_address(a1),

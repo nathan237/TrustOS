@@ -78,6 +78,8 @@ pub const IRQ_BASE: u8          = 49;
 pub const KEYBOARD_VECTOR: u8   = IRQ_BASE + 1;  // 50
 /// APIC-routed mouse vector
 pub const MOUSE_VECTOR: u8      = IRQ_BASE + 12; // 61
+/// VirtIO interrupt vector (shared by all VirtIO devices on the same PCI IRQ)
+pub const VIRTIO_VECTOR: u8     = 62;
 
 // ═══════════════════════════════════════════════════════════════════════
 // State
@@ -455,4 +457,25 @@ pub fn is_enabled() -> bool {
 /// Get calibrated ticks per millisecond
 pub fn ticks_per_ms() -> u64 {
     TICKS_PER_MS.load(Ordering::Relaxed)
+}
+
+/// Route a PCI interrupt line through I/O APIC to a specific vector
+/// `irq` = PCI interrupt line (e.g. 10, 11)
+/// `vector` = IDT vector to fire
+/// Level-triggered, active-low (standard for PCI interrupts)
+pub fn route_pci_irq(irq: u8, vector: u8) {
+    if !is_enabled() {
+        return;
+    }
+    let ioapic_base = IOAPIC_BASE_VIRT.load(Ordering::Relaxed);
+    if ioapic_base == 0 {
+        crate::serial_println!("[APIC] Cannot route IRQ {}: IOAPIC not initialized", irq);
+        return;
+    }
+    unsafe {
+        // PCI interrupts are level-triggered, active-low
+        let flags = IOAPIC_LEVEL_TRIGGERED | IOAPIC_ACTIVE_LOW;
+        ioapic_route_irq(irq, vector, 0, flags);
+    }
+    crate::serial_println!("[APIC] Routed PCI IRQ {} → vector {} (level/low)", irq, vector);
 }

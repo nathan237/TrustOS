@@ -644,13 +644,25 @@ pub(super) fn cmd_blkid() {
 
 pub(super) fn cmd_export(args: &[&str]) {
     if args.is_empty() {
-        crate::println!("PATH=/bin:/usr/bin");
-        crate::println!("HOME=/");
-        crate::println!("USER=root");
-        crate::println!("SHELL=/bin/tsh");
+        // Show all variables as export format
+        for (k, v) in super::scripting::all_vars() {
+            crate::println!("export {}={}", k, v);
+        }
         return;
     }
-    crate::println_color!(COLOR_YELLOW, "export: environment variables stored in memory only");
+    // Parse VAR=VALUE or VAR
+    let joined = args.join(" ");
+    if let Some(eq_pos) = joined.find('=') {
+        let key = joined[..eq_pos].trim();
+        let val = joined[eq_pos + 1..].trim().trim_matches('"').trim_matches('\'');
+        super::scripting::set_var(key, val);
+        crate::serial_println!("[export] {}={}", key, val);
+    } else {
+        // Just mark as exported (already in our global store)
+        if super::scripting::get_var(args[0]).is_none() {
+            super::scripting::set_var(args[0], "");
+        }
+    }
 }
 
 pub(super) fn cmd_source(args: &[&str]) {
@@ -661,23 +673,16 @@ pub(super) fn cmd_source(args: &[&str]) {
     
     match super::network::read_file_content(args[0]) {
         Some(content) => {
-            for line in content.lines() {
-                let trimmed = line.trim();
-                if !trimmed.is_empty() && !trimmed.starts_with('#') {
-                    super::execute_command(trimmed);
-                }
-            }
+            super::scripting::execute_script(&content);
         }
         None => crate::println_color!(COLOR_RED, "source: cannot read {}", args[0]),
     }
 }
 
 pub(super) fn cmd_set(_args: &[&str]) {
-    crate::println!("SHELL=/bin/tsh");
-    crate::println!("PATH=/bin:/usr/bin");
-    crate::println!("PWD={}", crate::ramfs::with_fs(|fs| String::from(fs.pwd())));
-    crate::println!("USER=root");
-    crate::println!("HOME=/");
+    for (k, v) in super::scripting::all_vars() {
+        crate::println!("{}={}", k, v);
+    }
 }
 
 pub(super) fn cmd_printf(args: &[&str]) {

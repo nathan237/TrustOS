@@ -13,6 +13,8 @@ pub mod dns;
 pub mod http;
 pub mod https;
 pub mod socket;
+pub mod ipv6;
+pub mod icmpv6;
 
 use alloc::vec::Vec;
 use alloc::collections::VecDeque;
@@ -58,6 +60,9 @@ pub fn process_packet(data: Vec<u8>) {
     if data.len() < EthernetFrame::SIZE {
         return;
     }
+
+    // Feed packet to sniffer if capture is active
+    crate::netscan::sniffer::process_packet(&data);
     
     let frame = match EthernetFrame::parse(&data) {
         Some(f) => f,
@@ -80,6 +85,9 @@ pub fn process_packet(data: Vec<u8>) {
         }
         ethertype::IPV4 => {
             ip::handle_packet(payload);
+        }
+        ethertype::IPV6 => {
+            ipv6::handle_packet(payload);
         }
         _ => {
             // Unknown protocol, ignore

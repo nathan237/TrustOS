@@ -1,0 +1,137 @@
+name: TrustOS CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  build:
+    name: Build Kernel
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust Nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-unknown-none
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Upload kernel binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: trustos-kernel
+          path: target/x86_64-unknown-none/release/kernel
+          retention-days: 7
+
+  lint:
+    name: Clippy + Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust Nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: clippy, rustfmt
+          targets: x86_64-unknown-none
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/
+          key: ${{ runner.os }}-lint-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Clippy
+        run: cargo clippy --release -- -A clippy::all
+        continue-on-error: true
+
+  integration-test:
+    name: QEMU Integration Tests
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install QEMU
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 ovmf xorriso mtools
+
+      - name: Install Rust Nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: x86_64-unknown-none
+
+      - name: Build kernel
+        run: cargo build --release
+
+      - name: Build ISO
+        run: |
+          chmod +x build.sh
+          ./build.sh || true
+
+      - name: Run integration tests
+        run: |
+          # Boot TrustOS in QEMU, send 'inttest' command, capture serial output
+          timeout 120 qemu-system-x86_64 \
+            -machine q35 \
+            -cpu qemu64 \
+            -smp 2 \
+            -m 256M \
+            -nographic \
+            -serial stdio \
+            -no-reboot \
+            -bios /usr/share/OVMF/OVMF_CODE.fd \
+            -drive format=raw,file=trustos.iso \
+            2>/dev/null | tee test_output.txt || true
+
+      - name: Check test results
+        run: |
+          if grep -q "ALL.*TESTS PASSED" test_output.txt; then
+            echo "All integration tests passed!"
+            exit 0
+          else
+            echo "Tests may have failed or did not complete."
+            cat test_output.txt
+            exit 1
+          fi
+
+      - name: Upload test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-output
+          path: test_output.txt
+          retention-days: 5

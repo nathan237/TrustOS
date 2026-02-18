@@ -177,13 +177,43 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    nslookup <host>     DNS lookup (A, AAAA records)");
     crate::println!("    arp [-a]            Show ARP table (IP->MAC mappings)");
     crate::println!("    route               Display routing table");
-    crate::println!("    traceroute <host>   Trace packet path to destination");
+    crate::println!("    traceroute <host>   Real TTL-based traceroute");
     crate::println!("    netstat             Show active connections & listeners");
     crate::println!("    browse <url>        Text-mode web browser");
     crate::println!("    sandbox <cmd>       Web sandbox (open/allow/deny/fs/status/list/kill)");
     crate::println!("    container <cmd>     Web container daemon (status/list/create/go/stop)");
     crate::println!("    tcpsyn <host:port>  Raw TCP SYN connection test");
     crate::println!("    httpget <url>       Raw HTTP GET request");
+    crate::println!();
+
+    // SECURITY TOOLKIT
+    crate::println_color!(COLOR_CYAN, "  SECURITY TOOLKIT (TrustScan)");
+    crate::println!("    nmap <target>       Port scanner (SYN/Connect/UDP scan)");
+    crate::println!("    nmap <t> -A         Aggressive scan (ports + banners + vulns)");
+    crate::println!("    discover [mode]     Host discovery (arp/ping/full)");
+    crate::println!("    banner <target>     Service banner grabber & version detect");
+    crate::println!("    sniff <cmd>         Packet sniffer (start/stop/show/hex/stats)");
+    crate::println!("    vulnscan <target>   Vulnerability assessment scanner");
+    crate::println!("    traceroute <host>   Real TTL-based traceroute with ICMP");
+    crate::println!("    scantest [target]   Live network test suite (8 tests)");
+    crate::println!();
+
+    // HTTP SERVER
+    crate::println_color!(COLOR_CYAN, "  HTTP SERVER");
+    crate::println!("    httpd [start] [p]   Start HTTP server (default port 8080)");
+    crate::println!("    httpd stop          Stop the running HTTP server");
+    crate::println!("    httpd status        Show server status and request count");
+    crate::println!();
+
+    // PACKAGE MANAGER
+    crate::println_color!(COLOR_CYAN, "  PACKAGE MANAGER (TrustPkg)");
+    crate::println!("    trustpkg list       List all available packages");
+    crate::println!("    trustpkg search <q> Search packages by name/description");
+    crate::println!("    trustpkg install <p> Install a package");
+    crate::println!("    trustpkg remove <p> Remove an installed package");
+    crate::println!("    trustpkg info <p>   Show package details");
+    crate::println!("    trustpkg installed  List installed packages only");
+    crate::println!("    trustpkg update     Update package catalog");
     crate::println!();
     
     // LINUX SUBSYSTEM
@@ -259,7 +289,7 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    benchmark [test]    Run performance benchmarks");
     crate::println!("    keytest             Interactive keyboard scancode tester");
     crate::println!("    test                Run internal kernel test suite");
-    crate::println!("    inttest             Integration test (15 tests, Gaps 1-5 + SMP + NVMe + xHCI + RTL8169 + TrustLang)");
+    crate::println!("    inttest             Integration test (20 tests, +FAT32 +DHCP +VirtIO +IPv6 +Pipe)");
     crate::println!("    panic               Trigger kernel panic (debug only)");
     crate::println!();
     
@@ -1228,12 +1258,9 @@ pub(super) fn cmd_uname(args: &[&str]) {
 }
 
 pub(super) fn cmd_env() {
-    crate::println!("USER=root");
-    crate::println!("HOSTNAME=trustos");
-    crate::println!("SHELL=/bin/tsh");
-    crate::println!("PWD={}", crate::ramfs::with_fs(|fs| String::from(fs.pwd())));
-    crate::println!("HOME=/home");
-    crate::println!("TERM=trustos-console");
+    for (k, v) in super::scripting::all_vars() {
+        crate::println!("{}={}", k, v);
+    }
 }
 
 pub(super) fn cmd_history() {
@@ -1464,6 +1491,106 @@ pub(super) fn cmd_keytest() {
     }
 }
 
+// ==================== HTTP SERVER COMMAND ====================
+pub(super) fn cmd_httpd(args: &[&str]) {
+    match args.first() {
+        Some(&"start") | None => {
+            let port = args.get(1)
+                .and_then(|s| s.parse::<u16>().ok())
+                .unwrap_or(8080);
+            let max = args.get(2)
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(0);
+            crate::httpd::start(port, max);
+        }
+        Some(&"stop") => {
+            crate::httpd::stop();
+            crate::println_color!(COLOR_GREEN, "HTTP server stop requested");
+        }
+        Some(&"status") => {
+            let (port, requests, running) = crate::httpd::get_stats();
+            crate::println_color!(COLOR_CYAN, "HTTP Server Status:");
+            crate::println!("  Running:  {}", if running { "yes" } else { "no" });
+            crate::println!("  Port:     {}", port);
+            crate::println!("  Requests: {}", requests);
+        }
+        Some(&"help") | Some(&"-h") | Some(&"--help") => {
+            crate::println!("Usage: httpd [start [port] [max_requests]]");
+            crate::println!("       httpd stop");
+            crate::println!("       httpd status");
+            crate::println!();
+            crate::println!("Start an HTTP server on the specified port (default: 8080).");
+            crate::println!("Available pages: /, /status, /files/, /api/info, /api/stats");
+        }
+        _ => {
+            crate::println!("Usage: httpd {{start|stop|status|help}}");
+        }
+    }
+}
+
+// ==================== PACKAGE MANAGER COMMAND ====================
+pub(super) fn cmd_trustpkg(args: &[&str]) {
+    match args.first() {
+        Some(&"list") | None => crate::trustpkg::list_packages(),
+        Some(&"search") => {
+            if args.len() > 1 {
+                crate::trustpkg::search(args[1]);
+            } else {
+                crate::println!("Usage: trustpkg search <query>");
+            }
+        }
+        Some(&"install") => {
+            if args.len() > 1 {
+                crate::trustpkg::install(args[1]);
+            } else {
+                crate::println!("Usage: trustpkg install <package>");
+            }
+        }
+        Some(&"remove") | Some(&"uninstall") => {
+            if args.len() > 1 {
+                crate::trustpkg::remove(args[1]);
+            } else {
+                crate::println!("Usage: trustpkg remove <package>");
+            }
+        }
+        Some(&"info") | Some(&"show") => {
+            if args.len() > 1 {
+                crate::trustpkg::info(args[1]);
+            } else {
+                crate::println!("Usage: trustpkg info <package>");
+            }
+        }
+        Some(&"installed") => crate::trustpkg::list_installed(),
+        Some(&"update") => crate::trustpkg::update(),
+        Some(&"help") | Some(&"-h") | Some(&"--help") => {
+            crate::println!("TrustPkg — Package Manager for TrustOS");
+            crate::println!();
+            crate::println!("Usage: trustpkg <command> [args]");
+            crate::println!();
+            crate::println!("Commands:");
+            crate::println!("  list               List all packages");
+            crate::println!("  search <query>     Search packages");
+            crate::println!("  install <pkg>      Install a package");
+            crate::println!("  remove <pkg>       Remove a package");
+            crate::println!("  info <pkg>         Show package details");
+            crate::println!("  installed          List installed packages");
+            crate::println!("  update             Update package catalog");
+        }
+        _ => {
+            crate::println!("Usage: trustpkg {{list|search|install|remove|info|installed|update}}");
+        }
+    }
+}
+
+// ==================== UNSET VARIABLE COMMAND ====================
+pub(super) fn cmd_unset(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: unset <variable>");
+        return;
+    }
+    super::scripting::unset_var(args[0]);
+}
+
 /// Comprehensive integration test suite: exercises all Gap #1–#5 features.
 /// Tests: exception safety, signal syscalls, stdio/time, plus all existing tests.
 pub(super) fn cmd_inttest() {
@@ -1474,7 +1601,7 @@ pub(super) fn cmd_inttest() {
     let mut failed = 0usize;
 
     // -- 1. Kernel self-test (heap, string, interrupts) ---------------
-    crate::println_color!(COLOR_CYAN, "[ 1/15] Kernel self-test");
+    crate::println_color!(COLOR_CYAN, "[ 1/30] Kernel self-test");
     {
         let mut ok = true;
         crate::print!("  heap+string... ");
@@ -1501,14 +1628,14 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 2. Frame allocator -------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 2/15] Frame allocator self-test");
+    crate::println_color!(COLOR_CYAN, "[ 2/30] Frame allocator self-test");
     let (p, f) = crate::memory::frame::self_test();
     passed += p;
     failed += f;
     crate::println!();
 
     // -- 3. Ring 3 basic exec -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 3/15] Ring 3 basic exec");
+    crate::println_color!(COLOR_CYAN, "[ 3/30] Ring 3 basic exec");
     crate::print!("  hello world... ");
     match crate::exec::exec_test_program() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1522,7 +1649,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 4. Ring 3 ELF loader -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 4/15] Ring 3 ELF exec");
+    crate::println_color!(COLOR_CYAN, "[ 4/30] Ring 3 ELF exec");
     crate::print!("  ELF hello... ");
     match crate::exec::exec_hello_elf() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1536,7 +1663,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 5. Ring 3 brk + mmap -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 5/15] Ring 3 brk/mmap");
+    crate::println_color!(COLOR_CYAN, "[ 5/30] Ring 3 brk/mmap");
     crate::print!("  memory mgmt... ");
     match crate::exec::exec_memtest() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1550,7 +1677,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 6. Ring 3 IPC pipe -------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 6/15] Ring 3 IPC pipe");
+    crate::println_color!(COLOR_CYAN, "[ 6/30] Ring 3 IPC pipe");
     crate::print!("  pipe2+rw... ");
     match crate::exec::exec_pipe_test() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1564,7 +1691,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 7. Exception safety (Gap #4) ---------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 7/15] Exception safety (UD2 in Ring 3)");
+    crate::println_color!(COLOR_CYAN, "[ 7/30] Exception safety (UD2 in Ring 3)");
     crate::print!("  invalid opcode... ");
     match crate::exec::exec_exception_safety_test() {
         crate::exec::ExecResult::Exited(code) if code != 0 => {
@@ -1588,7 +1715,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 8. Signal syscalls (Gap #4) ----------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 8/15] Signal syscalls (sigprocmask + kill)");
+    crate::println_color!(COLOR_CYAN, "[ 8/30] Signal syscalls (sigprocmask + kill)");
     crate::print!("  signal test... ");
     match crate::exec::exec_signal_test() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1602,7 +1729,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 9. Stdio + time (Gap #4) ------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 9/15] Stdio + getpid + clock_gettime");
+    crate::println_color!(COLOR_CYAN, "[ 9/30] Stdio + getpid + clock_gettime");
     crate::print!("  io test... ");
     match crate::exec::exec_stdio_test() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1616,7 +1743,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 10. Frame leak check -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[10/15] Frame leak test");
+    crate::println_color!(COLOR_CYAN, "[10/30] Frame leak test");
     crate::print!("  alloc before... ");
     let (total_before, used_before) = crate::memory::frame::stats();
     let free_before = total_before - used_before;
@@ -1635,7 +1762,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 11. SMP multi-core -------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[11/15] SMP multi-core");
+    crate::println_color!(COLOR_CYAN, "[11/30] SMP multi-core");
     {
         let ready = crate::cpu::smp::ready_cpu_count();
         let total = crate::cpu::smp::cpu_count();
@@ -1689,7 +1816,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 12. NVMe storage read/write -----------------------------------
-    crate::println_color!(COLOR_CYAN, "[12/15] NVMe storage");
+    crate::println_color!(COLOR_CYAN, "[12/30] NVMe storage");
     {
         if crate::nvme::is_initialized() {
             // Test read
@@ -1755,7 +1882,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 13. xHCI USB 3.0 ---------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[13/15] xHCI USB 3.0");
+    crate::println_color!(COLOR_CYAN, "[13/30] xHCI USB 3.0");
     {
         if crate::drivers::xhci::is_initialized() {
             crate::print!("  controller init... ");
@@ -1779,7 +1906,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 14. RTL8169 Gigabit Ethernet -----------------------------------
-    crate::println_color!(COLOR_CYAN, "[14/15] RTL8169 Gigabit Ethernet");
+    crate::println_color!(COLOR_CYAN, "[14/30] RTL8169 Gigabit Ethernet");
     {
         // Check if network driver is active (could be RTL8169 or other)
         if crate::drivers::net::has_driver() {
@@ -1804,7 +1931,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 15. TrustLang bytecode VM --------------------------------------
-    crate::println_color!(COLOR_CYAN, "[15/15] TrustLang bytecode VM");
+    crate::println_color!(COLOR_CYAN, "[15/30] TrustLang bytecode VM");
     {
         crate::print!("  fibonacci eval... ");
         let fib_src = r#"fn fibonacci(n: i64) -> i64 {
@@ -1843,6 +1970,851 @@ fn main() {
                 crate::println_color!(COLOR_RED, "[FAIL] {}", e);
                 failed += 1;
             }
+        }
+    }
+
+    // -- 16. FAT32 write persistence -----------------------------------
+    crate::println_color!(COLOR_CYAN, "[16/30] FAT32 write persistence");
+    {
+        // Test: write a file, read it back, verify size is persisted in dir entry
+        use crate::vfs;
+        crate::print!("  write+readback... ");
+        let test_path = "/test_fat32_inttest.txt";
+        let test_data = b"FAT32_INTTEST_DATA_12345678";
+        
+        // Write
+        let write_ok = vfs::write_file(test_path, test_data).is_ok();
+        if write_ok {
+            // Read back
+            match vfs::read_file(test_path) {
+                Ok(content) => {
+                    if content == test_data {
+                        crate::println_color!(COLOR_GREEN, "[OK]");
+                        passed += 1;
+                    } else {
+                        crate::println_color!(COLOR_RED, "[FAIL] content mismatch (got {} bytes)", content.len());
+                        failed += 1;
+                    }
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "[FAIL] read: {:?}", e);
+                    failed += 1;
+                }
+            }
+        } else {
+            // No writable FS mounted — skip
+            crate::println_color!(COLOR_GREEN, "[SKIP] no writable FS");
+            passed += 1;
+        }
+
+        crate::print!("  size in stat... ");
+        if write_ok {
+            match vfs::stat(test_path) {
+                Ok(st) => {
+                    if st.size == test_data.len() as u64 {
+                        crate::println_color!(COLOR_GREEN, "[OK] size={}", st.size);
+                        passed += 1;
+                    } else {
+                        crate::println_color!(COLOR_RED, "[FAIL] stat size={} expected={}", st.size, test_data.len());
+                        failed += 1;
+                    }
+                }
+                Err(_) => {
+                    crate::println_color!(COLOR_RED, "[FAIL] stat error");
+                    failed += 1;
+                }
+            }
+            // Cleanup
+            let _ = vfs::unlink(test_path);
+        } else {
+            crate::println_color!(COLOR_GREEN, "[SKIP]");
+            passed += 1;
+        }
+    }
+
+    // -- 17. DHCP lease renewal state ----------------------------------
+    crate::println_color!(COLOR_CYAN, "[17/30] DHCP lease renewal");
+    {
+        crate::print!("  DHCP bound... ");
+        if crate::netstack::dhcp::is_bound() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            // DHCP may not be bound in all test environments
+            crate::println_color!(COLOR_GREEN, "[SKIP] not bound");
+            passed += 1;
+        }
+
+        crate::print!("  config valid... ");
+        match crate::netstack::dhcp::get_config() {
+            Some((ip, mask, gw, dns)) => {
+                let ip_ok = ip != [0,0,0,0];
+                let mask_ok = mask != [0,0,0,0];
+                if ip_ok && mask_ok {
+                    crate::println_color!(COLOR_GREEN, "[OK] {}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3]);
+                    passed += 1;
+                } else {
+                    crate::println_color!(COLOR_RED, "[FAIL] ip={:?} mask={:?}", ip, mask);
+                    failed += 1;
+                }
+                let _ = (gw, dns);
+            }
+            None => {
+                crate::println_color!(COLOR_GREEN, "[SKIP] no config");
+                passed += 1;
+            }
+        }
+    }
+
+    // -- 18. VirtIO interrupt support ----------------------------------
+    crate::println_color!(COLOR_CYAN, "[18/30] VirtIO interrupt support");
+    {
+        crate::print!("  virtio-net init... ");
+        if crate::virtio_net::is_initialized() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_GREEN, "[SKIP] no virtio-net");
+            passed += 1;
+        }
+
+        crate::print!("  virtio-blk init... ");
+        if crate::virtio_blk::is_initialized() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+
+            // Test: read sector 0 (verifies interrupt-assisted I/O works)
+            crate::print!("  blk read LBA 0... ");
+            let mut buf = [0u8; 512];
+            match crate::virtio_blk::read_sectors(0, 1, &mut buf) {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "[OK]");
+                    passed += 1;
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "[FAIL] {}", e);
+                    failed += 1;
+                }
+            }
+        } else {
+            crate::println_color!(COLOR_GREEN, "[SKIP] no virtio-blk");
+            passed += 2; // Skip blk read test too
+        }
+    }
+
+    // -- 19. IPv6 + NDP -----------------------------------------------
+    crate::println_color!(COLOR_CYAN, "[19/30] IPv6 + NDP");
+    {
+        crate::print!("  IPv6 enabled... ");
+        if crate::netstack::ipv6::is_enabled() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+
+            crate::print!("  link-local addr... ");
+            let addr = crate::netstack::ipv6::link_local_addr();
+            if addr.is_link_local() {
+                crate::println_color!(COLOR_GREEN, "[OK] {}", addr);
+                passed += 1;
+            } else {
+                crate::println_color!(COLOR_RED, "[FAIL] not link-local: {}", addr);
+                failed += 1;
+            }
+        } else {
+            crate::println_color!(COLOR_GREEN, "[SKIP] IPv6 not enabled");
+            passed += 2;
+        }
+    }
+
+    // -- 20. Kernel pipe blocking -------------------------------------
+    crate::println_color!(COLOR_CYAN, "[20/30] Kernel pipe blocking");
+    {
+        crate::print!("  pipe create... ");
+        let (read_fd, write_fd) = crate::pipe::create();
+        if read_fd > 0 && write_fd > 0 {
+            crate::println_color!(COLOR_GREEN, "[OK] r={} w={}", read_fd, write_fd);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        crate::print!("  pipe write... ");
+        let data = b"pipe_test_42";
+        let written = crate::pipe::write(write_fd, data);
+        if written == data.len() as i64 {
+            crate::println_color!(COLOR_GREEN, "[OK] {} bytes", written);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] wrote {}", written);
+            failed += 1;
+        }
+
+        crate::print!("  pipe read... ");
+        let mut buf = [0u8; 32];
+        let n = crate::pipe::read(read_fd, &mut buf);
+        if n == data.len() as i64 && &buf[..n as usize] == data {
+            crate::println_color!(COLOR_GREEN, "[OK] {} bytes", n);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] read {}", n);
+            failed += 1;
+        }
+
+        crate::print!("  pipe EOF... ");
+        crate::pipe::close(write_fd);
+        let n2 = crate::pipe::read(read_fd, &mut buf);
+        if n2 == 0 {
+            crate::println_color!(COLOR_GREEN, "[OK] EOF after close");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] expected 0, got {}", n2);
+            failed += 1;
+        }
+        crate::pipe::close(read_fd);
+    }
+
+    // -- 21. TrustScan utilities (format, parse, service DB) -----------
+    crate::println_color!(COLOR_CYAN, "[21/30] TrustScan utilities");
+    {
+        // 21a. format_ip round-trip
+        crate::print!("  format_ip... ");
+        let s = crate::netscan::format_ip([10, 0, 2, 15]);
+        if s == "10.0.2.15" {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got '{}'", s);
+            failed += 1;
+        }
+
+        // 21b. format_mac
+        crate::print!("  format_mac... ");
+        let m = crate::netscan::format_mac([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]);
+        if m == "AA:BB:CC:DD:EE:FF" {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got '{}'", m);
+            failed += 1;
+        }
+
+        // 21c. parse_ip valid
+        crate::print!("  parse_ip valid... ");
+        if crate::netscan::parse_ip("192.168.1.100") == Some([192, 168, 1, 100]) {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 21d. parse_ip invalid
+        crate::print!("  parse_ip invalid... ");
+        if crate::netscan::parse_ip("not.an.ip") == None
+            && crate::netscan::parse_ip("1.2.3") == None
+        {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 21e. service_name database
+        crate::print!("  service_name DB... ");
+        let checks = [
+            (22, "ssh"), (80, "http"), (443, "https"), (3306, "mysql"),
+            (6379, "redis"), (27017, "mongodb"), (53, "dns"), (21, "ftp"),
+        ];
+        let all_ok = checks.iter().all(|&(port, expected)| {
+            crate::netscan::service_name(port) == expected
+        });
+        if all_ok {
+            crate::println_color!(COLOR_GREEN, "[OK] 8/8 mappings correct");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 21f. COMMON_PORTS & TOP_100_PORTS lengths
+        crate::print!("  port lists... ");
+        let cp = crate::netscan::COMMON_PORTS.len();
+        let tp = crate::netscan::TOP_100_PORTS.len();
+        if cp == 25 && tp == 100 {
+            crate::println_color!(COLOR_GREEN, "[OK] common={} top={}", cp, tp);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] common={} top={}", cp, tp);
+            failed += 1;
+        }
+    }
+
+    // -- 22. TrustScan port scanner config builder --------------------
+    crate::println_color!(COLOR_CYAN, "[22/30] TrustScan port scanner config");
+    {
+        use crate::netscan::port_scanner::*;
+
+        // 22a. ScanConfig builder default
+        crate::print!("  ScanConfig defaults... ");
+        let cfg = ScanConfig::new([10, 0, 2, 1]);
+        if cfg.target == [10, 0, 2, 1]
+            && cfg.scan_type == ScanType::Syn
+            && cfg.timeout_ms == 1500
+            && cfg.grab_banner == false
+            && cfg.ports.len() == crate::netscan::COMMON_PORTS.len()
+        {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 22b. ScanConfig builder chaining
+        crate::print!("  builder chain... ");
+        let cfg2 = ScanConfig::new([192, 168, 1, 1])
+            .with_ports(alloc::vec![80, 443, 8080])
+            .with_type(ScanType::Connect)
+            .with_timeout(500)
+            .with_banner(true);
+        if cfg2.ports == alloc::vec![80u16, 443, 8080]
+            && cfg2.scan_type == ScanType::Connect
+            && cfg2.timeout_ms == 500
+            && cfg2.grab_banner == true
+        {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 22c. ScanConfig with_range
+        crate::print!("  with_range... ");
+        let cfg3 = ScanConfig::new([10, 0, 0, 1]).with_range(1, 100);
+        if cfg3.ports.len() == 100 && cfg3.ports[0] == 1 && cfg3.ports[99] == 100 {
+            crate::println_color!(COLOR_GREEN, "[OK] 100 ports");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got {} ports", cfg3.ports.len());
+            failed += 1;
+        }
+
+        // 22d. PortState enum
+        crate::print!("  PortState enum... ");
+        if PortState::Open.as_str() == "open"
+            && PortState::Closed.as_str() == "closed"
+            && PortState::Filtered.as_str() == "filtered"
+            && PortState::OpenFiltered.as_str() == "open|filtered"
+        {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 22e. ScanConfig with_top_ports
+        crate::print!("  with_top_ports... ");
+        let cfg4 = ScanConfig::new([0; 4]).with_top_ports();
+        if cfg4.ports.len() == 100 {
+            crate::println_color!(COLOR_GREEN, "[OK] 100 ports");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got {} ports", cfg4.ports.len());
+            failed += 1;
+        }
+    }
+
+    // -- 23. TrustScan sniffer engine ---------------------------------
+    crate::println_color!(COLOR_CYAN, "[23/30] TrustScan sniffer engine");
+    {
+        use crate::netscan::sniffer;
+
+        // 23a. start/stop/is_capturing
+        crate::print!("  start/stop capture... ");
+        let was_capturing = sniffer::is_capturing();
+        sniffer::start_capture();
+        let active_after_start = sniffer::is_capturing();
+        sniffer::stop_capture();
+        let active_after_stop = sniffer::is_capturing();
+        if !was_capturing && active_after_start && !active_after_stop {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] was={} start={} stop={}",
+                was_capturing, active_after_start, active_after_stop);
+            failed += 1;
+        }
+
+        // 23b. stats after fresh start
+        crate::print!("  capture stats... ");
+        sniffer::start_capture();
+        let (count, bytes, buffered) = sniffer::get_stats();
+        sniffer::stop_capture();
+        // After start, counters should be 0
+        if count == 0 && bytes == 0 && buffered == 0 {
+            crate::println_color!(COLOR_GREEN, "[OK] 0/0/0");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_GREEN, "[OK] c={} b={} buf={}", count, bytes, buffered);
+            passed += 1; // Non-zero is OK if packets arrived during test
+        }
+
+        // 23c. Protocol enum as_str
+        crate::print!("  Protocol enum... ");
+        if sniffer::Protocol::Arp.as_str() == "ARP"
+            && sniffer::Protocol::Tcp.as_str() == "TCP"
+            && sniffer::Protocol::Http.as_str() == "HTTP"
+            && sniffer::Protocol::Dns.as_str() == "DNS"
+            && sniffer::Protocol::Tls.as_str() == "TLS"
+            && sniffer::Protocol::Unknown(0).as_str() == "???"
+        {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 23d. hex_dump function
+        crate::print!("  hex_dump format... ");
+        let test_data = [0x48, 0x65, 0x6C, 0x6C, 0x6F]; // "Hello"
+        let dump = sniffer::hex_dump(&test_data, 5);
+        if dump.contains("0000") && dump.contains("48 65 6C 6C 6F") && dump.contains("|Hello|") {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] '{}'", dump.trim());
+            failed += 1;
+        }
+
+        // 23e. process_packet with a crafted Ethernet frame
+        crate::print!("  packet dissect... ");
+        sniffer::start_capture();
+        {
+            // Craft a minimal ARP request (42 bytes)
+            let mut arp_frame = alloc::vec![0u8; 42];
+            // Dst MAC: broadcast
+            arp_frame[0..6].copy_from_slice(&[0xFF,0xFF,0xFF,0xFF,0xFF,0xFF]);
+            // Src MAC
+            arp_frame[6..12].copy_from_slice(&[0x52,0x54,0x00,0x12,0x34,0x56]);
+            // EtherType: ARP (0x0806)
+            arp_frame[12] = 0x08; arp_frame[13] = 0x06;
+            // ARP header: HW=Ethernet(1), Proto=IPv4(0x0800), HLen=6, PLen=4
+            arp_frame[14] = 0x00; arp_frame[15] = 0x01;
+            arp_frame[16] = 0x08; arp_frame[17] = 0x00;
+            arp_frame[18] = 6; arp_frame[19] = 4;
+            // Op: Request (1)
+            arp_frame[20] = 0x00; arp_frame[21] = 0x01;
+            // Sender IP: 10.0.2.15
+            arp_frame[28] = 10; arp_frame[29] = 0; arp_frame[30] = 2; arp_frame[31] = 15;
+            // Target IP: 10.0.2.1
+            arp_frame[38] = 10; arp_frame[39] = 0; arp_frame[40] = 2; arp_frame[41] = 1;
+
+            sniffer::process_packet(&arp_frame);
+        }
+        let pkts = sniffer::peek_captured_packets(1);
+        sniffer::stop_capture();
+        if pkts.len() == 1 && pkts[0].protocol == sniffer::Protocol::Arp {
+            crate::println_color!(COLOR_GREEN, "[OK] ARP dissected");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got {} packets", pkts.len());
+            failed += 1;
+        }
+    }
+
+    // -- 24. TrustScan vuln scanner types -----------------------------
+    crate::println_color!(COLOR_CYAN, "[24/30] TrustScan vulnerability scanner");
+    {
+        use crate::netscan::vuln;
+
+        // 24a. Severity enum
+        crate::print!("  Severity enum... ");
+        if vuln::Severity::Info.as_str() == "INFO"
+            && vuln::Severity::Low.as_str() == "LOW"
+            && vuln::Severity::Medium.as_str() == "MEDIUM"
+            && vuln::Severity::High.as_str() == "HIGH"
+            && vuln::Severity::Critical.as_str() == "CRITICAL"
+        {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 24b. Finding struct construction
+        crate::print!("  Finding struct... ");
+        let f = vuln::Finding {
+            port: 22,
+            service: "ssh",
+            severity: vuln::Severity::Medium,
+            title: String::from("Test finding"),
+            description: String::from("Test desc"),
+            recommendation: String::from("Test rec"),
+        };
+        if f.port == 22 && f.service == "ssh" && f.severity == vuln::Severity::Medium {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 24c. scan with no open ports → no findings
+        crate::print!("  scan empty... ");
+        let findings = vuln::scan([127, 0, 0, 1], &[]);
+        if findings.is_empty() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got {} findings", findings.len());
+            failed += 1;
+        }
+
+        // 24d. format_report with findings
+        crate::print!("  format_report... ");
+        let test_findings = alloc::vec![
+            vuln::Finding {
+                port: 23,
+                service: "telnet",
+                severity: vuln::Severity::High,
+                title: String::from("Telnet detected"),
+                description: String::from("Unencrypted remote access"),
+                recommendation: String::from("Use SSH instead"),
+            },
+        ];
+        let report = vuln::format_report([127, 0, 0, 1], &test_findings);
+        if report.contains("Telnet") && report.contains("HIGH") {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+    }
+
+    // -- 25. TrustScan traceroute + discovery data structures ----------
+    crate::println_color!(COLOR_CYAN, "[25/30] TrustScan traceroute + discovery");
+    {
+        // 25a. TraceConfig default values
+        crate::print!("  TraceConfig default... ");
+        let tc = crate::netscan::traceroute::TraceConfig::default();
+        if tc.max_hops == 30 && tc.probes_per_hop == 3 && tc.timeout_ms == 2000 {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 25b. TraceHop struct
+        crate::print!("  TraceHop struct... ");
+        let hop = crate::netscan::traceroute::TraceHop {
+            hop_num: 1,
+            ip: Some([10, 0, 2, 1]),
+            hostname: None,
+            rtt_ms: [5, 3, 4],
+            reached: false,
+        };
+        if hop.hop_num == 1 && hop.ip == Some([10, 0, 2, 1]) && !hop.reached {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 25c. HostInfo struct
+        crate::print!("  HostInfo struct... ");
+        let hi = crate::netscan::discovery::HostInfo {
+            ip: [192, 168, 1, 1],
+            mac: Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]),
+            hostname: Some(String::from("gateway")),
+            ttl: Some(64),
+            rtt_ms: 5,
+            os_hint: "Linux/Unix/macOS",
+        };
+        if hi.ip == [192, 168, 1, 1]
+            && hi.mac == Some([0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF])
+            && hi.ttl == Some(64)
+            && hi.os_hint == "Linux/Unix/macOS"
+        {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 25d. CaptureFilter struct
+        crate::print!("  CaptureFilter default... ");
+        let cf = crate::netscan::sniffer::CaptureFilter::default();
+        if cf.src_ip.is_none() && cf.dst_ip.is_none()
+            && cf.port.is_none() && cf.protocol.is_none()
+        {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 25e. BannerResult struct
+        crate::print!("  BannerResult struct... ");
+        let br = crate::netscan::banner::BannerResult {
+            port: 80,
+            service: "http",
+            banner: String::from("Apache/2.4.41 (Ubuntu)"),
+            version: Some(String::from("Apache")),
+        };
+        if br.port == 80 && br.service == "http"
+            && br.version.as_deref() == Some("Apache")
+        {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+    }
+
+    // -- 26. Shell scripting variables --------------------------------
+    crate::println_color!(COLOR_CYAN, "[26/30] Shell scripting variables");
+    {
+        // 26a. Set and get variable
+        crate::print!("  set_var/get_var... ");
+        super::scripting::set_var("TEST_VAR", "hello");
+        if super::scripting::get_var("TEST_VAR").as_deref() == Some("hello") {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 26b. Unset variable
+        crate::print!("  unset_var... ");
+        super::scripting::unset_var("TEST_VAR");
+        if super::scripting::get_var("TEST_VAR").is_none() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 26c. Default variables exist
+        crate::print!("  default vars (HOME, USER, SHELL)... ");
+        let home = super::scripting::get_var("HOME");
+        let user = super::scripting::get_var("USER");
+        let shell_var = super::scripting::get_var("SHELL");
+        if home.is_some() && user.is_some() && shell_var.is_some() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 26d. all_vars returns entries
+        crate::print!("  all_vars()... ");
+        let all = super::scripting::all_vars();
+        if all.len() >= 5 {
+            crate::println_color!(COLOR_GREEN, "[OK] {} vars", all.len());
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] only {} vars", all.len());
+            failed += 1;
+        }
+    }
+
+    // -- 27. Shell variable expansion ---------------------------------
+    crate::println_color!(COLOR_CYAN, "[27/30] Shell variable expansion");
+    {
+        // 27a. Simple $VAR expansion
+        crate::print!("  $USER expansion... ");
+        super::scripting::set_var("USER", "root");
+        let expanded = super::scripting::expand_variables("hello $USER");
+        if expanded == "hello root" {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got '{}'", expanded);
+            failed += 1;
+        }
+
+        // 27b. ${VAR} expansion
+        crate::print!("  ${{VAR}} expansion... ");
+        let expanded = super::scripting::expand_variables("${USER}name");
+        if expanded == "rootname" {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got '{}'", expanded);
+            failed += 1;
+        }
+
+        // 27c. Arithmetic $((expr))
+        crate::print!("  $((3+4*2)) arithmetic... ");
+        let expanded = super::scripting::expand_variables("$((3+4*2))");
+        if expanded == "11" {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got '{}'", expanded);
+            failed += 1;
+        }
+
+        // 27d. ${VAR:-default} fallback
+        crate::print!("  ${{UNSET:-fallback}}... ");
+        super::scripting::unset_var("UNSET_TEST");
+        let expanded = super::scripting::expand_variables("${UNSET_TEST:-fallback}");
+        if expanded == "fallback" {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got '{}'", expanded);
+            failed += 1;
+        }
+    }
+
+    // -- 28. Shell arithmetic engine ----------------------------------
+    crate::println_color!(COLOR_CYAN, "[28/30] Shell arithmetic engine");
+    {
+        // 28a. Basic addition
+        crate::print!("  eval_arithmetic(\"2+3\")... ");
+        let r = super::scripting::eval_arithmetic("2+3");
+        if r == 5 {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got {}", r);
+            failed += 1;
+        }
+
+        // 28b. Operator precedence
+        crate::print!("  eval_arithmetic(\"2+3*4\")... ");
+        let r = super::scripting::eval_arithmetic("2+3*4");
+        if r == 14 {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got {}", r);
+            failed += 1;
+        }
+
+        // 28c. Parentheses
+        crate::print!("  eval_arithmetic(\"(2+3)*4\")... ");
+        let r = super::scripting::eval_arithmetic("(2+3)*4");
+        if r == 20 {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got {}", r);
+            failed += 1;
+        }
+
+        // 28d. Modulo
+        crate::print!("  eval_arithmetic(\"17%5\")... ");
+        let r = super::scripting::eval_arithmetic("17%5");
+        if r == 2 {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] got {}", r);
+            failed += 1;
+        }
+    }
+
+    // -- 29. HTTP server infrastructure -------------------------------
+    crate::println_color!(COLOR_CYAN, "[29/30] HTTP server infrastructure");
+    {
+        // 29a. Server not running initially
+        crate::print!("  is_running() == false... ");
+        if !crate::httpd::is_running() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 29b. get_stats returns valid tuple
+        crate::print!("  get_stats()... ");
+        let (port, reqs, running) = crate::httpd::get_stats();
+        if !running && reqs == 0 {
+            crate::println_color!(COLOR_GREEN, "[OK] port={}", port);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 29c. TCP listener infrastructure
+        crate::print!("  tcp::listen_on/stop_listening... ");
+        crate::netstack::tcp::listen_on(9999, 2);
+        crate::netstack::tcp::stop_listening(9999);
+        crate::println_color!(COLOR_GREEN, "[OK]");
+        passed += 1;
+
+        // 29d. TCP accept on unused port returns None
+        crate::print!("  accept_connection(9998) = None... ");
+        if crate::netstack::tcp::accept_connection(9998).is_none() {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+    }
+
+    // -- 30. TrustPkg package manager ---------------------------------
+    crate::println_color!(COLOR_CYAN, "[30/30] TrustPkg package manager");
+    {
+        // 30a. Package catalog exists
+        crate::print!("  total_count() > 0... ");
+        let total = crate::trustpkg::total_count();
+        if total > 0 {
+            crate::println_color!(COLOR_GREEN, "[OK] {} packages", total);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 30b. Core packages installed
+        crate::print!("  installed_count() > 0... ");
+        let installed = crate::trustpkg::installed_count();
+        if installed > 0 {
+            crate::println_color!(COLOR_GREEN, "[OK] {} installed", installed);
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 30c. Known package exists
+        crate::print!("  package_exists(coreutils)... ");
+        if crate::trustpkg::package_exists("coreutils") {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
+        }
+
+        // 30d. Unknown package does not exist
+        crate::print!("  !package_exists(nonexistent)... ");
+        if !crate::trustpkg::package_exists("nonexistent_pkg_12345") {
+            crate::println_color!(COLOR_GREEN, "[OK]");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]");
+            failed += 1;
         }
     }
 

@@ -72,6 +72,11 @@ pub struct VirtioBlk {
 static DRIVER: Mutex<Option<VirtioBlk>> = Mutex::new(None);
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
+/// VirtIO blk I/O base (for ISR access without locking DRIVER)
+static VIRTIO_BLK_IOBASE: core::sync::atomic::AtomicU16 = core::sync::atomic::AtomicU16::new(0);
+/// Request completion flag (set by ISR, polled by read/write)
+static VIRTIO_BLK_COMPLETE: AtomicBool = AtomicBool::new(false);
+
 /// Statistics
 static READS: AtomicU64 = AtomicU64::new(0);
 static WRITES: AtomicU64 = AtomicU64::new(0);
@@ -256,12 +261,18 @@ impl VirtioBlk {
             port.write(0);
         }
         
+        // Wait for completion (interrupt-assisted polling)
+        VIRTIO_BLK_COMPLETE.store(false, Ordering::Release);
+        
         // Get queue reference again for polling
         let queue = self.queue.as_mut().ok_or("Queue not initialized")?;
         
-        // Wait for completion (simple polling)
+        // Wait for completion — check interrupt flag or used ring
         let mut timeout = 1_000_000u32;
         while !queue.has_used() && timeout > 0 {
+            if VIRTIO_BLK_COMPLETE.load(Ordering::Acquire) {
+                break;
+            }
             core::hint::spin_loop();
             timeout -= 1;
         }
@@ -382,11 +393,17 @@ impl VirtioBlk {
             port.write(0);
         }
         
+        // Wait for completion (interrupt-assisted polling)
+        VIRTIO_BLK_COMPLETE.store(false, Ordering::Release);
+        
         // Get queue reference again for polling
         let queue = self.queue.as_mut().ok_or("Queue not initialized")?;
         
         let mut timeout = 1_000_000u32;
         while !queue.has_used() && timeout > 0 {
+            if VIRTIO_BLK_COMPLETE.load(Ordering::Acquire) {
+                break;
+            }
             core::hint::spin_loop();
             timeout -= 1;
         }
@@ -432,8 +449,18 @@ pub fn init(pci_dev: &PciDevice) -> Result<(), &'static str> {
     driver.setup_queue()?;
     driver.start()?;
     
+    // Store iobase for ISR access
+    VIRTIO_BLK_IOBASE.store(driver.device.iobase, Ordering::SeqCst);
+    
     INITIALIZED.store(true, Ordering::SeqCst);
     *DRIVER.lock() = Some(driver);
+    
+    // Route PCI interrupt through IOAPIC
+    let irq = pci_dev.interrupt_line;
+    if irq > 0 && irq < 255 {
+        crate::apic::route_pci_irq(irq, crate::apic::VIRTIO_VECTOR);
+        crate::serial_println!("[virtio-blk] IRQ {} routed to vector {}", irq, crate::apic::VIRTIO_VECTOR);
+    }
     
     Ok(())
 }
@@ -485,4 +512,22 @@ pub fn get_stats() -> (u64, u64, u64, u64) {
         BYTES_READ.load(Ordering::Relaxed),
         BYTES_WRITTEN.load(Ordering::Relaxed),
     )
+}
+
+/// Called from the VirtIO ISR — reads ISR status and sets completion flag.
+/// Safe to call from interrupt context (no mutex locks).
+pub fn handle_interrupt() {
+    let iobase = VIRTIO_BLK_IOBASE.load(Ordering::Relaxed);
+    if iobase == 0 { return; }
+    
+    // Read ISR status register (iobase+0x13) — this also acknowledges the interrupt
+    let isr: u8 = unsafe {
+        let mut port = x86_64::instructions::port::Port::<u8>::new(iobase + 0x13);
+        port.read()
+    };
+    
+    if isr & 1 != 0 {
+        // Bit 0: used ring update (request completed)
+        VIRTIO_BLK_COMPLETE.store(true, Ordering::Release);
+    }
 }

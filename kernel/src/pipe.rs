@@ -66,49 +66,86 @@ pub fn is_pipe_fd(fd: i32) -> bool {
 }
 
 /// Write bytes into a pipe (via write-end fd). Returns bytes written or negative errno.
+/// Blocks (yields) if the pipe buffer is full and the read end is still open.
 pub fn write(fd: i32, data: &[u8]) -> i64 {
-    let mut reg = REGISTRY.write();
-    let &(pipe_id, is_write) = match reg.fd_map.get(&fd) {
-        Some(info) => info,
-        None => return -9, // EBADF
-    };
-    if !is_write {
-        return -9; // Can't write to read end
+    if data.is_empty() { return 0; }
+    
+    let mut retries = 0u32;
+    loop {
+        {
+            let mut reg = REGISTRY.write();
+            let &(pipe_id, is_write) = match reg.fd_map.get(&fd) {
+                Some(info) => info,
+                None => return -9, // EBADF
+            };
+            if !is_write {
+                return -9; // Can't write to read end
+            }
+            let pipe = match reg.pipes.get_mut(&pipe_id) {
+                Some(p) => p,
+                None => return -9,
+            };
+            if !pipe.read_open {
+                return -32; // EPIPE — no readers left
+            }
+            let space = PIPE_BUF_SIZE - pipe.data.len();
+            if space > 0 {
+                let n = data.len().min(space);
+                for &b in &data[..n] {
+                    pipe.data.push_back(b);
+                }
+                return n as i64;
+            }
+            // Buffer full — drop lock and yield
+        }
+        
+        retries += 1;
+        if retries > 10_000 {
+            return -11; // EAGAIN — too many retries
+        }
+        crate::thread::schedule();
     }
-    let pipe = match reg.pipes.get_mut(&pipe_id) {
-        Some(p) => p,
-        None => return -9,
-    };
-    if !pipe.read_open {
-        return -32; // EPIPE — no readers left
-    }
-    let space = PIPE_BUF_SIZE - pipe.data.len();
-    let n = data.len().min(space);
-    for &b in &data[..n] {
-        pipe.data.push_back(b);
-    }
-    n as i64
 }
 
 /// Read bytes from a pipe (via read-end fd). Returns bytes read or negative errno.
+/// Blocks (yields) if the pipe is empty and the write end is still open.
 pub fn read(fd: i32, buf: &mut [u8]) -> i64 {
-    let mut reg = REGISTRY.write();
-    let &(pipe_id, is_write) = match reg.fd_map.get(&fd) {
-        Some(info) => info,
-        None => return -9, // EBADF
-    };
-    if is_write {
-        return -9; // Can't read from write end
+    if buf.is_empty() { return 0; }
+    
+    let mut retries = 0u32;
+    loop {
+        {
+            let mut reg = REGISTRY.write();
+            let &(pipe_id, is_write) = match reg.fd_map.get(&fd) {
+                Some(info) => info,
+                None => return -9, // EBADF
+            };
+            if is_write {
+                return -9; // Can't read from write end
+            }
+            let pipe = match reg.pipes.get_mut(&pipe_id) {
+                Some(p) => p,
+                None => return -9,
+            };
+            if !pipe.data.is_empty() {
+                let n = buf.len().min(pipe.data.len());
+                for i in 0..n {
+                    buf[i] = pipe.data.pop_front().unwrap();
+                }
+                return n as i64;
+            }
+            if !pipe.write_open {
+                return 0; // EOF — write end closed, no more data coming
+            }
+            // Empty but write end open — drop lock and yield
+        }
+        
+        retries += 1;
+        if retries > 10_000 {
+            return 0; // Treat as EOF after too many retries
+        }
+        crate::thread::schedule();
     }
-    let pipe = match reg.pipes.get_mut(&pipe_id) {
-        Some(p) => p,
-        None => return -9,
-    };
-    let n = buf.len().min(pipe.data.len());
-    for i in 0..n {
-        buf[i] = pipe.data.pop_front().unwrap();
-    }
-    n as i64
 }
 
 /// Close a pipe fd (either end). Destroys pipe when both ends are closed.

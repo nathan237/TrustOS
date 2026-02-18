@@ -14,7 +14,7 @@
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
 [![Lines](https://img.shields.io/badge/code-165%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![ISO](https://img.shields.io/badge/ISO-8.95%20MB-purple?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.4.0-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.4.1-orange?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -32,6 +32,7 @@
 
 | Date | Changes |
 |------|----------|
+| **2026-02-19** | **v0.4.1 — Shell Scripting + HTTP Server + Package Manager + Network Security** — **Shell scripting engine** (variables `$VAR`/`${VAR:-default}`, arithmetic `$((expr))`, control flow `if/elif/else/fi`, `for/while` loops, command substitution `$(cmd)`, special vars `$?`/`$$`/`$#`, `source` scripts). **HTTP server** (`httpd start/stop/status`) with dashboard, live status, RAMFS file browser, REST API (`/api/info`, `/api/stats`, `/api/processes`). **TrustPkg package manager** (`trustpkg install/remove/search/list/info`) with 30+ packages across 7 categories. **TrustScan network security toolkit** (port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulnerability scanner). **CONTRIBUTING.md** developer guide. **GitHub Actions CI pipeline** (build, clippy, QEMU integration tests). IPv6 + ICMPv6 protocol support. Integration tests 26-30 (20 sub-tests). |
 | **2026-02-18** | **v0.4.0 — Game Boy Color Emulator + GameLab + NES + Mario 64** — Full CGB emulator (LR35902 CPU, all 245+256 CB opcodes, scanline-accurate PPU with CGB dual VRAM banks & 8+8 color palettes, MBC1/3/5, timer, joypad, OAM/HDMA DMA). NES emulator (6502 CPU with unofficial opcodes, 2C02 PPU, mappers 0-3). TrustMario64 3D platformer (software-rendered, 23 player actions, Bob-omb Battlefield, 3 enemy types, TAS engine). **GameLab** — 2,000-line real-time analysis dashboard for the GB emulator: 5-tab UI (Analyze, Search, Watch, Tiles, Trace), memory search (Cheat Engine-style), 16-slot watch list, save/load state, breakpoints + single-step, tile/sprite viewer, speed control (0.25x–4x), trace log (last 64 instructions), memory diff highlighting. ~9,200 new lines across 23 files. 165K total, 296 source files. |
 | **2026-02-17** | **v0.3.5 — ACPI + Device Emulation** — Full ACPI table generation (RSDP v2, XSDT, MADT, FADT w/ PM timer + SCI, DSDT with AML bytecode), Intel 8259A PIC emulation (ICW1-4, OCW1-3, edge-triggered IRQs, cascaded master/slave, spurious IRQ detection), Intel 8254 PIT emulation (modes 0/2/3, channel 0-2, 1.193182 MHz, lobyte/hibyte access), CMOS RTC emulation (BCD time registers 0x00-0x09, Status A/B/C, NMI masking, century register), ACPI PM Timer (3.579545 MHz, 24/32-bit). Phase 0 infrastructure: setup.sh, setup.ps1, CI release workflow, Makefile auto-Limine, repo cleanup. |
 | **2026-02-16** | **v0.3.4 — POSIX Process Model + Real Disk Swap** — PTY/TTY subsystem with POSIX line discipline (canonical mode, echo, signal chars), pseudo-terminal pairs (master/slave), job control syscalls (SETPGID/SETSID/GETPGID/GETSID), `/etc/passwd` persistence (load/sync to filesystem), ELF improvements (PATH search across 5 dirs, shebang `#!` support, auxiliary vector on stack), `chroot` syscall with per-process root dir, NVMe-backed swap (last 64MB of disk, 8 sectors/page, in-memory fallback), kernel stacks 16KB→64KB. 96/96 tests. 143K lines, 262 source files. |
@@ -67,8 +68,8 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 | Metric | Value |
 |--------|-------|
 | **Total code** | 165,000+ lines of Rust |
-| **Source files** | 296 `.rs` files |
-| **Kernel modules** | 37 independent modules |
+| **Source files** | 304+ `.rs` files |
+| **Kernel modules** | 44 independent modules |
 | **ISO size** | 8.95 MB |
 | **Boot time** | < 1 second |
 | **Desktop FPS** | 144 FPS (SSE2 SIMD) |
@@ -235,9 +236,44 @@ TrustLab is a 7-panel interactive workspace that lets you **watch the OS kernel 
 ### 🌐 Network Stack (from scratch)
 - **VirtIO-net** driver with full packet handling
 - **TCP/IP** stack: ARP, DHCP, DNS, TCP, UDP, ICMP
+- **IPv6 + ICMPv6** — Next-generation internet protocol support
 - **TLS 1.3** — full handshake, X.509 certificate validation, crypto
 - **HTTP/HTTPS client** — `curl`, `wget`, `browse`
+- **HTTP server** — Built-in web server (`httpd start/stop/status`)
 - **Commands**: `ping`, `nslookup`, `traceroute`, `netstat`, `arp`, `route`, `ifconfig`
+
+### 🔒 TrustScan — Network Security Toolkit
+- **Port scanner** — TCP SYN/connect scanning with service detection
+- **Packet sniffer** — Real-time packet capture and analysis
+- **Banner grabber** — Service identification via banner probes
+- **Host discovery** — ARP-based and ICMP-based network scanning
+- **Traceroute** — ICMP/UDP hop-by-hop path analysis
+- **Vulnerability scanner** — Common vulnerability checks against discovered services
+- Commands: `netscan scan`, `netscan sniff`, `netscan banner`, `netscan discover`, `netscan trace`, `netscan vuln`
+
+### 🌐 HTTP Server (httpd)
+- **Built-in web server** running on the TrustOS TCP stack
+- **Dashboard** — System overview page at `/`
+- **Live status** — Real-time OS stats at `/status`
+- **File browser** — Browse RAMFS files at `/files/`
+- **REST API** — `/api/info`, `/api/stats`, `/api/processes` (JSON)
+- Commands: `httpd start [port]`, `httpd stop`, `httpd status`
+
+### 📦 TrustPkg — Package Manager
+- **30+ packages** across 7 categories (system, network, dev, security, graphics, games, utils)
+- **Install/Remove** — `trustpkg install <pkg>`, `trustpkg remove <pkg>`
+- **Search/Browse** — `trustpkg search <query>`, `trustpkg list [category]`
+- **Package info** — `trustpkg info <pkg>` with description, version, size, dependencies
+- **Update** — `trustpkg update` to refresh all installed packages
+
+### 📜 Shell Scripting Engine
+- **Variables** — `export VAR=value`, `$VAR`, `${VAR}`, `${VAR:-default}`
+- **Arithmetic** — `$((expression))` with `+`, `-`, `*`, `/`
+- **Control flow** — `if/elif/else/fi` with test conditions (`-f`, `-d`, `-z`, `-n`, `=`, `!=`)
+- **Loops** — `for var in list; do ... done`, `while condition; do ... done`
+- **Command substitution** — `$(command)` for inline execution
+- **Special variables** — `$?` (last exit code), `$$` (PID), `$#` (arg count)
+- **Script execution** — `source script.sh` to run shell scripts
 
 ### 🐧 Linux Compatibility Layer (WIP)
 
@@ -368,6 +404,9 @@ cargo build --release -p trustos_kernel
 | `gameboy` | Launch the Game Boy Color emulator |
 | `nes` | Launch the NES emulator |
 | `mario64` | Launch the 3D Mario platformer |
+| `httpd start` | Start the built-in HTTP web server |
+| `trustpkg list` | Browse 30+ installable packages |
+| `netscan scan` | Scan network ports |
 | `help` | Show all 200+ commands |
 
 ---
@@ -417,9 +456,21 @@ cargo build --release -p trustos_kernel
 </details>
 
 <details>
-<summary><strong>🌐 Network (15+)</strong></summary>
+<summary><strong>🌐 Network (20+)</strong></summary>
 
-`ifconfig` `ping` `curl` `wget` `nslookup` `arp` `route` `netstat` `traceroute` `browse` `download` `httpget` `tcpsyn` `ip` `dig`
+`ifconfig` `ping` `curl` `wget` `nslookup` `arp` `route` `netstat` `traceroute` `browse` `download` `httpget` `tcpsyn` `ip` `dig` `httpd` `netscan`
+</details>
+
+<details>
+<summary><strong>🔒 Security & Scanning (10+)</strong></summary>
+
+`netscan scan` `netscan sniff` `netscan banner` `netscan discover` `netscan trace` `netscan vuln` `login` `su` `passwd` `adduser`
+</details>
+
+<details>
+<summary><strong>📦 Package Management</strong></summary>
+
+`trustpkg list` `trustpkg search` `trustpkg install` `trustpkg remove` `trustpkg info` `trustpkg installed` `trustpkg update`
 </details>
 
 <details>
@@ -441,9 +492,9 @@ cargo build --release -p trustos_kernel
 </details>
 
 <details>
-<summary><strong>🛠️ Development (10+)</strong></summary>
+<summary><strong>🛠️ Development (15+)</strong></summary>
 
-`trustlang` `transpile` `exec` `elfinfo` `hexdump` `strings` `base64` `md5sum` `sha256sum` `od`
+`trustlang` `transpile` `exec` `elfinfo` `hexdump` `strings` `base64` `md5sum` `sha256sum` `od` `export` `unset` `set` `env` `source`
 </details>
 
 <details>
@@ -491,6 +542,12 @@ TrustOS includes a **built-in cinematic animated explainer** — a 2-minute film
 │  devfs   │ DHCP/DNS │ syscalls  │ 3D Mesh  │  Renderer      │
 │  TrustFS │ VirtIO   │ ELF      │ Formula  │  Fire/Plasma   │
 │  FAT32   │ HTTP/S   │ Alpine   │ HoloMat  │  Matrix Rain   │
+│          │ httpd    │          │          │                │
+├──────────┼──────────┼───────────┼──────────┼────────────────┤
+│ TrustPkg │ NetScan  │ Scripting │ IPv6     │  CI Pipeline   │
+│ 30+ pkgs │ Scanner  │ Engine    │ ICMPv6   │  GitHub        │
+│ 7 categ. │ Sniffer  │ Variables │          │  Actions       │
+│          │ Vuln     │ Loops     │          │                │
 ├──────────┴──────────┴───────────┴──────────┴────────────────┤
 │                    TrustOS Kernel                           │
 │  Memory · Scheduler · IPC · Security · Drivers · Syscalls  │
@@ -529,6 +586,12 @@ TrustOS includes a **built-in cinematic animated explainer** — a 2-minute film
 | `tty.rs` | ~330 | POSIX TTY layer with line discipline |
 | `pty.rs` | ~196 | Pseudo-terminal master/slave pairs |
 | `swap.rs` | ~466 | NVMe-backed page swap with fallback |
+| `scripting.rs` | ~643 | Shell scripting engine (variables, loops, control flow) |
+| `httpd.rs` | ~414 | Built-in HTTP web server with REST API |
+| `trustpkg.rs` | ~290 | Package manager with 30+ packages |
+| `netscan/` | ~900 | Network security toolkit (6 modules) |
+| `ipv6.rs` | ~200 | IPv6 protocol implementation |
+| `icmpv6.rs` | ~150 | ICMPv6 protocol support |
 
 ---
 
@@ -561,6 +624,8 @@ The showcase runs through:
 ## 🤝 Contributing
 
 Contributions are welcome! TrustOS is designed to be **readable and hackable**.
+
+> 📖 **See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete developer guide** — build requirements, architecture overview, how to add commands/drivers/syscalls, integration tests, code style, and PR process.
 
 ### Good First Issues
 - Add a new shell command (follow the pattern in `shell.rs`)
@@ -614,6 +679,10 @@ The **creator signature (#001)** is hardcoded in every kernel binary and can nev
 kernel/src/
 ├── main.rs              # Kernel entry point
 ├── shell.rs             # Shell + 200+ commands + showcase
+├── shell/scripting.rs   # Shell scripting engine
+├── httpd.rs             # Built-in HTTP web server
+├── trustpkg.rs          # Package manager (30+ packages)
+├── netscan/             # Network security toolkit (6 modules)
 ├── desktop.rs           # COSMIC2 desktop manager
 ├── chess.rs             # Chess engine (rules, AI, game state)
 ├── chess3d.rs           # 3D Chess renderer (camera, meshes)
@@ -630,7 +699,7 @@ kernel/src/
 ├── formula3d.rs         # Wireframe 3D engine
 ├── compositor/          # 8-layer GPU compositor
 ├── browser/             # HTML/CSS/JS browser engine
-├── network/             # TCP/IP, DHCP, DNS
+├── network/             # TCP/IP, DHCP, DNS, IPv6, ICMPv6
 ├── tls13/               # TLS 1.3, crypto, X.509
 ├── video/               # TrustVideo codec
 ├── trustlang/           # Compiler + VM
@@ -661,6 +730,10 @@ kernel/src/
 | 3D Games | ✅ (FPS + Chess3D + Mario64) | ❌ (2D only) | ❌ | ✅ (16 colors) | Ported |
 | Audio Synthesizer | ✅ (8-voice poly) | ❌ | ❌ | ❌ (single voice) | ❌ |
 | **Built-in Emulators** | **✅ (GBC + NES + GameLab)** | ❌ | ❌ | ❌ | ❌ |
+| **HTTP Server** | **✅ (built-in httpd)** | ❌ | ❌ | ❌ | Via Apache/nginx |
+| **Package Manager** | **✅ (TrustPkg, 30+ pkgs)** | Ports | ❌ | ❌ | apt/dnf/pacman |
+| **Shell Scripting** | **✅ (variables, loops, if/else)** | ✅ | ✅ | ✅ | ✅ (bash) |
+| **Network Security Scanner** | **✅ (TrustScan, 6 tools)** | ❌ | ❌ | ❌ | Via nmap |
 | TLS 1.3 from scratch | ✅ | ❌ | ❌ | ❌ | Via OpenSSL |
 | Binary Analyzer | ✅ (TrustView) | ❌ | ❌ | ❌ | External (Ghidra) |
 | Hypervisor + VMI | ✅ (VT-x/SVM + introspection) | ❌ | ❌ | ❌ | Via KVM (no VMI) |
@@ -670,6 +743,16 @@ kernel/src/
 ---
 
 ## 📋 Changelog
+
+### v0.4.1 — February 2026
+- **Shell Scripting Engine** — Full shell scripting with POSIX-style variables (`$VAR`, `${VAR}`, `${VAR:-default}`), arithmetic expansion (`$((expr))`), control flow (`if/elif/else/fi` with test conditions: `-f`, `-d`, `-z`, `-n`, `=`, `!=`), loops (`for var in list; do...done`, `while cond; do...done`), command substitution (`$(cmd)`), special variables (`$?`, `$$`, `$#`), and script execution via `source`. Integrated into the shell — all commands support variable expansion.
+- **HTTP Server (httpd)** — Built-in web server using the existing TCP stack. Dashboard page (`/`), live status (`/status`), RAMFS file browser (`/files/`), REST API endpoints (`/api/info`, `/api/stats`, `/api/processes`). Start/stop/status control via `httpd` command.
+- **TrustPkg Package Manager** — Package manager with 30+ packages across 7 categories (system, network, dev, security, graphics, games, utils). Install, remove, search, list, info, and update commands. Full dependency metadata and size tracking.
+- **TrustScan Network Security Toolkit** — 6-module security suite: port scanner (TCP SYN/connect), packet sniffer (real-time capture), banner grabber (service identification), host discovery (ARP/ICMP scan), traceroute (hop-by-hop path), vulnerability scanner (CVE checks). Commands via `netscan`.
+- **IPv6 + ICMPv6** — IPv6 protocol support with ICMPv6 for next-generation networking.
+- **CONTRIBUTING.md** — Comprehensive developer guide: build requirements, architecture overview, how to add commands/drivers/syscalls, integration test guide, code style, PR process.
+- **GitHub Actions CI Pipeline** — 3-job CI: Build (cargo build --release), Lint (clippy), Integration Test (QEMU boot + auto-test). Cargo cache, artifact upload.
+- **Integration tests 26-30** — 20 new sub-tests covering shell scripting engine, HTTP server, package manager, network security scanner, and IPv6/ICMPv6. Total: 30 integration test groups.
 
 ### v0.4.0 — February 2026
 - **Game Boy Color Emulator** — Complete CGB emulator running bare-metal. Sharp LR35902 CPU with all 245 base opcodes + 256 CB-prefix operations. Scanline-accurate PPU (160×144) with proper dot-cycle timing across 4 modes. Full CGB extensions: dual VRAM banks, per-tile attributes (palette, bank, flip), 8 BG + 8 OBJ color palettes (RGB555) via BCPS/BCPD/OCPS/OCPD. MBC0/MBC1/MBC3/MBC5 cartridge mappers (up to 4MB ROM, 128KB RAM). Timer (DIV/TIMA/TMA/TAC) with correct falling-edge detection. Joypad, OAM DMA, HDMA, 32KB WRAM with CGB bank switching, HRAM. Compile-time ROM embedding via `include_bytes!()`.
@@ -789,7 +872,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 - GitHub: [@nathan237](https://github.com/nathan237)
 - Project: [TrustOS](https://github.com/nathan237/TrustOS)
 
-> Every line of TrustOS — 165,000+ lines of Rust — was designed, written, and tested by a single developer. 12 days. Zero C. Zero compromises.
+> Every line of TrustOS — 165,000+ lines of Rust — was designed, written, and tested by a single developer. 13 days. Zero C. Zero compromises.
 
 ---
 
@@ -799,7 +882,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 Created with ❤️ by [Nated0ge](https://github.com/nathan237)
 
-165,000 lines · 12 days · Zero C · Fully auditable
+165,000+ lines · 13 days · Zero C · Fully auditable
 
 ⭐ **Star this repo** if you believe in transparent, auditable operating systems.
 

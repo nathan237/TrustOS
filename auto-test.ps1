@@ -231,8 +231,8 @@ $tests = @(
     # -- SELFTEST --
     @{ Category="SELFTEST"; Name="builtin self-test"; Cmd="test"; Validate={ param($o) $o -match "self-test|Self-Test|OK|Done|PASS" } }
 
-    # -- INTTEST (Gap #1-5 integration) --
-    @{ Category="INTTEST"; Name="integration test suite"; Cmd="inttest"; Validate={ param($o) $o -match "ALL.*TESTS PASSED" }; Timeout=15 }
+    # -- INTTEST (25-test integration suite) --
+    @{ Category="INTTEST"; Name="integration test suite"; Cmd="inttest"; Validate={ param($o) $o -match "ALL.*TESTS PASSED" }; Timeout=30 }
 
     # -- TRUSTLANG --
     @{ Category="TRUSTLANG"; Name="eval println"; Cmd='trustlang eval println("hello_tl")'; Validate={ param($o) $o -match "hello_tl" } }

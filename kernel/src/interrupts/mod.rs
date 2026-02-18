@@ -46,6 +46,10 @@ lazy_static! {
         // SMP reschedule IPI vector (0xFD = 253) - trigger schedule on target CPU
         idt[0xFD].set_handler_fn(handlers::reschedule_ipi_handler);
         
+        // VirtIO shared interrupt handler (vector 62) - for virtio-net/blk
+        idt[crate::apic::VIRTIO_VECTOR as usize]
+            .set_handler_fn(handlers::virtio_interrupt_handler);
+        
         idt
     };
 }

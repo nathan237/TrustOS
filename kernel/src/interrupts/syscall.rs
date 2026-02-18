@@ -117,11 +117,44 @@ pub extern "C" fn syscall_handler_rust(
     arg5: u64,
     arg6: u64,
 ) -> u64 {
+    use crate::syscall::linux::nr::RT_SIGRETURN;
+    
     // Forward all arguments to the full handler
     let ret = crate::syscall::handle_full(num, arg1, arg2, arg3, arg4, arg5, arg6);
 
     // Emit structured syscall event to TrustLab trace bus
     crate::lab_mode::trace_bus::emit_syscall(num, [arg1, arg2, arg3], ret);
+
+    // ── Signal delivery on return to userspace ──
+    // Skip for rt_sigreturn (it handles its own context restoration)
+    if num == RT_SIGRETURN {
+        // rt_sigreturn — restore saved context from signal frame
+        unsafe {
+            let result = crate::signals::sigreturn_restore(
+                &mut crate::userland::USER_RETURN_RIP,
+                &mut crate::userland::USER_RSP_TEMP,
+                &mut crate::userland::USER_RETURN_RFLAGS,
+            );
+            return result as u64;
+        }
+    }
+    
+    // Check for pending signals with user handlers
+    unsafe {
+        if let Some(signo) = crate::signals::try_deliver_signal(
+            &mut crate::userland::USER_RETURN_RIP,
+            &mut crate::userland::USER_RSP_TEMP,
+            &mut crate::userland::USER_RETURN_RFLAGS,
+            ret as u64,
+        ) {
+            // Signal is being delivered — the return context has been
+            // redirected to the signal handler.
+            // Set SIGNAL_DELIVER_SIGNO so the asm trampoline puts signo in RDI.
+            crate::userland::SIGNAL_DELIVER_SIGNO = signo;
+            // RAX should still contain the syscall result — the signal frame
+            // has it saved for restoration by rt_sigreturn.
+        }
+    }
 
     ret as u64
 }
