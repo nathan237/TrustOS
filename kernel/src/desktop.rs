@@ -455,7 +455,6 @@ pub enum IconAction {
     OpenBrowser,
     OpenModelEditor,
     OpenGame3D,
-    OpenMario64,
     OpenNes,
     OpenGameBoy,
     OpenGameLab,
@@ -483,7 +482,6 @@ pub enum WindowType {
     Game3D,  // 3D FPS raycasting game
     Chess,   // Chess game vs AI
     Chess3D, // 3D Matrix-style chess
-    Mario64, // Super Mario 64 clone with TAS
     NesEmu,  // NES emulator
     GameBoyEmu, // Game Boy emulator
     GameBoyInput, // Game Boy input display (separate window)
@@ -795,8 +793,6 @@ pub struct Desktop {
     pub chess3d_states: BTreeMap<u32, crate::chess3d::Chess3DState>,
     // Binary viewer states (window_id -> BinaryViewerState)
     pub binary_viewer_states: BTreeMap<u32, crate::apps::binary_viewer::BinaryViewerState>,
-    // Mario64 states (window_id -> Mario64Game)
-    pub mario64_states: BTreeMap<u32, crate::mario64::Mario64Game>,
     // NES emulator states
     pub nes_states: BTreeMap<u32, crate::nes::NesEmulator>,
     // Game Boy emulator states
@@ -1120,7 +1116,6 @@ impl Desktop {
             game3d_states: BTreeMap::new(),
             chess_states: BTreeMap::new(),
             chess3d_states: BTreeMap::new(),
-            mario64_states: BTreeMap::new(),
             nes_states: BTreeMap::new(),
             gameboy_states: BTreeMap::new(),
             binary_viewer_states: BTreeMap::new(),
@@ -1153,7 +1148,6 @@ impl Desktop {
         self.snake_states.clear();
         self.game3d_states.clear();
         self.chess3d_states.clear();
-        self.mario64_states.clear();
         self.nes_states.clear();
         self.gameboy_states.clear();
         self.binary_viewer_states.clear();
@@ -1587,9 +1581,6 @@ struct AppConfig {
             WindowType::Chess3D => {
                 self.chess3d_states.insert(window.id, crate::chess3d::Chess3DState::new());
             },
-            WindowType::Mario64 => {
-                self.mario64_states.insert(window.id, crate::mario64::Mario64Game::new());
-            },
             WindowType::NesEmu => {
                 let mut emu = crate::nes::NesEmulator::new();
                 // Auto-load embedded ROM if available
@@ -1634,7 +1625,6 @@ struct AppConfig {
                 // (the window chrome will still animate, but we don't need the state)
                 self.gameboy_states.remove(&id);
                 self.nes_states.remove(&id);
-                self.mario64_states.remove(&id);
                 self.game3d_states.remove(&id);
                 self.chess3d_states.remove(&id);
                 self.gamelab_states.remove(&id);
@@ -1652,7 +1642,6 @@ struct AppConfig {
         self.game3d_states.remove(&id);
         self.chess_states.remove(&id);
         self.chess3d_states.remove(&id);
-        self.mario64_states.remove(&id);
         self.nes_states.remove(&id);
         self.gameboy_states.remove(&id);
         self.binary_viewer_states.remove(&id);
@@ -1690,7 +1679,6 @@ struct AppConfig {
             self.model_editor_states.remove(&id);
             self.game3d_states.remove(&id);
             self.chess3d_states.remove(&id);
-            self.mario64_states.remove(&id);
             self.nes_states.remove(&id);
             self.gameboy_states.remove(&id);
             self.gamelab_states.remove(&id);
@@ -2478,9 +2466,6 @@ struct AppConfig {
             IconAction::OpenGame3D => {
                 self.create_window("TrustDoom 3D", 80 + offset, 50 + offset, 640, 480, WindowType::Game3D)
             },
-            IconAction::OpenMario64 => {
-                self.create_window("TrustMario64", 60 + offset, 40 + offset, 640, 480, WindowType::Mario64)
-            },
             IconAction::OpenNes => {
                 self.create_window("NES Emulator", 80 + offset, 50 + offset, 512, 480, WindowType::NesEmu)
             },
@@ -2574,23 +2559,23 @@ struct AppConfig {
         // Search bar is at menu_y + 30, height 32 — clicking there focuses search (no action)
         let search_bar_bottom = menu_y + 66;
         
-        // 18 list items at search_bar_bottom + 4 + (i * 28), each 26px tall
+        // 17 list items at search_bar_bottom + 4 + (i * 28), each 26px tall
         // Matches draw_start_menu items array:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=Mario64,
-        // 11=NES, 12=GameBoy, 13=TrustLab, 14=Settings, 15=Exit Desktop, 16=Shutdown, 17=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D,
+        // 10=NES, 11=GameBoy, 12=TrustLab, 13=Settings, 14=Exit Desktop, 15=Shutdown, 16=Reboot
         let items_start_y = search_bar_bottom + 4;
         let item_spacing = 28;
         let item_h = 26;
         
         // Build filtered items list to match draw_start_menu filtering
-        let all_labels: [&str; 18] = [
+        let all_labels: [&str; 17] = [
             "Terminal", "Files", "Calculator", "Network", "Text Editor",
             "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
-            "Mario 64", "NES Emulator", "Game Boy", "TrustLab",
+            "NES Emulator", "Game Boy", "TrustLab",
             "Settings", "Exit Desktop", "Shutdown", "Reboot",
         ];
-        let all_indices: [u8; 18] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17];
+        let all_indices: [u8; 17] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
         
         // Filter by search
         let search = self.start_menu_search.trim();
@@ -2621,7 +2606,7 @@ struct AppConfig {
     fn handle_menu_action(&mut self, action: u8) {
         // Matches draw_start_menu items array order:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=Mario64, 11=TrustLab, 12=Settings, 13=Exit Desktop, 14=Shutdown, 15=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=NES, 11=GameBoy, 12=TrustLab, 13=Settings, 14=Exit Desktop, 15=Shutdown, 16=Reboot
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
@@ -2661,31 +2646,28 @@ struct AppConfig {
                     w.maximized = true;
                 }
             },
-            10 => { // Mario 64
-                self.create_window("TrustMario64", 60, 40, 640, 480, WindowType::Mario64);
-            },
-            11 => { // NES Emulator
+            10 => { // NES Emulator
                 self.create_window("NES Emulator", 80, 50, 512, 480, WindowType::NesEmu);
             },
-            12 => { // Game Boy
+            11 => { // Game Boy
                 self.create_window("Game Boy", 100, 60, 480, 432, WindowType::GameBoyEmu);
             },
-            13 => { // TrustLab
+            12 => { // TrustLab
                 self.open_lab_mode();
             },
-            14 => { // Settings
+            13 => { // Settings
                 self.open_settings_panel();
             },
-            15 => { // Exit Desktop
+            14 => { // Exit Desktop
                 crate::serial_println!("[GUI] Exit Desktop from start menu");
                 EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
             },
-            16 => { // Shutdown
+            15 => { // Shutdown
                 crate::println!("\n\n=== SYSTEM SHUTDOWN ===");
                 crate::println!("Goodbye!");
                 loop { x86_64::instructions::hlt(); }
             },
-            17 => { // Reboot
+            16 => { // Reboot
                 crate::serial_println!("[SYSTEM] Reboot requested");
                 // Triple fault reboot
                 unsafe {
@@ -2712,10 +2694,10 @@ struct AppConfig {
                 },
                 0x0D | 0x0A => { // Enter — launch first matching item
                     // Build filtered list same as draw/click
-                    let all_labels: [&str; 18] = [
+                    let all_labels: [&str; 17] = [
                         "Terminal", "Files", "Calculator", "Network", "Text Editor",
                         "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
-                        "Mario 64", "NES Emulator", "Game Boy", "TrustLab",
+                        "NES Emulator", "Game Boy", "TrustLab",
                         "Settings", "Exit Desktop", "Shutdown", "Reboot",
                     ];
                     let search = self.start_menu_search.trim();
@@ -2807,11 +2789,6 @@ struct AppConfig {
                 WindowType::Chess3D => {
                     if let Some(state) = self.chess3d_states.get_mut(&win_id) {
                         state.handle_key(key);
-                    }
-                },
-                WindowType::Mario64 => {
-                    if let Some(game) = self.mario64_states.get_mut(&win_id) {
-                        game.handle_key(key);
                     }
                 },
                 WindowType::NesEmu => {
@@ -3724,15 +3701,6 @@ struct AppConfig {
                 output.push(String::from("\x01G\u{265A} TrustChess 3D \x01M— Opening 3D chess window..."));
                 output.push(String::from("\x01MWASD:Camera  ZX:Zoom  O:Auto-rotate  Click:Move"));
             },
-            "mario64" | "mario" => {
-                output.push(String::from("\x01G\u{2B50} TrustMario64 \x01M— Opening Mario 64 window..."));
-                output.push(String::from("\x01MWASD:Move Space:Jump Shift:Attack Ctrl:Crouch"));
-                output.push(String::from("\x01MF1:Save F2:Load F3:FrameAdv F5:Record F6:Replay"));
-            },
-            "nes" => {
-                output.push(String::from("\x01G\u{1F3AE} NES Emulator \x01M— Opening NES window..."));
-                output.push(String::from("\x01MWASD:D-Pad X/Space:A Z:B C:Select Enter:Start"));
-            },
             "gameboy" | "gb" => {
                 output.push(String::from("\x01G\u{1F3AE} Game Boy \x01M— Opening Game Boy window..."));
                 output.push(String::from("\x01MWASD:D-Pad X/Space:A Z:B C:Select Enter:Start"));
@@ -3923,17 +3891,6 @@ struct AppConfig {
             }
         }
         
-        // Tick Mario64 — only when window is focused and visible
-        let mario64_ids: Vec<u32> = self.mario64_states.keys().copied().collect();
-        for id in mario64_ids {
-            let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
-            if is_active {
-                if let Some(game) = self.mario64_states.get_mut(&id) {
-                    game.tick();
-                }
-            }
-        }
-        
         // Tick NES emulator — only when window is focused and visible
         let nes_ids: Vec<u32> = self.nes_states.keys().copied().collect();
         for id in nes_ids {
@@ -3956,7 +3913,7 @@ struct AppConfig {
                     .find(|(_, lab)| lab.linked_gb_id == Some(id))
                     .map(|(&lid, _)| lid)
                     .or_else(|| self.gamelab_states.keys().next().copied());
-
+                
                 // Read lab state
                 let (paused, mut step_one, mut step_frame, speed_idx, trace_enabled) =
                     if let Some(lid) = lab_id {
@@ -3964,7 +3921,7 @@ struct AppConfig {
                             (lab.paused, lab.step_one, lab.step_frame, lab.speed_idx, lab.trace_enabled)
                         } else { (false, false, false, 2, false) }
                     } else { (false, false, false, 2, false) };
-
+                
                 // Handle pause
                 if paused && !step_one && !step_frame {
                     // Still poll key releases
@@ -4153,10 +4110,7 @@ struct AppConfig {
         // Fifth pass: render 3D chess windows (needs &mut for state)
         self.draw_chess3d_windows();
         
-        // Sixth pass: render Mario64 windows (needs &mut for state)
-        self.draw_mario64_windows();
-        
-        // Seventh pass: render emulator windows
+        // Sixth pass: render emulator windows
         self.draw_nes_windows();
         self.draw_gameboy_windows();
         
@@ -5212,7 +5166,7 @@ struct AppConfig {
         let items_start_y = search_y + search_h as i32 + 4;
         
         // Menu items — full list
-        let items: [(&str, &str, bool); 18] = [
+        let items: [(&str, &str, bool); 17] = [
             (">_", "Terminal", false),
             ("[]", "Files", false),
             ("##", "Calculator", false),
@@ -5223,7 +5177,6 @@ struct AppConfig {
             ("Sk", "Snake", false),
             ("Kk", "Chess", false),
             ("C3", "Chess 3D", false),
-            ("M6", "Mario 64", false),
             ("NE", "NES Emulator", false),
             ("GB", "Game Boy", false),
             ("Lb", "TrustLab", false),
@@ -5478,7 +5431,6 @@ struct AppConfig {
         if window.window_type == WindowType::GameBoyEmu
             || window.window_type == WindowType::GameBoyInput
             || window.window_type == WindowType::NesEmu
-            || window.window_type == WindowType::Mario64
         {
             return;
         }
@@ -5814,41 +5766,6 @@ struct AppConfig {
         }
     }
     
-    /// Render Mario64 windows (needs &mut self for game state)
-    fn draw_mario64_windows(&mut self) {
-        let mario_windows: Vec<(u32, i32, i32, u32, u32)> = self.windows.iter()
-            .filter(|w| w.window_type == WindowType::Mario64 && w.visible && !w.minimized && !w.pending_close)
-            .map(|w| (w.id, w.x, w.y, w.width, w.height))
-            .collect();
-        
-        for (win_id, wx, wy, ww, wh) in mario_windows {
-            if let Some(game) = self.mario64_states.get_mut(&win_id) {
-                let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
-                let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
-                
-                if content_w < 80 || content_h < 60 { continue; }
-                
-                let buf_w = content_w as usize;
-                let buf_h = content_h as usize;
-                let mut buf = alloc::vec![0u32; buf_w * buf_h];
-                
-                game.render(&mut buf, buf_w, buf_h);
-                
-                // Blit buffer to framebuffer
-                for py in 0..buf_h {
-                    for px in 0..buf_w {
-                        let color = buf[py * buf_w + px];
-                        let sx = content_x + px as u32;
-                        let sy = content_y + py as u32;
-                        framebuffer::put_pixel(sx, sy, color);
-                    }
-                }
-            }
-        }
-    }
-    
     /// Render NES emulator windows
     fn draw_nes_windows(&mut self) {
         let nes_windows: Vec<(u32, i32, i32, u32, u32)> = self.windows.iter()
@@ -5901,7 +5818,7 @@ struct AppConfig {
                 
                 if content_w < 80 || content_h < 60 { continue; }
                 
-                // ── Menu bar at top ────────────────────────────────────
+                // ── Menu bar at top ────────────────────────────────────────────
                 framebuffer::fill_rect(content_x, content_y, content_w, menu_h, 0xFF0E1418);
                 framebuffer::fill_rect(content_x, content_y + menu_h - 1, content_w, 1, 0xFF1E3028);
                 
@@ -5957,7 +5874,7 @@ struct AppConfig {
                     framebuffer::draw_char_at(ltx + i as u32 * 8, content_y + 5, ch, 0xFF58A6FF);
                 }
                 
-                // ── Game rendering below menu ────────────────────────
+                // ── Game rendering below menu ──────────────────────────
                 let game_y = content_y + menu_h;
                 let game_h = content_h.saturating_sub(menu_h);
                 

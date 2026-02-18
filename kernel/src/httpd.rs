@@ -270,7 +270,7 @@ fn page_index() -> String {
             <li>Type-1 hypervisor (Intel VT-x / AMD SVM)</li>
             <li>COSMIC desktop environment</li>
             <li>TrustScan security toolkit</li>
-            <li>NES + Game Boy emulators, Mario 64 clone</li>
+            <li>NES + Game Boy emulators</li>
             <li>TrustLang programming language</li>
         </ul>
     </div>

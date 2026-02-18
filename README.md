@@ -33,7 +33,7 @@
 | Date | Changes |
 |------|----------|
 | **2026-02-19** | **v0.4.1 — Shell Scripting + HTTP Server + Package Manager + Network Security** — **Shell scripting engine** (variables `$VAR`/`${VAR:-default}`, arithmetic `$((expr))`, control flow `if/elif/else/fi`, `for/while` loops, command substitution `$(cmd)`, special vars `$?`/`$$`/`$#`, `source` scripts). **HTTP server** (`httpd start/stop/status`) with dashboard, live status, RAMFS file browser, REST API (`/api/info`, `/api/stats`, `/api/processes`). **TrustPkg package manager** (`trustpkg install/remove/search/list/info`) with 30+ packages across 7 categories. **TrustScan network security toolkit** (port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulnerability scanner). **CONTRIBUTING.md** developer guide. **GitHub Actions CI pipeline** (build, clippy, QEMU integration tests). IPv6 + ICMPv6 protocol support. Integration tests 26-30 (20 sub-tests). |
-| **2026-02-18** | **v0.4.0 — Game Boy Color Emulator + GameLab + NES + Mario 64** — Full CGB emulator (LR35902 CPU, all 245+256 CB opcodes, scanline-accurate PPU with CGB dual VRAM banks & 8+8 color palettes, MBC1/3/5, timer, joypad, OAM/HDMA DMA). NES emulator (6502 CPU with unofficial opcodes, 2C02 PPU, mappers 0-3). TrustMario64 3D platformer (software-rendered, 23 player actions, Bob-omb Battlefield, 3 enemy types, TAS engine). **GameLab** — 2,000-line real-time analysis dashboard for the GB emulator: 5-tab UI (Analyze, Search, Watch, Tiles, Trace), memory search (Cheat Engine-style), 16-slot watch list, save/load state, breakpoints + single-step, tile/sprite viewer, speed control (0.25x–4x), trace log (last 64 instructions), memory diff highlighting. ~9,200 new lines across 23 files. 165K total, 296 source files. |
+| **2026-02-18** | **v0.4.0 — Game Boy Color Emulator + GameLab + NES** — Full CGB emulator (LR35902 CPU, all 245+256 CB opcodes, scanline-accurate PPU with CGB dual VRAM banks & 8+8 color palettes, MBC1/3/5, timer, joypad, OAM/HDMA DMA). NES emulator (6502 CPU with unofficial opcodes, 2C02 PPU, mappers 0-3). **GameLab** — 2,000-line real-time analysis dashboard for the GB emulator: 5-tab UI (Analyze, Search, Watch, Tiles, Trace), memory search (Cheat Engine-style), 16-slot watch list, save/load state, breakpoints + single-step, tile/sprite viewer, speed control (0.25x–4x), trace log (last 64 instructions), memory diff highlighting. ~9,200 new lines across 23 files. 165K total, 296 source files. |
 | **2026-02-17** | **v0.3.5 — ACPI + Device Emulation** — Full ACPI table generation (RSDP v2, XSDT, MADT, FADT w/ PM timer + SCI, DSDT with AML bytecode), Intel 8259A PIC emulation (ICW1-4, OCW1-3, edge-triggered IRQs, cascaded master/slave, spurious IRQ detection), Intel 8254 PIT emulation (modes 0/2/3, channel 0-2, 1.193182 MHz, lobyte/hibyte access), CMOS RTC emulation (BCD time registers 0x00-0x09, Status A/B/C, NMI masking, century register), ACPI PM Timer (3.579545 MHz, 24/32-bit). Phase 0 infrastructure: setup.sh, setup.ps1, CI release workflow, Makefile auto-Limine, repo cleanup. |
 | **2026-02-16** | **v0.3.4 — POSIX Process Model + Real Disk Swap** — PTY/TTY subsystem with POSIX line discipline (canonical mode, echo, signal chars), pseudo-terminal pairs (master/slave), job control syscalls (SETPGID/SETSID/GETPGID/GETSID), `/etc/passwd` persistence (load/sync to filesystem), ELF improvements (PATH search across 5 dirs, shebang `#!` support, auxiliary vector on stack), `chroot` syscall with per-process root dir, NVMe-backed swap (last 64MB of disk, 8 sectors/page, in-memory fallback), kernel stacks 16KB→64KB. 96/96 tests. 143K lines, 262 source files. |
 | **2026-02-16** | **v0.3.3 — Cinematic Trailer + Visual Overhaul** — Beat-synced 128 BPM trailer (`trailer` command) with 14 scenes, 1984/Big Brother theme, feature showcase crescendo (17 cards with decreasing delay), glow/vignette/CRT effects, XOR plasma, optimized fire. SMP: APs safely parked (cli;hlt), BSP-only mode. 131K lines, 253 source files. |
@@ -214,15 +214,7 @@ TrustLab is a 7-panel interactive workspace that lets you **watch the OS kernel 
 - **Controller input**, OAM DMA, nametable mirroring (horizontal/vertical/single/four-screen)
 - Drop a `.nes` file in `kernel/roms/` to embed at compile time
 
-### 🏔️ TrustMario64 — 3D Platformer
-- **Software-rendered 3D** — No GPU, pure CPU rendering with perspective projection
-- **23 player actions** — walk, run, jump, double/triple jump, long jump, backflip, side flip, wall kick, ground pound, dive, swim, ledge grab, and more
-- **Bob-omb Battlefield** — 32×32 heightmap terrain with mountain, water, bridge, trees, coins, stars
-- **3 enemy types** — Goomba (patrol/chase), Bob-omb (fuse/explode), Chain Chomp (tethered lunge)
-- **TAS engine** — Save/load state (F1/F2), frame advance (F3), record/replay inputs (F5/F6), rewind (F7), ghost playback (F8), hitbox visualization (F10)
-- **Lakitu camera** — Mouse orbit + scroll zoom + E/Q rotation
-
-### 🎮 Interactive Desktop Apps
+###  Interactive Desktop Apps
 - **Calculator** — Full arithmetic with chained operations, keyboard & mouse input
 - **Snake Game** — Real-time gameplay with arrow keys, scoring, progressive speed
 - **TrustBrowser** — Keyboard-driven URL bar, page navigation
@@ -403,7 +395,6 @@ cargo build --release -p trustos_kernel
 | `chess3d` | Play 3D chess against AI |
 | `gameboy` | Launch the Game Boy Color emulator |
 | `nes` | Launch the NES emulator |
-| `mario64` | Launch the 3D Mario platformer |
 | `httpd start` | Start the built-in HTTP web server |
 | `trustpkg list` | Browse 30+ installable packages |
 | `netscan scan` | Scan network ports |
@@ -531,7 +522,7 @@ TrustOS includes a **built-in cinematic animated explainer** — a 2-minute film
 ┌─────────────────────────────────────────────────────────────┐
 │                     Applications                            │
 │  TrustCode · TrustLang · TrustBrowser · Games · Terminal    │
-│  Game Boy Color · NES · Mario64 · GameLab                   │
+│  Game Boy Color · NES · GameLab                   │
 ├─────────────────────────────────────────────────────────────┤
 │              COSMIC2 Desktop Compositor                     │
 │     8-layer GPU compositing · SSE2 SIMD · 144 FPS          │
@@ -575,7 +566,6 @@ TrustOS includes a **built-in cinematic animated explainer** — a 2-minute film
 | `gameboy/` | ~1,870 | Game Boy Color emulator: CPU, PPU, MBC1/3/5, timer, CGB color |
 | `game_lab.rs` | ~2,025 | GameLab analysis dashboard: search, watch, tiles, trace, breakpoints |
 | `nes/` | ~1,466 | NES emulator: 6502 CPU, 2C02 PPU, mappers 0-3 |
-| `mario64/` | ~3,840 | 3D platformer: player, physics, enemies, renderer, TAS engine |
 | `model_editor.rs` | ~750 | TrustEdit 3D wireframe model editor |
 | `video/` | ~1,500 | TrustVideo codec & player |
 | `framebuffer/` | ~1,500 | SSE2 SIMD rendering |
@@ -689,7 +679,6 @@ kernel/src/
 ├── gameboy/             # Game Boy Color emulator (CPU, PPU, MBC, CGB)
 ├── game_lab.rs          # GameLab real-time analysis dashboard
 ├── nes/                 # NES emulator (6502, 2C02 PPU, mappers)
-├── mario64/             # 3D platformer (player, physics, TAS, renderer)
 ├── embedded_roms.rs     # Compile-time ROM embedding
 ├── model_editor.rs      # TrustEdit 3D model editor
 ├── tty.rs               # POSIX TTY layer + line discipline
@@ -727,7 +716,7 @@ kernel/src/
 | Built-in IDE | ✅ (TrustCode) | ✅ (HackStudio) | ❌ | ✅ | ❌ |
 | Built-in Language | ✅ (TrustLang) | ❌ | ❌ | ✅ (HolyC) | ❌ |
 | **Kernel Introspection Lab** | **✅ (FIRST)** | ❌ | ❌ | ❌ | ❌ (external tools) |
-| 3D Games | ✅ (FPS + Chess3D + Mario64) | ❌ (2D only) | ❌ | ✅ (16 colors) | Ported |
+| 3D Games | ✅ (FPS + Chess3D) | ❌ (2D only) | ❌ | ✅ (16 colors) | Ported |
 | Audio Synthesizer | ✅ (8-voice poly) | ❌ | ❌ | ❌ (single voice) | ❌ |
 | **Built-in Emulators** | **✅ (GBC + NES + GameLab)** | ❌ | ❌ | ❌ | ❌ |
 | **HTTP Server** | **✅ (built-in httpd)** | ❌ | ❌ | ❌ | Via Apache/nginx |
@@ -758,8 +747,8 @@ kernel/src/
 - **Game Boy Color Emulator** — Complete CGB emulator running bare-metal. Sharp LR35902 CPU with all 245 base opcodes + 256 CB-prefix operations. Scanline-accurate PPU (160×144) with proper dot-cycle timing across 4 modes. Full CGB extensions: dual VRAM banks, per-tile attributes (palette, bank, flip), 8 BG + 8 OBJ color palettes (RGB555) via BCPS/BCPD/OCPS/OCPD. MBC0/MBC1/MBC3/MBC5 cartridge mappers (up to 4MB ROM, 128KB RAM). Timer (DIV/TIMA/TMA/TAC) with correct falling-edge detection. Joypad, OAM DMA, HDMA, 32KB WRAM with CGB bank switching, HRAM. Compile-time ROM embedding via `include_bytes!()`.
 - **GameLab — Real-Time GB Analysis Dashboard** — 2,000-line interactive debugger/analysis tool with 5 tabs: **Analyze** (6-panel live view: CPU regs/flags, GPU state, memory hex dump, I/O regs, cart info, input), **Search** (Cheat Engine-style memory search: exact value, changed, unchanged, greater, less — snapshot-based narrowing, 256 results), **Watch** (16-slot address watch list with labels, previous/current values, change highlighting), **Tiles** (tile/sprite viewer: tiles $8000, tiles $8800, OAM sprites), **Trace** (last 64 instructions with PC, opcode, A, F, SP). Toolbar: speed control (0.25×–4×), breakpoints (8 PC breakpoints + single-step + frame advance), save/load state (full CPU/GPU/VRAM/OAM/palettes/timer/RAM snapshot), memory diff (highlights changed bytes in hex dump).
 - **NES Emulator** — MOS 6502 CPU with all 151 official opcodes + common unofficial opcodes (LAX, SAX, DCP, ISB, SLO, RLA, SRE, RRA). 2C02 PPU with scanline-accurate background/sprite rendering, scroll registers, sprite 0 hit, 64-color palette. Mappers 0 (NROM), 1 (MMC1), 2 (UxROM), 3 (CNROM). Controller input, OAM DMA, nametable mirroring.
-- **TrustMario64 — 3D Platformer** — Software-rendered 3D platformer with 23 player actions (walking, running, jumping, double/triple jump, long jump, backflip, side flip, wall kick, ground pound, dive, swim, ledge grab...), Bob-omb Battlefield level (32×32 heightmap, central mountain, water, bridge, trees, 6 stars, 24 coins), 3 enemy types (Goomba, Bob-omb, Chain Chomp with AI behaviors), TAS engine (save/load state, frame advance, record/replay, rewind, ghost playback, hitbox visualization), Lakitu-style camera with mouse orbit.
-- **Desktop integration** — Game Boy, NES, and Mario64 run as windowed desktop apps. GameLab opens as a side panel next to the GB window. Desktop icons for all emulators. Multi-pass rendering keeps emulator content z-order consistent.
+
+- **Desktop integration** — Game Boy and NES run as windowed desktop apps. GameLab opens as a side panel next to the GB window. Desktop icons for all emulators. Multi-pass rendering keeps emulator content z-order consistent.
 - ~9,200 new lines across 23 files. 165K total, 296 source files.
 
 ### v0.3.5 — February 2026

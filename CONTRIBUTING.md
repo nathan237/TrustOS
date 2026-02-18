@@ -156,8 +156,7 @@ kernel/src/
 ├── desktop.rs           # COSMIC desktop environment
 ├── trustlang.rs         # TrustLang programming language
 ├── nes.rs               # NES emulator
-├── gameboy.rs           # Game Boy emulator
-└── mario64.rs           # Mario 64 3D game
+└── gameboy.rs           # Game Boy emulator
 ```
 
 ## Adding a Shell Command

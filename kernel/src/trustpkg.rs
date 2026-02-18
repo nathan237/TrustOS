@@ -96,7 +96,6 @@ fn catalog() -> Vec<Package> {
         // Games
         Package { name: "snake", version: "1.0.0", description: "Classic Snake game", category: PkgCategory::Games, size_kb: 8, dependencies: &[], status: PkgStatus::Installed },
         Package { name: "chess", version: "1.0.0", description: "Chess engine with AI opponent (minimax + alpha-beta)", category: PkgCategory::Games, size_kb: 48, dependencies: &[], status: PkgStatus::Installed },
-        Package { name: "mario64", version: "1.0.0", description: "Super Mario 64 clone with 3D renderer", category: PkgCategory::Games, size_kb: 128, dependencies: &[], status: PkgStatus::Installed },
         Package { name: "doom", version: "0.1.0", description: "3D raycasting FPS game engine", category: PkgCategory::Games, size_kb: 64, dependencies: &[], status: PkgStatus::Installed },
         Package { name: "nes", version: "1.0.0", description: "NES emulator (6502 CPU, 2C02 PPU, iNES ROMs)", category: PkgCategory::Games, size_kb: 56, dependencies: &[], status: PkgStatus::Installed },
         Package { name: "gameboy", version: "1.0.0", description: "Game Boy emulator (LR35902, MBC1/3/5)", category: PkgCategory::Games, size_kb: 48, dependencies: &[], status: PkgStatus::Installed },
