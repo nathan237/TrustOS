@@ -795,7 +795,6 @@ impl SvmVirtualMachine {
             unsafe { svm::stgi(); }
             
             // Copy back registers from vmrun_regs to guest_regs
-            self.guest_regs.rax = vmrun_regs.rax;
             self.guest_regs.rbx = vmrun_regs.rbx;
             self.guest_regs.rcx = vmrun_regs.rcx;
             self.guest_regs.rdx = vmrun_regs.rdx;
@@ -811,9 +810,10 @@ impl SvmVirtualMachine {
             self.guest_regs.r14 = vmrun_regs.r14;
             self.guest_regs.r15 = vmrun_regs.r15;
             
-            // Get RSP from VMCB
+            // Get RAX and RSP from VMCB (hardware saves these in the state-save area)
             {
                 let vmcb = self.vmcb.as_ref().ok_or(HypervisorError::VmcbNotLoaded)?;
+                self.guest_regs.rax = vmcb.read_state(state_offsets::RAX);
                 self.guest_regs.rsp = vmcb.read_state(state_offsets::RSP);
             }
             

@@ -913,7 +913,8 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
             } else {
                 match args[0] {
                     // Real hypervisor VM commands
-                    "create" | "run" | "start" | "guests" | "inspect" | "mount" | "input" => vm::cmd_vm(args),
+                    "create" | "run" | "start" | "guests" | "inspect" | "mount" | "input"
+                    | "debug" | "stack" | "regs" | "dump" | "linux" => vm::cmd_vm(args),
                     "status" => vm::cmd_gui_status(),
                     "install" => vm::cmd_gui_install(),
                     "console" | "shell" => vm::cmd_linux_shell(),

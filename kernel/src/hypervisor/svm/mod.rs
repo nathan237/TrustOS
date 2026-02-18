@@ -450,39 +450,41 @@ pub unsafe fn vmrun_with_regs(vmcb_phys: u64, regs: *mut VmrunGuestRegs) {
         "push r15",
         "push rbp",
         
-        // Save regs pointer for later
-        "push {regs}",
+        // Save regs pointer (r15) for after VMEXIT
+        "push r15",
         // Save VMCB address
         "push {vmcb}",
         
-        // Load guest GPRs from regs structure
-        "mov rax, [{regs}]",       // rax = regs->rax
-        "mov rbx, [{regs} + 8]",   // rbx = regs->rbx
-        "mov rcx, [{regs} + 16]",  // rcx = regs->rcx
-        "mov rdx, [{regs} + 24]",  // rdx = regs->rdx
-        "mov rsi, [{regs} + 32]",  // rsi = regs->rsi
-        "mov rdi, [{regs} + 40]",  // rdi = regs->rdi
-        "mov rbp, [{regs} + 48]",  // rbp = regs->rbp
-        "mov r8,  [{regs} + 56]",  // r8 = regs->r8
-        "mov r9,  [{regs} + 64]",  // r9 = regs->r9
-        "mov r10, [{regs} + 72]",  // r10 = regs->r10
-        "mov r11, [{regs} + 80]",  // r11 = regs->r11
-        "mov r12, [{regs} + 88]",  // r12 = regs->r12
-        "mov r13, [{regs} + 96]",  // r13 = regs->r13
-        "mov r14, [{regs} + 104]", // r14 = regs->r14
-        "mov r15, [{regs} + 112]", // r15 = regs->r15
+        // Load guest GPRs from regs structure.
+        // r15 is pinned to the regs pointer — load it LAST so the
+        // base address stays valid throughout the entire sequence.
+        "mov rax, [r15]",       // rax = regs->rax
+        "mov rbx, [r15 + 8]",   // rbx = regs->rbx
+        "mov rcx, [r15 + 16]",  // rcx = regs->rcx
+        "mov rdx, [r15 + 24]",  // rdx = regs->rdx
+        "mov rsi, [r15 + 32]",  // rsi = regs->rsi
+        "mov rdi, [r15 + 40]",  // rdi = regs->rdi
+        "mov rbp, [r15 + 48]",  // rbp = regs->rbp
+        "mov r8,  [r15 + 56]",  // r8  = regs->r8
+        "mov r9,  [r15 + 64]",  // r9  = regs->r9
+        "mov r10, [r15 + 72]",  // r10 = regs->r10
+        "mov r11, [r15 + 80]",  // r11 = regs->r11
+        "mov r12, [r15 + 88]",  // r12 = regs->r12
+        "mov r13, [r15 + 96]",  // r13 = regs->r13
+        "mov r14, [r15 + 104]", // r14 = regs->r14
+        "mov r15, [r15 + 112]", // r15 = regs->r15 (pointer no longer needed)
         
         // Now load VMCB address into rax for VMRUN
-        // (this overwrites guest rax, but rax is saved/restored by VMCB)
+        // (this overwrites guest rax, but hardware saves/restores it via VMCB)
         "mov rax, [rsp]",          // rax = vmcb_phys from stack
         
         // Execute VMRUN - enters guest, returns on #VMEXIT
         "vmrun rax",
         
         // After VMEXIT: save guest GPRs back to regs structure
-        // First get the regs pointer back (it's at [rsp+8])
-        "xchg rax, [rsp + 8]",     // swap rax with saved regs ptr (saves guest rax)
-        // Now rax = regs pointer, [rsp+8] = guest rax
+        // Host rax = vmcb_phys (restored by hardware).
+        // Recover the regs pointer from [rsp+8] (pushed before vmcb).
+        "xchg rax, [rsp + 8]",     // rax = regs ptr, [rsp+8] = vmcb_phys
         
         "mov [rax + 8], rbx",      // regs->rbx = guest rbx
         "mov [rax + 16], rcx",     // regs->rcx = guest rcx
@@ -490,8 +492,8 @@ pub unsafe fn vmrun_with_regs(vmcb_phys: u64, regs: *mut VmrunGuestRegs) {
         "mov [rax + 32], rsi",     // regs->rsi = guest rsi
         "mov [rax + 40], rdi",     // regs->rdi = guest rdi
         "mov [rax + 48], rbp",     // regs->rbp = guest rbp
-        "mov [rax + 56], r8",      // regs->r8 = guest r8
-        "mov [rax + 64], r9",      // regs->r9 = guest r9
+        "mov [rax + 56], r8",      // regs->r8  = guest r8
+        "mov [rax + 64], r9",      // regs->r9  = guest r9
         "mov [rax + 72], r10",     // regs->r10 = guest r10
         "mov [rax + 80], r11",     // regs->r11 = guest r11
         "mov [rax + 88], r12",     // regs->r12 = guest r12
@@ -499,9 +501,10 @@ pub unsafe fn vmrun_with_regs(vmcb_phys: u64, regs: *mut VmrunGuestRegs) {
         "mov [rax + 104], r14",    // regs->r14 = guest r14
         "mov [rax + 112], r15",    // regs->r15 = guest r15
         
-        // Now save guest rax from [rsp+8]
-        "mov rbx, [rsp + 8]",      // rbx = guest rax
-        "mov [rax], rbx",          // regs->rax = guest rax
+        // Guest RAX: hardware saved it in the VMCB state-save area.
+        // We cannot read it here (only have physical addr). Caller
+        // must read guest RAX from vmcb.read_state(RAX) instead.
+        // Leave regs->rax untouched (stale value — caller overwrites it).
         
         // Clean up stack (vmcb + regs)
         "add rsp, 16",
@@ -515,7 +518,7 @@ pub unsafe fn vmrun_with_regs(vmcb_phys: u64, regs: *mut VmrunGuestRegs) {
         "pop rbx",
         
         vmcb = in(reg) vmcb_phys,
-        regs = in(reg) regs,
+        in("r15") regs,
         options(nostack)
     );
 }
