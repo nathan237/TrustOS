@@ -40,6 +40,11 @@ mod browser;
 mod game3d; // 3D raycasting FPS game engine
 mod chess;   // Chess game engine with AI
 mod chess3d; // 3D Matrix-style chess renderer
+mod mario64; // Super Mario 64 clone with TAS engine
+mod nes;     // NES emulator (MOS 6502 + 2C02 PPU, iNES ROMs)
+mod gameboy; // Game Boy emulator (Sharp LR35902, MBC1/3/5)
+mod game_lab; // GameLab — real-time Game Boy emulator analysis dashboard
+mod embedded_roms; // ROM data embedded at compile time from kernel/roms/
 mod cosmic; // COSMIC-style UI framework (libcosmic-inspired)
 mod compositor; // Multi-layer compositor for flicker-free rendering
 mod holovolume; // Volumetric ASCII raymarcher - 3D holographic desktop

@@ -51,4 +51,32 @@ fn main() {
         })
         .unwrap_or_else(|_| "unknown".to_string());
     println!("cargo:rustc-env=TRUSTOS_BUILD_TIME={}", now);
+
+    // ── ROM embedding: detect .nes and .gb files in roms/ directory ──
+    let roms_dir = PathBuf::from(&manifest_dir).join("roms");
+    println!("cargo:rerun-if-changed={}", roms_dir.display());
+    
+    if roms_dir.exists() {
+        // Find .nes ROM
+        if let Ok(entries) = std::fs::read_dir(&roms_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(ext) = path.extension() {
+                    let ext = ext.to_string_lossy().to_lowercase();
+                    if ext == "nes" {
+                        println!("cargo:rustc-cfg=has_nes_rom");
+                        println!("cargo:rustc-env=NES_ROM_PATH={}", path.display());
+                        println!("cargo:rerun-if-changed={}", path.display());
+                        eprintln!("  [ROM] Found NES ROM: {}", path.display());
+                    }
+                    if ext == "gb" || ext == "gbc" {
+                        println!("cargo:rustc-cfg=has_gb_rom");
+                        println!("cargo:rustc-env=GB_ROM_PATH={}", path.display());
+                        println!("cargo:rerun-if-changed={}", path.display());
+                        eprintln!("  [ROM] Found GB ROM: {}", path.display());
+                    }
+                }
+            }
+        }
+    }
 }
