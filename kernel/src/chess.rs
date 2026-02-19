@@ -124,6 +124,7 @@ pub struct ChessState {
     // AI
     pub vs_ai: bool,
     pub ai_thinking: bool,
+    pub ai_depth: i32,
     pub rng_state: u32,
     // Last move highlight
     pub last_move_from: Option<usize>,
@@ -164,6 +165,7 @@ impl ChessState {
             promotion_square: None,
             vs_ai: true,
             ai_thinking: false,
+            ai_depth: 2,
             rng_state: 12345,
             last_move_from: None,
             last_move_to: None,
@@ -278,6 +280,19 @@ impl ChessState {
                 if self.timer_enabled {
                     self.cycle_timer_preset();
                 }
+            },
+            b'd' | b'D' => {
+                // Cycle AI difficulty: 1 → 2 → 3 → 1
+                self.ai_depth = match self.ai_depth {
+                    1 => 2,
+                    2 => 3,
+                    _ => 1,
+                };
+                self.message = match self.ai_depth {
+                    1 => String::from("AI: Easy (depth 1)"),
+                    2 => String::from("AI: Medium (depth 2)"),
+                    _ => String::from("AI: Hard (depth 3)"),
+                };
             },
             _ => {}
         }
@@ -862,8 +877,8 @@ impl ChessState {
     }
 
     fn ai_move(&mut self) {
-        let mut best_from = 0usize;
-        let mut best_to = 0usize;
+        let mut best_from: Option<usize> = None;
+        let mut best_to: Option<usize> = None;
         let mut best_score = 100000i32; // AI is black, minimizing
         
         for sq in 0..64 {
@@ -885,21 +900,21 @@ impl ChessState {
                     self.en_passant_target = Some(((sq + target) / 2) as usize);
                 }
                 
-                let score = self.minimax(2, -100000, 100000, true);
+                let score = self.minimax(self.ai_depth, -100000, 100000, true);
                 
                 self.board = saved;
                 self.en_passant_target = saved_ep;
                 
                 if score < best_score {
                     best_score = score;
-                    best_from = sq;
-                    best_to = target;
+                    best_from = Some(sq);
+                    best_to = Some(target);
                 }
             }
         }
         
-        if best_from != best_to || self.board[best_from] != EMPTY {
-            self.make_move(best_from, best_to);
+        if let (Some(from), Some(to)) = (best_from, best_to) {
+            self.make_move(from, to);
         }
     }
 

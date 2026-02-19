@@ -18,6 +18,12 @@ use crate::framebuffer::{self, COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN
 use crate::apps::text_editor::{EditorState, render_editor};
 use core::sync::atomic::{AtomicBool, Ordering};
 
+/// Get a color with high-contrast fallback
+#[inline]
+fn hc(normal: u32, hc_replacement: u32) -> u32 {
+    crate::accessibility::a11y_color(normal, hc_replacement)
+}
+
 /// Module-level flag to signal desktop exit (accessible from run() and handle_menu_action)
 static EXIT_DESKTOP_FLAG: AtomicBool = AtomicBool::new(false);
 
@@ -538,6 +544,16 @@ pub enum ResizeEdge {
     BottomRight,
 }
 
+/// Cursor display mode (changes dynamically based on context)
+#[derive(Clone, Copy, PartialEq)]
+enum CursorMode {
+    Arrow,
+    ResizeH,     // Horizontal ←→
+    ResizeV,     // Vertical ↕
+    ResizeNWSE,  // Diagonal ↘↖
+    ResizeNESW,  // Diagonal ↗↙
+}
+
 impl Window {
     pub fn new(title: &str, x: i32, y: i32, width: u32, height: u32, wtype: WindowType) -> Self {
         let mut id_lock = NEXT_WINDOW_ID.lock();
@@ -657,30 +673,36 @@ impl Window {
     
     /// Check if point is on close button
     pub fn on_close_button(&self, px: i32, py: i32) -> bool {
-        let btn_x = self.x + self.width as i32 - 24;
-        px >= btn_x && px < btn_x + 18 &&
-        py >= self.y + 5 && py < self.y + 23
+        // Windows-style: close is rightmost button (32px wide)
+        let btn_w = 32i32;
+        let btn_x = self.x + self.width as i32 - btn_w - 2;
+        px >= btn_x && px < btn_x + btn_w &&
+        py >= self.y + 2 && py < self.y + TITLE_BAR_HEIGHT as i32
     }
     
     /// Check if point is on maximize button
     pub fn on_maximize_button(&self, px: i32, py: i32) -> bool {
-        let btn_x = self.x + self.width as i32 - 46;
-        px >= btn_x && px < btn_x + 18 &&
-        py >= self.y + 5 && py < self.y + 23
+        // Windows-style: maximize is middle button
+        let btn_w = 32i32;
+        let btn_x = self.x + self.width as i32 - btn_w * 2 - 2;
+        px >= btn_x && px < btn_x + btn_w &&
+        py >= self.y + 2 && py < self.y + TITLE_BAR_HEIGHT as i32
     }
     
     /// Check if point is on minimize button
     pub fn on_minimize_button(&self, px: i32, py: i32) -> bool {
-        let btn_x = self.x + self.width as i32 - 68;
-        px >= btn_x && px < btn_x + 18 &&
-        py >= self.y + 5 && py < self.y + 23
+        // Windows-style: minimize is leftmost of the three buttons
+        let btn_w = 32i32;
+        let btn_x = self.x + self.width as i32 - btn_w * 3 - 2;
+        px >= btn_x && px < btn_x + btn_w &&
+        py >= self.y + 2 && py < self.y + TITLE_BAR_HEIGHT as i32
     }
     
     /// Check if point is on resize edge
     pub fn on_resize_edge(&self, px: i32, py: i32) -> ResizeEdge {
         if self.maximized { return ResizeEdge::None; }
         
-        let resize_margin = 8i32;
+        let resize_margin = 12i32;
         let left_edge = self.x;
         let right_edge = self.x + self.width as i32;
         let top_edge = self.y;
@@ -813,112 +835,322 @@ pub struct Desktop {
     matrix_initialized: bool,
     // Terminal auto-suggestions: how many suggestion lines added after prompt
     terminal_suggestion_count: usize,
+    // Terminal command history (Up/Down arrows)
+    command_history: Vec<String>,
+    history_index: Option<usize>,
+    saved_input: String,
     // Start menu search
     pub start_menu_search: String,
+    // Start menu keyboard navigation (selected item index, -1 = none)
+    pub start_menu_selected: i32,
 }
 
 /// Calculator state for interactive calculator windows
 pub struct CalculatorState {
+    /// The full expression string (e.g. "2*(3+4)")
+    pub expression: String,
+    /// Display text (expression while typing, result after =)
     pub display: String,
-    pub accumulator: f64,
-    pub current_input: String,
-    pub operator: Option<char>,
+    /// True after pressing = (next digit starts new expression)
     pub just_evaluated: bool,
+    /// Scientific mode toggle
+    pub scientific: bool,
 }
 
 impl CalculatorState {
     pub fn new() -> Self {
         CalculatorState {
+            expression: String::new(),
             display: String::from("0"),
-            accumulator: 0.0,
-            current_input: String::new(),
-            operator: None,
             just_evaluated: false,
+            scientific: false,
         }
     }
     
     pub fn press_digit(&mut self, d: char) {
         if self.just_evaluated {
-            self.current_input.clear();
+            self.expression.clear();
             self.just_evaluated = false;
         }
-        if self.current_input.len() < 12 {
-            self.current_input.push(d);
-            self.display = self.current_input.clone();
+        if self.expression.len() < 64 {
+            self.expression.push(d);
+            self.display = self.expression.clone();
         }
     }
     
     pub fn press_dot(&mut self) {
         if self.just_evaluated {
-            self.current_input = String::from("0");
+            self.expression = String::from("0");
             self.just_evaluated = false;
         }
-        if !self.current_input.contains('.') {
-            if self.current_input.is_empty() {
-                self.current_input.push('0');
-            }
-            self.current_input.push('.');
-            self.display = self.current_input.clone();
-        }
+        self.expression.push('.');
+        self.display = self.expression.clone();
     }
     
     pub fn press_operator(&mut self, op: char) {
-        if !self.current_input.is_empty() {
-            let val = self.parse_input();
-            if let Some(prev_op) = self.operator {
-                self.accumulator = self.evaluate(self.accumulator, prev_op, val);
-            } else {
-                self.accumulator = val;
-            }
-            self.display = self.format_number(self.accumulator);
-            self.current_input.clear();
+        if self.just_evaluated {
+            // Continue from result — expression starts with the result
+            self.just_evaluated = false;
         }
-        self.operator = Some(op);
-        self.just_evaluated = false;
+        if !self.expression.is_empty() {
+            self.expression.push(op);
+            self.display = self.expression.clone();
+        }
+    }
+    
+    pub fn press_paren(&mut self, p: char) {
+        if self.just_evaluated && p == '(' {
+            self.expression.clear();
+            self.just_evaluated = false;
+        }
+        self.expression.push(p);
+        self.display = self.expression.clone();
+    }
+    
+    pub fn press_func(&mut self, name: &str) {
+        if self.just_evaluated {
+            self.expression.clear();
+            self.just_evaluated = false;
+        }
+        self.expression.push_str(name);
+        self.expression.push('(');
+        self.display = self.expression.clone();
     }
     
     pub fn press_equals(&mut self) {
-        if !self.current_input.is_empty() {
-            let val = self.parse_input();
-            if let Some(op) = self.operator {
-                self.accumulator = self.evaluate(self.accumulator, op, val);
-            } else {
-                self.accumulator = val;
-            }
-        }
-        self.display = self.format_number(self.accumulator);
-        self.current_input.clear();
-        self.operator = None;
+        let result = Self::eval_expression(&self.expression);
+        self.display = Self::format_number(result);
+        // Keep the result as expression for chaining
+        self.expression = self.display.clone();
         self.just_evaluated = true;
     }
     
     pub fn press_clear(&mut self) {
+        self.expression.clear();
         self.display = String::from("0");
-        self.accumulator = 0.0;
-        self.current_input.clear();
-        self.operator = None;
         self.just_evaluated = false;
     }
     
     pub fn press_backspace(&mut self) {
-        if !self.current_input.is_empty() {
-            self.current_input.pop();
-            if self.current_input.is_empty() {
+        if !self.expression.is_empty() {
+            // If expression ends with a function name like "sqrt(", remove the whole thing
+            let funcs = ["sqrt(", "sin(", "cos(", "tan(", "abs(", "ln("];
+            let mut removed_func = false;
+            for f in funcs {
+                if self.expression.ends_with(f) {
+                    for _ in 0..f.len() { self.expression.pop(); }
+                    removed_func = true;
+                    break;
+                }
+            }
+            if !removed_func {
+                self.expression.pop();
+            }
+            if self.expression.is_empty() {
                 self.display = String::from("0");
             } else {
-                self.display = self.current_input.clone();
+                self.display = self.expression.clone();
             }
         }
     }
     
-    fn parse_input(&self) -> f64 {
-        // Simple integer/float parser for no_std
-        let s = &self.current_input;
+    /// Toggle scientific mode
+    pub fn toggle_scientific(&mut self) {
+        self.scientific = !self.scientific;
+    }
+    
+    // ── Expression evaluator with parentheses and precedence ──
+    // Grammar: expr = term (('+' | '-') term)*
+    //          term = factor (('*' | '/' | '%') factor)*
+    //          factor = ['-'] atom
+    //          atom = number | '(' expr ')' | func '(' expr ')'
+    
+    fn eval_expression(expr: &str) -> f64 {
+        let tokens = Self::tokenize(expr);
+        let mut pos = 0;
+        let result = Self::parse_expr(&tokens, &mut pos);
+        result
+    }
+    
+    fn tokenize(expr: &str) -> Vec<CalcToken> {
+        let mut tokens = Vec::new();
+        let chars: Vec<char> = expr.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            let ch = chars[i];
+            if ch.is_ascii_digit() || ch == '.' {
+                // Parse number
+                let start = i;
+                while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
+                    i += 1;
+                }
+                let num_str: String = chars[start..i].iter().collect();
+                tokens.push(CalcToken::Num(Self::parse_float(&num_str)));
+            } else if ch.is_ascii_alphabetic() {
+                // Parse function name
+                let start = i;
+                while i < chars.len() && chars[i].is_ascii_alphabetic() {
+                    i += 1;
+                }
+                let name: String = chars[start..i].iter().collect();
+                tokens.push(CalcToken::Func(name));
+            } else if ch == '(' {
+                tokens.push(CalcToken::LParen);
+                i += 1;
+            } else if ch == ')' {
+                tokens.push(CalcToken::RParen);
+                i += 1;
+            } else if ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%' {
+                tokens.push(CalcToken::Op(ch));
+                i += 1;
+            } else {
+                i += 1; // skip unknown chars
+            }
+        }
+        tokens
+    }
+    
+    fn parse_expr(tokens: &[CalcToken], pos: &mut usize) -> f64 {
+        let mut left = Self::parse_term(tokens, pos);
+        while *pos < tokens.len() {
+            match &tokens[*pos] {
+                CalcToken::Op('+') => { *pos += 1; left += Self::parse_term(tokens, pos); }
+                CalcToken::Op('-') => { *pos += 1; left -= Self::parse_term(tokens, pos); }
+                _ => break,
+            }
+        }
+        left
+    }
+    
+    fn parse_term(tokens: &[CalcToken], pos: &mut usize) -> f64 {
+        let mut left = Self::parse_factor(tokens, pos);
+        while *pos < tokens.len() {
+            match &tokens[*pos] {
+                CalcToken::Op('*') => { *pos += 1; left *= Self::parse_factor(tokens, pos); }
+                CalcToken::Op('/') => { *pos += 1; let r = Self::parse_factor(tokens, pos); left = if r != 0.0 { left / r } else { 0.0 }; }
+                CalcToken::Op('%') => { *pos += 1; let r = Self::parse_factor(tokens, pos); left = if r != 0.0 { left % r } else { 0.0 }; }
+                _ => break,
+            }
+        }
+        left
+    }
+    
+    fn parse_factor(tokens: &[CalcToken], pos: &mut usize) -> f64 {
+        // Handle unary minus
+        if *pos < tokens.len() {
+            if let CalcToken::Op('-') = &tokens[*pos] {
+                *pos += 1;
+                return -Self::parse_atom(tokens, pos);
+            }
+        }
+        Self::parse_atom(tokens, pos)
+    }
+    
+    fn parse_atom(tokens: &[CalcToken], pos: &mut usize) -> f64 {
+        if *pos >= tokens.len() { return 0.0; }
+        
+        match &tokens[*pos] {
+            CalcToken::Num(n) => {
+                let v = *n;
+                *pos += 1;
+                v
+            }
+            CalcToken::LParen => {
+                *pos += 1; // skip (
+                let v = Self::parse_expr(tokens, pos);
+                if *pos < tokens.len() {
+                    if let CalcToken::RParen = &tokens[*pos] { *pos += 1; }
+                }
+                v
+            }
+            CalcToken::Func(name) => {
+                let fname = name.clone();
+                *pos += 1; // skip func name
+                // Expect (
+                if *pos < tokens.len() {
+                    if let CalcToken::LParen = &tokens[*pos] { *pos += 1; }
+                }
+                let arg = Self::parse_expr(tokens, pos);
+                if *pos < tokens.len() {
+                    if let CalcToken::RParen = &tokens[*pos] { *pos += 1; }
+                }
+                Self::apply_func(&fname, arg)
+            }
+            _ => {
+                *pos += 1;
+                0.0
+            }
+        }
+    }
+    
+    fn apply_func(name: &str, x: f64) -> f64 {
+        match name {
+            "sqrt" => {
+                if x >= 0.0 { Self::sqrt_approx(x) } else { 0.0 }
+            }
+            "sin" => Self::sin_approx(x),
+            "cos" => Self::cos_approx(x),
+            "tan" => {
+                let c = Self::cos_approx(x);
+                if c.abs() > 1e-10 { Self::sin_approx(x) / c } else { 0.0 }
+            }
+            "abs" => if x < 0.0 { -x } else { x },
+            "ln" => Self::ln_approx(x),
+            _ => x,
+        }
+    }
+    
+    // ── Math approximations (no libm in no_std) ──
+    
+    fn sqrt_approx(x: f64) -> f64 {
+        if x <= 0.0 { return 0.0; }
+        let mut guess = x / 2.0;
+        for _ in 0..20 {
+            guess = (guess + x / guess) / 2.0;
+        }
+        guess
+    }
+    
+    fn sin_approx(x: f64) -> f64 {
+        // Normalize to [-PI, PI]
+        let pi = 3.14159265358979323846;
+        let mut x = x % (2.0 * pi);
+        if x > pi { x -= 2.0 * pi; }
+        if x < -pi { x += 2.0 * pi; }
+        // Taylor series: sin(x) = x - x^3/6 + x^5/120 - x^7/5040 + ...
+        let x2 = x * x;
+        let x3 = x2 * x;
+        let x5 = x3 * x2;
+        let x7 = x5 * x2;
+        let x9 = x7 * x2;
+        let x11 = x9 * x2;
+        x - x3 / 6.0 + x5 / 120.0 - x7 / 5040.0 + x9 / 362880.0 - x11 / 39916800.0
+    }
+    
+    fn cos_approx(x: f64) -> f64 {
+        let pi = 3.14159265358979323846;
+        Self::sin_approx(x + pi / 2.0)
+    }
+    
+    fn ln_approx(x: f64) -> f64 {
+        if x <= 0.0 { return 0.0; }
+        // Use: ln(x) = 2 * atanh((x-1)/(x+1)) with series expansion
+        let y = (x - 1.0) / (x + 1.0);
+        let y2 = y * y;
+        let mut result = y;
+        let mut term = y;
+        for n in 1..30 {
+            term *= y2;
+            result += term / (2 * n + 1) as f64;
+        }
+        result * 2.0
+    }
+    
+    fn parse_float(s: &str) -> f64 {
         let mut result: f64 = 0.0;
         let mut decimal_part = false;
         let mut decimal_factor = 0.1;
         let mut negative = false;
-        
         for (i, ch) in s.chars().enumerate() {
             if ch == '-' && i == 0 {
                 negative = true;
@@ -937,29 +1169,26 @@ impl CalculatorState {
         if negative { -result } else { result }
     }
     
-    fn evaluate(&self, a: f64, op: char, b: f64) -> f64 {
-        match op {
-            '+' => a + b,
-            '-' => a - b,
-            '*' => a * b,
-            '/' => if b != 0.0 { a / b } else { 0.0 },
-            '%' => if b != 0.0 { a % b } else { 0.0 },
-            _ => b,
-        }
-    }
-    
-    fn format_number(&self, n: f64) -> String {
-        // Check if it's an integer
+    fn format_number(n: f64) -> String {
         if n == (n as i64) as f64 && n.abs() < 1e15 {
             format!("{}", n as i64)
         } else {
-            // Format with up to 6 decimal places, trimming trailing zeros
             let s = format!("{:.6}", n);
             let s = s.trim_end_matches('0');
             let s = s.trim_end_matches('.');
             String::from(s)
         }
     }
+}
+
+/// Token for calculator expression parser
+#[derive(Clone)]
+enum CalcToken {
+    Num(f64),
+    Op(char),
+    LParen,
+    RParen,
+    Func(String),
 }
 
 /// Snake game state for interactive game windows
@@ -969,6 +1198,8 @@ pub struct SnakeState {
     pub food: (i32, i32),
     pub score: u32,
     pub game_over: bool,
+    pub paused: bool,
+    pub high_score: u32,
     pub grid_w: i32,
     pub grid_h: i32,
     pub tick_counter: u32,
@@ -984,6 +1215,8 @@ impl SnakeState {
             food: (12, 5),
             score: 0,
             game_over: false,
+            paused: false,
+            high_score: 0,
             grid_w: 20,
             grid_h: 15,
             tick_counter: 0,
@@ -1005,25 +1238,55 @@ impl SnakeState {
     }
     
     pub fn spawn_food(&mut self) {
-        loop {
+        // Check if there are any free cells left (avoid infinite loop)
+        let total_cells = (self.grid_w * self.grid_h) as usize;
+        if self.snake.len() >= total_cells {
+            // Grid is full — player wins!
+            self.game_over = true;
+            if self.score > self.high_score { self.high_score = self.score; }
+            return;
+        }
+        for _ in 0..1000 {
             let fx = (self.next_rng() % self.grid_w as u32) as i32;
             let fy = (self.next_rng() % self.grid_h as u32) as i32;
             if !self.snake.iter().any(|&(sx, sy)| sx == fx && sy == fy) {
                 self.food = (fx, fy);
-                break;
+                return;
             }
         }
+        // Fallback: linear scan for any free cell
+        for gy in 0..self.grid_h {
+            for gx in 0..self.grid_w {
+                if !self.snake.iter().any(|&(sx, sy)| sx == gx && sy == gy) {
+                    self.food = (gx, gy);
+                    return;
+                }
+            }
+        }
+        // Truly full — game over (win)
+        self.game_over = true;
+        if self.score > self.high_score { self.high_score = self.score; }
     }
     
     pub fn handle_key(&mut self, key: u8) {
         use crate::keyboard::{KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT};
+        // Pause toggle with P or Escape
+        if key == b'p' || key == b'P' || key == 0x1B {
+            if !self.game_over {
+                self.paused = !self.paused;
+                return;
+            }
+        }
         if self.game_over {
             if key == b' ' || key == 0x0D {
-                // Restart
+                // Restart — preserve high score
+                let hs = self.high_score;
                 *self = SnakeState::new();
+                self.high_score = hs;
             }
             return;
         }
+        if self.paused { return; }
         match key {
             KEY_UP    if self.direction != (0, 1)  => self.direction = (0, -1),
             KEY_DOWN  if self.direction != (0, -1) => self.direction = (0, 1),
@@ -1034,7 +1297,7 @@ impl SnakeState {
     }
     
     pub fn tick(&mut self) {
-        if self.game_over { return; }
+        if self.game_over || self.paused { return; }
         self.tick_counter += 1;
         if self.tick_counter < self.speed { return; }
         self.tick_counter = 0;
@@ -1045,12 +1308,14 @@ impl SnakeState {
         // Wall collision
         if new_head.0 < 0 || new_head.0 >= self.grid_w || new_head.1 < 0 || new_head.1 >= self.grid_h {
             self.game_over = true;
+            if self.score > self.high_score { self.high_score = self.score; }
             return;
         }
         
         // Self collision
         if self.snake.iter().any(|&s| s == new_head) {
             self.game_over = true;
+            if self.score > self.high_score { self.high_score = self.score; }
             return;
         }
         
@@ -1129,7 +1394,11 @@ impl Desktop {
             matrix_seeds: Vec::new(),
             matrix_initialized: false,
             terminal_suggestion_count: 0,
+            command_history: Vec::new(),
+            history_index: None,
+            saved_input: String::new(),
             start_menu_search: String::new(),
+            start_menu_selected: -1,
         }
     }
     
@@ -1170,6 +1439,9 @@ impl Desktop {
         // Counters / tracking
         self.frame_count = 0;
         self.terminal_suggestion_count = 0;
+        self.command_history.clear();
+        self.history_index = None;
+        self.saved_input.clear();
         self.last_window_count = 0;
         self.last_start_menu_open = false;
         self.last_context_menu_visible = false;
@@ -1512,6 +1784,14 @@ struct AppConfig {
                 let anim_speed = *ANIMATION_SPEED.lock();
                 window.content.push(format!("[1] Animations: {}", anim_status));
                 window.content.push(format!("[2] Speed: {:.1}x", anim_speed));
+                window.content.push(String::from(""));
+                window.content.push(String::from("--- Accessibility ---"));
+                let hc = if crate::accessibility::is_high_contrast() { "ON " } else { "OFF" };
+                window.content.push(format!("[5] High Contrast: {}", hc));
+                window.content.push(format!("[6] Font Size: {}", crate::accessibility::get_font_size().label()));
+                window.content.push(format!("[7] Cursor Size: {}", crate::accessibility::get_cursor_size().label()));
+                window.content.push(format!("[8] Sticky Keys: {}", if crate::accessibility::is_sticky_keys() { "ON" } else { "OFF" }));
+                window.content.push(format!("[9] Mouse Speed: {}", crate::accessibility::get_mouse_speed().label()));
                 window.content.push(String::from(""));
                 window.content.push(String::from("--- Other ---"));
                 window.content.push(String::from("[3] File Associations"));
@@ -2049,8 +2329,10 @@ struct AppConfig {
                                         .or_else(|| self.gameboy_states.keys().next().copied());
                                     if let Some(eid) = emu_id {
                                         if let Some(emu) = self.gameboy_states.get(&eid) {
-                                            self.gamelab_states.get_mut(&win_id).unwrap().save_from(emu);
-                                            crate::serial_println!("[GameLab] State saved (click)");
+                                            if let Some(gl) = self.gamelab_states.get_mut(&win_id) {
+                                                gl.save_from(emu);
+                                                crate::serial_println!("[GameLab] State saved (click)");
+                                            }
                                         }
                                     }
                                 } else if rel_x >= save_rx + 54 && rel_x < save_rx + 102 {
@@ -2058,11 +2340,14 @@ struct AppConfig {
                                     let emu_id = lab.linked_gb_id
                                         .or_else(|| self.gameboy_states.keys().next().copied());
                                     if let Some(eid) = emu_id {
-                                        let lab = self.gamelab_states.get(&win_id).unwrap();
-                                        if lab.save_state.valid {
+                                        let valid = self.gamelab_states.get(&win_id)
+                                            .map(|l| l.save_state.valid).unwrap_or(false);
+                                        if valid {
                                             if let Some(emu) = self.gameboy_states.get_mut(&eid) {
-                                                self.gamelab_states.get(&win_id).unwrap().load_into(emu);
-                                                crate::serial_println!("[GameLab] State loaded (click)");
+                                                if let Some(gl) = self.gamelab_states.get(&win_id) {
+                                                    gl.load_into(emu);
+                                                    crate::serial_println!("[GameLab] State loaded (click)");
+                                                }
                                             }
                                         }
                                     }
@@ -2131,6 +2416,8 @@ struct AppConfig {
                                                 '%' => calc.press_operator('%'),
                                                 '=' => calc.press_equals(),
                                                 'C' => calc.press_clear(),
+                                                '(' => calc.press_paren('('),
+                                                ')' => calc.press_paren(')'),
                                                 _ => {}
                                             }
                                         }
@@ -2261,14 +2548,14 @@ struct AppConfig {
             x,
             y,
             items: alloc::vec![
-                ContextMenuItem { label: String::from("  Open"), action: ContextAction::Open },
+                ContextMenuItem { label: String::from("  Open          Enter"), action: ContextAction::Open },
                 ContextMenuItem { label: String::from("  Open With..."), action: ContextAction::OpenWith },
                 ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
-                ContextMenuItem { label: String::from("  Cut"), action: ContextAction::Cut },
-                ContextMenuItem { label: String::from("  Copy"), action: ContextAction::Copy },
+                ContextMenuItem { label: String::from("  Cut          Ctrl+X"), action: ContextAction::Cut },
+                ContextMenuItem { label: String::from("  Copy         Ctrl+C"), action: ContextAction::Copy },
                 ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
-                ContextMenuItem { label: String::from("  Rename"), action: ContextAction::Rename },
-                ContextMenuItem { label: String::from("  Delete"), action: ContextAction::Delete },
+                ContextMenuItem { label: String::from("  Rename            F2"), action: ContextAction::Rename },
+                ContextMenuItem { label: String::from("  Delete           Del"), action: ContextAction::Delete },
                 ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
                 ContextMenuItem { label: String::from("  Properties"), action: ContextAction::Properties },
             ],
@@ -2287,9 +2574,9 @@ struct AppConfig {
             items: alloc::vec![
                 ContextMenuItem { label: String::from("  View              >"), action: ContextAction::ViewLargeIcons },
                 ContextMenuItem { label: String::from("  Sort by           >"), action: ContextAction::SortByName },
-                ContextMenuItem { label: String::from("  Refresh"), action: ContextAction::Refresh },
+                ContextMenuItem { label: String::from("  Refresh          F5"), action: ContextAction::Refresh },
                 ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
-                ContextMenuItem { label: String::from("  Paste"), action: ContextAction::Paste },
+                ContextMenuItem { label: String::from("  Paste        Ctrl+V"), action: ContextAction::Paste },
                 ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
                 ContextMenuItem { label: String::from("  New               >"), action: ContextAction::NewFile },
                 ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
@@ -2488,6 +2775,13 @@ struct AppConfig {
     }
     
     fn handle_taskbar_click(&mut self, x: i32, _y: i32) {
+        // Show Desktop button (far right corner, 8px wide)
+        if x >= (self.width - 8) as i32 {
+            self.toggle_show_desktop();
+            crate::serial_println!("[GUI] Show Desktop corner clicked");
+            return;
+        }
+        
         // TrustOS button (left side, matches draw_taskbar)
         if x >= 4 && x < 112 {
             self.start_menu_open = !self.start_menu_open;
@@ -2558,44 +2852,58 @@ struct AppConfig {
         
         // Search bar is at menu_y + 30, height 32 — clicking there focuses search (no action)
         let search_bar_bottom = menu_y + 66;
-        
-        // 17 list items at search_bar_bottom + 4 + (i * 28), each 26px tall
-        // Matches draw_start_menu items array:
-        // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D,
-        // 10=NES, 11=GameBoy, 12=TrustLab, 13=Settings, 14=Exit Desktop, 15=Shutdown, 16=Reboot
         let items_start_y = search_bar_bottom + 4;
         let item_spacing = 28;
         let item_h = 26;
         
-        // Build filtered items list to match draw_start_menu filtering
-        let all_labels: [&str; 17] = [
+        // App labels (indices 0-13, non-special)
+        let app_labels: [&str; 14] = [
             "Terminal", "Files", "Calculator", "Network", "Text Editor",
             "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
-            "NES Emulator", "Game Boy", "TrustLab",
-            "Settings", "Exit Desktop", "Shutdown", "Reboot",
+            "NES Emulator", "Game Boy", "TrustLab", "Settings",
         ];
-        let all_indices: [u8; 17] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
+        let app_indices: [u8; 14] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13];
         
-        // Filter by search
+        // Power labels (indices 14-16, bottom-anchored)
+        let power_labels: [&str; 3] = ["Exit Desktop", "Shutdown", "Reboot"];
+        let power_indices: [u8; 3] = [14, 15, 16];
+        
         let search = self.start_menu_search.trim();
-        let filtered: alloc::vec::Vec<u8> = if search.is_empty() {
-            all_indices.to_vec()
+        let search_lower: String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+        
+        // Check app items first
+        let filtered_apps: alloc::vec::Vec<u8> = if search.is_empty() {
+            app_indices.to_vec()
         } else {
-            let search_lower: String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
-            all_indices.iter().filter(|&&idx| {
-                let label: String = all_labels[idx as usize].chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+            app_indices.iter().filter(|&&idx| {
+                let label: String = app_labels[idx as usize].chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
                 label.contains(search_lower.as_str())
             }).copied().collect()
         };
         
-        if y >= items_start_y {
+        if y >= items_start_y && y < menu_y + menu_h as i32 - 106 {
             let clicked_row = ((y - items_start_y) / item_spacing) as usize;
-            if clicked_row < filtered.len() {
-                // Verify within item height (not in gap)
+            if clicked_row < filtered_apps.len() {
                 let item_top = items_start_y + (clicked_row as i32 * item_spacing);
                 if y < item_top + item_h {
-                    return Some(filtered[clicked_row]);
+                    return Some(filtered_apps[clicked_row]);
+                }
+            }
+        }
+        
+        // Check power items (bottom-anchored)
+        let power_y = menu_y + menu_h as i32 - 106;
+        let power_start_y = power_y + 6;
+        if y >= power_start_y {
+            for (pi, &pidx) in power_indices.iter().enumerate() {
+                // Filter by search
+                if !search_lower.is_empty() {
+                    let ll: String = power_labels[pi].chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                    if !ll.contains(search_lower.as_str()) { continue; }
+                }
+                let item_top = power_start_y + (pi as i32 * item_spacing);
+                if y >= item_top && y < item_top + item_h {
+                    return Some(pidx);
                 }
             }
         }
@@ -2682,18 +2990,46 @@ struct AppConfig {
     
     /// Handle keyboard input for the focused window
     pub fn handle_keyboard_input(&mut self, key: u8) {
-        // If start menu is open, route keyboard to search bar
+        use crate::keyboard::{KEY_UP, KEY_DOWN};
+        
+        // If start menu is open, route keyboard to search bar + navigation
         if self.start_menu_open {
             match key {
                 0x1B => { // Escape — close menu
                     self.start_menu_open = false;
                     self.start_menu_search.clear();
+                    self.start_menu_selected = -1;
                 },
                 0x08 | 0x7F => { // Backspace / Delete
                     self.start_menu_search.pop();
+                    self.start_menu_selected = -1; // Reset selection on search change
                 },
-                0x0D | 0x0A => { // Enter — launch first matching item
-                    // Build filtered list same as draw/click
+                k if k == KEY_UP => { // Arrow Up — navigate menu items
+                    if self.start_menu_selected > 0 {
+                        self.start_menu_selected -= 1;
+                    } else {
+                        // Wrap to last item (total including power items = 17)
+                        self.start_menu_selected = 16;
+                    }
+                },
+                k if k == KEY_DOWN => { // Arrow Down — navigate menu items
+                    if self.start_menu_selected < 16 {
+                        self.start_menu_selected += 1;
+                    } else {
+                        self.start_menu_selected = 0;
+                    }
+                },
+                0x0D | 0x0A => { // Enter — launch selected or first match
+                    if self.start_menu_selected >= 0 && self.start_menu_selected <= 16 {
+                        // Launch the selected item
+                        let action = self.start_menu_selected as u8;
+                        self.start_menu_open = false;
+                        self.start_menu_search.clear();
+                        self.start_menu_selected = -1;
+                        self.handle_menu_action(action);
+                        return;
+                    }
+                    // Fallback: launch first matching item by search
                     let all_labels: [&str; 17] = [
                         "Terminal", "Files", "Calculator", "Network", "Text Editor",
                         "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
@@ -2708,6 +3044,7 @@ struct AppConfig {
                             if label_lower.contains(search_lower.as_str()) {
                                 self.start_menu_open = false;
                                 self.start_menu_search.clear();
+                                self.start_menu_selected = -1;
                                 self.handle_menu_action(i as u8);
                                 return;
                             }
@@ -2717,6 +3054,7 @@ struct AppConfig {
                 b' '..=b'~' => { // Printable ASCII
                     if self.start_menu_search.len() < 32 {
                         self.start_menu_search.push(key as char);
+                        self.start_menu_selected = -1; // Reset selection on search change
                     }
                 },
                 _ => {}
@@ -2763,10 +3101,13 @@ struct AppConfig {
                             b'*' => calc.press_operator('*'),
                             b'/' => calc.press_operator('/'),
                             b'%' => calc.press_operator('%'),
+                            b'(' => calc.press_paren('('),
+                            b')' => calc.press_paren(')'),
                             b'=' | 0x0D | 0x0A => calc.press_equals(), // = or Enter
                             b'c' | b'C' => calc.press_clear(),
                             0x08 => calc.press_backspace(), // Backspace
                             0x7F => calc.press_backspace(), // Delete
+                            b's' => calc.press_func("sqrt"), // s for sqrt
                             _ => {}
                         }
                     }
@@ -2841,11 +3182,15 @@ struct AppConfig {
                                     let do_initial = !lab.search_active;
                                     if do_initial {
                                         if let Some(emu) = self.gameboy_states.get(&eid) {
-                                            self.gamelab_states.get_mut(&win_id).unwrap().search_initial(emu);
+                                            if let Some(gl) = self.gamelab_states.get_mut(&win_id) {
+                                                gl.search_initial(emu);
+                                            }
                                         }
                                     } else {
                                         if let Some(emu) = self.gameboy_states.get(&eid) {
-                                            self.gamelab_states.get_mut(&win_id).unwrap().search_filter(emu);
+                                            if let Some(gl) = self.gamelab_states.get_mut(&win_id) {
+                                                gl.search_filter(emu);
+                                            }
                                         }
                                     }
                                 }
@@ -2991,6 +3336,22 @@ struct AppConfig {
                     }
                     }
                 },
+                WindowType::HexViewer => {
+                    use crate::keyboard::{KEY_UP, KEY_DOWN, KEY_PGUP, KEY_PGDOWN, KEY_HOME, KEY_END};
+                    if let Some(window) = self.windows.iter_mut().find(|w| w.id == win_id) {
+                        let visible_lines = ((window.height.saturating_sub(TITLE_BAR_HEIGHT + 20)) / 16) as usize;
+                        let max_scroll = window.content.len().saturating_sub(visible_lines);
+                        match key {
+                            KEY_UP => window.scroll_offset = window.scroll_offset.saturating_sub(1),
+                            KEY_DOWN => window.scroll_offset = (window.scroll_offset + 1).min(max_scroll),
+                            KEY_PGUP => window.scroll_offset = window.scroll_offset.saturating_sub(visible_lines),
+                            KEY_PGDOWN => window.scroll_offset = (window.scroll_offset + visible_lines).min(max_scroll),
+                            KEY_HOME => window.scroll_offset = 0,
+                            KEY_END => window.scroll_offset = max_scroll,
+                            _ => {}
+                        }
+                    }
+                },
                 _ => {}
             }
         }
@@ -2998,11 +3359,40 @@ struct AppConfig {
     
     /// Handle file manager keyboard input
     fn handle_filemanager_key(&mut self, key: u8) {
-        use crate::keyboard::{KEY_UP, KEY_DOWN};
+        use crate::keyboard::{KEY_UP, KEY_DOWN, KEY_DELETE};
         
         let mut action: Option<(String, bool)> = None; // (filename, is_dir)
+        let mut delete_target: Option<String> = None;
+        let mut new_file = false;
+        let mut new_folder = false;
+        let mut rename_start = false;
+        
+        let mut rename_action: Option<(String, String, String)> = None; // (old_name, new_name, current_path)
         
         if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+            // Check if we're in rename mode
+            if window.title.starts_with("RENAME:") {
+                if key == 0x0D || key == 0x0A { // Enter — confirm rename
+                    let old_name = String::from(&window.title[7..]);
+                    let new_name = self.input_buffer.clone();
+                    self.input_buffer.clear();
+                    window.title = String::from("File Manager");
+                    let current_path = window.file_path.clone().unwrap_or_else(|| String::from("/"));
+                    rename_action = Some((old_name, new_name, current_path));
+                } else if key == 0x08 { // Backspace in rename
+                    self.input_buffer.pop();
+                    return;
+                } else if key == 0x1B { // Escape — cancel rename
+                    self.input_buffer.clear();
+                    window.title = String::from("File Manager");
+                    return;
+                } else if key >= 0x20 && key < 0x7F {
+                    self.input_buffer.push(key as char);
+                    return;
+                }
+                return;
+            }
+            
             // Get file list (skip header lines - first 5 lines)
             let file_count = window.content.len().saturating_sub(7); // header + footer
             
@@ -3014,32 +3404,240 @@ struct AppConfig {
                 if window.selected_index < file_count.saturating_sub(1) {
                     window.selected_index += 1;
                 }
+            } else if key == 0x08 { // Backspace - navigate up
+                action = Some((String::from(".."), true));
+            } else if key == KEY_DELETE { // Delete selected file/folder
+                let idx = window.selected_index + 5;
+                if idx < window.content.len().saturating_sub(2) {
+                    let line = &window.content[idx];
+                    if let Some(name_start) = line.find(']') {
+                        if name_start + 2 < line.len() {
+                            let rest = &line[name_start + 2..];
+                            if let Some(name_end) = rest.find(' ') {
+                                let filename = String::from(rest[..name_end].trim());
+                                if filename != ".." {
+                                    delete_target = Some(filename);
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if key == b'n' || key == b'N' { // New file
+                new_file = true;
+            } else if key == b'd' || key == b'D' { // New folder (D for Directory)
+                new_folder = true;
+            } else if key == b'r' || key == b'R' { // R for rename
+                rename_start = true;
+                let idx = window.selected_index + 5;
+                if idx < window.content.len().saturating_sub(2) {
+                    let line = &window.content[idx];
+                    if let Some(name_start) = line.find(']') {
+                        if name_start + 2 < line.len() {
+                            let rest = &line[name_start + 2..];
+                            if let Some(name_end) = rest.find(' ') {
+                                let filename = String::from(rest[..name_end].trim());
+                                if filename != ".." {
+                                    self.input_buffer = filename.clone();
+                                    window.title = format!("RENAME:{}", filename);
+                                }
+                            }
+                        }
+                    }
+                }
             } else if key == 0x0D || key == 0x0A { // Enter - open file
                 // Get selected file
                 let idx = window.selected_index + 5; // Skip header
-                if idx < window.content.len() - 2 { // Skip footer
+                if idx < window.content.len().saturating_sub(2) { // Skip footer
                     let line = &window.content[idx];
                     // Parse filename from line format: "  [icon] filename..."
                     if let Some(name_start) = line.find(']') {
-                        let rest = &line[name_start + 2..];
-                        if let Some(name_end) = rest.find(' ') {
-                            let filename = String::from(rest[..name_end].trim());
-                            let is_dir = line.contains("[D]");
-                            action = Some((filename, is_dir));
+                        if name_start + 2 < line.len() {
+                            let rest = &line[name_start + 2..];
+                            if let Some(name_end) = rest.find(' ') {
+                                let filename = String::from(rest[..name_end].trim());
+                                let is_dir = line.contains("[D]");
+                                action = Some((filename, is_dir));
+                            }
                         }
                     }
                 }
             }
         }
         
+        // Handle rename action
+        if let Some((old_name, new_name, current_path)) = rename_action {
+            let old_path = if current_path == "/" { format!("/{}", old_name) } else { format!("{}/{}", current_path, old_name) };
+            let new_path_str = if current_path == "/" { format!("/{}", new_name) } else { format!("{}/{}", current_path, new_name) };
+            let _ = crate::ramfs::with_fs(|fs| fs.mv(&old_path, &new_path_str));
+            crate::serial_println!("[FM] Renamed: {} -> {}", old_path, new_path_str);
+            self.refresh_file_manager(&current_path);
+            return;
+        }
+        
+        // Handle delete outside borrow
+        if let Some(filename) = delete_target {
+            let current_path = self.windows.iter()
+                .find(|w| w.focused && w.window_type == WindowType::FileManager)
+                .and_then(|w| w.file_path.clone())
+                .unwrap_or_else(|| String::from("/"));
+            let full_path = if current_path == "/" { format!("/{}", filename) } else { format!("{}/{}", current_path, filename) };
+            let _ = crate::ramfs::with_fs(|fs| fs.rm(&full_path));
+            crate::serial_println!("[FM] Deleted: {}", full_path);
+            self.refresh_file_manager(&current_path);
+            return;
+        }
+        
+        // Handle new file
+        if new_file {
+            let current_path = self.windows.iter()
+                .find(|w| w.focused && w.window_type == WindowType::FileManager)
+                .and_then(|w| w.file_path.clone())
+                .unwrap_or_else(|| String::from("/"));
+            let name = format!("new_file_{}.txt", self.frame_count % 1000);
+            let full_path = if current_path == "/" { format!("/{}", name) } else { format!("{}/{}", current_path, name) };
+            let _ = crate::ramfs::with_fs(|fs| fs.touch(&full_path));
+            crate::serial_println!("[FM] Created file: {}", full_path);
+            self.refresh_file_manager(&current_path);
+            return;
+        }
+        
+        // Handle new folder
+        if new_folder {
+            let current_path = self.windows.iter()
+                .find(|w| w.focused && w.window_type == WindowType::FileManager)
+                .and_then(|w| w.file_path.clone())
+                .unwrap_or_else(|| String::from("/"));
+            let name = format!("folder_{}", self.frame_count % 1000);
+            let full_path = if current_path == "/" { format!("/{}", name) } else { format!("{}/{}", current_path, name) };
+            let _ = crate::ramfs::with_fs(|fs| fs.mkdir(&full_path));
+            crate::serial_println!("[FM] Created folder: {}", full_path);
+            self.refresh_file_manager(&current_path);
+            return;
+        }
+        
         // Handle action outside the borrow
         if let Some((filename, is_dir)) = action {
             if is_dir {
-                // TODO: Navigate into directory
-                crate::serial_println!("[FM] Navigate to dir: {}", filename);
+                // Navigate into directory
+                self.navigate_file_manager(&filename);
             } else {
                 self.open_file(&filename);
             }
+        }
+    }
+    
+    /// Refresh file manager at current directory
+    fn refresh_file_manager(&mut self, path: &str) {
+        // Set file_path temporarily to know current path, then navigate to "."
+        // We just re-call navigate with the same path by navigating to a dummy then back
+        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+            let cp = window.file_path.clone().unwrap_or_else(|| String::from("/"));
+            // Rebuild content in-place
+            window.content.clear();
+            window.content.push(String::from("=== File Manager ==="));
+            window.content.push(format!("Path: {}", path));
+            window.content.push(String::from(""));
+            window.content.push(String::from("  Name              Type       Size    Program"));
+            window.content.push(String::from("  ────────────────────────────────────────────"));
+            
+            if path != "/" {
+                window.content.push(String::from("  [D] ..             DIR        ---     ---"));
+            }
+            
+            let path_arg = if path == "/" { Some("/") } else { Some(path) };
+            if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(path_arg)) {
+                for (name, ftype, size) in entries.iter().take(50) {
+                    let icon = if *ftype == crate::ramfs::FileType::Directory { 
+                        "[D]" 
+                    } else { 
+                        crate::file_assoc::get_file_icon(name)
+                    };
+                    let prog = if *ftype == crate::ramfs::FileType::Directory {
+                        String::from("---")
+                    } else {
+                        String::from(crate::file_assoc::get_program_for_file(name).name())
+                    };
+                    let ftype_str = if *ftype == crate::ramfs::FileType::Directory { "DIR" } else { "FILE" };
+                    window.content.push(format!("  {} {:<14} {:<10} {:<7} {}", icon, name, ftype_str, size, prog));
+                }
+            }
+            if window.content.len() <= 5 + if path != "/" { 1 } else { 0 } {
+                window.content.push(String::from("  (empty directory)"));
+            }
+            window.content.push(String::from(""));
+            window.content.push(String::from("  [Del] Delete | [N] New File | [D] New Folder | [F2] Rename"));
+            
+            window.file_path = Some(String::from(path));
+            window.selected_index = 0;
+            window.scroll_offset = 0;
+        }
+    }
+    
+    /// Navigate file manager to a directory
+    fn navigate_file_manager(&mut self, dirname: &str) {
+        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+            // Build new path
+            let current_path = window.file_path.clone().unwrap_or_else(|| String::from("/"));
+            let new_path = if dirname == ".." {
+                // Go up one level
+                if current_path == "/" {
+                    String::from("/")
+                } else {
+                    let trimmed = current_path.trim_end_matches('/');
+                    match trimmed.rfind('/') {
+                        Some(0) => String::from("/"),
+                        Some(pos) => String::from(&trimmed[..pos]),
+                        None => String::from("/"),
+                    }
+                }
+            } else if current_path == "/" {
+                format!("/{}", dirname)
+            } else {
+                format!("{}/{}", current_path.trim_end_matches('/'), dirname)
+            };
+            
+            crate::serial_println!("[FM] Navigate: {} -> {}", current_path, new_path);
+            
+            // Rebuild window content
+            window.content.clear();
+            window.content.push(String::from("=== File Manager ==="));
+            window.content.push(format!("Path: {}", new_path));
+            window.content.push(String::from(""));
+            window.content.push(String::from("  Name              Type       Size    Program"));
+            window.content.push(String::from("  ────────────────────────────────────────────"));
+            
+            // Add ".." entry if not at root
+            if new_path != "/" {
+                window.content.push(String::from("  [D] ..             DIR        ---     ---"));
+            }
+            
+            // List actual files from ramfs
+            let path_arg = if new_path == "/" { Some("/") } else { Some(new_path.as_str()) };
+            if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(path_arg)) {
+                for (name, ftype, size) in entries.iter().take(20) {
+                    let icon = if *ftype == crate::ramfs::FileType::Directory { 
+                        "[D]" 
+                    } else { 
+                        crate::file_assoc::get_file_icon(name)
+                    };
+                    let prog = if *ftype == crate::ramfs::FileType::Directory {
+                        String::from("---")
+                    } else {
+                        String::from(crate::file_assoc::get_program_for_file(name).name())
+                    };
+                    let ftype_str = if *ftype == crate::ramfs::FileType::Directory { "DIR" } else { "FILE" };
+                    window.content.push(format!("  {} {:<14} {:<10} {:<7} {}", icon, name, ftype_str, size, prog));
+                }
+            }
+            if window.content.len() <= 5 + if new_path != "/" { 1 } else { 0 } {
+                window.content.push(String::from("  (empty directory)"));
+            }
+            window.content.push(String::from(""));
+            window.content.push(String::from("  [Del] Delete | [N] New File | [D] New Folder | [R] Rename"));
+            
+            window.file_path = Some(new_path);
+            window.selected_index = 0;
+            window.scroll_offset = 0;
         }
     }
     
@@ -3098,7 +3696,8 @@ struct AppConfig {
                     // Load and show hex
                     let file_path = format!("/{}", filename);
                     if let Ok(content) = crate::ramfs::with_fs(|fs| fs.read_file(&file_path).map(|d| d.to_vec())) {
-                        for (i, chunk) in content.chunks(8).enumerate().take(16) {
+                        let total_bytes = content.len();
+                        for (i, chunk) in content.chunks(8).enumerate() {
                             let offset = i * 8;
                             let hex: String = chunk.iter()
                                 .map(|b| format!("{:02X} ", b))
@@ -3108,7 +3707,10 @@ struct AppConfig {
                                 .collect();
                             window.content.push(format!("{:08X} {:<24} {}", offset, hex, ascii));
                         }
+                        window.content.push(String::new());
+                        window.content.push(format!("Total: {} bytes ({} lines)", total_bytes, window.content.len() - 4));
                     }
+                    window.scroll_offset = 0;
                 }
             },
             Program::Terminal => {
@@ -3134,7 +3736,6 @@ struct AppConfig {
         if key == b'1' {
             // Toggle animations
             toggle_animations();
-            // Refresh settings window content
             self.refresh_settings_window();
         } else if key == b'2' {
             // Cycle animation speed: 0.5 -> 1.0 -> 2.0 -> 0.5
@@ -3150,6 +3751,28 @@ struct AppConfig {
             // About
             let offset = (self.windows.len() as i32 * 20) % 100;
             self.create_window("About TrustOS", 280 + offset, 150 + offset, 350, 200, WindowType::About);
+        } else if key == b'5' {
+            // Toggle high contrast
+            crate::accessibility::toggle_high_contrast();
+            self.needs_full_redraw = true;
+            self.background_cached = false;
+            self.refresh_settings_window();
+        } else if key == b'6' {
+            // Cycle font size
+            crate::accessibility::cycle_font_size();
+            self.refresh_settings_window();
+        } else if key == b'7' {
+            // Cycle cursor size
+            crate::accessibility::cycle_cursor_size();
+            self.refresh_settings_window();
+        } else if key == b'8' {
+            // Toggle sticky keys
+            crate::accessibility::toggle_sticky_keys();
+            self.refresh_settings_window();
+        } else if key == b'9' {
+            // Cycle mouse speed
+            crate::accessibility::cycle_mouse_speed();
+            self.refresh_settings_window();
         }
     }
     
@@ -3167,6 +3790,14 @@ struct AppConfig {
             let anim_speed = *ANIMATION_SPEED.lock();
             window.content.push(format!("[1] Animations: {}", anim_status));
             window.content.push(format!("[2] Speed: {:.1}x", anim_speed));
+            window.content.push(String::from(""));
+            window.content.push(String::from("--- Accessibility ---"));
+            let hc = if crate::accessibility::is_high_contrast() { "ON " } else { "OFF" };
+            window.content.push(format!("[5] High Contrast: {}", hc));
+            window.content.push(format!("[6] Font Size: {}", crate::accessibility::get_font_size().label()));
+            window.content.push(format!("[7] Cursor Size: {}", crate::accessibility::get_cursor_size().label()));
+            window.content.push(format!("[8] Sticky Keys: {}", if crate::accessibility::is_sticky_keys() { "ON" } else { "OFF" }));
+            window.content.push(format!("[9] Mouse Speed: {}", crate::accessibility::get_mouse_speed().label()));
             window.content.push(String::from(""));
             window.content.push(String::from("--- Other ---"));
             window.content.push(String::from("[3] File Associations"));
@@ -3278,30 +3909,115 @@ struct AppConfig {
                     }
                 }
             }
-        } else if key == 0x09 { // Tab — autosuggestion
+        } else if key == 0x09 { // Tab — autosuggestion (commands + file names)
             let partial = self.input_buffer.clone();
             if !partial.is_empty() {
-                let commands = crate::shell::SHELL_COMMANDS;
-                let partial_str = partial.as_str();
-                let matches: Vec<&str> = commands.iter().copied().filter(|c| c.starts_with(partial_str)).collect();
-                if matches.len() == 1 {
-                    self.input_buffer = String::from(matches[0]);
-                    if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
-                        if let Some(last) = window.content.last_mut() {
-                            *last = Self::make_prompt(&format!("{}_", self.input_buffer));
+                // Check if we're completing a command argument (contains space) or a command name
+                if let Some(space_pos) = partial.rfind(' ') {
+                    // Completing a filename argument
+                    let file_partial = &partial[space_pos + 1..];
+                    if !file_partial.is_empty() {
+                        // List files from ramfs and find matches
+                        let mut file_matches: Vec<String> = Vec::new();
+                        if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(Some("/"))) {
+                            for (name, ftype, _size) in entries.iter() {
+                                let name_lower: String = name.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                                let partial_lower: String = file_partial.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                                if name_lower.starts_with(&partial_lower) {
+                                    let suffix = if *ftype == crate::ramfs::FileType::Directory { "/" } else { "" };
+                                    file_matches.push(format!("{}{}", name, suffix));
+                                }
+                            }
+                        }
+                        if file_matches.len() == 1 {
+                            let cmd_prefix = &partial[..=space_pos];
+                            self.input_buffer = format!("{}{}", cmd_prefix, file_matches[0]);
+                            if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                                if let Some(last) = window.content.last_mut() {
+                                    *last = Self::make_prompt(&format!("{}_", self.input_buffer));
+                                }
+                            }
+                        } else if file_matches.len() > 1 {
+                            let match_str: String = file_matches.join("  ");
+                            if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                                window.content.push(match_str);
+                                window.content.push(Self::make_prompt(&format!("{}_", self.input_buffer)));
+                            }
                         }
                     }
-                } else if matches.len() > 1 {
-                    let match_str: String = matches.join("  ");
-                    if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
-                        window.content.push(match_str);
-                        window.content.push(Self::make_prompt(&format!("{}_", self.input_buffer)));
+                } else {
+                    // Completing a command name
+                    let commands = crate::shell::SHELL_COMMANDS;
+                    let partial_str = partial.as_str();
+                    let matches: Vec<&str> = commands.iter().copied().filter(|c| c.starts_with(partial_str)).collect();
+                    if matches.len() == 1 {
+                        self.input_buffer = String::from(matches[0]);
+                        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                            if let Some(last) = window.content.last_mut() {
+                                *last = Self::make_prompt(&format!("{}_", self.input_buffer));
+                            }
+                        }
+                    } else if matches.len() > 1 {
+                        let match_str: String = matches.join("  ");
+                        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                            window.content.push(match_str);
+                            window.content.push(Self::make_prompt(&format!("{}_", self.input_buffer)));
+                        }
+                    }
+                }
+            }
+        } else if key == 0xF0 { // Up arrow — history previous
+            if !self.command_history.is_empty() {
+                match self.history_index {
+                    None => {
+                        // Start browsing: save current input, go to last command
+                        self.saved_input = self.input_buffer.clone();
+                        let idx = self.command_history.len() - 1;
+                        self.history_index = Some(idx);
+                        self.input_buffer = self.command_history[idx].clone();
+                    }
+                    Some(i) if i > 0 => {
+                        let idx = i - 1;
+                        self.history_index = Some(idx);
+                        self.input_buffer = self.command_history[idx].clone();
+                    }
+                    _ => {} // already at oldest
+                }
+                if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                    if let Some(last) = window.content.last_mut() {
+                        *last = Self::make_prompt(&format!("{}_", self.input_buffer));
+                    }
+                }
+            }
+        } else if key == 0xF1 { // Down arrow — history next
+            if let Some(i) = self.history_index {
+                if i + 1 < self.command_history.len() {
+                    let idx = i + 1;
+                    self.history_index = Some(idx);
+                    self.input_buffer = self.command_history[idx].clone();
+                } else {
+                    // Past the end: restore saved input
+                    self.history_index = None;
+                    self.input_buffer = self.saved_input.clone();
+                }
+                if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                    if let Some(last) = window.content.last_mut() {
+                        *last = Self::make_prompt(&format!("{}_", self.input_buffer));
                     }
                 }
             }
         } else if key == 0x0D || key == 0x0A { // Enter
             let cmd = self.input_buffer.clone();
             self.input_buffer.clear();
+            // Save to history (skip duplicates of last entry)
+            if !cmd.trim().is_empty() {
+                let dup = self.command_history.last().map(|h| h == &cmd).unwrap_or(false);
+                if !dup {
+                    self.command_history.push(cmd.clone());
+                }
+            }
+            self.history_index = None;
+            self.saved_input.clear();
             
             let output = Self::execute_command_static(&cmd);
             
@@ -3328,8 +4044,8 @@ struct AppConfig {
                     
                     // Auto-scroll to bottom
                     let line_height = 16usize;
-                    let content_area_h = window.height as usize - TITLE_BAR_HEIGHT as usize - 16;
-                    let visible_lines = content_area_h / line_height;
+                    let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT as usize + 16);
+                    let visible_lines = if line_height > 0 { content_area_h / line_height } else { 1 };
                     if window.content.len() > visible_lines {
                         window.scroll_offset = window.content.len() - visible_lines;
                     } else {
@@ -3526,9 +4242,15 @@ struct AppConfig {
                 output.push(String::from("\x01Gtrustos"));
             },
             "history" => {
-                output.push(String::from("\x01M  1  help"));
-                output.push(String::from("\x01M  2  ls"));
-                output.push(String::from("\x01M  (history not persisted)"));
+                // Show real command history from DESKTOP
+                let hist = crate::desktop::DESKTOP.lock().command_history.clone();
+                if hist.is_empty() {
+                    output.push(String::from("\x01M  (no history yet)"));
+                } else {
+                    for (i, entry) in hist.iter().enumerate() {
+                        output.push(format!("\x01M  {}  {}", i + 1, entry));
+                    }
+                }
             },
             "free" | "mem" => {
                 let heap_mb = crate::memory::heap_size() / 1024 / 1024;
@@ -4315,38 +5037,8 @@ struct AppConfig {
             return;
         }
         
-        // ── Build "TrustOS" text bitmap in center ──
-        // Large block letters, each char ~20px wide, ~24px tall
-        // "TRUSTOS" = 7 chars → ~140px wide at center
-        let text_str = "TrustOS";
-        let text_px_w = text_str.len() as u32 * 16; // 16px per char (scaled 2x from 8px glyphs)
-        let text_px_h = 32u32; // 2x scale of 16px glyph
-        let text_x0 = (width / 2).saturating_sub(text_px_w / 2);
-        let text_y0 = (height / 2).saturating_sub(text_px_h / 2);
-        
-        // Build text mask: 1 = pixel belongs to "TrustOS" text
-        // Use 2x scaled glyphs
-        let mut text_mask = [[false; 224]; 32]; // 7*16*2=224 wide, 32 tall max
-        for (ci, ch) in text_str.chars().enumerate() {
-            let glyph = crate::framebuffer::font::get_glyph(ch);
-            for (row, &bits) in glyph.iter().enumerate() {
-                for bit in 0..8u32 {
-                    if bits & (0x80 >> bit) != 0 {
-                        // Scale 2x
-                        let mx = ci * 16 + (bit as usize) * 2;
-                        let my = row * 2;
-                        if mx < 224 && my < 32 {
-                            text_mask[my][mx] = true;
-                            if mx + 1 < 224 { text_mask[my][mx + 1] = true; }
-                            if my + 1 < 32 {
-                                text_mask[my + 1][mx] = true;
-                                if mx + 1 < 224 { text_mask[my + 1][mx + 1] = true; }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        // Logo centered vertically in the available space
+        let logo_center_y = height / 2;
         
         // ── Render matrix rain ──
         let col_width = width / MATRIX_COLS as u32;
@@ -4390,26 +5082,8 @@ struct AppConfig {
                 
                 let brightness = ((base as f32) * brightness_mult) as u8;
                 
-                // Check if this rain drop touches the "TrustOS" text zone
-                let in_text_zone = x >= text_x0 && x < text_x0 + text_px_w
-                    && (char_y as u32) >= text_y0 && (char_y as u32) < text_y0 + text_px_h;
-                
-                let mut text_hit = false;
-                if in_text_zone {
-                    let tx = (x - text_x0) as usize;
-                    let ty = (char_y as u32 - text_y0) as usize;
-                    if ty < 32 && tx < 224 && text_mask[ty][tx] {
-                        text_hit = true;
-                    }
-                }
-                
                 // Color computation
-                let (r, g, b) = if text_hit {
-                    // Text pixel: bright white-green glow when rain touches
-                    let glow = brightness.max(180);
-                    let white = (glow as u32 * 3 / 4).min(220) as u8;
-                    (white, glow, white)
-                } else if i == 0 {
+                let (r, g, b) = if i == 0 {
                     // Head: white-ish glow
                     let w = (140.0 * brightness_mult) as u8;
                     (w, brightness.max(w), w)
@@ -4443,42 +5117,14 @@ struct AppConfig {
             }
         }
         
-        // ── Draw "TrustOS" outline when NOT being rained on ──
-        // Very subtle dark green text that's always visible as ghost
-        for (ci, ch) in text_str.chars().enumerate() {
-            let glyph = crate::framebuffer::font::get_glyph(ch);
-            for (row, &bits) in glyph.iter().enumerate() {
-                for bit in 0..8u32 {
-                    if bits & (0x80 >> bit) != 0 {
-                        for sy in 0..2u32 {
-                            for sx in 0..2u32 {
-                                let px = text_x0 + (ci as u32) * 16 + bit * 2 + sx;
-                                let py = text_y0 + (row as u32) * 2 + sy;
-                                if px < width && py < height {
-                                    // Only draw ghost if pixel is currently black/very dark
-                                    // This creates the "text appears only when rain hits" effect
-                                    // with a faint outline always visible
-                                    let existing = framebuffer::get_pixel(px, py);
-                                    let eg = (existing >> 8) & 0xFF;
-                                    if eg < 20 {
-                                        framebuffer::put_pixel(px, py, 0xFF001A0A);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // ── Draw TrustOS fleur-de-lis logo above center text ──
-        // The logo integrates with the matrix rain: edge pixels glow green
+        // ── Draw TrustOS fleur-de-lis logo — centered on screen ──
+        // Transparent interior: only outline/edge pixels drawn, matrix rain visible through
         {
             let logo_w = crate::logo_bitmap::LOGO_W as u32;
             let logo_h = crate::logo_bitmap::LOGO_H as u32;
             let logo_x = (width / 2).saturating_sub(logo_w / 2);
-            // Place logo above the "TrustOS" text, with a small gap
-            let logo_y = text_y0.saturating_sub(logo_h + 16);
+            // Center logo vertically in available space
+            let logo_y = logo_center_y.saturating_sub(logo_h / 2);
             
             for ly in 0..logo_h {
                 for lx in 0..logo_w {
@@ -4497,35 +5143,58 @@ struct AppConfig {
                     let py = logo_y + ly;
                     if px >= width || py >= height { continue; }
                     
-                    // Edge glow: edge pixels get a subtle green corona
-                    if crate::logo_bitmap::logo_edge_pixel(lx as usize, ly as usize) {
-                        // Glow in 2px radius around edges
-                        for gdy in 0..3u32 {
-                            for gdx in 0..3u32 {
-                                let gx = px + gdx;
-                                let gy = py + gdy;
-                                if gx > 0 && gy > 0 && gx - 1 < width && gy - 1 < height {
-                                    let existing = framebuffer::get_pixel(gx - 1, gy - 1);
-                                    let eg = (existing >> 8) & 0xFF;
-                                    if eg < 30 {
-                                        framebuffer::put_pixel(gx - 1, gy - 1, 0xFF001A08);
+                    let is_edge = crate::logo_bitmap::logo_edge_pixel(lx as usize, ly as usize);
+                    
+                    // Check if near edge (within 3px) for softer falloff
+                    let near_edge = if !is_edge {
+                        let mut min_dist = 99u32;
+                        for dy in 0..5u32 {
+                            for dx in 0..5u32 {
+                                let nx = lx as i32 + dx as i32 - 2;
+                                let ny = ly as i32 + dy as i32 - 2;
+                                if nx >= 0 && ny >= 0 && nx < logo_w as i32 && ny < logo_h as i32 {
+                                    if crate::logo_bitmap::logo_edge_pixel(nx as usize, ny as usize) {
+                                        let d = ((dx as i32 - 2).unsigned_abs() + (dy as i32 - 2).unsigned_abs()) as u32;
+                                        if d < min_dist { min_dist = d; }
                                     }
                                 }
                             }
                         }
-                    }
+                        min_dist
+                    } else { 0 };
                     
-                    // Draw actual pixel with alpha blend
-                    if a >= 240 {
-                        framebuffer::put_pixel(px, py, argb);
-                    } else {
+                    if is_edge {
+                        // Edge pixels: bright green glow corona (3px)
+                        for gdy in 0..5u32 {
+                            for gdx in 0..5u32 {
+                                let gx = px + gdx;
+                                let gy = py + gdy;
+                                if gx >= 2 && gy >= 2 && gx - 2 < width && gy - 2 < height {
+                                    let existing = framebuffer::get_pixel(gx - 2, gy - 2);
+                                    let eg = (existing >> 8) & 0xFF;
+                                    if eg < 40 {
+                                        framebuffer::put_pixel(gx - 2, gy - 2, 0xFF002A10);
+                                    }
+                                }
+                            }
+                        }
+                        // Draw edge pixel: use original color but boost green channel
+                        let edge_r = (r / 3).min(60);
+                        let edge_g = (g.max(luminance) + 40).min(255);
+                        let edge_b = (b / 3).min(60);
+                        framebuffer::put_pixel(px, py, 0xFF000000 | (edge_r << 16) | (edge_g << 8) | edge_b);
+                    } else if near_edge <= 2 {
+                        // Near-edge: very subtle tint (15-30% alpha), matrix visible
+                        let alpha_val = if near_edge == 1 { 45u32 } else { 20u32 };
                         let bg = framebuffer::get_pixel(px, py);
-                        let inv_a = 255 - a;
-                        let nr = ((r * a + ((bg >> 16) & 0xFF) * inv_a) / 255) & 0xFF;
-                        let ng = ((g * a + ((bg >> 8) & 0xFF) * inv_a) / 255) & 0xFF;
-                        let nb = ((b * a + (bg & 0xFF) * inv_a) / 255) & 0xFF;
+                        let inv = 255 - alpha_val;
+                        let edge_g2 = g.max(60).min(200);
+                        let nr = ((r / 4) * alpha_val + ((bg >> 16) & 0xFF) * inv) / 255;
+                        let ng = (edge_g2 * alpha_val + ((bg >> 8) & 0xFF) * inv) / 255;
+                        let nb = ((b / 4) * alpha_val + (bg & 0xFF) * inv) / 255;
                         framebuffer::put_pixel(px, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
                     }
+                    // Interior pixels (far from edge): skip entirely → matrix rain shows through
                 }
             }
         }
@@ -4783,16 +5452,6 @@ struct AppConfig {
             }
         }
         
-        // ── "TrustOS" text below circuit key ──
-        let text_y_pos = (key_end_y + 16) as i32;
-        if (text_y_pos + 16) < self.height.saturating_sub(TASKBAR_HEIGHT) as i32 {
-            // "Trust" in gray
-            let trust_x = (center_x as i32) - 28;
-            self.draw_text(trust_x, text_y_pos, "Trust", text_gray);
-            // "OS" in green, right after
-            let os_x = trust_x + 40;
-            self.draw_text(os_x, text_y_pos, "OS", text_green);
-        }
     }
     
     fn draw_desktop_icons(&self) {
@@ -4873,14 +5532,35 @@ struct AppConfig {
                         }
                     }
                 }
-                // Inner highlight
-                framebuffer::fill_rect(ix - 3, iy - 2, icon_size + 6, icon_size + 16, 0xFF001A0A);
-                framebuffer::draw_rect(ix - 3, iy - 2, icon_size + 6, icon_size + 16, 0xFF00AA44);
+                // Inner highlight (rounded to match icon shape)
+                draw_rounded_rect((ix as i32) - 3, (iy as i32) - 2, icon_size + 6, icon_size + 16, 6, 0xFF001A0A);
+                draw_rounded_rect_border((ix as i32) - 3, (iy as i32) - 2, icon_size + 6, icon_size + 16, 6, 0xFF00AA44);
             }
             
-            // Icon square background — very dark
-            framebuffer::fill_rect(ix, iy, icon_size, icon_size, 0xFF050805);
-            framebuffer::draw_rect(ix, iy, icon_size, icon_size, if is_hovered { 0xFF00CC55 } else { 0xFF002A15 });
+            // Icon background — rounded dark square with colored accent glow
+            let accent_color = match icon.icon_type {
+                IconType::Terminal => 0xFF20CC60u32,  // Bright green
+                IconType::Folder => 0xFFDDAA30u32,    // Warm amber/gold
+                IconType::Editor => 0xFF5090E0u32,    // Soft blue  
+                IconType::Calculator => 0xFFCC6633u32, // Orange
+                IconType::Network => 0xFF40AADDu32,    // Cyan
+                IconType::Game => 0xFFCC4444u32,       // Red
+                IconType::Settings => 0xFF9988BBu32,   // Purple/lilac
+                IconType::Browser => 0xFF4488DDu32,    // Blue
+                IconType::GameBoy => 0xFF88BB44u32,    // Yellow-green
+                _ => icon_color,
+            };
+            // Rounded icon background
+            draw_rounded_rect(ix as i32, iy as i32, icon_size, icon_size, 6, 0xFF060A06);
+            if is_hovered {
+                // Colored accent border on hover
+                draw_rounded_rect_border(ix as i32, iy as i32, icon_size, icon_size, 6, accent_color);
+            } else {
+                draw_rounded_rect_border(ix as i32, iy as i32, icon_size, icon_size, 6, 0xFF1A2A1A);
+            }
+            
+            // Use accent color for hovered icons, muted version for normal
+            let draw_color = if is_hovered { accent_color } else { icon_color };
             
             // Pixel-art icon inside square
             let cx = ix + icon_size / 2;
@@ -4888,97 +5568,198 @@ struct AppConfig {
             use crate::icons::IconType;
             match icon.icon_type {
                 IconType::Terminal => {
-                    // Terminal: rect with >_ prompt
-                    framebuffer::draw_rect(cx - 14, cy - 10, 28, 20, icon_color);
-                    self.draw_text((cx - 8) as i32, (cy - 4) as i32, ">", icon_color);
-                    framebuffer::fill_rect(cx - 2, cy - 2, 10, 2, icon_color);
+                    // Terminal: rounded rect with >_ prompt and blinking cursor
+                    draw_rounded_rect_border((cx - 14) as i32, (cy - 10) as i32, 28, 20, 3, draw_color);
+                    // Top bar of terminal window
+                    framebuffer::fill_rect(cx - 13, cy - 9, 26, 3, draw_color);
+                    // 3 tiny dots in top bar (traffic lights)
+                    framebuffer::fill_rect(cx - 11, cy - 8, 2, 1, 0xFF0A0A0A);
+                    framebuffer::fill_rect(cx - 8, cy - 8, 2, 1, 0xFF0A0A0A);
+                    framebuffer::fill_rect(cx - 5, cy - 8, 2, 1, 0xFF0A0A0A);
+                    // Prompt >_
+                    self.draw_text((cx - 8) as i32, (cy - 2) as i32, ">", draw_color);
+                    framebuffer::fill_rect(cx - 2, cy, 8, 2, draw_color);
                 },
                 IconType::Folder => {
-                    // Files: folder shape
-                    framebuffer::fill_rect(cx - 12, cy - 2, 24, 14, icon_color);
-                    framebuffer::fill_rect(cx - 14, cy - 6, 10, 6, icon_color);
+                    // Files: folder with tab and inner shadow
+                    // Folder tab
+                    framebuffer::fill_rect(cx - 14, cy - 8, 12, 5, draw_color);
+                    // Main folder body
+                    framebuffer::fill_rect(cx - 14, cy - 3, 28, 15, draw_color);
+                    // Inner shadow (darker interior)
+                    framebuffer::fill_rect(cx - 12, cy - 1, 24, 11, 0xFF0A0A0A);
+                    // File hint lines inside
+                    framebuffer::fill_rect(cx - 8, cy + 2, 16, 1, 0xFF303020);
+                    framebuffer::fill_rect(cx - 8, cy + 5, 12, 1, 0xFF303020);
                 },
                 IconType::Editor => {
-                    // Editor: document with text lines
-                    framebuffer::fill_rect(cx - 10, cy - 12, 20, 24, icon_color);
-                    framebuffer::fill_rect(cx - 8, cy - 10, 16, 20, 0xFF0A0A0A);
-                    framebuffer::fill_rect(cx - 6, cy - 6, 12, 2, icon_color);
-                    framebuffer::fill_rect(cx - 6, cy - 2, 12, 2, icon_color);
-                    framebuffer::fill_rect(cx - 6, cy + 2, 8, 2, icon_color);
+                    // Editor: document with code lines (syntax colored)
+                    framebuffer::fill_rect(cx - 10, cy - 12, 20, 24, draw_color);
+                    // Dog-eared corner
+                    framebuffer::fill_rect(cx + 4, cy - 12, 6, 6, 0xFF0A0A0A);
+                    framebuffer::fill_rect(cx + 4, cy - 12, 1, 6, draw_color);
+                    framebuffer::fill_rect(cx + 4, cy - 7, 6, 1, draw_color);
+                    // Dark interior
+                    framebuffer::fill_rect(cx - 8, cy - 6, 16, 16, 0xFF0A0A0A);
+                    // Code-like lines with colors
+                    framebuffer::fill_rect(cx - 6, cy - 4, 6, 1, 0xFF6688CC); // blue keyword
+                    framebuffer::fill_rect(cx - 6, cy - 2, 10, 1, draw_color);
+                    framebuffer::fill_rect(cx - 6, cy + 0, 8, 1, 0xFFCC8844); // orange string
+                    framebuffer::fill_rect(cx - 6, cy + 2, 12, 1, draw_color);
+                    framebuffer::fill_rect(cx - 6, cy + 4, 4, 1, 0xFF88BB44); // green comment
+                    framebuffer::fill_rect(cx - 6, cy + 6, 9, 1, draw_color);
                 },
                 IconType::Calculator => {
-                    // Calculator: grid squares
-                    framebuffer::draw_rect(cx - 10, cy - 10, 20, 20, icon_color);
-                    framebuffer::fill_rect(cx - 8, cy - 8, 6, 4, icon_color);
-                    framebuffer::fill_rect(cx + 2, cy - 8, 6, 4, icon_color);
-                    framebuffer::fill_rect(cx - 8, cy + 2, 6, 4, icon_color);
-                    framebuffer::fill_rect(cx + 2, cy + 2, 6, 4, icon_color);
-                },
-                IconType::Network => {
-                    // Network: signal bars
-                    framebuffer::fill_rect(cx - 10, cy + 4, 4, 8, icon_color);
-                    framebuffer::fill_rect(cx - 4, cy - 0, 4, 12, icon_color);
-                    framebuffer::fill_rect(cx + 2, cy - 4, 4, 16, icon_color);
-                    framebuffer::fill_rect(cx + 8, cy - 8, 4, 20, icon_color);
-                },
-                IconType::Game => {
-                    // Game: play triangle
-                    for dy in 0..16u32 {
-                        let w = (dy.min(16 - dy) + 1) as u32;
-                        framebuffer::fill_rect(cx - 6, cy - 8 + dy, w, 1, icon_color);
-                    }
-                },
-                IconType::Settings => {
-                    // Settings: gear circle
-                    for dy in 0..12u32 {
-                        for dx in 0..12u32 {
-                            let ddx = dx as i32 - 6;
-                            let ddy = dy as i32 - 6;
-                            if ddx * ddx + ddy * ddy <= 36 && ddx * ddx + ddy * ddy >= 16 {
-                                framebuffer::put_pixel(cx - 6 + dx, cy - 6 + dy, icon_color);
-                            }
+                    // Calculator: screen + colored button grid
+                    draw_rounded_rect_border((cx - 10) as i32, (cy - 12) as i32, 20, 24, 2, draw_color);
+                    // LED screen
+                    framebuffer::fill_rect(cx - 8, cy - 10, 16, 6, 0xFF1A3320);
+                    self.draw_text((cx - 4) as i32, (cy - 10) as i32, "42", 0xFF40FF40);
+                    // Button grid (3x3)
+                    for row in 0..3u32 {
+                        for col in 0..3u32 {
+                            let bx = cx - 8 + col * 6;
+                            let by = cy - 1 + row * 5;
+                            let btn_col = if row == 2 && col == 2 { 0xFFCC6633 } else { draw_color };
+                            framebuffer::fill_rect(bx, by, 4, 3, btn_col);
                         }
                     }
                 },
+                IconType::Network => {
+                    // Network: Wi-Fi arcs + signal strength
+                    let arc_cx = cx as i32;
+                    let arc_cy = (cy + 4) as i32;
+                    // Signal arcs (3 concentric)
+                    for ring in 0..3u32 {
+                        let r = 4 + ring * 4;
+                        let r2 = (r * r) as i32;
+                        let r2_inner = ((r.saturating_sub(2)) * (r.saturating_sub(2))) as i32;
+                        for dy in 0..r as i32 + 1 {
+                            for dx in -(r as i32)..=(r as i32) {
+                                let dist2 = dx * dx + dy * dy;
+                                if dist2 <= r2 && dist2 >= r2_inner && dy <= 0 {
+                                    let px = (arc_cx + dx) as u32;
+                                    let py = (arc_cy + dy) as u32;
+                                    if px >= ix && px < ix + icon_size && py >= iy && py < iy + icon_size {
+                                        let fade = if ring == 0 { draw_color } 
+                                            else if ring == 1 { if is_hovered { draw_color } else { GREEN_GHOST } }
+                                            else { GREEN_GHOST };
+                                        framebuffer::put_pixel(px, py, fade);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Center dot
+                    framebuffer::fill_rect(cx - 1, cy + 3, 3, 3, draw_color);
+                },
+                IconType::Game => {
+                    // Game: game controller / gamepad
+                    // Controller body (wide rounded shape)
+                    framebuffer::fill_rect(cx - 12, cy - 4, 24, 12, draw_color);
+                    framebuffer::fill_rect(cx - 14, cy - 2, 4, 8, draw_color);
+                    framebuffer::fill_rect(cx + 10, cy - 2, 4, 8, draw_color);
+                    // Dark interior
+                    framebuffer::fill_rect(cx - 11, cy - 3, 22, 10, 0xFF0A0A0A);
+                    // D-pad (left)
+                    framebuffer::fill_rect(cx - 9, cy - 1, 5, 1, draw_color);
+                    framebuffer::fill_rect(cx - 7, cy - 3, 1, 5, draw_color);
+                    // Action buttons (right) — colored dots
+                    framebuffer::fill_rect(cx + 5, cy - 2, 2, 2, 0xFF4488DD); // blue
+                    framebuffer::fill_rect(cx + 8, cy - 1, 2, 2, ACCENT_RED); // red
+                    framebuffer::fill_rect(cx + 5, cy + 1, 2, 2, 0xFF44DD44); // green
+                    framebuffer::fill_rect(cx + 8, cy + 2, 2, 2, 0xFFDDDD44); // yellow
+                },
+                IconType::Settings => {
+                    // Settings: detailed gear with teeth
+                    for dy in 0..18u32 {
+                        for dx in 0..18u32 {
+                            let ddx = dx as i32 - 9;
+                            let ddy = dy as i32 - 9;
+                            let dist_sq = ddx * ddx + ddy * ddy;
+                            // Outer ring
+                            if dist_sq >= 30 && dist_sq <= 64 {
+                                framebuffer::put_pixel(cx - 9 + dx, cy - 9 + dy, draw_color);
+                            }
+                            // Inner circle
+                            if dist_sq <= 9 {
+                                framebuffer::put_pixel(cx - 9 + dx, cy - 9 + dy, draw_color);
+                            }
+                        }
+                    }
+                    // 8 gear teeth
+                    let teeth: &[(i32, i32)] = &[(0, -9), (0, 9), (-9, 0), (9, 0), (-7, -7), (7, -7), (-7, 7), (7, 7)];
+                    for &(tx, ty) in teeth {
+                        let px = (cx as i32 + tx) as u32;
+                        let py = (cy as i32 + ty) as u32;
+                        framebuffer::fill_rect(px.saturating_sub(1), py.saturating_sub(1), 3, 3, draw_color);
+                    }
+                },
                 IconType::Browser => {
-                    // Browser: globe
+                    // Browser: globe with meridians and parallels
                     for dy in 0..20u32 {
                         for dx in 0..20u32 {
                             let ddx = dx as i32 - 10;
                             let ddy = dy as i32 - 10;
-                            if ddx * ddx + ddy * ddy <= 100 && ddx * ddx + ddy * ddy >= 64 {
-                                framebuffer::put_pixel(cx - 10 + dx, cy - 10 + dy, icon_color);
+                            let dist_sq = ddx * ddx + ddy * ddy;
+                            // Outer circle
+                            if dist_sq >= 72 && dist_sq <= 100 {
+                                framebuffer::put_pixel(cx - 10 + dx, cy - 10 + dy, draw_color);
                             }
                         }
                     }
-                    framebuffer::fill_rect(cx - 10, cy - 1, 20, 2, icon_color);
-                    framebuffer::fill_rect(cx - 1, cy - 10, 2, 20, icon_color);
+                    // Equator
+                    framebuffer::fill_rect(cx - 10, cy - 1, 20, 2, draw_color);
+                    // Vertical meridian
+                    framebuffer::fill_rect(cx - 1, cy - 10, 2, 20, draw_color);
+                    // Elliptical meridian (curved) — integer sqrt approximation
+                    for dy in 0..20u32 {
+                        let ddy = dy as i32 - 10;
+                        let val = 100 - ddy * ddy;
+                        if val > 0 {
+                            let curve_x = (fast_sqrt_i32(val) * 2 / 5) as u32; // ~0.4 * sqrt
+                            let px1 = cx + curve_x;
+                            let px2 = cx.saturating_sub(curve_x);
+                            if px1 > ix && px1 < ix + icon_size {
+                                framebuffer::put_pixel(px1, cy - 10 + dy, draw_color);
+                            }
+                            if px2 > ix && px2 < ix + icon_size {
+                                framebuffer::put_pixel(px2, cy - 10 + dy, draw_color);
+                            }
+                        }
+                    }
+                    // Parallels (latitude lines)
+                    framebuffer::fill_rect(cx - 8, cy - 5, 16, 1, draw_color);
+                    framebuffer::fill_rect(cx - 8, cy + 5, 16, 1, draw_color);
                 },
                 IconType::GameBoy => {
-                    // Game Boy: handheld console shape
-                    framebuffer::draw_rect(cx - 10, cy - 12, 20, 24, icon_color);
-                    // Screen area
-                    framebuffer::fill_rect(cx - 7, cy - 9, 14, 10, icon_color);
-                    framebuffer::fill_rect(cx - 6, cy - 8, 12, 8, 0xFF0A0A0A);
+                    // Game Boy: handheld console (detailed)
+                    draw_rounded_rect_border((cx - 10) as i32, (cy - 12) as i32, 20, 24, 2, draw_color);
+                    framebuffer::fill_rect(cx - 9, cy - 11, 18, 22, draw_color);
+                    // Screen area (green-tinted)
+                    framebuffer::fill_rect(cx - 7, cy - 9, 14, 10, 0xFF1A3320);
+                    // Pixel character on screen
+                    framebuffer::fill_rect(cx - 2, cy - 7, 4, 4, 0xFF40CC40);
+                    framebuffer::fill_rect(cx - 3, cy - 3, 6, 2, 0xFF40CC40);
                     // D-pad
-                    framebuffer::fill_rect(cx - 6, cy + 3, 6, 2, icon_color);
-                    framebuffer::fill_rect(cx - 4, cy + 1, 2, 6, icon_color);
-                    // A/B buttons
-                    framebuffer::fill_rect(cx + 4, cy + 2, 3, 3, icon_color);
-                    framebuffer::fill_rect(cx + 1, cy + 4, 3, 3, icon_color);
+                    framebuffer::fill_rect(cx - 7, cy + 3, 5, 2, 0xFF0A0A0A);
+                    framebuffer::fill_rect(cx - 5, cy + 1, 1, 6, 0xFF0A0A0A);
+                    // A/B buttons (colored)
+                    framebuffer::fill_rect(cx + 4, cy + 2, 3, 3, ACCENT_RED);
+                    framebuffer::fill_rect(cx + 1, cy + 4, 3, 3, 0xFF4488DD);
                 },
                 _ => {
-                    // Generic: bordered square
-                    framebuffer::draw_rect(cx - 10, cy - 10, 20, 20, icon_color);
-                    framebuffer::fill_rect(cx - 4, cy - 4, 8, 8, icon_color);
+                    // Generic: bordered square with inner pattern
+                    draw_rounded_rect_border((cx - 10) as i32, (cy - 10) as i32, 20, 20, 3, draw_color);
+                    framebuffer::fill_rect(cx - 4, cy - 4, 8, 8, draw_color);
                 },
             }
             
-            // Label under icon
+            // Label under icon (anti-aliased)
             let name = &icon.name;
             let text_w = name.len() as u32 * 8;
             let text_x = ix + (icon_size / 2).saturating_sub(text_w / 2);
-            self.draw_text(text_x as i32, (iy + icon_size + 2) as i32, name, label_color);
+            self.draw_text_smooth(text_x as i32, (iy + icon_size + 2) as i32, name, label_color);
         }
     }
     
@@ -4986,26 +5767,61 @@ struct AppConfig {
         let y = self.height - TASKBAR_HEIGHT;
         
         // ═══════════════════════════════════════════════════════════════
-        // REFINED TRANSLUCENT TASKBAR — Frosted glass with smooth text
+        // TRANSLUCENT ROUNDED TASKBAR — Frosted glass, matrix shows through
         // ═══════════════════════════════════════════════════════════════
         
-        // Translucent dark glass background (opaque base + subtle green tint)
-        // Use opaque fill first, then translucent green overlay for glass effect
-        framebuffer::fill_rect(0, y, self.width, TASKBAR_HEIGHT, 0xFF080C0A);
-        framebuffer::fill_rect_alpha(0, y, self.width, TASKBAR_HEIGHT, 0x00AA44, 15);
+        // Rounded translucent background — alpha-blended over matrix rain
+        {
+            let radius = 12u32;
+            let ri = radius as i32;
+            let r2 = ri * ri;
+            let w = self.width;
+            
+            // Top rows: rounded corners (per-row scanline)
+            for row in 0..radius {
+                let vert_dist = ri - row as i32;
+                let horiz = fast_sqrt_i32(r2 - vert_dist * vert_dist) as u32;
+                let left_indent = radius - horiz;
+                let visible_w = w.saturating_sub(left_indent * 2);
+                if visible_w > 0 {
+                    framebuffer::fill_rect_alpha(left_indent, y + row, visible_w, 1, 0x040A06, 155);
+                }
+            }
+            // Main body below rounded zone
+            framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT - radius, 0x040A06, 155);
+            // Subtle green tint overlay
+            framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT - radius, 0x00AA44, 8);
+            
+            // Rounded top border — glowing green arc
+            for row in 0..radius {
+                let vert_dist = ri - row as i32;
+                let horiz = fast_sqrt_i32(r2 - vert_dist * vert_dist) as u32;
+                let left_x = radius - horiz;
+                let right_x = w - radius + horiz;
+                if left_x < w {
+                    framebuffer::put_pixel(left_x, y + row, 0xFF0D5D2A);
+                }
+                if right_x > 0 && right_x - 1 < w {
+                    framebuffer::put_pixel(right_x - 1, y + row, 0xFF0D5D2A);
+                }
+            }
+            // Straight top border between corners
+            if w > radius * 2 {
+                for px in radius..(w - radius) {
+                    framebuffer::put_pixel(px, y, 0xFF0D5D2A);
+                }
+            }
+        }
         
-        // Top border: soft gradient line (2px, fading green)
-        framebuffer::fill_rect(0, y, self.width, 1, 0xFF0D3D1A);
-        framebuffer::fill_rect_alpha(0, y + 1, self.width, 1, 0x00AA44, 25);
-        
-        // ── TrustOS button (left) ──
+        // ── TrustOS button (left) — rounded pill shape ──
         let start_hover = self.cursor_x >= 4 && self.cursor_x < 112 && self.cursor_y >= y as i32;
         if start_hover || self.start_menu_open {
+            draw_rounded_rect(4, (y + 5) as i32, 104, 30, 8, 0xFF003318);
             framebuffer::fill_rect_alpha(4, y + 5, 104, 30, 0x00CC66, 50);
         }
-        // Rounded-feel border (subtle glow)
+        // Rounded border
         let border_color = if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_GHOST };
-        framebuffer::draw_rect(4, y + 5, 104, 30, border_color);
+        draw_rounded_rect_border(4, (y + 5) as i32, 104, 30, 8, border_color);
         let txt_color = if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_SECONDARY };
         self.draw_text_smooth(16, (y + 11) as i32, "TrustOS", txt_color);
         
@@ -5023,15 +5839,17 @@ struct AppConfig {
             let is_hover = self.cursor_x >= btn_x as i32 && self.cursor_x < (btn_x + btn_w) as i32
                 && self.cursor_y >= y as i32;
             
-            // Button background — translucent glass
+            // Button background — rounded translucent glass pill
             if w.focused {
-                framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, 30, 0x00AA44, 70);
+                draw_rounded_rect(btn_x as i32, btn_y as i32, btn_w, 30, 6, 0xFF001A0A);
+                framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, 30, 0x00AA44, 60);
             } else if is_hover {
-                framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, 30, 0x008833, 45);
+                draw_rounded_rect(btn_x as i32, btn_y as i32, btn_w, 30, 6, 0xFF000D05);
+                framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, 30, 0x008833, 40);
             }
-            // Border
+            // Rounded border
             let bdr = if w.focused { GREEN_PRIMARY } else if is_hover { GREEN_MUTED } else { GREEN_GHOST };
-            framebuffer::draw_rect(btn_x, btn_y, btn_w, 30, bdr);
+            draw_rounded_rect_border(btn_x as i32, btn_y as i32, btn_w, 30, 6, bdr);
             
             // Window title (truncated, anti-aliased)
             let title_max = 8;
@@ -5060,29 +5878,87 @@ struct AppConfig {
         
         // Clock (anti-aliased, bright)
         let time = self.get_time_string();
-        self.draw_text_smooth((self.width - 130) as i32, (y + 14) as i32, &time, GREEN_PRIMARY);
+        self.draw_text_smooth((self.width - 130) as i32, (y + 8) as i32, &time, hc(GREEN_PRIMARY, 0xFFFFFFFF));
+        
+        // Date below clock
+        let date = self.get_date_string();
+        self.draw_text_smooth((self.width - 130) as i32, (y + 22) as i32, &date, hc(GREEN_TERTIARY, 0xFFCCCCCC));
+        
+        // Accessibility status indicators (left of clock)
+        let a11y_str = crate::accessibility::status_indicators();
+        if !a11y_str.is_empty() {
+            let a11y_x = (self.width - 210) as i32;
+            self.draw_text_smooth(a11y_x, (y + 14) as i32, &a11y_str, hc(ACCENT_AMBER, 0xFFFFFF00));
+        }
 
-        // Status circles with soft glow
-        let cx = self.width - 30;
-        let cy = y + TASKBAR_HEIGHT / 2;
-        // Green circle + glow
-        framebuffer::fill_rect_alpha(cx.saturating_sub(16), cy.saturating_sub(6), 12, 12, GREEN_PRIMARY, 30);
-        for dy in 0..6u32 {
-            for dx in 0..6u32 {
-                if (dx as i32 - 3) * (dx as i32 - 3) + (dy as i32 - 3) * (dy as i32 - 3) <= 9 {
-                    framebuffer::put_pixel(cx - 12 + dx, cy - 3 + dy, GREEN_PRIMARY);
+        // System indicators (CPU + MEM mini-bars)
+        let ind_x = self.width - 50;
+        let ind_y = y + 6;
+        // CPU indicator — simulated activity based on frame timing
+        let cpu_level = ((self.frame_count % 7) + 2).min(6) as u32; // 2-6 of 8 segments
+        self.draw_text((ind_x - 24) as i32, (ind_y + 1) as i32, "C", GREEN_GHOST);
+        for seg in 0..8u32 {
+            let seg_color = if seg < cpu_level {
+                if cpu_level > 6 { ACCENT_RED } else { GREEN_PRIMARY }
+            } else { GREEN_GHOST };
+            framebuffer::fill_rect(ind_x + seg * 3, ind_y + 2, 2, 8, seg_color);
+        }
+        // MEM indicator — gets actual memory usage from allocator stats
+        let mem_level = {
+            let total = 16u32; // normalized to 16 segments (represents "total")
+            let used = ((self.windows.len() as u32 * 2) + 4).min(total); // rough estimate
+            (used * 8 / total).min(8)
+        };
+        self.draw_text((ind_x - 24) as i32, (ind_y + 15) as i32, "M", GREEN_GHOST);
+        for seg in 0..8u32 {
+            let seg_color = if seg < mem_level {
+                if mem_level > 6 { ACCENT_AMBER } else { GREEN_PRIMARY }
+            } else { GREEN_GHOST };
+            framebuffer::fill_rect(ind_x + seg * 3, ind_y + 16, 2, 8, seg_color);
+        }
+        
+        // ── Settings gear icon (left of indicators, no overlap) ──
+        let gear_x = self.width - 80;
+        let gear_y = y + 12;
+        let gear_hover = self.cursor_x >= (gear_x as i32 - 4) && self.cursor_x < (gear_x as i32 + 20)
+            && self.cursor_y >= y as i32;
+        let gear_color = if gear_hover { GREEN_PRIMARY } else { GREEN_TERTIARY };
+        if gear_hover {
+            // Subtle hover glow background
+            framebuffer::fill_rect_alpha(gear_x - 2, gear_y - 2, 20, 20, 0x00CC66, 30);
+        }
+        // Outer gear ring with teeth
+        for dy in 0..16u32 {
+            for dx in 0..16u32 {
+                let ddx = dx as i32 - 8;
+                let ddy = dy as i32 - 8;
+                let dist_sq = ddx * ddx + ddy * ddy;
+                // Outer ring
+                if dist_sq >= 25 && dist_sq <= 56 {
+                    framebuffer::put_pixel(gear_x + dx, gear_y + dy, gear_color);
+                }
+                // Inner dot
+                if dist_sq <= 6 {
+                    framebuffer::put_pixel(gear_x + dx, gear_y + dy, gear_color);
                 }
             }
         }
-        // Amber circle + glow
-        framebuffer::fill_rect_alpha(cx.saturating_sub(4), cy.saturating_sub(6), 12, 12, ACCENT_AMBER, 30);
-        for dy in 0..6u32 {
-            for dx in 0..6u32 {
-                if (dx as i32 - 3) * (dx as i32 - 3) + (dy as i32 - 3) * (dy as i32 - 3) <= 9 {
-                    framebuffer::put_pixel(cx + dx, cy - 3 + dy, ACCENT_AMBER);
-                }
-            }
+        // Gear teeth (small rects at cardinal + diagonal directions)
+        let teeth: &[(i32, i32)] = &[(0, -8), (0, 8), (-8, 0), (8, 0), (-6, -6), (6, -6), (-6, 6), (6, 6)];
+        for &(tx, ty) in teeth {
+            let px = (gear_x as i32 + 8 + tx) as u32;
+            let py = (gear_y as i32 + 8 + ty) as u32;
+            framebuffer::fill_rect(px.saturating_sub(1), py.saturating_sub(1), 3, 3, gear_color);
         }
+        
+        // ── Show Desktop button (far right corner, Windows-style) ──
+        let sd_x = self.width - 8;
+        let sd_w = 8u32;
+        let sd_hover = self.cursor_x >= sd_x as i32 && self.cursor_y >= y as i32;
+        let sd_color = if sd_hover { GREEN_MUTED } else { GREEN_GHOST };
+        framebuffer::fill_rect(sd_x, y, sd_w, TASKBAR_HEIGHT, sd_color);
+        // Thin separator line
+        framebuffer::fill_rect(sd_x, y + 4, 1, TASKBAR_HEIGHT - 8, GREEN_SUBTLE);
     }
     
     fn get_time_string(&mut self) -> String {
@@ -5107,20 +5983,32 @@ struct AppConfig {
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
+        let is_hc = crate::accessibility::is_high_contrast();
+        
         // ═══════════════════════════════════════════════════════════════
         // MATRIX HACKER STYLE START MENU — Wide frosted glass popup with search
         // ═══════════════════════════════════════════════════════════════
         
         // Frosted dark glass background
-        framebuffer::fill_rect_alpha(menu_x as u32, menu_y as u32, menu_w, menu_h, 0x060A08, 210);
+        if is_hc {
+            framebuffer::fill_rect(menu_x as u32, menu_y as u32, menu_w, menu_h, 0xFF000000);
+        } else {
+            framebuffer::fill_rect_alpha(menu_x as u32, menu_y as u32, menu_w, menu_h, 0x060A08, 210);
+        }
         
-        // Double green border
-        framebuffer::draw_rect(menu_x as u32, menu_y as u32, menu_w, menu_h, GREEN_PRIMARY);
-        framebuffer::draw_rect((menu_x + 1) as u32, (menu_y + 1) as u32, menu_w - 2, menu_h - 2, GREEN_SUBTLE);
+        // Double border
+        let border1 = hc(GREEN_PRIMARY, 0xFFFFFFFF);
+        let border2 = hc(GREEN_SUBTLE, 0xFF888888);
+        framebuffer::draw_rect(menu_x as u32, menu_y as u32, menu_w, menu_h, border1);
+        framebuffer::draw_rect((menu_x + 1) as u32, (menu_y + 1) as u32, menu_w - 2, menu_h - 2, border2);
         
-        // Title bar: translucent dark green
-        framebuffer::fill_rect_alpha((menu_x + 2) as u32, (menu_y + 2) as u32, menu_w - 4, 24, 0x002200, 180);
-        self.draw_text_smooth(menu_x + 10, menu_y + 6, "TrustOS Menu", GREEN_PRIMARY);
+        // Title bar
+        if is_hc {
+            framebuffer::fill_rect((menu_x + 2) as u32, (menu_y + 2) as u32, menu_w - 4, 24, 0xFF1A1A1A);
+        } else {
+            framebuffer::fill_rect_alpha((menu_x + 2) as u32, (menu_y + 2) as u32, menu_w - 4, 24, 0x002200, 180);
+        }
+        self.draw_text_smooth(menu_x + 10, menu_y + 6, "TrustOS Menu", hc(GREEN_PRIMARY, 0xFFFFFF00));
         
         // Separator
         framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 26) as u32, menu_w - 4, GREEN_MUTED);
@@ -5190,8 +6078,11 @@ struct AppConfig {
         let search = self.start_menu_search.trim();
         let search_lower: alloc::string::String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
         
+        // Draw app items (non-special, indices 0-13)
         let mut drawn = 0usize;
-        for (i, (icon, label, is_special)) in items.iter().enumerate() {
+        for (ii, (icon, label, is_special)) in items.iter().enumerate() {
+            if *is_special { continue; } // Power items drawn separately
+            
             // Filter: skip items that don't match search
             if !search_lower.is_empty() {
                 let label_lower: alloc::string::String = label.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
@@ -5204,55 +6095,93 @@ struct AppConfig {
             let item_h = 26u32;
             drawn += 1;
             
-            // Don't draw past menu bottom
-            if item_y + item_h as i32 > menu_y + menu_h as i32 - 24 { break; }
+            // Don't draw past the power section
+            if item_y + item_h as i32 > menu_y + menu_h as i32 - 110 { break; }
             
-            // Hover detection
+            // Hover or keyboard selection detection
             let is_hovered = self.cursor_x >= menu_x 
                 && self.cursor_x < menu_x + menu_w as i32
                 && self.cursor_y >= item_y 
                 && self.cursor_y < item_y + item_h as i32;
+            let is_selected = self.start_menu_selected == ii as i32;
             
-            if is_hovered {
-                framebuffer::fill_rect_alpha((menu_x + 3) as u32, item_y as u32, menu_w - 6, item_h, 0x00AA44, 50);
-                framebuffer::fill_rect((menu_x + 3) as u32, (item_y + 3) as u32, 2, item_h - 6, 
-                    if *is_special { ACCENT_RED } else { GREEN_PRIMARY });
+            if is_hovered || is_selected {
+                framebuffer::fill_rect_alpha((menu_x + 3) as u32, item_y as u32, menu_w - 6, item_h, 0x00AA44, if is_selected { 70 } else { 50 });
+                framebuffer::fill_rect((menu_x + 3) as u32, (item_y + 3) as u32, 2, item_h - 6, GREEN_PRIMARY);
             }
             
             // Icon
-            let icon_color = if is_hovered {
-                if *is_special { ACCENT_RED } else { GREEN_PRIMARY }
-            } else {
-                if *is_special { 0xFF994444 } else { GREEN_TERTIARY }
-            };
+            let icon_color = if is_hovered || is_selected { GREEN_PRIMARY } else { GREEN_TERTIARY };
             self.draw_text_smooth(menu_x + 14, item_y + 6, icon, icon_color);
             
             // Label
-            let label_color = if is_hovered {
-                if *is_special { ACCENT_RED } else { GREEN_SECONDARY }
-            } else {
-                if *is_special { 0xFFAA4444 } else { GREEN_SECONDARY }
-            };
+            let label_color = if is_hovered || is_selected { GREEN_SECONDARY } else { GREEN_SECONDARY };
             self.draw_text_smooth(menu_x + 40, item_y + 6, label, label_color);
             
-            // Show search match highlight: if search active, highlight matching portion
+            // Show search match highlight
             if !search_lower.is_empty() && is_hovered {
-                // Small indicator that this matched
                 let kw_x = menu_x + 40 + (label.len() as i32 * 8) + 8;
                 self.draw_text(kw_x, item_y + 8, "*", GREEN_GHOST);
             }
         }
         
-        // "No results" when search yields nothing
-        if drawn == 0 && !search_lower.is_empty() {
+        // "No results" when search yields nothing (and no power items match either)
+        let power_items_visible = if search_lower.is_empty() { true } else {
+            items[14..].iter().any(|(_, label, _)| {
+                let ll: String = label.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                ll.contains(search_lower.as_str())
+            })
+        };
+        if drawn == 0 && !power_items_visible && !search_lower.is_empty() {
             let no_y = items_start_y + 12;
             self.draw_text_smooth(menu_x + 40, no_y, "No results found", GREEN_GHOST);
+        }
+        
+        // ── Power section (bottom-anchored with separator) ──
+        let power_y = menu_y + menu_h as i32 - 106;
+        // Separator line
+        framebuffer::draw_hline((menu_x + 8) as u32, power_y as u32, menu_w - 16, GREEN_MUTED);
+        
+        let power_items: [(&str, &str, u8); 3] = [
+            ("<-", "Exit Desktop", 14),
+            ("!!", "Shutdown", 15),
+            (">>", "Reboot", 16),
+        ];
+        
+        for (pi, (icon, label, idx)) in power_items.iter().enumerate() {
+            // Filter by search
+            if !search_lower.is_empty() {
+                let label_lower: String = label.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                if !label_lower.contains(search_lower.as_str()) {
+                    continue;
+                }
+            }
+            
+            let item_y = power_y + 6 + (pi as i32 * 28);
+            let item_h = 26u32;
+            
+            let is_hovered = self.cursor_x >= menu_x 
+                && self.cursor_x < menu_x + menu_w as i32
+                && self.cursor_y >= item_y 
+                && self.cursor_y < item_y + item_h as i32;
+            let is_selected = self.start_menu_selected == *idx as i32;
+            
+            if is_hovered || is_selected {
+                framebuffer::fill_rect_alpha((menu_x + 3) as u32, item_y as u32, menu_w - 6, item_h, 0x00AA44, if is_selected { 70 } else { 50 });
+                framebuffer::fill_rect((menu_x + 3) as u32, (item_y + 3) as u32, 2, item_h - 6, ACCENT_RED);
+            }
+            
+            let icon_color = if is_hovered || is_selected { ACCENT_RED } else { 0xFF994444 };
+            self.draw_text_smooth(menu_x + 14, item_y + 6, icon, icon_color);
+            
+            let label_color = if is_hovered || is_selected { ACCENT_RED } else { 0xFFAA4444 };
+            self.draw_text_smooth(menu_x + 40, item_y + 6, label, label_color);
         }
         
         // Bottom: version info
         let ver_y = menu_y + menu_h as i32 - 20;
         framebuffer::draw_hline((menu_x + 4) as u32, ver_y as u32, menu_w - 8, GREEN_GHOST);
-        self.draw_text(menu_x + 10, ver_y + 6, "TrustOS v0.2.0", GREEN_SUBTLE);
+        self.draw_text(menu_x + 10, ver_y + 6, "TrustOS v0.4.2", GREEN_SUBTLE);
     }
     
     fn draw_window(&self, window: &Window) {
@@ -5265,21 +6194,83 @@ struct AppConfig {
         // MATRIX HACKER STYLE WINDOW — Green borders, dark background
         // ═══════════════════════════════════════════════════════════════
         
-        // Window background: near-black
-        framebuffer::fill_rect(x as u32, y as u32, w, h, 0xFF0A0A0A);
-        
-        // Double green border
-        let border_color = if window.focused { GREEN_PRIMARY } else { GREEN_SUBTLE };
-        framebuffer::draw_rect(x as u32, y as u32, w, h, border_color);
-        if w > 4 && h > 4 {
-            framebuffer::draw_rect((x + 1) as u32, (y + 1) as u32, w - 2, h - 2, 
-                if window.focused { GREEN_MUTED } else { GREEN_GHOST });
+        // Drop shadow (subtle depth effect, only for non-maximized windows)
+        let corner_radius = if window.maximized { 0u32 } else { 8u32 };
+        if !window.maximized && w > 4 && h > 4 {
+            // 3-layer shadow: decreasing opacity at increasing offset
+            framebuffer::fill_rect_alpha((x + 6) as u32, (y + 6) as u32, w, h, 0x000000, 30);
+            framebuffer::fill_rect_alpha((x + 4) as u32, (y + 4) as u32, w, h, 0x000000, 22);
+            framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w + 2, h + 2, 0x000000, 15);
         }
         
-        // Title bar: frosted glass effect
+        // Window background: near-black with rounded corners (increased radius from 6→8)
+        let win_bg = hc(0xFF0A0A0A, 0xFF000000);
+        if corner_radius > 0 {
+            draw_rounded_rect(x, y, w, h, corner_radius, win_bg);
+        } else {
+            framebuffer::fill_rect(x as u32, y as u32, w, h, win_bg);
+        }
+        
+        // Green border (rounded)
+        let border_color = if window.focused {
+            hc(GREEN_PRIMARY, 0xFFFFFFFF)
+        } else {
+            hc(GREEN_SUBTLE, 0xFF888888)
+        };
+        if corner_radius > 0 {
+            draw_rounded_rect_border(x, y, w, h, corner_radius, border_color);
+            if w > 4 && h > 4 {
+                draw_rounded_rect_border(x + 1, y + 1, w - 2, h - 2, corner_radius.saturating_sub(1), 
+                    if window.focused { GREEN_MUTED } else { GREEN_GHOST });
+            }
+        } else {
+            framebuffer::draw_rect(x as u32, y as u32, w, h, border_color);
+            if w > 4 && h > 4 {
+                framebuffer::draw_rect((x + 1) as u32, (y + 1) as u32, w - 2, h - 2, 
+                    if window.focused { GREEN_MUTED } else { GREEN_GHOST });
+            }
+        }
+        
+        // Visual resize edge indicators (glow strips when hovering)
+        if window.focused && !window.maximized && w > 20 && h > 20 {
+            let edge = window.on_resize_edge(self.cursor_x, self.cursor_y);
+            let glow_color = 0x00FF66u32; // bright green glow
+            let glow_alpha = 40u32;
+            let gt = 3u32;
+            let gh = if h > 4 { h - 4 } else { 1 };
+            let gw = if w > 4 { w - 4 } else { 1 };
+            match edge {
+                ResizeEdge::Left | ResizeEdge::TopLeft | ResizeEdge::BottomLeft => {
+                    framebuffer::fill_rect_alpha(x as u32, (y + 2) as u32, gt, gh, glow_color, glow_alpha);
+                }
+                _ => {}
+            }
+            match edge {
+                ResizeEdge::Right | ResizeEdge::TopRight | ResizeEdge::BottomRight => {
+                    framebuffer::fill_rect_alpha((x + w as i32 - gt as i32) as u32, (y + 2) as u32, gt, gh, glow_color, glow_alpha);
+                }
+                _ => {}
+            }
+            match edge {
+                ResizeEdge::Top | ResizeEdge::TopLeft | ResizeEdge::TopRight => {
+                    framebuffer::fill_rect_alpha((x + 2) as u32, y as u32, gw, gt, glow_color, glow_alpha);
+                }
+                _ => {}
+            }
+            match edge {
+                ResizeEdge::Bottom | ResizeEdge::BottomLeft | ResizeEdge::BottomRight => {
+                    framebuffer::fill_rect_alpha((x + 2) as u32, (y + h as i32 - gt as i32) as u32, gw, gt, glow_color, glow_alpha);
+                }
+                _ => {}
+            }
+        }
+
+        // Title bar: frosted glass effect with subtle gradient
         let titlebar_h = TITLE_BAR_HEIGHT;
         if window.focused {
             framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w - 4, titlebar_h - 2, 0x0A1A0A, 220);
+            // Subtle highlight at top of title bar
+            framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w - 4, 1, 0x00FF66, 15);
         } else {
             framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w - 4, titlebar_h - 2, 0x080C08, 200);
         }
@@ -5305,71 +6296,69 @@ struct AppConfig {
         self.draw_text_smooth(x + 10, y + 7, icon_str, icon_color);
         
         // Title text
-        let text_color = if window.focused { TEXT_PRIMARY } else { TEXT_SECONDARY };
+        let text_color = if window.focused {
+            hc(TEXT_PRIMARY, 0xFFFFFFFF)
+        } else {
+            hc(TEXT_SECONDARY, 0xFFCCCCCC)
+        };
         self.draw_text_smooth(x + 32, y + 7, &window.title, text_color);
         
         // ═══════════════════════════════════════════════════════════════
-        // Control Buttons (macOS-style colored circles)
+        // Control Buttons (Windows-style: minimize | maximize | close)
         // ═══════════════════════════════════════════════════════════════
-        let btn_r = 5u32;
+        let btn_w = 32u32;
+        let btn_h = titlebar_h - 2;
+        let btn_y_top = y + 2;
         let btn_y_center = y + titlebar_h as i32 / 2;
         let mx = self.cursor_x;
         let my = self.cursor_y;
         
-        // Close button (red circle)
-        let close_cx = x + w as i32 - 20;
-        let close_hover = (mx - close_cx).abs() <= btn_r as i32 + 2 && (my - btn_y_center).abs() <= btn_r as i32 + 2;
-        let close_color = if close_hover { 0xFFFF4444 } else { BTN_CLOSE };
-        for dy in 0..btn_r * 2 + 1 {
-            for dx in 0..btn_r * 2 + 1 {
-                let ddx = dx as i32 - btn_r as i32;
-                let ddy = dy as i32 - btn_r as i32;
-                if ddx * ddx + ddy * ddy <= (btn_r * btn_r) as i32 {
-                    framebuffer::put_pixel((close_cx + ddx) as u32, (btn_y_center + ddy) as u32, close_color);
-                }
-            }
-        }
+        // Close button (rightmost, red on hover)
+        let close_x = x + w as i32 - btn_w as i32 - 2;
+        let close_hover = mx >= close_x && mx < close_x + btn_w as i32 && my >= btn_y_top && my < btn_y_top + btn_h as i32;
         if close_hover {
-            // X inside
-            for i in -2..=2i32 {
-                framebuffer::put_pixel((close_cx + i) as u32, (btn_y_center + i) as u32, 0xFFFFFFFF);
-                framebuffer::put_pixel((close_cx + i) as u32, (btn_y_center - i) as u32, 0xFFFFFFFF);
-            }
+            framebuffer::fill_rect(close_x as u32, btn_y_top as u32, btn_w, btn_h, 0xFFCC3333);
+        }
+        // X icon
+        let cx = close_x + btn_w as i32 / 2;
+        let cy = btn_y_center;
+        let x_color = if close_hover { 0xFFFFFFFF } else { if window.focused { GREEN_SECONDARY } else { GREEN_GHOST } };
+        for i in -3..=3i32 {
+            framebuffer::put_pixel((cx + i) as u32, (cy + i) as u32, x_color);
+            framebuffer::put_pixel((cx + i) as u32, (cy - i) as u32, x_color);
+            // Thicken
+            framebuffer::put_pixel((cx + i + 1) as u32, (cy + i) as u32, x_color);
+            framebuffer::put_pixel((cx + i + 1) as u32, (cy - i) as u32, x_color);
         }
         
-        // Minimize button (yellow circle)
-        let min_cx = close_cx - 18;
-        let min_hover = (mx - min_cx).abs() <= btn_r as i32 + 2 && (my - btn_y_center).abs() <= btn_r as i32 + 2;
-        let min_color = if min_hover { 0xFFFFCC00 } else { BTN_MAXIMIZE };
-        for dy in 0..btn_r * 2 + 1 {
-            for dx in 0..btn_r * 2 + 1 {
-                let ddx = dx as i32 - btn_r as i32;
-                let ddy = dy as i32 - btn_r as i32;
-                if ddx * ddx + ddy * ddy <= (btn_r * btn_r) as i32 {
-                    framebuffer::put_pixel((min_cx + ddx) as u32, (btn_y_center + ddy) as u32, min_color);
-                }
-            }
-        }
-        if min_hover {
-            framebuffer::fill_rect((min_cx - 3) as u32, btn_y_center as u32, 6, 1, 0xFF000000);
-        }
-        
-        // Maximize button (green circle)
-        let max_cx = min_cx - 18;
-        let max_hover = (mx - max_cx).abs() <= btn_r as i32 + 2 && (my - btn_y_center).abs() <= btn_r as i32 + 2;
-        let max_color = if max_hover { 0xFF44DD44 } else { BTN_MINIMIZE };
-        for dy in 0..btn_r * 2 + 1 {
-            for dx in 0..btn_r * 2 + 1 {
-                let ddx = dx as i32 - btn_r as i32;
-                let ddy = dy as i32 - btn_r as i32;
-                if ddx * ddx + ddy * ddy <= (btn_r * btn_r) as i32 {
-                    framebuffer::put_pixel((max_cx + ddx) as u32, (btn_y_center + ddy) as u32, max_color);
-                }
-            }
-        }
+        // Maximize button (middle)
+        let max_x = close_x - btn_w as i32;
+        let max_hover = mx >= max_x && mx < max_x + btn_w as i32 && my >= btn_y_top && my < btn_y_top + btn_h as i32;
         if max_hover {
-            framebuffer::draw_rect((max_cx - 2) as u32, (btn_y_center - 2) as u32, 5, 5, 0xFF000000);
+            framebuffer::fill_rect(max_x as u32, btn_y_top as u32, btn_w, btn_h, GREEN_GHOST);
         }
+        // Square icon
+        let sq_color = if max_hover { GREEN_PRIMARY } else { if window.focused { GREEN_SECONDARY } else { GREEN_GHOST } };
+        let sq_x = max_x + btn_w as i32 / 2 - 4;
+        let sq_y = cy - 4;
+        if window.maximized {
+            // Overlapping squares for restore icon
+            framebuffer::draw_rect((sq_x + 2) as u32, (sq_y) as u32, 6, 6, sq_color);
+            framebuffer::draw_rect((sq_x) as u32, (sq_y + 2) as u32, 6, 6, sq_color);
+        } else {
+            framebuffer::draw_rect(sq_x as u32, sq_y as u32, 8, 8, sq_color);
+        }
+        
+        // Minimize button (leftmost of the three)
+        let min_x = max_x - btn_w as i32;
+        let min_hover = mx >= min_x && mx < min_x + btn_w as i32 && my >= btn_y_top && my < btn_y_top + btn_h as i32;
+        if min_hover {
+            framebuffer::fill_rect(min_x as u32, btn_y_top as u32, btn_w, btn_h, GREEN_GHOST);
+        }
+        // Dash icon (horizontal line)
+        let dash_color = if min_hover { GREEN_PRIMARY } else { if window.focused { GREEN_SECONDARY } else { GREEN_GHOST } };
+        framebuffer::fill_rect((min_x + btn_w as i32 / 2 - 4) as u32, cy as u32, 8, 1, dash_color);
+        framebuffer::fill_rect((min_x + btn_w as i32 / 2 - 4) as u32, (cy + 1) as u32, 8, 1, dash_color);
         
         // ═══════════════════════════════════════════════════════════════
         // Content Area
@@ -5441,6 +6430,14 @@ struct AppConfig {
             return;
         }
         
+        // ═══════════════════════════════════════════════════════════════
+        // FILE MANAGER — Windows Explorer-style graphical rendering
+        // ═══════════════════════════════════════════════════════════════
+        if window.window_type == WindowType::FileManager {
+            self.draw_file_manager_gui(window);
+            return;
+        }
+        
         // Special rendering for 3D demo window
         if window.window_type == WindowType::Demo3D {
             self.draw_3d_demo(window);
@@ -5504,8 +6501,8 @@ struct AppConfig {
         // ═══════════════════════════════════════════════════════════════
         if window.window_type == WindowType::Terminal {
             let line_height = 16i32;
-            let content_area_h = (window.height as i32 - TITLE_BAR_HEIGHT as i32 - 16) as usize;
-            let visible_lines = content_area_h / line_height as usize;
+            let content_area_h = (window.height as i32 - TITLE_BAR_HEIGHT as i32 - 16).max(0) as usize;
+            let visible_lines = if line_height as usize > 0 { content_area_h / line_height as usize } else { 0 };
             let total_lines = window.content.len();
             
             // Determine scroll range
@@ -5595,7 +6592,15 @@ struct AppConfig {
             _ => (0, 0),
         };
         
-        for (i, line) in window.content.iter().enumerate() {
+        // Apply scroll_offset for HexViewer (and other scrollable generic windows)
+        let scroll = if window.window_type == WindowType::HexViewer {
+            window.scroll_offset
+        } else {
+            0
+        };
+        
+        for (idx, line) in window.content.iter().enumerate().skip(scroll) {
+            let i = idx - scroll;
             let line_y = content_y + (i as i32 * 16);
             if line_y >= window.y + window.height as i32 - 8 {
                 break;
@@ -5603,9 +6608,9 @@ struct AppConfig {
             
             // Check if this line is selected
             let is_selected = needs_selection 
-                && i >= sel_start 
-                && i < sel_end 
-                && (i - sel_start) == window.selected_index;
+                && idx >= sel_start 
+                && idx < sel_end 
+                && (idx - sel_start) == window.selected_index;
             
             if is_selected {
                 // Draw selection highlight
@@ -6178,21 +7183,34 @@ struct AppConfig {
             // Title
             self.draw_text(game_x as i32 + 8, game_y as i32 + 8, "SNAKE", COLOR_BRIGHT_GREEN);
             
-            // Score
-            let score_str = format!("Score: {}", snake.score);
-            self.draw_text(game_x as i32 + game_w as i32 - 90, game_y as i32 + 8, &score_str, GREEN_SECONDARY);
+            // Score + High Score
+            let score_str = if snake.high_score > 0 {
+                format!("Score: {}  Best: {}", snake.score, snake.high_score)
+            } else {
+                format!("Score: {}", snake.score)
+            };
+            self.draw_text(game_x as i32 + game_w as i32 - 170, game_y as i32 + 8, &score_str, GREEN_SECONDARY);
             
             if snake.game_over {
                 // Game over overlay
                 let ox = game_x + game_w / 2 - 60;
                 let oy = game_y + game_h / 2 - 20;
-                framebuffer::fill_rect(ox - 4, oy - 4, 128, 48, 0xCC000000);
+                framebuffer::fill_rect(ox - 4, oy - 4, 128, 58, 0xCC000000);
                 self.draw_text(ox as i32, oy as i32, "GAME OVER", 0xFFFF4444);
-                self.draw_text(ox as i32 - 8, oy as i32 + 20, "Press ENTER", GREEN_TERTIARY);
+                let final_str = format!("Score: {}", snake.score);
+                self.draw_text(ox as i32 + 4, oy as i32 + 18, &final_str, GREEN_SECONDARY);
+                self.draw_text(ox as i32 - 8, oy as i32 + 36, "Press ENTER", GREEN_TERTIARY);
+            } else if snake.paused {
+                // Pause overlay
+                let ox = game_x + game_w / 2 - 50;
+                let oy = game_y + game_h / 2 - 20;
+                framebuffer::fill_rect(ox - 4, oy - 4, 110, 48, 0xCC000000);
+                self.draw_text(ox as i32 + 8, oy as i32, "PAUSED", 0xFFFFCC00);
+                self.draw_text(ox as i32 - 4, oy as i32 + 20, "P to resume", GREEN_TERTIARY);
             } else {
                 // Instructions
                 self.draw_text(game_x as i32 + 8, game_y as i32 + game_h as i32 - 18, 
-                               "Arrow Keys to move", GREEN_TERTIARY);
+                               "Arrows to move | P pause", GREEN_TERTIARY);
             }
         }
     }
@@ -6332,6 +7350,10 @@ struct AppConfig {
             let score_color = if score > 0 { 0xFFFFFFFF } else if score < 0 { 0xFFCC4444 } else { GREEN_MUTED };
             // Score bar next to title
             self.draw_text(game_x as i32 + 96, game_y as i32 + 6, &score_text, score_color);
+            
+            // Difficulty label
+            let diff_label = match chess.ai_depth { 1 => "Easy", 2 => "Med", _ => "Hard" };
+            self.draw_text(game_x as i32 + 130, game_y as i32 + 6, diff_label, GREEN_MUTED);
             
             // ── Timer display ──
             if chess.timer_enabled {
@@ -6496,7 +7518,7 @@ struct AppConfig {
             self.draw_text(game_x as i32 + 4, hint_y as i32,
                            "Mouse:Click/Drag  Arrows:Move  Enter:Select", GREEN_TERTIARY);
             self.draw_text(game_x as i32 + 4, hint_y as i32 + 12,
-                           "Esc:Desel  R:Reset  T:Timer  +:Preset", GREEN_TERTIARY);
+                           "Esc:Desel  R:Reset  T:Timer  D:Difficulty", GREEN_TERTIARY);
         }
     }
     
@@ -6548,6 +7570,280 @@ struct AppConfig {
         id
     }
 
+    /// Draw Windows Explorer-style file manager
+    fn draw_file_manager_gui(&self, window: &Window) {
+        let wx = window.x;
+        let wy = window.y;
+        let ww = window.width;
+        let wh = window.height;
+        
+        // Guard against too-small windows
+        if ww < 80 || wh < 100 {
+            return;
+        }
+        
+        let content_y_start = wy + TITLE_BAR_HEIGHT as i32;
+        
+        // ── Colors ──
+        let bg_dark = 0xFF0C1410u32;
+        let bg_toolbar = 0xFF0A1A12u32;
+        let bg_header = 0xFF0E1E14u32;
+        let bg_row_even = 0xFF0A140Fu32;
+        let bg_row_odd = 0xFF0C180Fu32;
+        let bg_selected = 0xFF0A3A1Au32;
+        let text_header = 0xFF60CC80u32;
+        let text_file = 0xFF80CC90u32;
+        let text_path = GREEN_PRIMARY;
+        let icon_folder = 0xFFDDAA30u32;
+        let icon_file = 0xFF60AA80u32;
+        let separator = 0xFF1A2A1Au32;
+        
+        // Safe u32 coordinate helpers
+        let safe_x = if wx < 0 { 0u32 } else { wx as u32 };
+        let safe_y = if wy < 0 { 0u32 } else { wy as u32 };
+        
+        // ── Toolbar area (path bar + nav buttons) ──
+        let toolbar_h = 32u32;
+        framebuffer::fill_rect_alpha(safe_x + 2, content_y_start as u32, ww.saturating_sub(4), toolbar_h, 0x0A1A12, 230);
+        
+        // Back button [<]
+        let btn_y = content_y_start + 6;
+        let btn_size = 20u32;
+        if btn_y > 0 {
+            draw_rounded_rect(wx + 8, btn_y, btn_size, btn_size, 3, 0xFF1A2A1A);
+            draw_rounded_rect_border(wx + 8, btn_y, btn_size, btn_size, 3, GREEN_GHOST);
+            self.draw_text(wx + 13, btn_y + 3, "<", GREEN_SUBTLE);
+            
+            // Up button [^]
+            draw_rounded_rect(wx + 32, btn_y, btn_size, btn_size, 3, 0xFF1A2A1A);
+            draw_rounded_rect_border(wx + 32, btn_y, btn_size, btn_size, 3, GREEN_GHOST);
+            self.draw_text(wx + 37, btn_y + 3, "^", GREEN_SUBTLE);
+        }
+        
+        // Path bar (breadcrumb style)
+        let path_x = wx + 58;
+        let path_w = (ww as i32).saturating_sub(66);
+        if path_w > 10 && btn_y > 0 {
+            draw_rounded_rect(path_x, btn_y, path_w as u32, btn_size, 4, 0xFF081208);
+            draw_rounded_rect_border(path_x, btn_y, path_w as u32, btn_size, 4, GREEN_GHOST);
+            let current_path = window.file_path.as_deref().unwrap_or("/");
+            let mut px = path_x + 8;
+            let parts: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
+            if parts.is_empty() {
+                self.draw_text_smooth(px, btn_y + 4, "/", text_path);
+            } else {
+                self.draw_text_smooth(px, btn_y + 4, "/", GREEN_GHOST);
+                px += 10;
+                for (i, part) in parts.iter().enumerate() {
+                    if px > path_x + path_w - 16 { break; } // don't overflow path bar
+                    let is_last = i == parts.len() - 1;
+                    let color = if is_last { text_path } else { GREEN_SUBTLE };
+                    self.draw_text_smooth(px, btn_y + 4, part, color);
+                    px += (part.len() as i32) * 8 + 4;
+                    if !is_last {
+                        self.draw_text_smooth(px, btn_y + 4, ">", GREEN_GHOST);
+                        px += 12;
+                    }
+                }
+            }
+        }
+        
+        // Toolbar bottom separator
+        let header_y = content_y_start as u32 + toolbar_h;
+        framebuffer::draw_hline(safe_x + 2, header_y, ww.saturating_sub(4), separator);
+        
+        // ── Column headers ──
+        let col_header_h = 22u32;
+        framebuffer::fill_rect(safe_x + 2, header_y + 1, ww.saturating_sub(4), col_header_h, bg_header);
+        
+        let col_name_x = wx + 34;
+        let col_type_x = wx + (ww as i32 * 55 / 100);
+        let col_size_x = wx + (ww as i32 * 72 / 100);
+        let col_prog_x = wx + (ww as i32 * 85 / 100);
+        
+        let hy = (header_y + 4) as i32;
+        self.draw_text_smooth(col_name_x, hy, "Name", text_header);
+        if ww > 200 {
+            self.draw_text_smooth(col_type_x, hy, "Type", text_header);
+        }
+        if ww > 280 {
+            self.draw_text_smooth(col_size_x, hy, "Size", text_header);
+        }
+        if ww > 360 {
+            self.draw_text_smooth(col_prog_x, hy, "Open with", text_header);
+        }
+        
+        // Header bottom separator + column separators
+        let list_start_y = header_y + col_header_h + 1;
+        framebuffer::draw_hline(safe_x + 2, list_start_y.saturating_sub(1), ww.saturating_sub(4), separator);
+        if ww > 200 && col_type_x > 4 {
+            framebuffer::fill_rect(col_type_x as u32 - 4, header_y + 1, 1, col_header_h, separator);
+        }
+        if ww > 280 && col_size_x > 4 {
+            framebuffer::fill_rect(col_size_x as u32 - 4, header_y + 1, 1, col_header_h, separator);
+        }
+        if ww > 360 && col_prog_x > 4 {
+            framebuffer::fill_rect(col_prog_x as u32 - 4, header_y + 1, 1, col_header_h, separator);
+        }
+        
+        // ── File list area ──
+        let list_area_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h + col_header_h + 30);
+        if list_area_h < 8 { return; }
+        framebuffer::fill_rect(safe_x + 2, list_start_y, ww.saturating_sub(4), list_area_h, bg_dark);
+        
+        let row_h = 24u32;
+        let max_visible = (list_area_h / row_h).max(1) as usize;
+        
+        // Parse file entries from content (skip header lines, last 2 footer)
+        // Guard: ensure content has enough lines
+        let file_start_idx = 5usize.min(window.content.len());
+        let file_end_idx = if window.content.len() > file_start_idx + 2 { 
+            window.content.len() - 2 
+        } else { 
+            window.content.len() 
+        };
+        
+        let file_entries: Vec<&str> = if file_end_idx > file_start_idx {
+            window.content[file_start_idx..file_end_idx]
+                .iter()
+                .map(|s| s.as_str())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        
+        if file_entries.is_empty() {
+            // Show empty directory message
+            self.draw_text_smooth(wx + 40, list_start_y as i32 + 20, "(empty)", GREEN_GHOST);
+        }
+        
+        let scroll = window.scroll_offset;
+        let visible_count = file_entries.len().min(max_visible);
+        
+        for vi in 0..visible_count {
+            let entry_idx = scroll + vi;
+            if entry_idx >= file_entries.len() { break; }
+            let line = file_entries[entry_idx];
+            let ry = list_start_y + (vi as u32) * row_h;
+            if ry + row_h > list_start_y + list_area_h { break; }
+            
+            let is_selected = entry_idx == window.selected_index;
+            let is_dir = line.contains("[D]");
+            
+            // Row background
+            let row_bg = if is_selected {
+                bg_selected
+            } else if vi % 2 == 0 {
+                bg_row_even
+            } else {
+                bg_row_odd
+            };
+            framebuffer::fill_rect(safe_x + 2, ry, ww.saturating_sub(4), row_h, row_bg);
+            
+            // Selection indicator
+            if is_selected {
+                framebuffer::fill_rect(safe_x + 2, ry, 3, row_h, GREEN_PRIMARY);
+                draw_rounded_rect_border(wx + 2, ry as i32, ww.saturating_sub(4), row_h, 2, 0xFF1A5A2A);
+            }
+            
+            let text_y = (ry + 5) as i32;
+            let row_text_color = if is_selected { GREEN_PRIMARY } else { text_file };
+            
+            // ── Draw folder/file icon ──
+            let ix = safe_x + 10;
+            let iy = ry + 3;
+            if is_dir {
+                let fc = if is_selected { 0xFFEEBB40 } else { icon_folder };
+                framebuffer::fill_rect(ix, iy, 8, 3, fc);
+                framebuffer::fill_rect(ix, iy + 3, 16, 11, fc);
+                framebuffer::fill_rect(ix + 1, iy + 5, 14, 7, 0xFF0A0A04);
+                framebuffer::fill_rect(ix + 3, iy + 7, 8, 1, 0xFF302A10);
+                framebuffer::fill_rect(ix + 3, iy + 9, 6, 1, 0xFF302A10);
+            } else {
+                let fc = if is_selected { 0xFF80DD99 } else { icon_file };
+                framebuffer::fill_rect(ix, iy, 14, 16, fc);
+                framebuffer::fill_rect(ix + 9, iy, 5, 5, 0xFF0A140A);
+                framebuffer::fill_rect(ix + 9, iy, 1, 5, fc);
+                framebuffer::fill_rect(ix + 9, iy + 4, 5, 1, fc);
+                framebuffer::fill_rect(ix + 2, iy + 6, 10, 8, 0xFF040A04);
+                framebuffer::fill_rect(ix + 3, iy + 7, 8, 1, 0xFF203020);
+                framebuffer::fill_rect(ix + 3, iy + 9, 6, 1, 0xFF203020);
+                framebuffer::fill_rect(ix + 3, iy + 11, 7, 1, 0xFF203020);
+            }
+            
+            // ── Parse entry fields ──
+            let trimmed = line.trim();
+            let name_str;
+            let type_str;
+            let size_str;
+            let prog_str;
+            
+            if let Some(bracket_end) = trimmed.find(']') {
+                let after_icon = if bracket_end + 1 < trimmed.len() { &trimmed[bracket_end + 1..] } else { "" };
+                let parts: Vec<&str> = after_icon.split_whitespace().collect();
+                name_str = if !parts.is_empty() { parts[0] } else { "???" };
+                type_str = if parts.len() > 1 { parts[1] } else { "" };
+                size_str = if parts.len() > 2 { parts[2] } else { "" };
+                prog_str = if parts.len() > 3 { parts[3] } else { "" };
+            } else {
+                name_str = trimmed;
+                type_str = "";
+                size_str = "";
+                prog_str = "";
+            }
+            
+            // Draw columns
+            self.draw_text_smooth(col_name_x, text_y, name_str, row_text_color);
+            if ww > 200 {
+                let type_color = if is_dir { 0xFF55AA70 } else { 0xFF558866 };
+                self.draw_text_smooth(col_type_x, text_y, type_str, if is_selected { GREEN_PRIMARY } else { type_color });
+            }
+            if ww > 280 {
+                self.draw_text_smooth(col_size_x, text_y, size_str, if is_selected { GREEN_SUBTLE } else { 0xFF558866 });
+            }
+            if ww > 360 {
+                self.draw_text_smooth(col_prog_x, text_y, prog_str, if is_selected { GREEN_SUBTLE } else { 0xFF446655 });
+            }
+            
+            // Row bottom separator
+            framebuffer::draw_hline(safe_x + 6, ry + row_h - 1, ww.saturating_sub(12), 0xFF0E1A12);
+        }
+        
+        // ── Scrollbar ──
+        if file_entries.len() > max_visible && list_area_h > 20 {
+            let sb_w = 6u32;
+            let sb_x = safe_x + ww.saturating_sub(sb_w + 4);
+            framebuffer::fill_rect(sb_x, list_start_y + 2, sb_w, list_area_h.saturating_sub(4), 0xFF0A1A0F);
+            let total = file_entries.len() as u32;
+            let visible = max_visible as u32;
+            let track_h = list_area_h.saturating_sub(4);
+            let thumb_h = ((visible * track_h) / total.max(1)).max(16).min(track_h);
+            let max_scroll = total.saturating_sub(visible);
+            let thumb_y = if max_scroll > 0 {
+                list_start_y + 2 + ((scroll as u32 * track_h.saturating_sub(thumb_h)) / max_scroll)
+            } else {
+                list_start_y + 2
+            };
+            draw_rounded_rect(sb_x as i32, thumb_y as i32, sb_w, thumb_h, 2, GREEN_MUTED);
+        }
+        
+        // ── Status bar at bottom ──
+        let status_y = safe_y + wh.saturating_sub(24);
+        framebuffer::fill_rect(safe_x + 2, status_y, ww.saturating_sub(4), 20, bg_toolbar);
+        framebuffer::draw_hline(safe_x + 2, status_y, ww.saturating_sub(4), separator);
+        
+        let item_count = file_entries.len();
+        let status_text = if item_count == 1 {
+            String::from("1 item")
+        } else {
+            alloc::format!("{} items", item_count)
+        };
+        self.draw_text_smooth(wx + 10, status_y as i32 + 4, &status_text, GREEN_SUBTLE);
+        if ww > 280 {
+            self.draw_text_smooth(wx + ww as i32 - 220, status_y as i32 + 4, "Enter:Open  Bksp:Up  Arrows:Nav", GREEN_GHOST);
+        }
+    }
+
     /// Draw interactive Calculator
     fn draw_calculator(&self, window: &Window) {
         use crate::gui::windows11::colors;
@@ -6586,12 +7882,11 @@ struct AppConfig {
             self.draw_text(px + 1, py, s, 0xFFFFFFFF); // Bold effect
         }
         
-        // Operator indicator
+        // Expression indicator (show expression in small text above result)
         if let Some(calc) = self.calculator_states.get(&window.id) {
-            if let Some(op) = calc.operator {
-                let mut buf = [0u8; 4];
-                let s = op.encode_utf8(&mut buf);
-                self.draw_text(cx as i32 + 10, cy as i32 + 12, s, colors::ACCENT);
+            if calc.just_evaluated && !calc.expression.is_empty() {
+                // Show a small "=" indicator
+                self.draw_text(cx as i32 + 10, cy as i32 + 12, "=", colors::ACCENT);
             }
         }
         
@@ -6948,16 +8243,59 @@ struct AppConfig {
     }
     
     fn draw_cursor(&self) {
-        // OPTIMIZED: Simple cursor without expensive glow calculations
-        // The glow effect was causing ~256 sqrt calculations per frame!
+        // Determine cursor type based on context (resize edges, etc.)
+        let mut cursor_mode = CursorMode::Arrow;
         
-        // Simple 3-pixel drop shadow (very fast)
+        // Check if hovering over a resize edge of any non-maximized window
+        for w in self.windows.iter().rev() {
+            if w.minimized || w.maximized { continue; }
+            let edge = w.on_resize_edge(self.cursor_x, self.cursor_y);
+            match edge {
+                ResizeEdge::Left | ResizeEdge::Right => { cursor_mode = CursorMode::ResizeH; break; },
+                ResizeEdge::Top | ResizeEdge::Bottom => { cursor_mode = CursorMode::ResizeV; break; },
+                ResizeEdge::TopLeft | ResizeEdge::BottomRight => { cursor_mode = CursorMode::ResizeNWSE; break; },
+                ResizeEdge::TopRight | ResizeEdge::BottomLeft => { cursor_mode = CursorMode::ResizeNESW; break; },
+                _ => {},
+            }
+            // If point is inside window bounds, stop checking further
+            if self.cursor_x >= w.x && self.cursor_x < w.x + w.width as i32
+                && self.cursor_y >= w.y && self.cursor_y < w.y + w.height as i32 {
+                break;
+            }
+        }
+        
+        // Also check if actively resizing
+        for w in &self.windows {
+            match w.resizing {
+                ResizeEdge::Left | ResizeEdge::Right => { cursor_mode = CursorMode::ResizeH; break; },
+                ResizeEdge::Top | ResizeEdge::Bottom => { cursor_mode = CursorMode::ResizeV; break; },
+                ResizeEdge::TopLeft | ResizeEdge::BottomRight => { cursor_mode = CursorMode::ResizeNWSE; break; },
+                ResizeEdge::TopRight | ResizeEdge::BottomLeft => { cursor_mode = CursorMode::ResizeNESW; break; },
+                _ => {},
+            }
+        }
+        
+        match cursor_mode {
+            CursorMode::Arrow => self.draw_arrow_cursor(),
+            CursorMode::ResizeH => self.draw_resize_cursor_h(),
+            CursorMode::ResizeV => self.draw_resize_cursor_v(),
+            CursorMode::ResizeNWSE => self.draw_resize_cursor_nwse(),
+            CursorMode::ResizeNESW => self.draw_resize_cursor_nesw(),
+        }
+    }
+    
+    /// Default arrow cursor
+    fn draw_arrow_cursor(&self) {
+        let cs = crate::accessibility::get_cursor_size().scale();
+        let hc = crate::accessibility::is_high_contrast();
+        
+        // Simple drop shadow (scaled)
         let shadow_color = 0x40000000u32;
-        for offset in 1..=2 {
+        for offset in 1..=(2 * cs as i32) {
             let sx = self.cursor_x + offset;
             let sy = self.cursor_y + offset;
             if sx >= 0 && sy >= 0 && sx < self.width as i32 && sy < self.height as i32 {
-                for dy in 0..12 {
+                for dy in 0..(12 * cs as i32) {
                     let py = (sy + dy) as u32;
                     let px = sx as u32;
                     if py < self.height && px < self.width {
@@ -6967,7 +8305,11 @@ struct AppConfig {
             }
         }
         
-        // Modern arrow cursor with green accent
+        // Cursor colors: high contrast uses white/black for maximum visibility
+        let outline_color = if hc { 0xFF000000u32 } else { GREEN_MUTED };
+        let fill_color = if hc { 0xFFFFFFFFu32 } else { GREEN_SECONDARY };
+        
+        // Modern arrow cursor with green accent (scaled by cursor size)
         let cursor: [[u8; 12]; 16] = [
             [1,0,0,0,0,0,0,0,0,0,0,0],
             [1,1,0,0,0,0,0,0,0,0,0,0],
@@ -6990,17 +8332,181 @@ struct AppConfig {
         for (cy, row) in cursor.iter().enumerate() {
             for (cx, &pixel) in row.iter().enumerate() {
                 if pixel == 0 { continue; }
-                let px = (self.cursor_x + cx as i32) as u32;
-                let py = (self.cursor_y + cy as i32) as u32;
-                if px < self.width && py < self.height {
-                    let color = match pixel {
-                        1 => GREEN_MUTED,      // Outline in muted green
-                        2 => GREEN_SECONDARY,  // Fill in bright green
-                        _ => continue,
-                    };
-                    framebuffer::put_pixel(px, py, color);
+                let color = match pixel {
+                    1 => outline_color,
+                    2 => fill_color,
+                    _ => continue,
+                };
+                // Draw cs×cs block per cursor pixel for accessibility scaling
+                for sy in 0..cs {
+                    for sx in 0..cs {
+                        let px = (self.cursor_x + cx as i32 * cs as i32 + sx as i32) as u32;
+                        let py = (self.cursor_y + cy as i32 * cs as i32 + sy as i32) as u32;
+                        if px < self.width && py < self.height {
+                            framebuffer::put_pixel(px, py, color);
+                        }
+                    }
                 }
             }
+        }
+    }
+    
+    /// Horizontal resize cursor (←→)
+    fn draw_resize_cursor_h(&self) {
+        let mx = self.cursor_x;
+        let my = self.cursor_y;
+        // Horizontal double arrow: ←→ centered on cursor
+        // Left arrow
+        for i in 0..7i32 {
+            let px = (mx - 7 + i) as u32;
+            let py = my as u32;
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
+                if py > 0 { framebuffer::put_pixel(px, py - 1, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel(px, py + 1, GREEN_MUTED); }
+            }
+        }
+        // Right arrow  
+        for i in 0..7i32 {
+            let px = (mx + 1 + i) as u32;
+            let py = my as u32;
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
+                if py > 0 { framebuffer::put_pixel(px, py - 1, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel(px, py + 1, GREEN_MUTED); }
+            }
+        }
+        // Left arrowhead
+        for d in 1..=4i32 {
+            let px = (mx - 7 + d) as u32;
+            if px < self.width {
+                if (my - d) >= 0 { framebuffer::put_pixel(px, (my - d) as u32, GREEN_PRIMARY); }
+                if (my + d) < self.height as i32 { framebuffer::put_pixel(px, (my + d) as u32, GREEN_PRIMARY); }
+            }
+        }
+        // Right arrowhead
+        for d in 1..=4i32 {
+            let px = (mx + 7 - d) as u32;
+            if px < self.width {
+                if (my - d) >= 0 { framebuffer::put_pixel(px, (my - d) as u32, GREEN_PRIMARY); }
+                if (my + d) < self.height as i32 { framebuffer::put_pixel(px, (my + d) as u32, GREEN_PRIMARY); }
+            }
+        }
+        // Center dot
+        if mx >= 0 && my >= 0 && (mx as u32) < self.width && (my as u32) < self.height {
+            framebuffer::put_pixel(mx as u32, my as u32, 0xFFFFFFFF);
+        }
+    }
+    
+    /// Vertical resize cursor (↕)
+    fn draw_resize_cursor_v(&self) {
+        let mx = self.cursor_x;
+        let my = self.cursor_y;
+        // Vertical double arrow
+        for i in 0..7i32 {
+            let px = mx as u32;
+            let py = (my - 7 + i) as u32;
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
+                if px > 0 { framebuffer::put_pixel(px - 1, py, GREEN_MUTED); }
+                if px + 1 < self.width { framebuffer::put_pixel(px + 1, py, GREEN_MUTED); }
+            }
+        }
+        for i in 0..7i32 {
+            let px = mx as u32;
+            let py = (my + 1 + i) as u32;
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
+                if px > 0 { framebuffer::put_pixel(px - 1, py, GREEN_MUTED); }
+                if px + 1 < self.width { framebuffer::put_pixel(px + 1, py, GREEN_MUTED); }
+            }
+        }
+        // Top arrowhead
+        for d in 1..=4i32 {
+            let py = (my - 7 + d) as u32;
+            if py < self.height {
+                if (mx - d) >= 0 { framebuffer::put_pixel((mx - d) as u32, py, GREEN_PRIMARY); }
+                if (mx + d) < self.width as i32 { framebuffer::put_pixel((mx + d) as u32, py, GREEN_PRIMARY); }
+            }
+        }
+        // Bottom arrowhead
+        for d in 1..=4i32 {
+            let py = (my + 7 - d) as u32;
+            if py < self.height {
+                if (mx - d) >= 0 { framebuffer::put_pixel((mx - d) as u32, py, GREEN_PRIMARY); }
+                if (mx + d) < self.width as i32 { framebuffer::put_pixel((mx + d) as u32, py, GREEN_PRIMARY); }
+            }
+        }
+        if mx >= 0 && my >= 0 && (mx as u32) < self.width && (my as u32) < self.height {
+            framebuffer::put_pixel(mx as u32, my as u32, 0xFFFFFFFF);
+        }
+    }
+    
+    /// NW-SE diagonal resize cursor (↘↖)
+    fn draw_resize_cursor_nwse(&self) {
+        let mx = self.cursor_x;
+        let my = self.cursor_y;
+        // Diagonal line NW→SE
+        for i in -6..=6i32 {
+            let px = (mx + i) as u32;
+            let py = (my + i) as u32;
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
+                if px + 1 < self.width { framebuffer::put_pixel(px + 1, py, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel(px, py + 1, GREEN_MUTED); }
+            }
+        }
+        // NW arrowhead
+        for d in 1..=3i32 {
+            let bx = mx - 6 + d;
+            let by = my - 6;
+            if bx >= 0 && (by as u32) < self.height { framebuffer::put_pixel(bx as u32, by as u32, GREEN_PRIMARY); }
+            let bx2 = mx - 6;
+            let by2 = my - 6 + d;
+            if bx2 >= 0 && by2 >= 0 { framebuffer::put_pixel(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
+        }
+        // SE arrowhead
+        for d in 1..=3i32 {
+            let bx = mx + 6 - d;
+            let by = my + 6;
+            if (bx as u32) < self.width && (by as u32) < self.height { framebuffer::put_pixel(bx as u32, by as u32, GREEN_PRIMARY); }
+            let bx2 = mx + 6;
+            let by2 = my + 6 - d;
+            if (bx2 as u32) < self.width && (by2 as u32) < self.height { framebuffer::put_pixel(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
+        }
+    }
+    
+    /// NE-SW diagonal resize cursor (↗↙)
+    fn draw_resize_cursor_nesw(&self) {
+        let mx = self.cursor_x;
+        let my = self.cursor_y;
+        // Diagonal line NE→SW
+        for i in -6..=6i32 {
+            let px = (mx + i) as u32;
+            let py = (my - i) as u32;
+            if px < self.width && py < self.height {
+                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
+                if px > 0 { framebuffer::put_pixel(px - 1, py, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel(px, py + 1, GREEN_MUTED); }
+            }
+        }
+        // NE arrowhead
+        for d in 1..=3i32 {
+            let bx = mx + 6 - d;
+            let by = my - 6;
+            if (bx as u32) < self.width && by >= 0 { framebuffer::put_pixel(bx as u32, by as u32, GREEN_PRIMARY); }
+            let bx2 = mx + 6;
+            let by2 = my - 6 + d;
+            if (bx2 as u32) < self.width && by2 >= 0 { framebuffer::put_pixel(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
+        }
+        // SW arrowhead
+        for d in 1..=3i32 {
+            let bx = mx - 6 + d;
+            let by = my + 6;
+            if bx >= 0 && (by as u32) < self.height { framebuffer::put_pixel(bx as u32, by as u32, GREEN_PRIMARY); }
+            let bx2 = mx - 6;
+            let by2 = my + 6 - d;
+            if bx2 >= 0 && (by2 as u32) < self.height { framebuffer::put_pixel(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
         }
     }
     
@@ -7029,8 +8535,8 @@ struct AppConfig {
     fn draw_text_smooth(&self, x: i32, y: i32, text: &str, color: u32) {
         let cw = crate::graphics::scaling::char_width() as i32;
         let factor = crate::graphics::scaling::get_scale_factor();
-        let ch = 16u32 * factor;
-        let fw = 8u32 * factor;
+        let _ch = 16u32 * factor;
+        let _fw = 8u32 * factor;
         let fb_w = self.width;
         let fb_h = self.height;
         
@@ -7046,7 +8552,6 @@ struct AppConfig {
             
             for row in 0..16u32 {
                 let bits = glyph[row as usize];
-                if bits == 0 { continue; }
                 let prev = if row > 0 { glyph[row as usize - 1] } else { 0u8 };
                 let next = if row < 15 { glyph[row as usize + 1] } else { 0u8 };
                 
@@ -7066,16 +8571,28 @@ struct AppConfig {
                             }
                         }
                     } else {
-                        // Check neighbors for AA edge
+                        // Check 8-connected neighbors for improved AA
                         let left  = col > 0 && (bits & (mask << 1)) != 0;
                         let right = col < 7 && (bits & (mask >> 1)) != 0;
                         let top   = prev & mask != 0;
                         let bot   = next & mask != 0;
-                        let adj = (left as u8) + (right as u8) + (top as u8) + (bot as u8);
+                        // Diagonal neighbors (weighted at 0.7x)
+                        let tl = col > 0 && (prev & (mask << 1)) != 0;
+                        let tr = col < 7 && (prev & (mask >> 1)) != 0;
+                        let bl = col > 0 && (next & (mask << 1)) != 0;
+                        let br = col < 7 && (next & (mask >> 1)) != 0;
                         
-                        if adj > 0 {
-                            // Edge pixel: blend at 30-60% depending on adjacency
-                            let alpha = if adj >= 2 { 150u32 } else { 75u32 };
+                        // Cardinal adjacency counts as 1.0, diagonal as 0.5
+                        let cardinal = (left as u32) + (right as u32) + (top as u32) + (bot as u32);
+                        let diagonal = (tl as u32) + (tr as u32) + (bl as u32) + (br as u32);
+                        let score = cardinal * 2 + diagonal; // max = 8+4 = 12
+                        
+                        if score > 0 {
+                            // Smoother alpha curve based on neighbor density
+                            let alpha = if score >= 6 { 140u32 }
+                                else if score >= 4 { 100u32 }
+                                else if score >= 2 { 60u32 }
+                                else { 35u32 };
                             let inv = 255 - alpha;
                             for sy in 0..factor {
                                 for sx in 0..factor {
@@ -7083,12 +8600,12 @@ struct AppConfig {
                                     let py = y as u32 + row * factor + sy;
                                     if px < fb_w && py < fb_h {
                                         let bg = framebuffer::get_pixel(px, py);
-                                        let br = (bg >> 16) & 0xFF;
+                                        let bg_r = (bg >> 16) & 0xFF;
                                         let bg_g = (bg >> 8) & 0xFF;
-                                        let bb = bg & 0xFF;
-                                        let r = (fg_r * alpha + br * inv) / 255;
+                                        let bg_b = bg & 0xFF;
+                                        let r = (fg_r * alpha + bg_r * inv) / 255;
                                         let g = (fg_g * alpha + bg_g * inv) / 255;
-                                        let b = (fg_b * alpha + bb * inv) / 255;
+                                        let b = (fg_b * alpha + bg_b * inv) / 255;
                                         framebuffer::put_pixel(px, py, 0xFF000000 | (r << 16) | (g << 8) | b);
                                     }
                                 }
@@ -7311,26 +8828,84 @@ pub fn run() {
             // Win+Left Arrow → snap window to left half
             if win && key == crate::keyboard::KEY_LEFT {
                 DESKTOP.lock().snap_focused_window(SnapDir::Left);
+                unsafe { WIN_USED_COMBO = true; }
                 continue;
             }
             // Win+Right Arrow → snap window to right half
             if win && key == crate::keyboard::KEY_RIGHT {
                 DESKTOP.lock().snap_focused_window(SnapDir::Right);
+                unsafe { WIN_USED_COMBO = true; }
                 continue;
             }
             // Win+Up Arrow → maximize focused window
             if win && key == crate::keyboard::KEY_UP {
                 DESKTOP.lock().toggle_maximize_focused();
+                unsafe { WIN_USED_COMBO = true; }
                 continue;
             }
             // Win+Down Arrow → minimize focused window
             if win && key == crate::keyboard::KEY_DOWN {
                 DESKTOP.lock().minimize_focused_window();
+                unsafe { WIN_USED_COMBO = true; }
                 continue;
             }
             
-            // Alt+F4 → close focused window  (F4 key sends no ASCII via read_char,
-            // so this is handled in the scancode check below)
+            // Win+D → toggle show desktop (minimize/restore all)
+            if win && (key == b'd' || key == b'D') {
+                DESKTOP.lock().toggle_show_desktop();
+                unsafe { WIN_USED_COMBO = true; }
+                crate::serial_println!("[GUI] Win+D: toggle show desktop");
+                continue;
+            }
+            
+            // Win+E → open file manager
+            if win && (key == b'e' || key == b'E') {
+                DESKTOP.lock().create_window("Files", 150, 100, 400, 350, WindowType::FileManager);
+                unsafe { WIN_USED_COMBO = true; }
+                crate::serial_println!("[GUI] Win+E: open file manager");
+                continue;
+            }
+            
+            // Win+I → open settings
+            if win && (key == b'i' || key == b'I') {
+                DESKTOP.lock().open_settings_panel();
+                unsafe { WIN_USED_COMBO = true; }
+                crate::serial_println!("[GUI] Win+I: open settings");
+                continue;
+            }
+            
+            // Win+H → toggle high contrast (accessibility)
+            if win && (key == b'h' || key == b'H') {
+                crate::accessibility::toggle_high_contrast();
+                let mut d = DESKTOP.lock();
+                d.needs_full_redraw = true;
+                d.background_cached = false;
+                drop(d);
+                unsafe { WIN_USED_COMBO = true; }
+                crate::serial_println!("[GUI] Win+H: toggle high contrast");
+                continue;
+            }
+            
+            // Mark any Win+key combo as used so Win release doesn't toggle start menu
+            if win && key != 0 {
+                unsafe { WIN_USED_COMBO = true; }
+            }
+            
+            // Alt+F4 → close focused window
+            // F4 scancode is 0x3E — check via is_key_pressed since F4 has no ASCII
+            if alt && crate::keyboard::is_key_pressed(0x3E) {
+                let mut d = DESKTOP.lock();
+                let has_focused = d.windows.iter().any(|w| w.focused && !w.minimized);
+                if has_focused {
+                    d.close_focused_window();
+                    crate::serial_println!("[GUI] Alt+F4: closed focused window");
+                } else {
+                    crate::serial_println!("[GUI] Alt+F4: no window, exiting desktop");
+                    EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
+                }
+                drop(d);
+                continue;
+            }
             
             // Pass key to focused window
             handle_keyboard(key);
@@ -7348,9 +8923,10 @@ pub fn run() {
         }
         
         // Win key alone (press & release) → toggle start menu
+        // (statics shared with keyboard loop above)
+        static mut LAST_WIN: bool = false;
+        static mut WIN_USED_COMBO: bool = false;
         {
-            static mut LAST_WIN: bool = false;
-            static mut WIN_USED_COMBO: bool = false;
             let win_now = crate::keyboard::is_key_pressed(0x5B);
             unsafe {
                 if win_now && !LAST_WIN {

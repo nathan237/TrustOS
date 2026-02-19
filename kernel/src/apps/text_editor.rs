@@ -19,6 +19,14 @@ use alloc::format;
 // EDITOR STATE
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Snapshot for undo/redo
+#[derive(Clone)]
+struct UndoSnapshot {
+    lines: Vec<String>,
+    cursor_line: usize,
+    cursor_col: usize,
+}
+
 /// Editor state per-window (stored outside Window struct to avoid bloat)
 #[derive(Clone)]
 pub struct EditorState {
@@ -42,6 +50,22 @@ pub struct EditorState {
     pub status_message: Option<String>,
     /// Frame counter for cursor blink
     pub blink_counter: u32,
+    /// Undo stack (past snapshots)
+    undo_stack: Vec<UndoSnapshot>,
+    /// Redo stack (undone snapshots)
+    redo_stack: Vec<UndoSnapshot>,
+    /// Selection anchor (line, col) — None means no selection
+    pub selection_anchor: Option<(usize, usize)>,
+    /// Find mode: None=normal, Some(query)=find active
+    pub find_query: Option<String>,
+    /// Replace text (when in replace mode)
+    pub replace_text: Option<String>,
+    /// Whether we're editing the replace field (vs find field)
+    pub find_replace_mode: bool,
+    /// All find match positions [(line, col)]
+    pub find_matches: Vec<(usize, usize)>,
+    /// Current match index
+    pub find_match_idx: usize,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -93,6 +117,14 @@ impl EditorState {
             language: Language::Plain,
             status_message: None,
             blink_counter: 0,
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+            selection_anchor: None,
+            find_query: None,
+            replace_text: None,
+            find_replace_mode: false,
+            find_matches: Vec::new(),
+            find_match_idx: 0,
         }
     }
     
@@ -199,6 +231,221 @@ impl EditorState {
             self.cursor_col = len;
         }
     }
+
+    /// Save current state to undo stack (call before every text mutation)
+    fn save_undo_state(&mut self) {
+        self.undo_stack.push(UndoSnapshot {
+            lines: self.lines.clone(),
+            cursor_line: self.cursor_line,
+            cursor_col: self.cursor_col,
+        });
+        // Cap at 200 entries
+        if self.undo_stack.len() > 200 {
+            self.undo_stack.remove(0);
+        }
+        // Any new edit clears redo stack
+        self.redo_stack.clear();
+    }
+
+    /// Undo: restore previous state
+    fn undo(&mut self) {
+        if let Some(snapshot) = self.undo_stack.pop() {
+            // Push current state to redo stack
+            self.redo_stack.push(UndoSnapshot {
+                lines: self.lines.clone(),
+                cursor_line: self.cursor_line,
+                cursor_col: self.cursor_col,
+            });
+            self.lines = snapshot.lines;
+            self.cursor_line = snapshot.cursor_line;
+            self.cursor_col = snapshot.cursor_col;
+            self.dirty = true;
+            self.status_message = Some(String::from("Undo"));
+        }
+    }
+
+    /// Redo: restore undone state
+    fn redo(&mut self) {
+        if let Some(snapshot) = self.redo_stack.pop() {
+            // Push current state to undo stack
+            self.undo_stack.push(UndoSnapshot {
+                lines: self.lines.clone(),
+                cursor_line: self.cursor_line,
+                cursor_col: self.cursor_col,
+            });
+            self.lines = snapshot.lines;
+            self.cursor_line = snapshot.cursor_line;
+            self.cursor_col = snapshot.cursor_col;
+            self.dirty = true;
+            self.status_message = Some(String::from("Redo"));
+        }
+    }
+
+    /// Get ordered selection range: (start_line, start_col, end_line, end_col)
+    /// Returns None if no selection active
+    pub fn get_selection_range(&self) -> Option<(usize, usize, usize, usize)> {
+        let (al, ac) = self.selection_anchor?;
+        let (bl, bc) = (self.cursor_line, self.cursor_col);
+        if (al, ac) <= (bl, bc) {
+            Some((al, ac, bl, bc))
+        } else {
+            Some((bl, bc, al, ac))
+        }
+    }
+
+    /// Extract selected text as a String
+    fn selected_text(&self) -> Option<String> {
+        let (sl, sc, el, ec) = self.get_selection_range()?;
+        let mut result = String::new();
+        for l in sl..=el {
+            if l >= self.lines.len() { break; }
+            let line = &self.lines[l];
+            let start = if l == sl { sc.min(line.len()) } else { 0 };
+            let end = if l == el { ec.min(line.len()) } else { line.len() };
+            if start <= end {
+                result.push_str(&line[start..end]);
+            }
+            if l < el {
+                result.push('\n');
+            }
+        }
+        Some(result)
+    }
+
+    /// Delete the selected text and collapse cursor to selection start
+    fn delete_selection(&mut self) {
+        if let Some((sl, sc, el, ec)) = self.get_selection_range() {
+            self.save_undo_state();
+            if sl == el {
+                // Single line selection
+                if sl < self.lines.len() {
+                    let end = ec.min(self.lines[sl].len());
+                    let start = sc.min(end);
+                    self.lines[sl] = format!("{}{}", &self.lines[sl][..start], &self.lines[sl][end..]);
+                }
+            } else {
+                // Multi-line selection
+                if el < self.lines.len() {
+                    let after = if ec <= self.lines[el].len() {
+                        String::from(&self.lines[el][ec..])
+                    } else {
+                        String::new()
+                    };
+                    // Merge start line prefix + end line suffix
+                    let prefix = if sc <= self.lines[sl].len() {
+                        String::from(&self.lines[sl][..sc])
+                    } else {
+                        self.lines[sl].clone()
+                    };
+                    self.lines[sl] = format!("{}{}", prefix, after);
+                    // Remove lines between
+                    let remove_count = el - sl;
+                    for _ in 0..remove_count {
+                        if sl + 1 < self.lines.len() {
+                            self.lines.remove(sl + 1);
+                        }
+                    }
+                }
+            }
+            self.cursor_line = sl;
+            self.cursor_col = sc;
+            self.selection_anchor = None;
+            self.dirty = true;
+        }
+    }
+
+    /// Update find matches from current query
+    fn update_find_matches(&mut self) {
+        self.find_matches.clear();
+        if let Some(ref query) = self.find_query {
+            if query.is_empty() { return; }
+            let q = query.clone();
+            for (line_idx, line) in self.lines.iter().enumerate() {
+                let mut start = 0;
+                while start + q.len() <= line.len() {
+                    if &line[start..start + q.len()] == q.as_str() {
+                        self.find_matches.push((line_idx, start));
+                        start += q.len().max(1);
+                    } else {
+                        start += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Jump to next find match
+    fn find_next(&mut self) {
+        if self.find_matches.is_empty() { return; }
+        self.find_match_idx = (self.find_match_idx + 1) % self.find_matches.len();
+        let (line, col) = self.find_matches[self.find_match_idx];
+        self.cursor_line = line;
+        self.cursor_col = col;
+        self.ensure_cursor_visible();
+    }
+
+    /// Jump to previous find match
+    fn find_prev(&mut self) {
+        if self.find_matches.is_empty() { return; }
+        if self.find_match_idx == 0 {
+            self.find_match_idx = self.find_matches.len() - 1;
+        } else {
+            self.find_match_idx -= 1;
+        }
+        let (line, col) = self.find_matches[self.find_match_idx];
+        self.cursor_line = line;
+        self.cursor_col = col;
+        self.ensure_cursor_visible();
+    }
+
+    /// Replace current match and find next
+    fn replace_current(&mut self) {
+        if self.find_matches.is_empty() { return; }
+        let idx = self.find_match_idx.min(self.find_matches.len() - 1);
+        let (line, col) = self.find_matches[idx];
+        let query = self.find_query.clone();
+        let replacement = self.replace_text.clone();
+        if let (Some(q), Some(rep)) = (query, replacement) {
+            if line < self.lines.len() && col + q.len() <= self.lines[line].len() {
+                self.save_undo_state();
+                let q_len = q.len();
+                self.lines[line] = format!("{}{}{}", &self.lines[line][..col], rep, &self.lines[line][col + q_len..]);
+                self.dirty = true;
+                self.update_find_matches();
+                self.cursor_line = line;
+                self.cursor_col = col + rep.len();
+            }
+        }
+    }
+
+    /// Replace all matches
+    fn replace_all(&mut self) {
+        if self.find_matches.is_empty() { return; }
+        let query = self.find_query.clone();
+        let replacement = self.replace_text.clone();
+        if let (Some(q), Some(rep)) = (query, replacement) {
+            self.save_undo_state();
+            for line in self.lines.iter_mut() {
+                let mut result = String::new();
+                let mut start = 0;
+                while start < line.len() {
+                    if start + q.len() <= line.len() && &line[start..start + q.len()] == q.as_str() {
+                        result.push_str(&rep);
+                        start += q.len();
+                    } else {
+                        if let Some(ch) = line.as_bytes().get(start) {
+                            result.push(*ch as char);
+                        }
+                        start += 1;
+                    }
+                }
+                *line = result;
+            }
+            self.dirty = true;
+            self.update_find_matches();
+            self.status_message = Some(String::from("Replaced all"));
+        }
+    }
     
     /// Total line count
     pub fn line_count(&self) -> usize {
@@ -220,6 +467,72 @@ impl EditorState {
             // Keep message for a few more keypresses
         }
         
+        // ── Find mode input handling ──
+        if self.find_query.is_some() {
+            match key {
+                0x1B => { // Escape — close find
+                    self.find_query = None;
+                    self.replace_text = None;
+                    self.find_replace_mode = false;
+                    self.find_matches.clear();
+                    return true;
+                }
+                0x0D | 0x0A => { // Enter — find next / replace
+                    if self.find_replace_mode {
+                        if let Some(ref _rt) = self.replace_text {
+                            self.replace_current();
+                        }
+                    } else {
+                        self.find_next();
+                    }
+                    return true;
+                }
+                0x09 => { // Tab — toggle between find and replace fields
+                    if self.replace_text.is_some() {
+                        self.find_replace_mode = !self.find_replace_mode;
+                    }
+                    return true;
+                }
+                0x08 => { // Backspace
+                    if self.find_replace_mode {
+                        if let Some(ref mut rt) = self.replace_text {
+                            rt.pop();
+                        }
+                    } else if let Some(ref mut q) = self.find_query {
+                        q.pop();
+                    }
+                    self.update_find_matches();
+                    return true;
+                }
+                0x01 => { // Ctrl+A in find mode — replace all
+                    self.replace_all();
+                    return true;
+                }
+                c if c >= 0x20 && c < 0x7F => {
+                    if self.find_replace_mode {
+                        if let Some(ref mut rt) = self.replace_text {
+                            rt.push(c as char);
+                        }
+                    } else if let Some(ref mut q) = self.find_query {
+                        q.push(c as char);
+                    }
+                    self.update_find_matches();
+                    // Auto-jump to first match
+                    if !self.find_matches.is_empty() {
+                        self.find_match_idx = 0;
+                        let (line, col) = self.find_matches[0];
+                        self.cursor_line = line;
+                        self.cursor_col = col;
+                        self.ensure_cursor_visible();
+                    }
+                    return true;
+                }
+                _ => { return true; }
+            }
+        }
+        
+        let shift_held = crate::keyboard::is_key_pressed(0x2A) || crate::keyboard::is_key_pressed(0x36);
+        
         match key {
             // ── Ctrl+S (save) ──
             0x13 => {
@@ -227,8 +540,110 @@ impl EditorState {
                 return true;
             }
             
-            // ── Arrow keys ──
+            // ── Ctrl+F (find) ──
+            0x06 => {
+                self.find_query = Some(String::new());
+                self.replace_text = None;
+                self.find_replace_mode = false;
+                self.find_matches.clear();
+                self.find_match_idx = 0;
+                return true;
+            }
+            
+            // ── Ctrl+H (find & replace) ──
+            0x12 => {
+                self.find_query = Some(String::new());
+                self.replace_text = Some(String::new());
+                self.find_replace_mode = false;
+                self.find_matches.clear();
+                self.find_match_idx = 0;
+                return true;
+            }
+            
+            // ── Ctrl+Z (undo) ──
+            0x1A => {
+                self.undo();
+                self.ensure_cursor_visible();
+                return true;
+            }
+            
+            // ── Ctrl+Y (redo) ──
+            0x19 => {
+                self.redo();
+                self.ensure_cursor_visible();
+                return true;
+            }
+            
+            // ── Ctrl+A (select all) ──
+            0x01 => {
+                self.selection_anchor = Some((0, 0));
+                let last_line = self.lines.len().saturating_sub(1);
+                let last_col = if last_line < self.lines.len() { self.lines[last_line].len() } else { 0 };
+                self.cursor_line = last_line;
+                self.cursor_col = last_col;
+                self.status_message = Some(String::from("Select All"));
+                return true;
+            }
+            
+            // ── Ctrl+C (copy) ──
+            0x03 => {
+                if let Some(text) = self.selected_text() {
+                    crate::keyboard::clipboard_set(&text);
+                    self.status_message = Some(String::from("Copied"));
+                }
+                return true;
+            }
+            
+            // ── Ctrl+X (cut) ──
+            0x18 => {
+                if let Some(text) = self.selected_text() {
+                    crate::keyboard::clipboard_set(&text);
+                    self.delete_selection();
+                    self.status_message = Some(String::from("Cut"));
+                }
+                return true;
+            }
+            
+            // ── Ctrl+V (paste) ──
+            0x16 => {
+                if let Some(text) = crate::keyboard::clipboard_get() {
+                    // Delete selection first if any
+                    if self.selection_anchor.is_some() {
+                        self.delete_selection();
+                    }
+                    self.save_undo_state();
+                    // Insert text at cursor
+                    for ch in text.chars() {
+                        if ch == '\n' {
+                            // Split line
+                            if self.cursor_line < self.lines.len() {
+                                self.cursor_col = self.cursor_col.min(self.lines[self.cursor_line].len());
+                                let rest = self.lines[self.cursor_line].split_off(self.cursor_col);
+                                self.cursor_line += 1;
+                                self.lines.insert(self.cursor_line, rest);
+                                self.cursor_col = 0;
+                            }
+                        } else if ch >= ' ' && ch as u32 <= 0x7E {
+                            if self.cursor_line < self.lines.len() && self.cursor_col <= self.lines[self.cursor_line].len() {
+                                self.lines[self.cursor_line].insert(self.cursor_col, ch);
+                                self.cursor_col += 1;
+                            }
+                        }
+                    }
+                    self.dirty = true;
+                    self.status_message = Some(String::from("Pasted"));
+                }
+                self.ensure_cursor_visible();
+                return true;
+            }
+            
+            // ── Arrow keys (Shift = extend selection) ──
             KEY_UP => {
+                if shift_held && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !shift_held {
+                    self.selection_anchor = None;
+                }
                 if self.cursor_line > 0 {
                     self.cursor_line -= 1;
                     self.clamp_cursor_col();
@@ -237,6 +652,11 @@ impl EditorState {
                 return true;
             }
             KEY_DOWN => {
+                if shift_held && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !shift_held {
+                    self.selection_anchor = None;
+                }
                 if self.cursor_line + 1 < self.lines.len() {
                     self.cursor_line += 1;
                     self.clamp_cursor_col();
@@ -245,10 +665,14 @@ impl EditorState {
                 return true;
             }
             KEY_LEFT => {
+                if shift_held && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !shift_held {
+                    self.selection_anchor = None;
+                }
                 if self.cursor_col > 0 {
                     self.cursor_col -= 1;
                 } else if self.cursor_line > 0 {
-                    // Wrap to end of previous line
                     self.cursor_line -= 1;
                     self.cursor_col = self.lines[self.cursor_line].len();
                 }
@@ -256,11 +680,15 @@ impl EditorState {
                 return true;
             }
             KEY_RIGHT => {
+                if shift_held && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !shift_held {
+                    self.selection_anchor = None;
+                }
                 let line_len = if self.cursor_line < self.lines.len() { self.lines[self.cursor_line].len() } else { 0 };
                 if self.cursor_col < line_len {
                     self.cursor_col += 1;
                 } else if self.cursor_line + 1 < self.lines.len() {
-                    // Wrap to start of next line
                     self.cursor_line += 1;
                     self.cursor_col = 0;
                 }
@@ -268,10 +696,20 @@ impl EditorState {
                 return true;
             }
             KEY_HOME => {
+                if shift_held && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !shift_held {
+                    self.selection_anchor = None;
+                }
                 self.cursor_col = 0;
                 return true;
             }
             KEY_END => {
+                if shift_held && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !shift_held {
+                    self.selection_anchor = None;
+                }
                 let line_len = if self.cursor_line < self.lines.len() { self.lines[self.cursor_line].len() } else { 0 };
                 self.cursor_col = line_len;
                 return true;
@@ -293,6 +731,12 @@ impl EditorState {
             
             // ── Backspace ──
             0x08 => {
+                if self.selection_anchor.is_some() {
+                    self.delete_selection();
+                    self.ensure_cursor_visible();
+                    return true;
+                }
+                self.save_undo_state();
                 if self.cursor_col > 0 && self.cursor_line < self.lines.len() {
                     self.lines[self.cursor_line].remove(self.cursor_col - 1);
                     self.cursor_col -= 1;
@@ -311,6 +755,11 @@ impl EditorState {
             
             // ── Delete ──
             KEY_DELETE => {
+                if self.selection_anchor.is_some() {
+                    self.delete_selection();
+                    return true;
+                }
+                self.save_undo_state();
                 if self.cursor_line < self.lines.len() {
                     let line_len = self.lines[self.cursor_line].len();
                     if self.cursor_col < line_len {
@@ -328,7 +777,13 @@ impl EditorState {
             
             // ── Enter ──
             0x0D | 0x0A => {
+                if self.selection_anchor.is_some() {
+                    self.delete_selection();
+                }
+                self.save_undo_state();
                 if self.cursor_line < self.lines.len() {
+                    // Clamp cursor_col to line length to prevent split_off panic
+                    self.cursor_col = self.cursor_col.min(self.lines[self.cursor_line].len());
                     // Split line at cursor
                     let rest = self.lines[self.cursor_line].split_off(self.cursor_col);
                     
@@ -358,6 +813,7 @@ impl EditorState {
             
             // ── Tab ──
             0x09 => {
+                self.save_undo_state();
                 // Insert 4 spaces
                 if self.cursor_line < self.lines.len() {
                     for _ in 0..4 {
@@ -371,6 +827,10 @@ impl EditorState {
             
             // ── Printable characters ──
             c if c >= 0x20 && c < 0x7F => {
+                if self.selection_anchor.is_some() {
+                    self.delete_selection();
+                }
+                self.save_undo_state();
                 if self.cursor_line < self.lines.len() {
                     let ch = c as char;
                     if self.cursor_col <= self.lines[self.cursor_line].len() {
@@ -722,6 +1182,24 @@ pub fn render_editor(
             );
         }
         
+        // ── Selection highlight ──
+        if let Some((sl, sc, el, ec)) = state.get_selection_range() {
+            if line_idx >= sl && line_idx <= el {
+                let line_len = state.lines[line_idx].len();
+                let sel_start = if line_idx == sl { sc.min(line_len) } else { 0 };
+                let sel_end = if line_idx == el { ec.min(line_len) } else { line_len };
+                if sel_start < sel_end {
+                    let sx = code_x + 4 + (sel_start as i32 * char_w);
+                    let sw = ((sel_end - sel_start) as i32 * char_w) as u32;
+                    crate::framebuffer::fill_rect(
+                        sx as u32, ly as u32,
+                        sw, line_h as u32,
+                        0xFF264F78, // VSCode-style selection blue
+                    );
+                }
+            }
+        }
+        
         // ── Line number ──
         let line_num_str = format!("{:>4} ", line_idx + 1);
         let num_color = if is_current_line { COLOR_ACTIVE_LINE } else { COLOR_LINE_NUM };
@@ -774,6 +1252,43 @@ pub fn render_editor(
         crate::framebuffer::fill_rect(sb_x, code_y as u32, 8, sb_h, 0xFF252526);
         // Thumb
         crate::framebuffer::fill_rounded_rect(sb_x + 1, code_y as u32 + thumb_y, 6, thumb_h, 3, 0xFF555555);
+    }
+    
+    // ── Find/Replace bar ──
+    if state.find_query.is_some() {
+        let find_bar_h: i32 = if state.replace_text.is_some() { 44 } else { 22 };
+        let find_y = code_y; // Draw at top of code area
+        crate::framebuffer::fill_rect(code_x as u32, find_y as u32, code_w as u32, find_bar_h as u32, 0xFF252526);
+        // Find field
+        let find_label = "Find: ";
+        let query = state.find_query.as_deref().unwrap_or("");
+        let match_info = if state.find_matches.is_empty() {
+            if query.is_empty() { String::new() } else { String::from(" (0 results)") }
+        } else {
+            format!(" ({}/{})", state.find_match_idx + 1, state.find_matches.len())
+        };
+        let find_indicator = if !state.find_replace_mode { ">" } else { " " };
+        let find_text = format!("{}{}{}{}", find_indicator, find_label, query, match_info);
+        draw_text_fn(code_x + 4, find_y + 3, &find_text, 0xFFCCCCCC);
+        // Replace field
+        if let Some(ref replace) = state.replace_text {
+            let rep_indicator = if state.find_replace_mode { ">" } else { " " };
+            let rep_text = format!("{}Replace: {}  [Enter]=Replace [Ctrl+A]=All", rep_indicator, replace);
+            draw_text_fn(code_x + 4, find_y + 22 + 3, &rep_text, 0xFFCCCCCC);
+        }
+        // Highlight find matches in code area
+        for &(ml, mc) in &state.find_matches {
+            if ml >= state.scroll_y && ml < state.scroll_y + visible_lines {
+                let vi = ml - state.scroll_y;
+                let mly = code_y + find_bar_h + (vi as i32 * line_h);
+                let q_len = state.find_query.as_ref().map(|q| q.len()).unwrap_or(0);
+                if q_len > 0 {
+                    let mx = code_x + 4 + (mc as i32 * char_w);
+                    let mw = (q_len as i32 * char_w) as u32;
+                    crate::framebuffer::fill_rect(mx as u32, mly as u32, mw, line_h as u32, 0xFF613214);
+                }
+            }
+        }
     }
     
     // ── Status bar ──

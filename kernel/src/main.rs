@@ -32,6 +32,7 @@ mod netstack;
 mod time;
 mod rng;
 mod file_assoc;
+mod accessibility;
 mod ui;
 mod apps;
 mod graphics;
@@ -711,6 +712,17 @@ pub unsafe extern "C" fn kmain() -> ! {
         framebuffer::print_boot_status("VirtIO GPU: not found (fallback framebuffer)", BootStatus::Skip);
     }
     serial_println!("[PHASE] VirtIO GPU init done");
+    
+    // Phase 11c: AMD GPU (native hardware driver)
+    serial_println!("[PHASE] AMD GPU init start");
+    framebuffer::print_boot_status("AMD GPU...", BootStatus::Info);
+    drivers::amdgpu::init();
+    if drivers::amdgpu::is_detected() {
+        framebuffer::print_boot_status(&alloc::format!("AMD GPU: {}", drivers::amdgpu::summary()), BootStatus::Ok);
+    } else {
+        framebuffer::print_boot_status("AMD GPU: not found (VM or non-AMD)", BootStatus::Skip);
+    }
+    serial_println!("[PHASE] AMD GPU init done");
     
     // Remap framebuffer as Write-Combining for faster MMIO writes
     // Skip on VirtualBox: VMSVGA dirty-tracking breaks with WC pages

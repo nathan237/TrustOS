@@ -134,6 +134,8 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println_color!(COLOR_CYAN, "  HARDWARE & DEVICES");
     crate::println!("    lspci [-v]          List PCI devices (vendor/class)");
     crate::println!("    lshw / hwinfo       Full hardware inventory");
+    crate::println!("    gpu [info|dcn|modes] AMD GPU info & display engine status");
+    crate::println!("    a11y [hc|font|...]  Accessibility settings (Win+H = contrast)");
     crate::println!("    lscpu               CPU model, cores, features, frequency");
     crate::println!("    lsmem               Memory layout and total RAM");
     crate::println!("    lsusb               List USB controllers & devices");
@@ -3440,6 +3442,19 @@ pub(super) fn cmd_neofetch() {
     crate::print_color!(COLOR_GREEN, r"                      ");
     crate::print_color!(COLOR_CYAN, "CPU: ");
     crate::println!("{} cores", crate::cpu::core_count());
+    crate::print_color!(COLOR_GREEN, r"                      ");
+    crate::print_color!(COLOR_CYAN, "GPU: ");
+    if crate::drivers::amdgpu::is_detected() {
+        crate::println!("{}", crate::drivers::amdgpu::summary());
+    } else {
+        // Show PCI display device
+        let display_devs = crate::pci::find_by_class(crate::pci::class::DISPLAY);
+        if let Some(dev) = display_devs.first() {
+            crate::println!("{} {:04X}:{:04X}", dev.vendor_name(), dev.vendor_id, dev.device_id);
+        } else {
+            crate::println!("N/A");
+        }
+    }
     crate::print_color!(COLOR_GREEN, r"                      ");
     crate::print_color!(COLOR_CYAN, "Creator: ");
     crate::println!("Nated0ge (@nathan237)");

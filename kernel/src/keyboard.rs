@@ -362,6 +362,10 @@ pub fn handle_scancode(scancode: u8) {
     // Handle Ctrl key
     if key == 0x1D {
         CTRL_PRESSED.store(!is_release, Ordering::SeqCst);
+        // Sticky keys: track modifier press/release
+        if !is_release {
+            crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Ctrl);
+        }
         return;
     }
     
@@ -369,6 +373,9 @@ pub fn handle_scancode(scancode: u8) {
     if key == 0x2A || key == 0x36 {
         // Left or Right Shift
         SHIFT_PRESSED.store(!is_release, Ordering::SeqCst);
+        if !is_release {
+            crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Shift);
+        }
         return;
     }
     
@@ -410,6 +417,12 @@ pub fn handle_scancode(scancode: u8) {
         return;
     }
 
+    // Handle Ctrl+X (cut)
+    if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x2D {
+        KEYBOARD_BUFFER.lock().push(0x18); // ASCII CAN (cut)
+        return;
+    }
+
     // Handle Ctrl+L (clear)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x26 {
         KEYBOARD_BUFFER.lock().push(12); // ASCII FF (form feed)
@@ -428,14 +441,33 @@ pub fn handle_scancode(scancode: u8) {
         return;
     }
 
+    // Handle Ctrl+F (find)
+    if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x21 {
+        KEYBOARD_BUFFER.lock().push(0x06); // ASCII ACK (find)
+        return;
+    }
+
+    // Handle Ctrl+H (replace)
+    if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x23 {
+        KEYBOARD_BUFFER.lock().push(0x12); // ASCII DC2 (replace)
+        return;
+    }
+
     // Handle Ctrl+Z (undo)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x2C {
         KEYBOARD_BUFFER.lock().push(0x1A); // ASCII SUB (undo)
         return;
     }
+
+    // Handle Ctrl+Y (redo)
+    if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x15 {
+        KEYBOARD_BUFFER.lock().push(0x19); // ASCII EM (redo)
+        return;
+    }
     
     // Convert scancode to ASCII
-    let shift = SHIFT_PRESSED.load(Ordering::SeqCst);
+    let shift = SHIFT_PRESSED.load(Ordering::SeqCst)
+        || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Shift);
     let caps = CAPS_LOCK.load(Ordering::SeqCst);
     
     let ascii = if key < 128 {
@@ -461,6 +493,8 @@ pub fn handle_scancode(scancode: u8) {
     if ascii != 0 {
         crate::serial_println!("[KB-BUF] push ascii={} (0x{:02X}) char='{}'", ascii, ascii, ascii as char);
         KEYBOARD_BUFFER.lock().push(ascii);
+        // Sticky keys: consume latched modifiers after a non-modifier key
+        crate::accessibility::sticky_consume_latched();
     }
 }
 
@@ -487,11 +521,14 @@ pub fn has_input() -> bool {
 /// Check if a specific key (by scancode) is currently pressed
 /// Used for checking modifier keys like Alt during Alt+Tab
 pub fn is_key_pressed(scancode: u8) -> bool {
-    // Special handling for modifier keys
+    // Special handling for modifier keys (+ sticky keys support)
     match scancode {
-        0x38 => ALT_PRESSED.load(Ordering::Relaxed),   // Alt
-        0x1D => CTRL_PRESSED.load(Ordering::Relaxed),  // Ctrl
-        0x2A | 0x36 => SHIFT_PRESSED.load(Ordering::Relaxed), // Shift
+        0x38 => ALT_PRESSED.load(Ordering::Relaxed)
+            || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Alt),
+        0x1D => CTRL_PRESSED.load(Ordering::Relaxed)
+            || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Ctrl),
+        0x2A | 0x36 => SHIFT_PRESSED.load(Ordering::Relaxed)
+            || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Shift),
         _ => {
             // Check key state bitmap
             let state = KEY_STATE.lock();
@@ -510,7 +547,13 @@ pub fn is_key_pressed(scancode: u8) -> bool {
 fn update_key_state(scancode: u8, pressed: bool) {
     // Update modifier key atomics
     match scancode {
-        0x38 => ALT_PRESSED.store(pressed, Ordering::Relaxed),
+        0x38 => {
+            ALT_PRESSED.store(pressed, Ordering::Relaxed);
+            // Sticky keys: track Alt press
+            if pressed {
+                crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Alt);
+            }
+        }
         0x1D => CTRL_PRESSED.store(pressed, Ordering::Relaxed),
         0x2A | 0x36 => SHIFT_PRESSED.store(pressed, Ordering::Relaxed),
         _ => {}
@@ -554,11 +597,11 @@ pub fn history_list() -> Vec<(usize, String)> {
     COMMAND_HISTORY.lock().iter().map(|(i, s)| (i, String::from(s))).collect()
 }
 
-fn clipboard_set(text: &str) {
+pub fn clipboard_set(text: &str) {
     *CLIPBOARD.lock() = Some(String::from(text));
 }
 
-fn clipboard_get() -> Option<String> {
+pub fn clipboard_get() -> Option<String> {
     CLIPBOARD.lock().as_ref().map(|s| s.clone())
 }
 

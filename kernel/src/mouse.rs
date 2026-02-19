@@ -200,8 +200,11 @@ pub fn handle_interrupt() {
     MIDDLE_BUTTON.store(b0 & 0x04 != 0, Ordering::Relaxed);
     
     // Sign extension via i8 cast — works correctly with VirtualBox PS/2 emulation
-    let x_rel = b1 as i8 as i32;
-    let y_rel = b2 as i8 as i32;
+    let raw_x = b1 as i8 as i32;
+    let raw_y = b2 as i8 as i32;
+    
+    // Apply accessibility mouse speed multiplier
+    let (x_rel, y_rel) = crate::accessibility::apply_mouse_speed(raw_x, raw_y);
     
     // Handle overflow: skip movement update but keep button state
     let x_overflow = b0 & 0x40 != 0;

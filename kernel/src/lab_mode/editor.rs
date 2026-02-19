@@ -121,7 +121,8 @@ impl EditorState {
                 if !self.output_focused {
                     // Split line at cursor
                     if self.cursor_line < self.lines.len() {
-                        let rest = self.lines[self.cursor_line].split_off(self.cursor_col);
+                        let col = self.cursor_col.min(self.lines[self.cursor_line].len());
+                        let rest = self.lines[self.cursor_line].split_off(col);
                         self.cursor_line += 1;
                         self.lines.insert(self.cursor_line, rest);
                         self.cursor_col = 0;

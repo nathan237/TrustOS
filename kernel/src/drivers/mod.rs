@@ -14,6 +14,7 @@ pub mod pci_ids;
 pub mod partition;
 pub mod virtio_gpu;
 pub mod hda;
+pub mod amdgpu;
 
 use alloc::boxed::Box;
 use alloc::string::String;

@@ -3253,6 +3253,138 @@ pub(super) fn cmd_lshw() {
     crate::println_color!(COLOR_CYAN, "Total: {} PCI devices", devices.len());
 }
 
+pub(super) fn cmd_gpu(args: &[&str]) {
+    if args.first() == Some(&"--help") || args.first() == Some(&"-h") {
+        crate::println!("Usage: gpu [info|dcn|modes]");
+        crate::println!("  gpu         Show GPU summary");
+        crate::println!("  gpu info    Detailed GPU information");
+        crate::println!("  gpu dcn     Display engine (DCN) status");
+        crate::println!("  gpu modes   List standard display modes");
+        return;
+    }
+    
+    let subcmd = args.first().copied().unwrap_or("info");
+    
+    match subcmd {
+        "info" | "" => {
+            crate::println_color!(COLOR_CYAN, "=== AMD GPU Status ===");
+            crate::println!();
+            
+            if crate::drivers::amdgpu::is_detected() {
+                for line in crate::drivers::amdgpu::info_lines() {
+                    crate::println!("{}", line);
+                }
+                crate::println!();
+                
+                // Also show DCN info
+                if crate::drivers::amdgpu::dcn::is_ready() {
+                    crate::println_color!(COLOR_GREEN, "Display Engine:");
+                    crate::println!("  {}", crate::drivers::amdgpu::dcn::summary());
+                }
+            } else {
+                crate::println!("No AMD GPU detected.");
+                crate::println!("(Requires bare metal or GPU passthrough)");
+                crate::println!();
+                
+                // Show whatever display controller is present
+                let display_devs = crate::pci::find_by_class(crate::pci::class::DISPLAY);
+                if !display_devs.is_empty() {
+                    crate::println_color!(COLOR_GREEN, "Display controllers found:");
+                    for dev in &display_devs {
+                        crate::println!("  {:04X}:{:04X} {} [{}]", 
+                            dev.vendor_id, dev.device_id,
+                            dev.subclass_name(), dev.vendor_name());
+                    }
+                }
+            }
+        }
+        "dcn" | "display" => {
+            crate::println_color!(COLOR_CYAN, "=== DCN Display Engine ===");
+            crate::println!();
+            
+            if crate::drivers::amdgpu::dcn::is_ready() {
+                for line in crate::drivers::amdgpu::dcn::info_lines() {
+                    crate::println!("{}", line);
+                }
+            } else {
+                crate::println!("DCN display engine not initialized.");
+                if !crate::drivers::amdgpu::is_detected() {
+                    crate::println!("(No AMD GPU detected)");
+                }
+            }
+        }
+        "modes" => {
+            crate::println_color!(COLOR_CYAN, "=== Standard Display Modes ===");
+            crate::println!();
+            for (i, mode) in crate::drivers::amdgpu::dcn::standard_modes().iter().enumerate() {
+                crate::println!("  [{}] {}", i, mode.modeline());
+            }
+        }
+        _ => {
+            crate::println!("Unknown subcommand: {}", subcmd);
+            crate::println!("Use 'gpu --help' for usage.");
+        }
+    }
+}
+
+pub(super) fn cmd_a11y(args: &[&str]) {
+    let subcmd = args.first().copied().unwrap_or("status");
+    
+    match subcmd {
+        "status" | "" => {
+            crate::println_color!(COLOR_CYAN, "=== Accessibility Settings ===");
+            crate::println!();
+            let hc = crate::accessibility::is_high_contrast();
+            let fs = crate::accessibility::get_font_size();
+            let cs = crate::accessibility::get_cursor_size();
+            let sk = crate::accessibility::is_sticky_keys();
+            let ms = crate::accessibility::get_mouse_speed();
+            crate::println!("  High Contrast : {}", if hc { "ON" } else { "OFF" });
+            crate::println!("  Font Size     : {}", fs.label());
+            crate::println!("  Cursor Size   : {}", cs.label());
+            crate::println!("  Sticky Keys   : {}", if sk { "ON" } else { "OFF" });
+            crate::println!("  Mouse Speed   : {}", ms.label());
+            crate::println!();
+            crate::println!("Shortcuts: Win+H = toggle high contrast");
+            crate::println!("Settings:  Win+I > keys 5-9 to adjust");
+        }
+        "hc" | "contrast" => {
+            crate::accessibility::toggle_high_contrast();
+            let on = crate::accessibility::is_high_contrast();
+            crate::println!("High contrast: {}", if on { "ON" } else { "OFF" });
+        }
+        "font" => {
+            crate::accessibility::cycle_font_size();
+            crate::println!("Font size: {}", crate::accessibility::get_font_size().label());
+        }
+        "cursor" => {
+            crate::accessibility::cycle_cursor_size();
+            crate::println!("Cursor size: {}", crate::accessibility::get_cursor_size().label());
+        }
+        "sticky" => {
+            crate::accessibility::toggle_sticky_keys();
+            let on = crate::accessibility::is_sticky_keys();
+            crate::println!("Sticky keys: {}", if on { "ON" } else { "OFF" });
+        }
+        "mouse" => {
+            crate::accessibility::cycle_mouse_speed();
+            crate::println!("Mouse speed: {}", crate::accessibility::get_mouse_speed().label());
+        }
+        "--help" | "-h" | "help" => {
+            crate::println!("Usage: a11y [status|hc|font|cursor|sticky|mouse]");
+            crate::println!("  a11y          Show all accessibility settings");
+            crate::println!("  a11y hc       Toggle high contrast mode");
+            crate::println!("  a11y font     Cycle font size (S/M/L/XL)");
+            crate::println!("  a11y cursor   Cycle cursor size (S/M/L)");
+            crate::println!("  a11y sticky   Toggle sticky keys");
+            crate::println!("  a11y mouse    Cycle mouse speed");
+        }
+        _ => {
+            crate::println!("Unknown: {}. Use 'a11y --help'", subcmd);
+        }
+    }
+}
+
 pub(super) fn cmd_tcpsyn(args: &[&str]) {
     if args.len() < 2 {
         crate::println!("Usage: tcpsyn <ip> <port>");

@@ -204,6 +204,32 @@ pub struct Item {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// ENEMY
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum EnemyState {
+    Idle,
+    Chasing,
+    Attacking,
+    Dead,
+}
+
+#[derive(Clone, Copy)]
+pub struct Enemy {
+    pub x: f32,
+    pub y: f32,
+    pub health: i32,
+    pub max_health: i32,
+    pub state: EnemyState,
+    pub attack_cooldown: u32,
+    pub damage: i32,
+    pub speed: f32,
+    pub sight_range: f32,
+    pub attack_range: f32,
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // LEVEL DATA
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -217,6 +243,7 @@ struct Level {
     spawn_y: f32,
     spawn_angle: f32,
     items: Vec<Item>,
+    enemies: Vec<Enemy>,
 }
 
 fn create_level_1() -> Level {
@@ -255,6 +282,11 @@ fn create_level_1() -> Level {
         spawn_y: 2.5,
         spawn_angle: 0.0,
         items,
+        enemies: alloc::vec![
+            Enemy { x: 8.5, y: 3.5, health: 30, max_health: 30, state: EnemyState::Idle, attack_cooldown: 0, damage: 8, speed: 0.02, sight_range: 6.0, attack_range: 1.5 },
+            Enemy { x: 3.5, y: 8.5, health: 30, max_health: 30, state: EnemyState::Idle, attack_cooldown: 0, damage: 8, speed: 0.02, sight_range: 6.0, attack_range: 1.5 },
+            Enemy { x: 13.5, y: 5.5, health: 40, max_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 12, speed: 0.025, sight_range: 8.0, attack_range: 1.5 },
+        ],
     }
 }
 
@@ -294,6 +326,12 @@ fn create_level_2() -> Level {
         spawn_y: 1.5,
         spawn_angle: 0.0,
         items,
+        enemies: alloc::vec![
+            Enemy { x: 5.5, y: 5.5, health: 40, max_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 10, speed: 0.025, sight_range: 7.0, attack_range: 1.5 },
+            Enemy { x: 10.5, y: 5.5, health: 40, max_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 10, speed: 0.025, sight_range: 7.0, attack_range: 1.5 },
+            Enemy { x: 5.5, y: 10.5, health: 40, max_health: 40, state: EnemyState::Idle, attack_cooldown: 0, damage: 10, speed: 0.025, sight_range: 7.0, attack_range: 1.5 },
+            Enemy { x: 10.5, y: 10.5, health: 50, max_health: 50, state: EnemyState::Idle, attack_cooldown: 0, damage: 15, speed: 0.03, sight_range: 8.0, attack_range: 1.5 },
+        ],
     }
 }
 
@@ -321,6 +359,7 @@ pub struct Game3DState {
     // Level
     map: [[u8; MAP_W]; MAP_H],
     items: Vec<Item>,
+    enemies: Vec<Enemy>,
     current_level: u32,
 
     // Textures (Vec-based to avoid stack overflow)
@@ -337,6 +376,13 @@ pub struct Game3DState {
     flash_timer: u32,          // Damage flash
     pickup_flash_timer: u32,   // Item pickup flash
     message: Option<(alloc::string::String, u32)>, // (text, frames remaining)
+
+    // Combat
+    shoot_cooldown: u32,
+    shoot_flash: u32,
+    weapon_bob: f32,
+    kills: u32,
+    z_buffer: Vec<f32>,  // Per-column depth for sprite clipping
 
     // RNG
     rng_state: u32,
@@ -362,6 +408,7 @@ impl Game3DState {
 
             map: level.map,
             items: level.items,
+            enemies: level.enemies,
             current_level: 1,
 
             tex_brick: WallTexture::brick(),
@@ -376,6 +423,12 @@ impl Game3DState {
             flash_timer: 0,
             pickup_flash_timer: 0,
             message: None,
+
+            shoot_cooldown: 0,
+            shoot_flash: 0,
+            weapon_bob: 0.0,
+            kills: 0,
+            z_buffer: Vec::new(),
 
             rng_state: 12345,
         }
@@ -396,6 +449,7 @@ impl Game3DState {
         };
         self.map = level.map;
         self.items = level.items;
+        self.enemies = level.enemies;
         self.player_x = level.spawn_x;
         self.player_y = level.spawn_y;
         self.player_angle = level.spawn_angle;
@@ -425,6 +479,7 @@ impl Game3DState {
             KEY_LEFT => self.turn_left = true,
             KEY_RIGHT => self.turn_right = true,
             b'e' | b'E' => self.try_interact(),
+            b' ' => self.shoot(), // Space to fire
             _ => {}
         }
     }
@@ -518,6 +573,26 @@ impl Game3DState {
         // Item pickup
         self.check_pickups();
 
+        // Enemy AI
+        self.update_enemies();
+
+        // Combat timers
+        if self.shoot_cooldown > 0 { self.shoot_cooldown -= 1; }
+        if self.shoot_flash > 0 { self.shoot_flash -= 1; }
+
+        // Weapon bob during movement
+        if self.move_forward || self.move_back || self.strafe_left || self.strafe_right {
+            self.weapon_bob += 0.12;
+        } else {
+            self.weapon_bob *= 0.9; // Settle
+        }
+
+        // Check player death
+        if self.player_health <= 0 {
+            self.game_over = true;
+            self.message = Some((alloc::string::String::from("YOU DIED"), 9999));
+        }
+
         // Auto-interact with exit when touching
         let mx = self.player_x as usize;
         let my = self.player_y as usize;
@@ -568,12 +643,115 @@ impl Game3DState {
         }
     }
 
+    /// Fire weapon — hitscan ray from player center
+    fn shoot(&mut self) {
+        if self.shoot_cooldown > 0 { return; }
+        self.shoot_cooldown = 15; // Cooldown between shots
+        self.shoot_flash = 4;    // Muzzle flash frames
+
+        // Hitscan: cast ray in look direction
+        let ray_dx = self.player_angle.cos();
+        let ray_dy = self.player_angle.sin();
+        let mut rx = self.player_x;
+        let mut ry = self.player_y;
+        let step = 0.1;
+
+        for _ in 0..120 { // Max range ~12 tiles
+            rx += ray_dx * step;
+            ry += ray_dy * step;
+
+            // Hit wall?
+            let mx = rx as usize;
+            let my = ry as usize;
+            if mx >= MAP_W || my >= MAP_H { break; }
+            if self.map[my][mx] != TILE_EMPTY { break; }
+
+            // Hit enemy?
+            for enemy in &mut self.enemies {
+                if enemy.state == EnemyState::Dead { continue; }
+                let edx = enemy.x - rx;
+                let edy = enemy.y - ry;
+                if edx * edx + edy * edy < 0.3 {
+                    // Hit!
+                    enemy.health -= 25;
+                    if enemy.health <= 0 {
+                        enemy.state = EnemyState::Dead;
+                        self.kills += 1;
+                        self.player_score += 200;
+                        self.message = Some((alloc::string::String::from("Enemy eliminated!"), 60));
+                    } else {
+                        enemy.state = EnemyState::Chasing; // Alert on hit
+                        self.message = Some((alloc::string::String::from("Hit!"), 30));
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    /// Update enemy AI
+    fn update_enemies(&mut self) {
+        let px = self.player_x;
+        let py = self.player_y;
+
+        for i in 0..self.enemies.len() {
+            if self.enemies[i].state == EnemyState::Dead { continue; }
+
+            let ex = self.enemies[i].x;
+            let ey = self.enemies[i].y;
+            let dx = px - ex;
+            let dy = py - ey;
+            let dist = (dx * dx + dy * dy).sqrt();
+
+            // State transitions
+            if dist < self.enemies[i].attack_range {
+                self.enemies[i].state = EnemyState::Attacking;
+            } else if dist < self.enemies[i].sight_range {
+                self.enemies[i].state = EnemyState::Chasing;
+            } else if self.enemies[i].state == EnemyState::Chasing {
+                // Lost sight — go idle after a bit
+                self.enemies[i].state = EnemyState::Idle;
+            }
+
+            match self.enemies[i].state {
+                EnemyState::Chasing => {
+                    // Move toward player
+                    if dist > 0.1 {
+                        let nx = dx / dist * self.enemies[i].speed;
+                        let ny = dy / dist * self.enemies[i].speed;
+                        let new_ex = self.enemies[i].x + nx;
+                        let new_ey = self.enemies[i].y + ny;
+                        // Basic wall collision for enemies
+                        if !self.is_wall(new_ex, new_ey) {
+                            self.enemies[i].x = new_ex;
+                            self.enemies[i].y = new_ey;
+                        }
+                    }
+                }
+                EnemyState::Attacking => {
+                    if self.enemies[i].attack_cooldown == 0 {
+                        // Deal damage to player
+                        self.player_health -= self.enemies[i].damage;
+                        self.flash_timer = 10;
+                        self.enemies[i].attack_cooldown = 45; // ~0.75 sec at 60fps
+                    }
+                }
+                _ => {}
+            }
+
+            // Cooldown tick
+            if self.enemies[i].attack_cooldown > 0 {
+                self.enemies[i].attack_cooldown -= 1;
+            }
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // RENDERING — Raycasting Engine
     // ═══════════════════════════════════════════════════════════════════════════
 
     /// Render the full game view into a pixel buffer
-    pub fn render(&self, buf: &mut [u32], w: usize, h: usize) {
+    pub fn render(&mut self, buf: &mut [u32], w: usize, h: usize) {
         if w < 80 || h < 60 { return; }
 
         let hud_h = 40; // Bottom HUD height
@@ -584,14 +762,27 @@ impl Game3DState {
             buf[i] = 0xFF000000;
         }
 
+        // Prepare z-buffer
+        self.z_buffer.clear();
+        self.z_buffer.resize(w, f32::MAX);
+
         // Render ceiling and floor
         self.render_floor_ceiling(buf, w, view_h);
 
-        // Raycasting — render walls
+        // Raycasting — render walls (fills z_buffer)
         self.render_walls(buf, w, view_h);
+
+        // Render enemy sprites (uses z_buffer for clipping)
+        self.render_enemies(buf, w, view_h);
 
         // Render item sprites (simple billboard circles)
         self.render_items(buf, w, view_h);
+
+        // Render crosshair
+        self.render_crosshair(buf, w, view_h);
+
+        // Render weapon
+        self.render_weapon(buf, w, view_h);
 
         // Minimap
         self.render_minimap(buf, w, h);
@@ -660,7 +851,7 @@ impl Game3DState {
         }
     }
 
-    fn render_walls(&self, buf: &mut [u32], w: usize, h: usize) {
+    fn render_walls(&mut self, buf: &mut [u32], w: usize, h: usize) {
         let fov = core::f32::consts::FRAC_PI_3; // 60 degrees
         let half_h = h as f32 / 2.0;
 
@@ -785,6 +976,11 @@ impl Game3DState {
 
                 buf[y * w + col] = pixel;
             }
+
+            // Store depth for sprite clipping
+            if col < self.z_buffer.len() {
+                self.z_buffer[col] = perp_dist;
+            }
         }
     }
 
@@ -840,6 +1036,199 @@ impl Game3DState {
                     let b = ((color & 0xFF) as f32 * pulse) as u32;
 
                     buf[row as usize * w + cx as usize] = 0xFF000000 | (r << 16) | (g << 8) | b;
+                }
+            }
+        }
+    }
+
+    fn render_enemies(&self, buf: &mut [u32], w: usize, h: usize) {
+        let half_h = h as f32 / 2.0;
+        let fov = core::f32::consts::FRAC_PI_3;
+
+        for enemy in &self.enemies {
+            if enemy.state == EnemyState::Dead { continue; }
+
+            // Relative position to player
+            let dx = enemy.x - self.player_x;
+            let dy = enemy.y - self.player_y;
+
+            // Transform to camera space
+            let cos_a = self.player_angle.cos();
+            let sin_a = self.player_angle.sin();
+            let tx = dx * cos_a + dy * sin_a;
+            let ty = -dx * sin_a + dy * cos_a;
+
+            // Behind player
+            if ty < 0.3 { continue; }
+
+            // Screen X position
+            let screen_x = (0.5 + tx / (ty * (fov / 2.0).tan() * 2.0)) * w as f32;
+            let sprite_h = (h as f32 / ty * 0.6) as i32;
+            let sprite_w = (sprite_h as f32 * 0.5) as i32;
+
+            if sprite_h < 2 { continue; }
+
+            let sx = screen_x as i32 - sprite_w / 2;
+            let sy = half_h as i32 - sprite_h / 2;
+
+            // Colors based on state and health
+            let base_color: u32 = match enemy.state {
+                EnemyState::Idle => 0xFFCC2222,      // Dark red
+                EnemyState::Chasing => 0xFFFF3333,   // Bright red
+                EnemyState::Attacking => 0xFFFF6600,  // Orange (attacking)
+                EnemyState::Dead => continue,
+            };
+
+            // Distance fog factor
+            let fog = (1.0 - (ty / 12.0).min(1.0)).max(0.2);
+
+            // Draw enemy as a humanoid shape (head + body + limbs)
+            for dy_off in 0..sprite_h {
+                let row = sy + dy_off;
+                if row < 0 || row >= h as i32 { continue; }
+
+                // Shape: narrow at top (head), wider in middle (body), narrow at bottom (legs)
+                let t = dy_off as f32 / sprite_h as f32; // 0=top, 1=bottom
+                let width_factor = if t < 0.2 {
+                    // Head: smaller circle
+                    0.4 + t
+                } else if t < 0.7 {
+                    // Body: wider
+                    0.7
+                } else {
+                    // Legs: two narrow strips
+                    0.5
+                };
+                let row_half_w = (sprite_w as f32 * width_factor * 0.5) as i32;
+
+                for dx_off in -row_half_w..=row_half_w {
+                    let cx = sx + sprite_w / 2 + dx_off;
+                    if cx < 0 || cx >= w as i32 { continue; }
+
+                    // Z-buffer check: only draw if closer than wall
+                    if (cx as usize) < self.z_buffer.len() && ty >= self.z_buffer[cx as usize] {
+                        continue; // Behind wall
+                    }
+
+                    // Legs gap at bottom
+                    if t > 0.75 && dx_off.abs() < 2 {
+                        continue; // Gap between legs
+                    }
+
+                    // Apply color with fog
+                    let r = (((base_color >> 16) & 0xFF) as f32 * fog) as u32;
+                    let g = (((base_color >> 8) & 0xFF) as f32 * fog) as u32;
+                    let b = ((base_color & 0xFF) as f32 * fog) as u32;
+                    let pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+
+                    buf[row as usize * w + cx as usize] = pixel;
+                }
+            }
+
+            // Eyes (two bright dots near top)
+            if sprite_h > 8 {
+                let eye_y = sy + sprite_h / 8;
+                let eye_offset = sprite_w / 6;
+                for &ex_off in &[-eye_offset, eye_offset] {
+                    let eye_x = sx + sprite_w / 2 + ex_off;
+                    if eye_x >= 0 && eye_x < w as i32 && eye_y >= 0 && eye_y < h as i32 {
+                        if (eye_x as usize) < self.z_buffer.len() && ty < self.z_buffer[eye_x as usize] {
+                            buf[eye_y as usize * w + eye_x as usize] = 0xFFFFFF00; // Yellow eyes
+                        }
+                    }
+                }
+            }
+
+            // Health bar above enemy head (only if damaged)
+            if enemy.health < enemy.max_health && sprite_h > 10 {
+                let bar_y = sy - 4;
+                if bar_y >= 0 && bar_y < h as i32 {
+                    let bar_w = sprite_w.min(20) as usize;
+                    let fill_w = (enemy.health as f32 / enemy.max_health as f32 * bar_w as f32) as usize;
+                    let bar_start_x = (sx + sprite_w / 2 - bar_w as i32 / 2).max(0) as usize;
+                    for bx in 0..bar_w {
+                        let px = bar_start_x + bx;
+                        if px >= w { break; }
+                        if (px as usize) < self.z_buffer.len() && ty >= self.z_buffer[px] {
+                            continue;
+                        }
+                        let color = if bx < fill_w { 0xFFFF0000 } else { 0xFF440000 };
+                        buf[bar_y as usize * w + px] = color;
+                    }
+                }
+            }
+        }
+    }
+
+    fn render_crosshair(&self, buf: &mut [u32], w: usize, h: usize) {
+        let cx = w / 2;
+        let cy = h / 2;
+        let size = 4;
+        let color = if self.shoot_flash > 0 { 0xFFFFFF00 } else { 0xAA00FF88 };
+
+        // Horizontal line
+        for x in (cx.saturating_sub(size))..=(cx + size).min(w - 1) {
+            if x != cx { // Gap in center
+                buf[cy * w + x] = color;
+            }
+        }
+        // Vertical line
+        for y in (cy.saturating_sub(size))..=(cy + size).min(h - 1) {
+            if y != cy {
+                buf[y * w + cx] = color;
+            }
+        }
+        // Center dot
+        buf[cy * w + cx] = if self.shoot_flash > 0 { 0xFFFFFFFF } else { 0xFF00FF88 };
+    }
+
+    fn render_weapon(&self, buf: &mut [u32], w: usize, h: usize) {
+        // Simple weapon sprite at bottom-center
+        let bob_offset = if self.move_forward || self.move_back || self.strafe_left || self.strafe_right {
+            (self.weapon_bob.sin() * 3.0) as i32
+        } else {
+            0
+        };
+
+        let base_x = (w as i32 / 2 + 30) as usize;
+        let base_y = (h as i32 - 20 + bob_offset) as usize;
+
+        // Draw a simple pistol shape
+        let gun_color = if self.shoot_flash > 0 { 0xFFFFDD44 } else { 0xFF666666 };
+        let barrel_color = if self.shoot_flash > 0 { 0xFFFFFF88 } else { 0xFF444444 };
+
+        // Barrel (thin horizontal rectangle)
+        for y in 0..3usize {
+            for x in 0..12usize {
+                let px = base_x + x;
+                let py = base_y.saturating_sub(8) + y;
+                if px < w && py < h {
+                    buf[py * w + px] = barrel_color;
+                }
+            }
+        }
+        // Grip (vertical rectangle below)
+        for y in 0..8usize {
+            for x in 0..6usize {
+                let px = base_x + 3 + x;
+                let py = base_y.saturating_sub(5) + y;
+                if px < w && py < h {
+                    buf[py * w + px] = gun_color;
+                }
+            }
+        }
+
+        // Muzzle flash
+        if self.shoot_flash > 0 {
+            let flash_x = base_x + 12;
+            let flash_y = base_y.saturating_sub(7);
+            for dy in 0..5usize {
+                for dx in 0..4usize {
+                    let px = flash_x + dx;
+                    let py = flash_y.saturating_sub(1) + dy;
+                    if px < w && py < h {
+                        buf[py * w + px] = 0xFFFFFF88;
+                    }
                 }
             }
         }
@@ -928,6 +1317,20 @@ impl Game3DState {
                 buf[(iy + 1) * w + ix + 1] = ic;
             }
         }
+
+        // Enemies on minimap (red dots)
+        for enemy in &self.enemies {
+            if enemy.state == EnemyState::Dead { continue; }
+            let ex = offset_x + (enemy.x * cell as f32) as usize;
+            let ey = offset_y + (enemy.y * cell as f32) as usize;
+            let ec = 0xFFFF2222;
+            if ex > 0 && ex + 1 < w && ey > 0 && ey + 1 < h {
+                buf[ey * w + ex] = ec;
+                buf[ey * w + ex + 1] = ec;
+                buf[(ey + 1) * w + ex] = ec;
+                buf[(ey + 1) * w + ex + 1] = ec;
+            }
+        }
     }
 
     fn render_hud(&self, buf: &mut [u32], w: usize, h: usize, view_h: usize) {
@@ -991,6 +1394,10 @@ impl Game3DState {
             self.draw_text_at(buf, w, h, 310, hud_y, "[KEY]", 0xFFFFAA00);
         }
 
+        // Kill count
+        let kill_str = format!("KILLS:{}", self.kills);
+        self.draw_text_at(buf, w, h, 370, hud_y, &kill_str, COLOR_DAMAGE);
+
         // Compass
         let compass_x = w - 60;
         let dirs = ["N", "E", "S", "W"];
@@ -999,7 +1406,7 @@ impl Game3DState {
         self.draw_text_at(buf, w, h, compass_x, hud_y, dirs[dir_idx], COLOR_HUD_GREEN);
 
         // Controls hint
-        self.draw_text_at(buf, w, h, 8, hud_y + 18, "WASD:Move Arrows:Turn E:Use", COLOR_HUD_DIM);
+        self.draw_text_at(buf, w, h, 8, hud_y + 18, "WASD:Move Arrows:Turn E:Use Space:Shoot", COLOR_HUD_DIM);
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
