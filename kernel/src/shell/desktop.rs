@@ -705,6 +705,804 @@ pub(super) fn cmd_security(args: &[&str]) {
     }
 }
 
+// ==================== DEMO TUTORIAL -- Interactive guided tour ====================
+// A cinematic interactive tutorial that walks users through TrustOS features.
+// Uses Matrix-rain styled scenes for intro, then live shell demos, then desktop preview.
+// Launched via `demo` or `tutorial` shell command.
+
+pub(super) fn cmd_demo(args: &[&str]) {
+    let lang = match args.first().copied() {
+        Some("fr") => "fr",
+        _ => "en",
+    };
+
+    // Use TSC for timing
+    let pause = |secs: u64| {
+        let ms = secs * 1000;
+        let start_tsc = crate::cpu::tsc::read_tsc();
+        let freq = crate::cpu::tsc::frequency_hz();
+        if freq == 0 { return; }
+        let target_cycles = freq / 1000 * ms;
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
+            if elapsed >= target_cycles { break; }
+            let _ = crate::keyboard::try_read_key();
+            core::hint::spin_loop();
+        }
+    };
+
+    let wait_key_or_timeout = |timeout_secs: u64| -> bool {
+        let ms = timeout_secs * 1000;
+        let start_tsc = crate::cpu::tsc::read_tsc();
+        let freq = crate::cpu::tsc::frequency_hz();
+        if freq == 0 { return false; }
+        let target_cycles = freq / 1000 * ms;
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
+            if elapsed >= target_cycles { return false; }
+            if let Some(key) = crate::keyboard::try_read_key() {
+                if key == 0x1B || key == b'q' { return true; } // quit
+                if key == b' ' || key == b'\n' || key == 13 { return false; } // continue
+            }
+            core::hint::spin_loop();
+        }
+    };
+
+    // -------------------------------------------------------------------
+    // PART 1: Cinematic Intro (Matrix rain framebuffer)
+    // -------------------------------------------------------------------
+    let (sw, sh) = crate::framebuffer::get_dimensions();
+
+    {
+        let was_db = crate::framebuffer::is_double_buffer_enabled();
+        if !was_db {
+            crate::framebuffer::init_double_buffer();
+            crate::framebuffer::set_double_buffer_mode(true);
+        }
+
+        let w = sw as usize;
+        let h = sh as usize;
+        let mut buf = alloc::vec![0u32; w * h];
+
+        // -- Helper: draw scaled character into buffer --
+        let draw_big_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+            let glyph = crate::framebuffer::font::get_glyph(c);
+            for (row, &bits) in glyph.iter().enumerate() {
+                for bit in 0..8u32 {
+                    if bits & (0x80 >> bit) != 0 {
+                        for sy in 0..scale {
+                            for sx in 0..scale {
+                                let px = cx + bit as usize * scale + sx;
+                                let py = cy + row * scale + sy;
+                                if px < w && py < h {
+                                    buf[py * w + px] = color;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        // -- Helper: Matrix rain background --
+        let mut rain_cols: alloc::vec::Vec<u16> = alloc::vec![0u16; w / 8 + 1];
+        let mut rain_speeds: alloc::vec::Vec<u8> = alloc::vec![1u8; w / 8 + 1];
+        for i in 0..rain_cols.len() {
+            rain_cols[i] = ((i * 37 + 13) % h) as u16;
+            rain_speeds[i] = (((i * 7 + 3) % 4) + 1) as u8;
+        }
+
+        let draw_rain_step = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
+            for pixel in buf.iter_mut() {
+                let g = ((*pixel >> 8) & 0xFF) as u32;
+                if g > 0 {
+                    let new_g = g.saturating_sub(8);
+                    *pixel = 0xFF000000 | (new_g << 8);
+                }
+            }
+            for col_idx in 0..cols.len() {
+                let x = col_idx * 8;
+                if x >= w { continue; }
+                cols[col_idx] = cols[col_idx].wrapping_add(speeds[col_idx] as u16);
+                if cols[col_idx] as usize >= h { cols[col_idx] = 0; }
+                let y = cols[col_idx] as usize;
+                let c = (((frame as usize + col_idx * 13) % 94) + 33) as u8 as char;
+                let glyph = crate::framebuffer::font::get_glyph(c);
+                for (row, &bits) in glyph.iter().enumerate() {
+                    let py = y + row;
+                    if py >= h { break; }
+                    for bit in 0..8u32 {
+                        if bits & (0x80 >> bit) != 0 {
+                            let px = x + bit as usize;
+                            if px < w {
+                                buf[py * w + px] = 0xFF00FF44;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        let blit_buf = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+                let bb = bb_ptr as *mut u32;
+                let bb_s = bb_stride as usize;
+                for y in 0..h.min(bb_h as usize) {
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            buf[y * w..].as_ptr(),
+                            bb.add(y * bb_s),
+                            w,
+                        );
+                    }
+                }
+            }
+            crate::framebuffer::swap_buffers();
+        };
+
+        // -- Helper: render tutorial scene with typing effect --
+        let render_scene = |buf: &mut [u32], w: usize, h: usize,
+                           rain_cols: &mut [u16], rain_speeds: &[u8],
+                           lines: &[(&str, u32, usize)],
+                           hold_ms: u64| {
+            let freq = crate::cpu::tsc::frequency_hz();
+            if freq == 0 { return; }
+
+            let total_chars: usize = lines.iter().map(|(t, _, _)| t.len()).sum();
+            let type_ms = 60u64;
+            let type_total_ms = total_chars as u64 * type_ms;
+
+            let start_tsc = crate::cpu::tsc::read_tsc();
+            let hold_target = freq / 1000 * (type_total_ms + hold_ms);
+
+            let mut frame = 0u32;
+            loop {
+                let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
+                if elapsed >= hold_target { break; }
+                if let Some(key) = crate::keyboard::try_read_key() {
+                    if key == 0x1B || key == b'q' { break; }
+                    if key == b' ' || key == b'\n' || key == 13 { break; } // skip scene
+                }
+
+                draw_rain_step(buf, w, h, rain_cols, rain_speeds, frame);
+
+                let elapsed_ms = elapsed / (freq / 1000).max(1);
+                let chars_shown = if elapsed_ms < type_total_ms {
+                    (elapsed_ms / type_ms.max(1)) as usize
+                } else {
+                    total_chars
+                };
+
+                let total_text_h: usize = lines.iter().map(|(_, _, s)| 16 * s + 8).sum::<usize>();
+                let mut y_start = if total_text_h < h { (h - total_text_h) / 2 } else { 20 };
+                let mut chars_counted = 0usize;
+
+                for &(text, color, scale) in lines {
+                    let text_w = text.len() * 8 * scale;
+                    let start_x = if text_w < w { (w - text_w) / 2 } else { 0 };
+
+                    for (i, c) in text.chars().enumerate() {
+                        if chars_counted + i >= chars_shown { break; }
+                        draw_big_char(buf, w, h, start_x + i * 8 * scale, y_start, c, color, scale);
+                    }
+                    if chars_shown > chars_counted && chars_shown < chars_counted + text.len() {
+                        let cursor_i = chars_shown - chars_counted;
+                        let cx = start_x + cursor_i * 8 * scale;
+                        for cy in y_start..y_start + 16 * scale {
+                            if cy < h && cx + 2 < w {
+                                buf[cy * w + cx] = 0xFF00FF88;
+                                buf[cy * w + cx + 1] = 0xFF00FF88;
+                            }
+                        }
+                    }
+
+                    chars_counted += text.len();
+                    y_start += 16 * scale + 8;
+                }
+
+                blit_buf(buf, w, h);
+                frame += 1;
+                crate::cpu::tsc::delay_millis(33);
+            }
+
+            // Fade out
+            let fade_start = crate::cpu::tsc::read_tsc();
+            let fade_target = freq / 1000 * 600;
+            loop {
+                let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(fade_start);
+                if elapsed >= fade_target { break; }
+                let progress = (elapsed * 255 / fade_target) as u32;
+                for pixel in buf.iter_mut() {
+                    let r = ((*pixel >> 16) & 0xFF) as u32;
+                    let g = ((*pixel >> 8) & 0xFF) as u32;
+                    let b = (*pixel & 0xFF) as u32;
+                    let nr = r.saturating_sub(r * progress / 512 + 1);
+                    let ng = g.saturating_sub(g * progress / 512 + 1);
+                    let nb = b.saturating_sub(b * progress / 512 + 1);
+                    *pixel = 0xFF000000 | (nr << 16) | (ng << 8) | nb;
+                }
+                blit_buf(buf, w, h);
+                crate::cpu::tsc::delay_millis(33);
+            }
+            for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
+            blit_buf(buf, w, h);
+        };
+
+        // ---- Scene 1: Welcome ----
+        crate::serial_println!("[DEMO] Scene 1: Welcome");
+        for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
+        if lang == "fr" {
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+                &[("Bienvenue dans", 0xFF00DD55, 5),
+                  ("TrustOS", 0xFF00FFAA, 6)],
+                3000);
+        } else {
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+                &[("Welcome to", 0xFF00DD55, 5),
+                  ("TrustOS", 0xFF00FFAA, 6)],
+                3000);
+        }
+
+        // ---- Scene 2: What is it? ----
+        crate::serial_println!("[DEMO] Scene 2: What is TrustOS");
+        if lang == "fr" {
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+                &[("Un OS bare-metal", 0xFF00DD55, 4),
+                  ("ecrit en 100% Rust", 0xFF00FF88, 4),
+                  ("Aucun C. Aucun Linux.", 0xFFFFCC44, 3)],
+                3000);
+        } else {
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+                &[("A bare-metal OS", 0xFF00DD55, 4),
+                  ("written in 100% Rust", 0xFF00FF88, 4),
+                  ("No C. No Linux. Just Rust.", 0xFFFFCC44, 3)],
+                3000);
+        }
+
+        // ---- Scene 3: Tutorial Mode ----
+        crate::serial_println!("[DEMO] Scene 3: Tutorial start");
+        if lang == "fr" {
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+                &[("Tutoriel Interactif", 0xFF44DDFF, 5),
+                  ("Appuyez ESPACE pour continuer", 0xFF888888, 2),
+                  ("ESC pour quitter", 0xFF666666, 2)],
+                4000);
+        } else {
+            render_scene(&mut buf, w, h, &mut rain_cols, &rain_speeds,
+                &[("Interactive Tutorial", 0xFF44DDFF, 5),
+                  ("Press SPACE to continue", 0xFF888888, 2),
+                  ("ESC to quit", 0xFF666666, 2)],
+                4000);
+        }
+
+        if !was_db {
+            crate::framebuffer::set_double_buffer_mode(false);
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // PART 2: Shell Tutorial (live command demos)
+    // -------------------------------------------------------------------
+    crate::framebuffer::clear();
+
+    let print_step = |step: u32, total: u32, title_en: &str, title_fr: &str, desc_en: &str, desc_fr: &str| {
+        crate::println!();
+        crate::println_color!(0xFF00CCFF, "+--------------------------------------------------------------+");
+        if lang == "fr" {
+            crate::println_color!(0xFF00CCFF, "|  ETAPE {}/{} -- {}", step, total, title_fr);
+        } else {
+            crate::println_color!(0xFF00CCFF, "|  STEP {}/{} -- {}", step, total, title_en);
+        }
+        crate::println_color!(0xFF00CCFF, "+--------------------------------------------------------------+");
+        crate::println!();
+        if lang == "fr" {
+            crate::println_color!(0xFF888888, "  {}", desc_fr);
+        } else {
+            crate::println_color!(0xFF888888, "  {}", desc_en);
+        }
+        crate::println!();
+    };
+
+    let total_steps = 8u32;
+
+    // ---- Step 1: System Info ----
+    print_step(1, total_steps, "SYSTEM INFO", "INFOS SYSTEME",
+               "TrustOS can show detailed system information, just like Linux.",
+               "TrustOS affiche les infos systeme, comme sous Linux.");
+    pause(2);
+
+    crate::println_color!(COLOR_CYAN, "  $ neofetch");
+    pause(1);
+    super::commands::cmd_neofetch();
+    pause(3);
+
+    if lang == "fr" {
+        crate::println_color!(0xFF00FF88, "  -> Neofetch montre le CPU, la RAM, le kernel et l'uptime.");
+    } else {
+        crate::println_color!(0xFF00FF88, "  -> Neofetch shows CPU, RAM, kernel version and uptime.");
+    }
+    if wait_key_or_timeout(6) { return; }
+
+    // ---- Step 2: Filesystem ----
+    print_step(2, total_steps, "FILESYSTEM", "SYSTEME DE FICHIERS",
+               "TrustOS has a full virtual filesystem (TrustFS + VFS).",
+               "TrustOS possede un systeme de fichiers virtuel complet (TrustFS + VFS).");
+    pause(1);
+
+    crate::println_color!(COLOR_CYAN, "  $ mkdir /tutorial");
+    crate::ramfs::with_fs(|fs| { let _ = fs.mkdir("/tutorial"); });
+    crate::println_color!(COLOR_GREEN, "  Created /tutorial");
+    pause(1);
+
+    crate::println_color!(COLOR_CYAN, "  $ echo 'Hello from TrustOS!' > /tutorial/hello.txt");
+    crate::ramfs::with_fs(|fs| {
+        let _ = fs.touch("/tutorial/hello.txt");
+        let _ = fs.write_file("/tutorial/hello.txt", b"Hello from TrustOS!\nThis file was created during the tutorial.\nPure Rust, running on bare metal.\n");
+    });
+    crate::println_color!(COLOR_GREEN, "  Written: /tutorial/hello.txt");
+    pause(1);
+
+    crate::println_color!(COLOR_CYAN, "  $ cat /tutorial/hello.txt");
+    super::commands::cmd_cat(&["/tutorial/hello.txt"], None, None);
+    pause(2);
+
+    crate::println_color!(COLOR_CYAN, "  $ tree /");
+    super::commands::cmd_tree(&["/"]);
+
+    if lang == "fr" {
+        crate::println_color!(0xFF00FF88, "  -> Commandes POSIX completes: ls, cd, mkdir, rm, cp, mv, cat, find, grep...");
+    } else {
+        crate::println_color!(0xFF00FF88, "  -> Full POSIX commands: ls, cd, mkdir, rm, cp, mv, cat, find, grep...");
+    }
+    if wait_key_or_timeout(6) { return; }
+
+    // ---- Step 3: TrustLang ----
+    print_step(3, total_steps, "TRUSTLANG COMPILER", "COMPILATEUR TRUSTLANG",
+               "TrustOS includes a built-in programming language with compiler + VM.",
+               "TrustOS inclut un langage de programmation avec compilateur + VM.");
+    pause(1);
+
+    let tl_code = r#"fn factorial(n: i64) -> i64 {
+    if n <= 1 { return 1; }
+    return n * factorial(n - 1);
+}
+
+fn main() {
+    println("=== TrustLang Demo ===");
+    for i in 1..8 {
+        print("  ");
+        print(to_string(i));
+        print("! = ");
+        println(to_string(factorial(i)));
+    }
+}"#;
+    crate::ramfs::with_fs(|fs| {
+        let _ = fs.touch("/tutorial/demo.tl");
+        let _ = fs.write_file("/tutorial/demo.tl", tl_code.as_bytes());
+    });
+
+    crate::println_color!(COLOR_CYAN, "  $ cat /tutorial/demo.tl");
+    crate::println_color!(0xFFDDDDDD, "{}", tl_code);
+    pause(3);
+
+    crate::println_color!(COLOR_CYAN, "  $ trustlang run /tutorial/demo.tl");
+    crate::println_color!(0xFF00FF88, "  [TrustLang] Compiling...");
+    match crate::trustlang::run(tl_code) {
+        Ok(output) => { if !output.is_empty() { crate::print!("{}", output); } }
+        Err(e) => crate::println_color!(COLOR_RED, "  Error: {}", e),
+    }
+    crate::println_color!(COLOR_GREEN, "  [TrustLang] Done!");
+
+    if lang == "fr" {
+        crate::println_color!(0xFF00FF88, "  -> Fonctions, recursion, boucles, types -- compile en bytecode!");
+    } else {
+        crate::println_color!(0xFF00FF88, "  -> Functions, recursion, loops, types -- compiled to bytecode!");
+    }
+    if wait_key_or_timeout(6) { return; }
+
+    // ---- Step 4: Network Stack ----
+    print_step(4, total_steps, "NETWORK STACK", "PILE RESEAU",
+               "Full TCP/IP stack: DHCP, DNS, HTTP, TLS 1.3 -- all in Rust.",
+               "Pile TCP/IP complete: DHCP, DNS, HTTP, TLS 1.3 -- tout en Rust.");
+    pause(1);
+
+    crate::println_color!(COLOR_CYAN, "  $ ifconfig");
+    super::vm::cmd_ifconfig();
+    pause(2);
+
+    crate::println_color!(COLOR_CYAN, "  $ netstat");
+    super::vm::cmd_netstat();
+
+    if lang == "fr" {
+        crate::println_color!(0xFF00FF88, "  -> Un navigateur web integre peut charger de vraies pages!");
+    } else {
+        crate::println_color!(0xFF00FF88, "  -> A built-in web browser can load real web pages!");
+    }
+    if wait_key_or_timeout(5) { return; }
+
+    // ---- Step 5: Video Effects ----
+    print_step(5, total_steps, "VIDEO EFFECTS", "EFFETS VIDEO",
+               "Real-time procedural rendering engine -- fire, matrix, plasma.",
+               "Moteur de rendu procedural temps reel -- feu, matrix, plasma.");
+    pause(2);
+
+    let vw = sw as u16;
+    let vh = sh as u16;
+
+    if lang == "fr" {
+        crate::println_color!(0xFFFF4400, "  Effet 1: FEU -- Flammes procedurales (5s)");
+    } else {
+        crate::println_color!(0xFFFF4400, "  Effect 1: FIRE -- Procedural flames (5s)");
+    }
+    pause(1);
+    crate::video::player::render_realtime_timed("fire", vw, vh, 30, 5000);
+    crate::framebuffer::clear();
+
+    if lang == "fr" {
+        crate::println_color!(0xFF00FF44, "  Effet 2: MATRIX -- Pluie numerique (5s)");
+    } else {
+        crate::println_color!(0xFF00FF44, "  Effect 2: MATRIX -- Digital rain (5s)");
+    }
+    pause(1);
+    crate::video::player::render_realtime_timed("matrix", vw, vh, 30, 5000);
+    crate::framebuffer::clear();
+
+    if lang == "fr" {
+        crate::println_color!(0xFFFF00FF, "  Effet 3: PLASMA -- Plasma psychedelique (5s)");
+    } else {
+        crate::println_color!(0xFFFF00FF, "  Effect 3: PLASMA -- Psychedelic plasma (5s)");
+    }
+    pause(1);
+    crate::video::player::render_realtime_timed("plasma", vw, vh, 30, 5000);
+    crate::framebuffer::clear();
+
+    if lang == "fr" {
+        crate::println_color!(0xFF00FF88, "  -> Tout fonctionne a 60+ FPS sur du bare-metal!");
+    } else {
+        crate::println_color!(0xFF00FF88, "  -> All running at 60+ FPS on bare metal!");
+    }
+    if wait_key_or_timeout(4) { return; }
+
+    // ---- Step 6: 3D Engine ----
+    print_step(6, total_steps, "3D ENGINE", "MOTEUR 3D",
+               "Wireframe 3D with perspective projection and depth shading.",
+               "3D filaire avec projection perspective et ombrage de profondeur.");
+    pause(2);
+
+    {
+        let mut renderer = crate::formula3d::FormulaRenderer::new();
+        renderer.set_scene(crate::formula3d::FormulaScene::Character);
+        renderer.wire_color = 0xFF00FFAA;
+
+        let rw = sw as usize;
+        let rh = sh as usize;
+        let mut vp_buf = alloc::vec![0u32; rw * rh];
+
+        let was_db = crate::framebuffer::is_double_buffer_enabled();
+        if !was_db {
+            crate::framebuffer::init_double_buffer();
+            crate::framebuffer::set_double_buffer_mode(true);
+        }
+        crate::framebuffer::clear_backbuffer(0xFF000000);
+        crate::framebuffer::swap_buffers();
+
+        let start_tsc = crate::cpu::tsc::read_tsc();
+        let freq = crate::cpu::tsc::frequency_hz();
+        let target_cycles = if freq > 0 { freq / 1000 * 6000 } else { u64::MAX }; // 6 seconds
+
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
+            if elapsed >= target_cycles { break; }
+            if let Some(key) = crate::keyboard::try_read_key() {
+                if key == 0x1B || key == b'q' { break; }
+                if key == b' ' || key == b'\n' || key == 13 { break; }
+            }
+
+            renderer.update();
+            renderer.render(&mut vp_buf, rw, rh);
+
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+                let bb = bb_ptr as *mut u32;
+                let bb_s = bb_stride as usize;
+                for y in 0..rh.min(bb_h as usize) {
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            vp_buf[y * rw..].as_ptr(),
+                            bb.add(y * bb_s),
+                            rw,
+                        );
+                    }
+                }
+            }
+            crate::framebuffer::swap_buffers();
+        }
+
+        if !was_db {
+            crate::framebuffer::set_double_buffer_mode(false);
+        }
+    }
+    crate::framebuffer::clear();
+    if wait_key_or_timeout(2) { return; }
+
+    // ---- Step 7: Desktop Environment ----
+    print_step(7, total_steps, "DESKTOP ENVIRONMENT", "ENVIRONNEMENT DE BUREAU",
+               "GPU-composited windowed desktop with apps, games, and more.",
+               "Bureau fenetre composite GPU avec apps, jeux, et plus encore.");
+    pause(1);
+
+    if lang == "fr" {
+        crate::println_color!(0xFF00FF88, "  Le bureau s'ouvre avec un Terminal pour 8 secondes...");
+        crate::println_color!(0xFF888888, "  (Essayez de taper des commandes!)");
+    } else {
+        crate::println_color!(0xFF00FF88, "  Desktop will open with a Terminal for 8 seconds...");
+        crate::println_color!(0xFF888888, "  (Try typing some commands!)");
+    }
+    pause(3);
+
+    // Launch desktop with Terminal, auto-exit after 8 seconds
+    cmd_cosmic_v2_with_app_timed(Some("shell"), 8000);
+    crate::framebuffer::clear();
+    pause(1);
+
+    // ---- Step 8: Feature Summary ----
+    print_step(8, total_steps, "FEATURE OVERVIEW", "VUE D'ENSEMBLE",
+               "Everything TrustOS includes -- all in 6MB, all in Rust.",
+               "Tout ce que TrustOS contient -- en 6Mo, tout en Rust.");
+    pause(1);
+
+    crate::println_color!(0xFFAADDFF, "  +- Kernel -------------------------------------------+");
+    crate::println_color!(0xFFDDDDDD, "  | SMP multicore * APIC * IDT * GDT * paging          |");
+    crate::println_color!(0xFFDDDDDD, "  | heap allocator * scheduler * RTC * PIT * TSC        |");
+    crate::println_color!(0xFFAADDFF, "  +- Shell --------------------------------------------|");
+    crate::println_color!(0xFFDDDDDD, "  | 200+ POSIX commands * pipes * scripting              |");
+    crate::println_color!(0xFFDDDDDD, "  | ls cd mkdir rm cp mv cat grep find head tail tree   |");
+    crate::println_color!(0xFFAADDFF, "  +- Desktop ------------------------------------------|");
+    crate::println_color!(0xFFDDDDDD, "  | GPU compositor * window manager * 60 FPS            |");
+    crate::println_color!(0xFFDDDDDD, "  | Terminal * Files * Calculator * Settings             |");
+    crate::println_color!(0xFFAADDFF, "  +- Apps ---------------------------------------------|");
+    crate::println_color!(0xFFDDDDDD, "  | TrustCode (editor) * Web Browser * Snake * Chess    |");
+    crate::println_color!(0xFFDDDDDD, "  | NES Emulator * Game Boy * TrustEdit 3D * TrustLab  |");
+    crate::println_color!(0xFFAADDFF, "  +- Languages ----------------------------------------|");
+    crate::println_color!(0xFFDDDDDD, "  | TrustLang compiler + VM * Shell scripting           |");
+    crate::println_color!(0xFFAADDFF, "  +- Network ------------------------------------------|");
+    crate::println_color!(0xFFDDDDDD, "  | TCP/IP * DHCP * DNS * HTTP * TLS 1.3 * curl/wget   |");
+    crate::println_color!(0xFFAADDFF, "  +- Graphics -----------------------------------------|");
+    crate::println_color!(0xFFDDDDDD, "  | TrustVideo * Formula3D * Matrix * Fire * Plasma     |");
+    crate::println_color!(0xFFAADDFF, "  +----------------------------------------------------+");
+    crate::println!();
+
+    if wait_key_or_timeout(8) { return; }
+
+    // -------------------------------------------------------------------
+    // PART 3: Cinematic Outro
+    // -------------------------------------------------------------------
+    {
+        let was_db = crate::framebuffer::is_double_buffer_enabled();
+        if !was_db {
+            crate::framebuffer::init_double_buffer();
+            crate::framebuffer::set_double_buffer_mode(true);
+        }
+
+        let w = sw as usize;
+        let h = sh as usize;
+        let mut buf = alloc::vec![0u32; w * h];
+
+        let draw_big_char = |buf: &mut [u32], w: usize, h: usize, cx: usize, cy: usize, c: char, color: u32, scale: usize| {
+            let glyph = crate::framebuffer::font::get_glyph(c);
+            for (row, &bits) in glyph.iter().enumerate() {
+                for bit in 0..8u32 {
+                    if bits & (0x80 >> bit) != 0 {
+                        for sy in 0..scale {
+                            for sx in 0..scale {
+                                let px = cx + bit as usize * scale + sx;
+                                let py = cy + row * scale + sy;
+                                if px < w && py < h {
+                                    buf[py * w + px] = color;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        let mut rain_cols: alloc::vec::Vec<u16> = alloc::vec![0u16; w / 8 + 1];
+        let mut rain_speeds: alloc::vec::Vec<u8> = alloc::vec![1u8; w / 8 + 1];
+        for i in 0..rain_cols.len() {
+            rain_cols[i] = ((i * 41 + 7) % h) as u16;
+            rain_speeds[i] = (((i * 11 + 5) % 4) + 1) as u8;
+        }
+
+        let draw_rain_step = |buf: &mut [u32], w: usize, h: usize, cols: &mut [u16], speeds: &[u8], frame: u32| {
+            for pixel in buf.iter_mut() {
+                let g = ((*pixel >> 8) & 0xFF) as u32;
+                if g > 0 {
+                    let new_g = g.saturating_sub(8);
+                    *pixel = 0xFF000000 | (new_g << 8);
+                }
+            }
+            for col_idx in 0..cols.len() {
+                let x = col_idx * 8;
+                if x >= w { continue; }
+                cols[col_idx] = cols[col_idx].wrapping_add(speeds[col_idx] as u16);
+                if cols[col_idx] as usize >= h { cols[col_idx] = 0; }
+                let y = cols[col_idx] as usize;
+                let c = (((frame as usize + col_idx * 13) % 94) + 33) as u8 as char;
+                let glyph = crate::framebuffer::font::get_glyph(c);
+                for (row, &bits) in glyph.iter().enumerate() {
+                    let py = y + row;
+                    if py >= h { break; }
+                    for bit in 0..8u32 {
+                        if bits & (0x80 >> bit) != 0 {
+                            let px = x + bit as usize;
+                            if px < w {
+                                buf[py * w + px] = 0xFF00FF44;
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        let blit_buf = |buf: &[u32], w: usize, h: usize| {
+            if let Some((bb_ptr, _bb_w, bb_h, bb_stride)) = crate::framebuffer::get_backbuffer_info() {
+                let bb = bb_ptr as *mut u32;
+                let bb_s = bb_stride as usize;
+                for y in 0..h.min(bb_h as usize) {
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            buf[y * w..].as_ptr(),
+                            bb.add(y * bb_s),
+                            w,
+                        );
+                    }
+                }
+            }
+            crate::framebuffer::swap_buffers();
+        };
+
+        // Outro scene: "You're ready!" + 3D character
+        crate::serial_println!("[DEMO] Outro: You're ready!");
+        for pixel in buf.iter_mut() { *pixel = 0xFF000000; }
+
+        let freq = crate::cpu::tsc::frequency_hz();
+        let outro_ms = 7000u64;
+        let outro_target = if freq > 0 { freq / 1000 * outro_ms } else { u64::MAX };
+        let start_tsc = crate::cpu::tsc::read_tsc();
+
+        let mut renderer3d = crate::formula3d::FormulaRenderer::new();
+        renderer3d.set_scene(crate::formula3d::FormulaScene::Character);
+        renderer3d.wire_color = 0xFF00FFAA;
+        let vp_w = 160usize;
+        let vp_h = 160usize;
+        let mut vp_buf = alloc::vec![0u32; vp_w * vp_h];
+
+        let mut frame = 0u32;
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(start_tsc);
+            if elapsed >= outro_target { break; }
+            if let Some(key) = crate::keyboard::try_read_key() {
+                if key == 0x1B || key == b'q' || key == b' ' || key == b'\n' || key == 13 { break; }
+            }
+
+            draw_rain_step(&mut buf, w, h, &mut rain_cols, &rain_speeds, frame);
+
+            // Title
+            let title = if lang == "fr" { "Pret a explorer!" } else { "You're ready!" };
+            let title_scale = 5;
+            let title_w = title.len() * 8 * title_scale;
+            let title_x = if title_w < w { (w - title_w) / 2 } else { 0 };
+            let title_y = h / 6;
+            for (i, c) in title.chars().enumerate() {
+                let hue = ((frame as usize * 3 + i * 25) % 360) as u32;
+                let color = if hue < 120 {
+                    let t = hue * 255 / 120;
+                    0xFF000000 | ((255 - t) << 16) | (t << 8)
+                } else if hue < 240 {
+                    let t = (hue - 120) * 255 / 120;
+                    0xFF000000 | ((255 - t) << 8) | t
+                } else {
+                    let t = (hue - 240) * 255 / 120;
+                    0xFF000000 | (t << 16) | (255 - t)
+                };
+                draw_big_char(&mut buf, w, h, title_x + i * 8 * title_scale, title_y, c, color, title_scale);
+            }
+
+            // 3D character
+            renderer3d.update();
+            for p in vp_buf.iter_mut() { *p = 0x00000000; }
+            renderer3d.render(&mut vp_buf, vp_w, vp_h);
+            let vp_x = if vp_w < w { (w - vp_w) / 2 } else { 0 };
+            let vp_y = title_y + 16 * title_scale + 20;
+            for vy in 0..vp_h {
+                for vx in 0..vp_w {
+                    let src = vp_buf[vy * vp_w + vx];
+                    if src & 0x00FFFFFF != 0 {
+                        let dy = vp_y + vy;
+                        let dx = vp_x + vx;
+                        if dy < h && dx < w {
+                            buf[dy * w + dx] = src;
+                        }
+                    }
+                }
+            }
+
+            // Hints
+            let hints: &[(&str, u32)] = if lang == "fr" {
+                &[
+                    ("Tapez 'help' pour la liste des commandes", 0xFF88CCFF),
+                    ("Tapez 'desktop' pour le bureau graphique", 0xFF88FFAA),
+                    ("Tapez 'showcase' pour la demo complete", 0xFFFFCC88),
+                    ("github.com/nathan237/TrustOS", 0xFF00FF88),
+                ]
+            } else {
+                &[
+                    ("Type 'help' for all commands", 0xFF88CCFF),
+                    ("Type 'desktop' for the GUI", 0xFF88FFAA),
+                    ("Type 'showcase' for the full demo", 0xFFFFCC88),
+                    ("github.com/nathan237/TrustOS", 0xFF00FF88),
+                ]
+            };
+
+            let hint_scale = 2;
+            let mut hy = vp_y + vp_h + 30;
+            for &(text, color) in hints {
+                let tw = text.len() * 8 * hint_scale;
+                let hx = if tw < w { (w - tw) / 2 } else { 0 };
+                for (i, c) in text.chars().enumerate() {
+                    draw_big_char(&mut buf, w, h, hx + i * 8 * hint_scale, hy, c, color, hint_scale);
+                }
+                hy += 16 * hint_scale + 6;
+            }
+
+            blit_buf(&buf, w, h);
+            frame += 1;
+            crate::cpu::tsc::delay_millis(33);
+        }
+
+        // Final fade out
+        let fade_start = crate::cpu::tsc::read_tsc();
+        let fade_target = if freq > 0 { freq / 1000 * 800 } else { u64::MAX };
+        loop {
+            let elapsed = crate::cpu::tsc::read_tsc().saturating_sub(fade_start);
+            if elapsed >= fade_target { break; }
+            for pixel in buf.iter_mut() {
+                let r = ((*pixel >> 16) & 0xFF).saturating_sub(4) as u32;
+                let g = ((*pixel >> 8) & 0xFF).saturating_sub(4) as u32;
+                let b = (*pixel & 0xFF).saturating_sub(4) as u32;
+                *pixel = 0xFF000000 | (r << 16) | (g << 8) | b;
+            }
+            blit_buf(&buf, w, h);
+            crate::cpu::tsc::delay_millis(33);
+        }
+
+        if !was_db {
+            crate::framebuffer::set_double_buffer_mode(false);
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // Return to shell
+    // -------------------------------------------------------------------
+    crate::framebuffer::clear();
+
+    // Clean up tutorial files
+    let _ = crate::ramfs::with_fs(|fs| {
+        let _ = fs.rm("/tutorial/hello.txt");
+        let _ = fs.rm("/tutorial/demo.tl");
+        let _ = fs.rm("/tutorial");
+    });
+
+    crate::println!();
+    if lang == "fr" {
+        crate::println_color!(0xFF00FF88, "  Tutoriel termine! Bon voyage dans TrustOS.");
+    } else {
+        crate::println_color!(0xFF00FF88, "  Tutorial complete! Enjoy exploring TrustOS.");
+    }
+    crate::println!();
+    crate::serial_println!("[DEMO] Tutorial complete");
+}
+
 // Runs through all TrustOS features with timed pauses between steps.
 // Perfect for screen recording with OBS to create marketing videos.
 

@@ -331,6 +331,7 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    showcase [N]        Automated demo (marketing video)");
     crate::println!("    showcase3d          3D graphics cinematic showcase");
     crate::println!("    filled3d            3D filled polygon rendering demo");
+    crate::println!("    demo [fr]           Interactive guided tutorial");
     crate::println!();
     
     crate::println_color!(COLOR_BRIGHT_GREEN, "  Total: ~180 commands | Type 'man <cmd>' for detailed usage");

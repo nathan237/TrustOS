@@ -207,6 +207,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "showcase",
     "showcase3d",
     "filled3d",
+    // Tutorial
+    "demo", "tutorial", "tour",
     // Hypervisor
     "hv", "hypervisor",
     // Trailer
@@ -896,6 +898,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "benchmark" | "bench" => desktop::cmd_benchmark(args),
         "showcase" => desktop::cmd_showcase(args),
         "showcase3d" | "demo3d" => desktop::cmd_showcase3d(),
+        "demo" | "tutorial" | "tour" => desktop::cmd_demo(args),
         "filled3d" => desktop::cmd_filled3d(),
         "desktop" | "gui" => desktop::launch_desktop_env(None),
         "cosmic" => desktop::cmd_cosmic_v2(),
