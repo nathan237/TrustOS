@@ -17,6 +17,7 @@ use spin::Mutex;
 use crate::framebuffer::{self, COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN, COLOR_WHITE, COLOR_BLACK};
 use crate::apps::text_editor::{EditorState, render_editor};
 use core::sync::atomic::{AtomicBool, Ordering};
+use crate::math::fast_sqrt;
 
 /// Get a color with high-contrast fallback
 #[inline]
@@ -26,13 +27,6 @@ fn hc(normal: u32, hc_replacement: u32) -> u32 {
 
 /// Module-level flag to signal desktop exit (accessible from run() and handle_menu_action)
 static EXIT_DESKTOP_FLAG: AtomicBool = AtomicBool::new(false);
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// 🧮 MATH UTILITIES for no_std environment
-// ═══════════════════════════════════════════════════════════════════════════════
-
-/// Fast approximate square root (delegates to shared math)
-fn fast_sqrt(x: f32) -> f32 { crate::math::fast_sqrt(x) }
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -5128,7 +5122,7 @@ struct AppConfig {
             
             for ly in 0..logo_h {
                 for lx in 0..logo_w {
-                    let argb = crate::logo_bitmap::LOGO_PIXELS[(ly as usize) * (logo_w as usize) + (lx as usize)];
+                    let argb = crate::logo_bitmap::logo_pixel(lx as usize, ly as usize);
                     let a = (argb >> 24) & 0xFF;
                     let r = (argb >> 16) & 0xFF;
                     let g = (argb >> 8) & 0xFF;

@@ -9,14 +9,7 @@ use alloc::vec::Vec;
 
 const FRAME_MS: u64 = 33; // ~30 fps
 
-#[inline]
-fn xorshift(mut x: u32) -> u32 {
-    if x == 0 { x = 1; }
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    x
-}
+use crate::draw_utils::xorshift32 as xorshift;
 
 // ===============================================================================
 // FLEUR-DE-LIS LOGO BITMAP -- Faithful reproduction of the TrustOS emblem

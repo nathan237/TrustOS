@@ -348,9 +348,14 @@ pub extern "x86-interrupt" fn reschedule_ipi_handler(_stack_frame: InterruptStac
 /// VirtIO shared interrupt handler (vector 62)
 /// Checks ISR status on all VirtIO devices and dispatches accordingly.
 pub extern "x86-interrupt" fn virtio_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    // Check virtio-net
+    // Check virtio-net (legacy driver path)
     if crate::virtio_net::is_initialized() {
         crate::virtio_net::handle_interrupt();
+    }
+    // Check virtio-net (new universal driver path) — read ISR to acknowledge
+    // even when legacy driver isn't initialized, so the interrupt is cleared.
+    if crate::drivers::net::has_driver() && !crate::virtio_net::is_initialized() {
+        crate::virtio_net::handle_interrupt_from_iobase();
     }
     
     // Check virtio-blk

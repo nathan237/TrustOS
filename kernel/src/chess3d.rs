@@ -1204,45 +1204,7 @@ fn fill_triangle_solid(buf: &mut [u32], w: usize, h: usize,
     }
 }
 
-fn draw_line_buf(buf: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
-    let mut x0 = x0;
-    let mut y0 = y0;
-    let dx = (x1 - x0).abs();
-    let dy = -(y1 - y0).abs();
-    let sx: i32 = if x0 < x1 { 1 } else { -1 };
-    let sy: i32 = if y0 < y1 { 1 } else { -1 };
-    let mut err = dx + dy;
-
-    loop {
-        if x0 >= 0 && y0 >= 0 && x0 < w as i32 && y0 < h as i32 {
-            let idx = y0 as usize * w + x0 as usize;
-            if idx < buf.len() {
-                buf[idx] = color;
-            }
-        }
-        if x0 == x1 && y0 == y1 { break; }
-        let e2 = 2 * err;
-        if e2 >= dy { err += dy; x0 += sx; }
-        if e2 <= dx { err += dx; y0 += sy; }
-    }
-}
-
-fn fill_circle_buf(buf: &mut [u32], w: usize, h: usize, cx: i32, cy: i32, r: i32, color: u32) {
-    for dy in -r..=r {
-        for dx in -r..=r {
-            if dx * dx + dy * dy <= r * r {
-                let px = cx + dx;
-                let py = cy + dy;
-                if px >= 0 && py >= 0 && px < w as i32 && py < h as i32 {
-                    let idx = py as usize * w + px as usize;
-                    if idx < buf.len() {
-                        buf[idx] = color;
-                    }
-                }
-            }
-        }
-    }
-}
+use crate::draw_utils::{draw_line as draw_line_buf, fill_circle as fill_circle_buf};
 
 /// Draw text into a buffer using 8x16 bitmap font
 fn hud_text(buf: &mut [u32], w: usize, h: usize, x: i32, y: i32, text: &str, color: u32) {

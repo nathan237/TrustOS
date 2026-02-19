@@ -1,7 +1,17 @@
-//! Disk I/O Driver
-//! 
-//! RAM Disk driver - provides a virtual disk in memory.
-//! Works without real hardware, perfect for QEMU/UEFI.
+//! Legacy RAM Disk Driver (DEPRECATED)
+//!
+//! This module provides a simple flat ramdisk with no filesystem abstraction.
+//! It exists for backward compatibility only.
+//!
+//! **All new code should use [`crate::vfs`] instead**, which provides:
+//! - A proper Virtual File System with mount points
+//! - Device files via devfs
+//! - Proc filesystem via procfs
+//! - FAT32 and ext4 support
+//! - TrustFS (native filesystem)
+//! - Block caching and write-ahead logging
+//!
+//! This module will be removed in a future release.
 
 use spin::Mutex;
 use alloc::vec;

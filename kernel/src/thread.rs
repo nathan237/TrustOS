@@ -407,6 +407,47 @@ pub fn block(tid: Tid) {
     }
 }
 
+/// Block current thread AND immediately context-switch away.
+/// The thread is marked Blocked and will NOT be put back in the ready queue
+/// until another thread calls `wake(tid)`.
+/// Returns `true` if the thread was woken normally, `false` on timeout.
+pub fn block_current_and_schedule() {
+    let tid = current_tid();
+    if is_idle_tid(tid) {
+        return; // never block idle
+    }
+    {
+        let mut threads = THREADS.write();
+        if let Some(thread) = threads.get_mut(&tid) {
+            thread.state = ThreadState::Blocked;
+        }
+    }
+    // schedule() will see the thread is Blocked and won't re-enqueue it
+    schedule();
+}
+
+/// Sleep current thread until `deadline_ns` (nanosecond timestamp).
+/// Registers a timer callback that wakes the thread at the deadline.
+/// Other threads can also wake this thread early via `wake(tid)`.
+pub fn sleep_until(deadline_ns: u64) {
+    let tid = current_tid();
+    if is_idle_tid(tid) {
+        return;
+    }
+
+    // Register a timer wake-up so the thread is woken at the deadline
+    crate::time::register_wakeup(tid, deadline_ns);
+
+    // Block and yield
+    block_current_and_schedule();
+}
+
+/// Sleep current thread for `duration_ns` nanoseconds.
+pub fn sleep_ns(duration_ns: u64) {
+    let deadline = crate::time::now_ns().saturating_add(duration_ns);
+    sleep_until(deadline);
+}
+
 // ============================================================================
 // Scheduler Integration
 // ============================================================================

@@ -858,19 +858,10 @@ fn parallax_layer(x: u32, y: u32, t: f32, h: u32, speed: f32, brightness: f32,
 }
 
 // ============================================================================
-// MATH UTILITIES (Fast approximations for shaders)
+// MATH UTILITIES (delegated to crate::math)
 // ============================================================================
 
-/// Fast sine approximation (Taylor series, accurate to ~0.001)
-/// Fast square root (delegates to shared math)
-#[inline]
-fn fast_sqrt(x: f32) -> f32 { crate::math::fast_sqrt(x) }
-
-/// Fast absolute value
-#[inline(always)]
-fn fast_abs(x: f32) -> f32 {
-    if x < 0.0 { -x } else { x }
-}
+use crate::math::{fast_sqrt, fast_abs, fast_sin, fast_cos, lerp_u8};
 
 /// Fast fractional part
 #[inline(always)]
@@ -1131,20 +1122,6 @@ fn matrix_rain_background(x: u32, y: u32, w: f32, h: f32, t: f32) -> (u8, u8, u8
         (5, 15, 8)  // Dark background
     }
 }
-
-/// Linear interpolate between u8 values
-#[inline]
-fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
-    ((a as f32) * (1.0 - t) + (b as f32) * t) as u8
-}
-
-/// Fast sine approximation (delegates to shared math)
-#[inline(always)]
-fn fast_sin(x: f32) -> f32 { crate::math::fast_sin(x) }
-
-/// Fast cosine (delegates to shared math)
-#[inline(always)]
-fn fast_cos(x: f32) -> f32 { crate::math::fast_cos(x) }
 
 // ============================================================================
 // GLOBAL VIRTUAL GPU INSTANCE

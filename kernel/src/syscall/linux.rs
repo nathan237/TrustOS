@@ -1629,43 +1629,48 @@ pub fn sys_poll(fds_ptr: u64, nfds: u32, timeout_ms: i32) -> i64 {
     
     let fds = unsafe { core::slice::from_raw_parts_mut(fds_ptr as *mut PollFd, nfds as usize) };
     
-    let max_tries = if timeout_ms == 0 { 1usize }
-                    else if timeout_ms < 0 { 100 }
-                    else { (timeout_ms as usize / 10).max(1) };
+    // Compute absolute deadline
+    let deadline_ns = if timeout_ms < 0 {
+        u64::MAX // block forever
+    } else if timeout_ms == 0 {
+        0 // non-blocking poll
+    } else {
+        crate::time::now_ns().saturating_add((timeout_ms as u64) * 1_000_000)
+    };
     
-    for _ in 0..max_tries {
+    loop {
         let mut ready = 0i64;
         for pfd in fds.iter_mut() {
             pfd.revents = 0;
             if pfd.fd < 0 { continue; }
             
-            // stdin — always readable for now
-            if pfd.fd == 0 && (pfd.events & POLLIN) != 0 { pfd.revents |= POLLIN; }
-            // stdout/stderr — always writable
-            if (pfd.fd == 1 || pfd.fd == 2) && (pfd.events & POLLOUT) != 0 { pfd.revents |= POLLOUT; }
-            // Pipes — ready
-            if crate::pipe::is_pipe_fd(pfd.fd) {
-                if (pfd.events & POLLIN) != 0 { pfd.revents |= POLLIN; }
-                if (pfd.events & POLLOUT) != 0 { pfd.revents |= POLLOUT; }
-            }
-            // Sockets — ready
-            if crate::netstack::socket::is_socket(pfd.fd) {
-                if (pfd.events & POLLIN) != 0 { pfd.revents |= POLLIN; }
-                if (pfd.events & POLLOUT) != 0 { pfd.revents |= POLLOUT; }
-            }
-            // Regular VFS fds — always ready for regular files
-            if pfd.revents == 0 && pfd.fd >= 3 {
-                if (pfd.events & POLLIN) != 0 { pfd.revents |= POLLIN; }
-                if (pfd.events & POLLOUT) != 0 { pfd.revents |= POLLOUT; }
+            if let Some(status) = crate::vfs::poll_fd(pfd.fd) {
+                if (pfd.events & POLLIN)  != 0 && status.readable { pfd.revents |= POLLIN; }
+                if (pfd.events & POLLOUT) != 0 && status.writable { pfd.revents |= POLLOUT; }
+                if status.error  { pfd.revents |= POLLERR; }
+                if status.hangup { pfd.revents |= POLLHUP; }
+            } else {
+                pfd.revents = POLLNVAL; // invalid fd
             }
             
             if pfd.revents != 0 { ready += 1; }
         }
+        
         if ready > 0 { return ready; }
+        
+        // Non-blocking: return immediately
         if timeout_ms == 0 { return 0; }
-        crate::thread::yield_thread();
+        
+        // Check timeout
+        let now = crate::time::now_ns();
+        if now >= deadline_ns { return 0; }
+        
+        // Sleep up to 10 ms or until deadline, whichever is sooner.
+        // The thread will be woken by the timer; if an fd becomes ready
+        // in the meantime the next iteration will detect it.
+        let sleep_until = deadline_ns.min(now.saturating_add(10_000_000));
+        crate::thread::sleep_until(sleep_until);
     }
-    0
 }
 
 // ============================================================================

@@ -735,10 +735,7 @@ fn color_to_rgba(color: u32) -> (f32, f32, f32, f32) {
     (r, g, b, a)
 }
 
-/// Linear interpolation
-fn lerp(a: f32, b: f32, t: f32) -> f32 {
-    a + (b - a) * t
-}
+use crate::math::lerp;
 
 /// Apply easing function
 fn apply_easing(t: f32, easing: Easing) -> f32 {

@@ -173,3 +173,27 @@ pub fn close(fd: i32) -> i64 {
 pub fn active_count() -> usize {
     REGISTRY.read().pipes.len()
 }
+
+/// Query readiness of a pipe fd.
+/// Returns (has_data, has_space, peer_closed).
+pub fn poll(fd: i32) -> (bool, bool, bool) {
+    let reg = REGISTRY.read();
+    let (pipe_id, is_write) = match reg.fd_map.get(&fd) {
+        Some(&info) => info,
+        None => return (false, false, false),
+    };
+    let pipe = match reg.pipes.get(&pipe_id) {
+        Some(p) => p,
+        None => return (false, false, false),
+    };
+    if is_write {
+        // Write end: writable if buffer has space, hangup if read end closed
+        let has_space = pipe.data.len() < PIPE_BUF_SIZE;
+        (false, has_space, !pipe.read_open)
+    } else {
+        // Read end: readable if buffer has data, hangup if write end closed
+        let has_data = !pipe.data.is_empty();
+        let peer_closed = !pipe.write_open;
+        (has_data || peer_closed, false, peer_closed)
+    }
+}

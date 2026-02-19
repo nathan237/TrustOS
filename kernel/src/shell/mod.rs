@@ -582,6 +582,14 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                     crate::print_fb_only!("\x08");
                 }
             }
+            // Poll network stack while idle (DHCP, packet RX, etc.)
+            {
+                static POLL_DIVISOR: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+                let count = POLL_DIVISOR.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+                if count % 5000 == 0 {
+                    crate::netstack::poll();
+                }
+            }
             for _ in 0..100 { core::hint::spin_loop(); }
         }
     }

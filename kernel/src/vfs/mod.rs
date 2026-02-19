@@ -799,6 +799,77 @@ pub fn fstat_fd(fd: Fd) -> VfsResult<Stat> {
 }
 
 // ============================================================================
+// Poll support — query readiness of file descriptors
+// ============================================================================
+
+/// Readiness status for a file descriptor
+pub struct PollStatus {
+    /// Data is available for reading
+    pub readable: bool,
+    /// Writing will not block
+    pub writable: bool,
+    /// Error condition on fd
+    pub error: bool,
+    /// Hang-up (peer closed)
+    pub hangup: bool,
+}
+
+/// Query the readiness of a file descriptor.
+/// Returns `None` if the fd is invalid.
+pub fn poll_fd(fd: Fd) -> Option<PollStatus> {
+    // stdin — readable if keyboard has data
+    if fd == 0 {
+        return Some(PollStatus {
+            readable: crate::keyboard::has_input(),
+            writable: false,
+            error: false,
+            hangup: false,
+        });
+    }
+    // stdout / stderr — always writable
+    if fd == 1 || fd == 2 {
+        return Some(PollStatus {
+            readable: false,
+            writable: true,
+            error: false,
+            hangup: false,
+        });
+    }
+    // Pipes
+    if crate::pipe::is_pipe_fd(fd) {
+        let (has_data, has_space, peer_closed) = crate::pipe::poll(fd);
+        return Some(PollStatus {
+            readable: has_data,
+            writable: has_space,
+            error: false,
+            hangup: peer_closed,
+        });
+    }
+    // Sockets
+    if crate::netstack::socket::is_socket(fd) {
+        let has_data = crate::netstack::socket::has_readable_data(fd);
+        return Some(PollStatus {
+            readable: has_data,
+            writable: true, // TCP send buffer assumed non-full
+            error: false,
+            hangup: false,
+        });
+    }
+    // Regular VFS files — always ready for regular files
+    let vfs = VFS.read();
+    if vfs.open_files.contains_key(&fd) {
+        return Some(PollStatus {
+            readable: true,
+            writable: true,
+            error: false,
+            hangup: false,
+        });
+    }
+    // Unknown fd
+    None
+}
+
+// ============================================================================
 // Permission checking
 // ============================================================================
 

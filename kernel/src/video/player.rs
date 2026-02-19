@@ -318,15 +318,7 @@ pub fn generate_matrix_demo(width: u16, height: u16, frames: u32, fps: u16) -> V
 
 // ── Math helpers (no libm) ──
 
-/// Fast sin approximation using Taylor series (good enough for visuals)
-/// xorshift32 PRNG
-fn xorshift(mut x: u32) -> u32 {
-    if x == 0 { x = 1; }
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    x
-}
+use crate::draw_utils::xorshift32 as xorshift;
 
 // ── Real-time streaming renderer ──
 // Generates and displays each frame directly — no file accumulation

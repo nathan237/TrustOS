@@ -50,6 +50,16 @@ impl Driver for VirtioNetDriver {
         driver.setup_queues()?;
         driver.setup_rx_buffers()?;
         
+        // Route PCI interrupt through IOAPIC so the VirtIO ISR fires
+        let irq = pci_device.interrupt_line;
+        if irq > 0 && irq < 255 {
+            crate::apic::route_pci_irq(irq, crate::apic::VIRTIO_VECTOR);
+            crate::serial_println!("[virtio-net-drv] IRQ {} routed to vector {}", irq, crate::apic::VIRTIO_VECTOR);
+        }
+        
+        // Store I/O base so the interrupt handler can ACK the ISR
+        crate::virtio_net::set_iobase_for_irq(driver.iobase());
+        
         self.inner = Some(driver);
         Ok(())
     }

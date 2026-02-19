@@ -111,60 +111,35 @@ fn futex_wait(uaddr: u64, expected: u32, timeout_ns: u64) -> Result<i64, i32> {
         });
     }
     
-    // Block thread
-    // In a real implementation, this would context switch
-    // For now, we spin-wait with yield
-    let deadline = if timeout_ns > 0 { now + timeout_ns } else { u64::MAX };
+    // Block the thread instead of spinning.
+    // The thread will be woken by futex_wake() calling crate::thread::wake(),
+    // or by the timer if a timeout is set.
+    if timeout_ns > 0 {
+        let deadline = now.saturating_add(timeout_ns);
+        crate::thread::sleep_until(deadline);
+    } else {
+        // Infinite wait — block until explicitly woken
+        crate::thread::block_current_and_schedule();
+    }
     
-    loop {
-        // Check if we've been woken
-        {
-            let queues = FUTEX_QUEUES.lock();
-            if let Some(queue) = queues.get(&uaddr) {
-                if !queue.iter().any(|e| e.tid == tid) {
-                    // We were removed from queue = woken
-                    return Ok(0);
-                }
-            } else {
-                // Queue gone = we were woken
-                return Ok(0);
-            }
-        }
-        
-        // Check timeout
-        let now = crate::time::now_ns();
-        if now >= deadline {
-            // Remove ourselves from queue
-            let mut queues = FUTEX_QUEUES.lock();
-            if let Some(queue) = queues.get_mut(&uaddr) {
+    // We've been woken (either by futex_wake or by timeout).
+    // Check if we're still in the queue (timeout case).
+    {
+        let mut queues = FUTEX_QUEUES.lock();
+        if let Some(queue) = queues.get_mut(&uaddr) {
+            if queue.iter().any(|e| e.tid == tid) {
+                // Still in queue → we timed out, remove ourselves
                 queue.retain(|e| e.tid != tid);
                 if queue.is_empty() {
                     queues.remove(&uaddr);
                 }
+                return Err(-110); // ETIMEDOUT
             }
-            return Err(-110); // ETIMEDOUT
-        }
-        
-        // Yield to other tasks
-        crate::scheduler::yield_now();
-        
-        // Also check if value changed
-        let current = unsafe { 
-            let ptr = uaddr as *const AtomicU32;
-            (*ptr).load(Ordering::SeqCst)
-        };
-        if current != expected {
-            // Remove from queue
-            let mut queues = FUTEX_QUEUES.lock();
-            if let Some(queue) = queues.get_mut(&uaddr) {
-                queue.retain(|e| e.tid != tid);
-                if queue.is_empty() {
-                    queues.remove(&uaddr);
-                }
-            }
-            return Ok(0);
         }
     }
+    
+    // Removed from queue by futex_wake → success
+    Ok(0)
 }
 
 /// Wake up to `count` waiters on futex
@@ -177,9 +152,8 @@ fn futex_wake(uaddr: u64, count: u32) -> Result<i64, i32> {
         // Remove first `to_wake` entries
         let woken: Vec<_> = queue.drain(..to_wake).collect();
         
-        // Wake each thread
+        // Wake each thread — thread::wake() moves them from Blocked to Ready
         for entry in &woken {
-            // In real implementation, this would unblock the thread
             crate::thread::wake(entry.tid);
         }
         

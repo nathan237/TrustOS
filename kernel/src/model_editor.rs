@@ -1034,64 +1034,14 @@ impl ModelEditorState {
     }
 }
 
-// ─── Buffer Drawing Helpers ──────────────────────────────────────────────
+// ─── Buffer Drawing Helpers (delegated to draw_utils) ────────────────────
 
-fn put_buf_pixel(buf: &mut [u32], w: usize, h: usize, x: i32, y: i32, color: u32) {
-    if x >= 0 && y >= 0 && (x as usize) < w && (y as usize) < h {
-        buf[y as usize * w + x as usize] = color;
-    }
-}
-
-fn fill_rect(buf: &mut [u32], bw: usize, bh: usize, x: usize, y: usize, w: usize, h: usize, color: u32) {
-    for dy in 0..h {
-        let py = y + dy;
-        if py >= bh { break; }
-        for dx in 0..w {
-            let px = x + dx;
-            if px >= bw { break; }
-            buf[py * bw + px] = color;
-        }
-    }
-}
-
-fn draw_rect(buf: &mut [u32], bw: usize, bh: usize, x: usize, y: usize, w: usize, h: usize, color: u32) {
-    for dx in 0..w {
-        put_buf_pixel(buf, bw, bh, (x + dx) as i32, y as i32, color);
-        put_buf_pixel(buf, bw, bh, (x + dx) as i32, (y + h - 1) as i32, color);
-    }
-    for dy in 0..h {
-        put_buf_pixel(buf, bw, bh, x as i32, (y + dy) as i32, color);
-        put_buf_pixel(buf, bw, bh, (x + w - 1) as i32, (y + dy) as i32, color);
-    }
-}
-
-fn draw_line_buf(buf: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
-    // Bresenham's line algorithm
-    let mut x = x0;
-    let mut y = y0;
-    let dx = (x1 - x0).abs();
-    let dy = -(y1 - y0).abs();
-    let sx = if x0 < x1 { 1 } else { -1 };
-    let sy = if y0 < y1 { 1 } else { -1 };
-    let mut err = dx + dy;
-    
-    let max_steps = (dx.abs() + dy.abs()) as usize + 1;
-    let max_steps = max_steps.min(4000); // safety limit
-    
-    for _ in 0..max_steps {
-        put_buf_pixel(buf, w, h, x, y, color);
-        if x == x1 && y == y1 { break; }
-        let e2 = 2 * err;
-        if e2 >= dy {
-            err += dy;
-            x += sx;
-        }
-        if e2 <= dx {
-            err += dx;
-            y += sy;
-        }
-    }
-}
+use crate::draw_utils::{
+    put_pixel as put_buf_pixel,
+    fill_rect,
+    draw_rect,
+    draw_line as draw_line_buf,
+};
 
 fn draw_dashed_line(buf: &mut [u32], w: usize, h: usize, x0: i32, y0: i32, x1: i32, y1: i32, color: u32) {
     let mut x = x0;

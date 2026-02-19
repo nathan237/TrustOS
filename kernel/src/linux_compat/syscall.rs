@@ -134,7 +134,7 @@ pub fn handle_syscall(
         SYS_FORK => ENOSYS, // Not supported yet
         SYS_EXECVE => ENOSYS, // Not supported yet
         SYS_WAIT4 => ENOSYS,
-        SYS_POLL => 0,
+        SYS_POLL => crate::syscall::linux::sys_poll(arg1, arg2 as u32, arg3 as i32),
         SYS_LSEEK => sys_lseek(process, arg1 as i32, arg2 as i64, arg3 as i32),
         _ => {
             crate::serial_println!("[LINUX] Unhandled syscall: {} (args: {:#x}, {:#x}, {:#x})", 
@@ -211,7 +211,10 @@ fn sys_write(process: &mut LinuxProcess, fd: i32, buf: u64, count: usize) -> i64
 }
 
 fn sys_open(process: &mut LinuxProcess, path_ptr: u64, flags: i32, mode: u32) -> i64 {
-    let path = read_string_from_user(path_ptr);
+    let path = match read_string_from_user(path_ptr) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
     crate::serial_println!("[LINUX] open({}, {:#x}, {:#o})", path, flags, mode);
     
     // Find free fd
@@ -249,41 +252,23 @@ fn sys_stat(_process: &mut LinuxProcess, _path_ptr: u64, stat_buf: u64) -> i64 {
 }
 
 fn sys_brk(process: &mut LinuxProcess, addr: u64) -> i64 {
-    if addr == 0 {
-        return process.brk as i64;
+    // Delegate to the real sys_brk which allocates physical frames and maps pages
+    let result = crate::syscall::linux::sys_brk(addr);
+    // Keep process-local tracking in sync
+    if result > 0 {
+        process.brk = result as u64;
     }
-    
-    // Extend brk (simplified - just track the value)
-    if addr > process.brk {
-        process.brk = addr;
-    }
-    
-    process.brk as i64
+    result
 }
 
 fn sys_mmap(process: &mut LinuxProcess, addr: u64, length: u64, prot: i32, flags: i32, fd: i32, offset: u64) -> i64 {
-    crate::serial_println!("[LINUX] mmap(addr={:#x}, len={}, prot={:#x}, flags={:#x}, fd={}, off={})",
-        addr, length, prot, flags, fd, offset);
-    
-    // Anonymous mapping - allocate memory
-    const MAP_ANONYMOUS: i32 = 0x20;
-    
-    if flags & MAP_ANONYMOUS != 0 {
-        // Allocate from heap
-        let layout = alloc::alloc::Layout::from_size_align(length as usize, 4096).unwrap();
-        let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) };
-        if ptr.is_null() {
-            return ENOMEM;
-        }
-        ptr as i64
-    } else {
-        ENOSYS
-    }
+    // Delegate to the real sys_mmap which handles page-level mapping
+    crate::syscall::linux::sys_mmap(addr, length, prot as u64, flags as u64, fd as i64, offset)
 }
 
 fn sys_munmap(_process: &mut LinuxProcess, addr: u64, length: u64) -> i64 {
-    // Simplified: don't actually free (would need tracking)
-    0
+    // Delegate to the real sys_munmap
+    crate::syscall::linux::sys_munmap(addr, length)
 }
 
 fn sys_exit(process: &mut LinuxProcess, code: i32) -> i64 {
@@ -336,13 +321,19 @@ fn sys_getcwd(process: &mut LinuxProcess, buf: u64, size: usize) -> i64 {
 }
 
 fn sys_chdir(process: &mut LinuxProcess, path_ptr: u64) -> i64 {
-    let path = read_string_from_user(path_ptr);
+    let path = match read_string_from_user(path_ptr) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
     process.cwd = path;
     0
 }
 
 fn sys_access(_process: &mut LinuxProcess, path_ptr: u64) -> i64 {
-    let path = read_string_from_user(path_ptr);
+    let path = match read_string_from_user(path_ptr) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
     if crate::linux::rootfs::exists(&path) {
         0
     } else {
@@ -431,13 +422,10 @@ fn sys_nanosleep(req: u64, _rem: u64) -> i64 {
     }
     
     let ts = unsafe { &*(req as *const Timespec) };
-    let ms = (ts.tv_sec * 1000 + ts.tv_nsec / 1_000_000) as u64;
+    let ns = (ts.tv_sec as u64) * 1_000_000_000 + (ts.tv_nsec as u64);
     
-    // Simple sleep
-    let start = crate::logger::get_ticks();
-    while crate::logger::get_ticks() - start < ms {
-        core::hint::spin_loop();
-    }
+    // Use real thread sleep instead of busy-wait
+    crate::thread::sleep_ns(ns);
     
     0
 }
@@ -508,7 +496,10 @@ fn sys_arch_prctl(code: u64, addr: u64) -> i64 {
 }
 
 fn sys_mkdir(process: &mut LinuxProcess, path_ptr: u64, _mode: u64) -> i64 {
-    let path = read_string_from_user(path_ptr);
+    let path = match read_string_from_user(path_ptr) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
     let full_path = alloc::format!("/linux{}", path);
     
     crate::ramfs::with_fs(|fs| {
@@ -520,7 +511,10 @@ fn sys_mkdir(process: &mut LinuxProcess, path_ptr: u64, _mode: u64) -> i64 {
 }
 
 fn sys_unlink(process: &mut LinuxProcess, path_ptr: u64) -> i64 {
-    let path = read_string_from_user(path_ptr);
+    let path = match read_string_from_user(path_ptr) {
+        Ok(s) => s,
+        Err(e) => return e,
+    };
     let full_path = alloc::format!("/linux{}", path);
     
     crate::ramfs::with_fs(|fs| {
@@ -563,9 +557,9 @@ struct LinuxStat {
     __unused: [i64; 3],
 }
 
-fn read_string_from_user(ptr: u64) -> String {
+fn read_string_from_user(ptr: u64) -> Result<String, i64> {
     if ptr == 0 {
-        return String::new();
+        return Err(-14); // EFAULT — null pointer
     }
     
     let mut s = String::new();
@@ -581,5 +575,5 @@ fn read_string_from_user(ptr: u64) -> String {
         }
     }
     
-    s
+    Ok(s)
 }

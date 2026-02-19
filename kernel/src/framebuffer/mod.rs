@@ -13,10 +13,7 @@ use alloc::vec::Vec;
 use alloc::boxed::Box;
 use alloc::format;
 use core::sync::atomic::{AtomicPtr, AtomicU64, AtomicBool, Ordering};
-
-/// Fast approximate square root (delegates to shared math)
-#[inline]
-fn fast_sqrt(x: f32) -> f32 { crate::math::fast_sqrt(x) }
+use crate::math::fast_sqrt;
 
 /// Framebuffer info stored after initialization
 struct FramebufferInfo {

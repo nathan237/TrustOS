@@ -136,6 +136,9 @@ mod model_editor;
 // Shared math utilities (sin, cos, sqrt, atan2) — centralized
 pub mod math;
 
+// Shared buffer drawing helpers (Bresenham, fill_rect, xorshift)
+pub mod draw_utils;
+
 // Developer tools (profiler, dmesg, memdbg, devpanel, peek/poke)
 mod devtools;
 

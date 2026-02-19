@@ -39,6 +39,7 @@ impl<T> RwLock<T> {
             // Can't read if writer holds lock
             if state >= WRITER {
                 core::hint::spin_loop();
+                crate::scheduler::yield_now();
                 continue;
             }
             
@@ -46,6 +47,7 @@ impl<T> RwLock<T> {
             if state >= MAX_READERS {
                 // Too many readers (shouldn't happen)
                 core::hint::spin_loop();
+                crate::scheduler::yield_now();
                 continue;
             }
             
@@ -94,6 +96,7 @@ impl<T> RwLock<T> {
             }
             
             core::hint::spin_loop();
+            crate::scheduler::yield_now();
         }
     }
     

@@ -4,17 +4,18 @@
 
 ### **Trust** the code. **Rust** is the reason.
 
-**A fully auditable, bare-metal operating system — 165,000+ lines of pure Rust. Zero C. Zero secrets.**
+**A fully auditable, bare-metal operating system — 171,000+ lines of pure Rust. Zero C. Zero secrets.**
 
 *One dev. One OS. Nothing to hide.*
 
-**🏆 The first bare-metal OS with a built-in real-time kernel introspection laboratory.**
+**🏆 The first bare-metal OS with a built-in real-time CyberLab — kernel introspection + network security toolkit.**
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-165%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-171%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![ISO](https://img.shields.io/badge/ISO-8.95%20MB-purple?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.4.1-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.5.0--CyberLab-orange?style=for-the-badge)]()
+[![Tests](https://img.shields.io/badge/tests-95%2F96%20(99%25)-brightgreen?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -32,6 +33,7 @@
 
 | Date | Changes |
 |------|----------|
+| **2026-02-19** | **v0.5.0 — CyberLab** — **Live network scan verified on google.com** (nmap SYN scan: 80/443 open in 2s, nmap -A: 99 ports + banner grab + vuln assessment, curl: real HTTP 301 from Google, ping: 4/4 0% loss 12ms RTT, nslookup: DNS resolution, traceroute, packet sniffer, full scantest 11/11 live tests passed). **Code optimization** (-2,800 lines): logo_bitmap.rs compressed via `include_bytes!` (2845→86 lines), shared `draw_utils` module eliminates 24 duplicate drawing functions, math wrapper deduplication across 5 files. **Architecture hardening**: 6 fixes (futex blocking, syscall unification, sys_poll, null ptr→EFAULT, RwLock yield, disk.rs deprecation). Auto-test: **95/96 (99%)**. 171K lines, 302 source files. |
 | **2026-02-19** | **v0.4.1 — Shell Scripting + HTTP Server + Package Manager + Network Security** — **Shell scripting engine** (variables `$VAR`/`${VAR:-default}`, arithmetic `$((expr))`, control flow `if/elif/else/fi`, `for/while` loops, command substitution `$(cmd)`, special vars `$?`/`$$`/`$#`, `source` scripts). **HTTP server** (`httpd start/stop/status`) with dashboard, live status, RAMFS file browser, REST API (`/api/info`, `/api/stats`, `/api/processes`). **TrustPkg package manager** (`trustpkg install/remove/search/list/info`) with 30+ packages across 7 categories. **TrustScan network security toolkit** (port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulnerability scanner). **CONTRIBUTING.md** developer guide. **GitHub Actions CI pipeline** (build, clippy, QEMU integration tests). IPv6 + ICMPv6 protocol support. Integration tests 26-30 (20 sub-tests). |
 | **2026-02-18** | **v0.4.0 — Game Boy Color Emulator + GameLab + NES** — Full CGB emulator (LR35902 CPU, all 245+256 CB opcodes, scanline-accurate PPU with CGB dual VRAM banks & 8+8 color palettes, MBC1/3/5, timer, joypad, OAM/HDMA DMA). NES emulator (6502 CPU with unofficial opcodes, 2C02 PPU, mappers 0-3). **GameLab** — 2,000-line real-time analysis dashboard for the GB emulator: 5-tab UI (Analyze, Search, Watch, Tiles, Trace), memory search (Cheat Engine-style), 16-slot watch list, save/load state, breakpoints + single-step, tile/sprite viewer, speed control (0.25x–4x), trace log (last 64 instructions), memory diff highlighting. ~9,200 new lines across 23 files. 165K total, 296 source files. |
 | **2026-02-17** | **v0.3.5 — ACPI + Device Emulation** — Full ACPI table generation (RSDP v2, XSDT, MADT, FADT w/ PM timer + SCI, DSDT with AML bytecode), Intel 8259A PIC emulation (ICW1-4, OCW1-3, edge-triggered IRQs, cascaded master/slave, spurious IRQ detection), Intel 8254 PIT emulation (modes 0/2/3, channel 0-2, 1.193182 MHz, lobyte/hibyte access), CMOS RTC emulation (BCD time registers 0x00-0x09, Status A/B/C, NMI masking, century register), ACPI PM Timer (3.579545 MHz, 24/32-bit). Phase 0 infrastructure: setup.sh, setup.ps1, CI release workflow, Makefile auto-Limine, repo cleanup. |
@@ -56,7 +58,7 @@ In a world where your operating system is a black box — millions of lines of l
 
 TrustOS is the answer: **every single line is open, readable, and auditable.**
 
-- 🔍 **Fully auditable** — 165,000 lines of Rust, all on GitHub. No binary blobs. No hidden code.
+- 🔍 **Fully auditable** — 171,000 lines of Rust, all on GitHub. No binary blobs. No hidden code.
 - 🦀 **Memory safe by design** — Rust's ownership model prevents entire categories of vulnerabilities (buffer overflows, use-after-free, data races).
 - 🧩 **Zero dependencies on C** — no libc, no glibc, no C runtime. Every driver, every protocol, every pixel is Rust.
 - 📖 **Readable** — one person wrote it in 8 days. If one person can build it, one person can understand it.
@@ -67,12 +69,13 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 
 | Metric | Value |
 |--------|-------|
-| **Total code** | 165,000+ lines of Rust |
-| **Source files** | 304+ `.rs` files |
+| **Total code** | 171,000+ lines of Rust |
+| **Source files** | 302 `.rs` files |
 | **Kernel modules** | 44 independent modules |
 | **ISO size** | 8.95 MB |
 | **Boot time** | < 1 second |
 | **Desktop FPS** | 144 FPS (SSE2 SIMD) |
+| **Auto-tests** | 95/96 passing (99%) |
 | **C code** | 0 lines |
 | **External dependencies** | 0 (everything from scratch) |
 | **Development time** | 12 days |
@@ -82,7 +85,7 @@ TrustOS is the answer: **every single line is open, readable, and auditable.**
 | | Traditional OS | TrustOS |
 |---|:---:|:---:|
 | **Language** | C/C++ with 40 years of memory bugs | 100% Rust — memory safe by design |
-| Codebase | Millions of lines, impossible to audit | 165K lines, one person can read it all |
+| Codebase | Millions of lines, impossible to audit | 171K lines, one person can read it all |
 | **Binary blobs** | Everywhere | None. Zero. |
 | **Telemetry** | Opt-out (maybe) | Doesn't exist — verify it yourself |
 | **Build** | Complex cross-compilation toolchains | `cargo build` — that's it |
@@ -242,6 +245,86 @@ TrustLab is a 7-panel interactive workspace that lets you **watch the OS kernel 
 - **Traceroute** — ICMP/UDP hop-by-hop path analysis
 - **Vulnerability scanner** — Common vulnerability checks against discovered services
 - Commands: `netscan scan`, `netscan sniff`, `netscan banner`, `netscan discover`, `netscan trace`, `netscan vuln`
+
+### 🔬 CyberLab — Live Network Scan Results (google.com)
+
+> **Real scan performed from TrustOS via QEMU serial — no simulation, no mocks.**
+
+All commands below were executed live against `google.com` (142.250.137.138) through QEMU's user-mode NAT:
+
+| Command | Result |
+|---------|--------|
+| `ifconfig` | ✅ eth0 UP, inet **10.0.2.15**, virtio-net driver active, RX/TX packets flowing |
+| `ping 10.0.2.2` | ✅ 4/4 packets, **0% loss**, RTT 1.6–7.7ms |
+| `nslookup google.com` | ✅ DNS resolved → **142.250.137.138** (via 8.8.8.8) |
+| `ping google.com` | ✅ 4/4 packets, **0% loss**, RTT 11.7–13.6ms |
+| `nmap google.com` | ✅ 25 ports scanned in **2,078ms** — **80/tcp open**, **443/tcp open**, 23 filtered |
+| `nmap google.com -A` | ✅ 99 ports scanned in **10,714ms** — 2 open, 97 filtered + banner grab + vuln assessment |
+| `banner google.com 80` | ✅ HTTP/1.0 404 — full HTTP headers + HTML body captured |
+| `curl http://google.com` | ✅ **HTTP/1.1 301 Moved Permanently** → www.google.com, Server: gws, 988 bytes |
+| `scantest google.com` | ✅ **11/11 live tests PASSED** (ICMP, ARP, DNS, SYN scan, TCP connect, banner grab, sniffer 3 pkts/218 bytes, traceroute, vuln scan) |
+
+<details>
+<summary><b>📋 Full nmap output (click to expand)</b></summary>
+
+```
+Starting TrustScan SYN scan on 142.250.137.138
+TrustScan 1.0 — TrustOS Network Security Scanner
+
+PORT       STATE          SERVICE
+21/tcp    filtered       ftp
+22/tcp    filtered       ssh
+23/tcp    filtered       telnet
+25/tcp    filtered       smtp
+53/tcp    filtered       dns
+80/tcp    open           http
+110/tcp    filtered       pop3
+135/tcp    filtered       msrpc
+139/tcp    filtered       netbios-ssn
+143/tcp    filtered       imap
+443/tcp    open           https
+445/tcp    filtered       microsoft-ds
+993/tcp    filtered       imaps
+995/tcp    filtered       pop3s
+3306/tcp    filtered       mysql
+3389/tcp    filtered       rdp
+5432/tcp    filtered       postgresql
+5900/tcp    filtered       vnc
+8080/tcp    filtered       http-proxy
+8443/tcp    filtered       https-alt
+9200/tcp    filtered       elasticsearch
+
+Scan complete: 25 ports scanned in 2078 ms
+2 open, 0 closed, 23 filtered
+```
+</details>
+
+<details>
+<summary><b>📋 Full curl output (click to expand)</b></summary>
+
+```
+Connecting to google.com:80...
+--- HTTP response ---
+HTTP/1.1 301 Moved Permanently
+Location: http://www.google.com/
+Content-Type: text/html; charset=UTF-8
+Date: Thu, 19 Feb 2026 21:28:17 GMT
+Expires: Sat, 21 Mar 2026 21:28:17 GMT
+Cache-Control: public, max-age=2592000
+Server: gws
+Content-Length: 219
+X-XSS-Protection: 0
+X-Frame-Options: SAMEORIGIN
+Connection: close
+
+<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">
+<TITLE>301 Moved</TITLE></HEAD><BODY>
+<H1>301 Moved</H1>
+The document has moved <A HREF="http://www.google.com/">here</A>.
+</BODY></HTML>
+--- end (988 bytes) ---
+```
+</details>
 
 ### 🌐 HTTP Server (httpd)
 - **Built-in web server** running on the TrustOS TCP stack

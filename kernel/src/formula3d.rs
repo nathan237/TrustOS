@@ -19,7 +19,9 @@ pub struct V2 {
     pub y: f32,
 }
 
-// ─── Fast trig (Taylor series, no libm) ──────────────────────────────────
+// ─── Fast trig (delegated to crate::math) ────────────────────────────────
+
+pub use crate::math::{fast_sin, fast_cos, fast_sqrt};
 
 /// Normalize angle to [-PI, PI]
 #[inline(always)]
@@ -30,18 +32,6 @@ fn wrap_angle(mut a: f32) -> f32 {
     while a < -PI { a += TAU; }
     a
 }
-
-/// sin(x) — re-exports from shared math
-#[inline(always)]
-pub fn fast_sin(x: f32) -> f32 { crate::math::fast_sin(x) }
-
-/// cos(x) — re-exports from shared math
-#[inline(always)]
-pub fn fast_cos(x: f32) -> f32 { crate::math::fast_cos(x) }
-
-/// sqrt — re-exports from shared math
-#[inline(always)]
-pub fn fast_sqrt(x: f32) -> f32 { crate::math::fast_sqrt(x) }
 
 /// Fast exp(x) approximation for x in [-4, 0] range (good for fog/falloff)
 /// Uses Padé-like: e^x ≈ (1 + x/4)^4 clamped

@@ -460,6 +460,11 @@ impl VirtioNet {
     pub fn is_link_up(&self) -> bool {
         self.link_up
     }
+    
+    /// Get the I/O base address (for IRQ setup from the universal driver wrapper)
+    pub fn iobase(&self) -> u16 {
+        self.device.iobase
+    }
 }
 
 // ============ Public API ============
@@ -560,4 +565,17 @@ pub fn handle_interrupt() {
 /// Check if there's a pending VirtIO net interrupt
 pub fn irq_pending() -> bool {
     VIRTIO_NET_IRQ_PENDING.load(Ordering::Relaxed)
+}
+
+/// Set the I/O base for interrupt handling (used by the universal driver wrapper
+/// when the legacy init path is not taken).
+pub fn set_iobase_for_irq(iobase: u16) {
+    VIRTIO_NET_IOBASE.store(iobase, Ordering::SeqCst);
+}
+
+/// Handle interrupt using just the stored IOBASE (no DRIVER lock).
+/// Used by the interrupt handler when the new driver framework is active
+/// but the legacy INITIALIZED flag is false.
+pub fn handle_interrupt_from_iobase() {
+    handle_interrupt();
 }

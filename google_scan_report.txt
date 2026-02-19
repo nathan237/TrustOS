@@ -1,0 +1,465 @@
+﻿==============================================================
+  TrustOS Network Scan Report â€” google.com
+  Date: 2026-02-19 16:28:49
+  Boot time: 9.4s | Scan duration: 116.7s
+  QEMU: q35, 256M, virtio-net, user-mode NAT
+==============================================================
+=== ifconfig (ifconfig) ===
+ifconfig
+Hardware:
+      Device: 1AF4:1000 [Red Hat (virtio)]
+      Driver: virtio-net
+      Status: REAL DRIVER ACTIVE
+      BAR0:   0x0000C040
+      IRQ:    11
+
+eth0:
+      Link: UP
+      HWaddr: 52:54:00:12:34:56
+      inet:   10.0.2.15
+
+      RX packets: 3  bytes: 1290
+      TX packets: 3  bytes: 754
+[21:26:51] trustos:/$ 
+
+=== arp (arp) ===
+arp
+No ARP entries
+[21:26:52] trustos:/$ 
+
+=== route (route) ===
+route
+Kernel IP routing table
+Destination     Gateway         Genmask         Iface
+10.0.2.15     10.0.2.2     255.255.255.0     net0
+0.0.0.0         10.0.2.2     0.0.0.0         net0
+[21:26:54] trustos:/$ 
+
+=== netstat (netstat) ===
+netstat
+Network Statistics
+==================
+
+Packets received: 0
+Packets sent:     0
+Bytes received:   0
+Bytes sent:       0
+Errors:           0
+[21:26:55] trustos:/$ 
+
+=== ping gateway (ping 10.0.2.2) ===
+ping 10.0.2.2
+PING 10.0.2.2 (10.0.2.2) 56 data bytes
+[      1403][CPU0][DEBUG] [ARP] Sent request for 10.0.2.2
+[ETH] len=64 etype=0x0806 dst=52:54:00:12:34:56
+[      1403][CPU0][DEBUG] [ARP] Reply from 10.0.2.2 = 52:55:0A:00:02:02
+[ICMP] Sent echo request to 10.0.2.2 id=4660 seq=1
+[ETH] len=98 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=4660 seq=1 ttl=255
+64 bytes from 10.0.2.2: icmp_seq=1 ttl=255 time=7.66 ms
+[ICMP] Sent echo request to 10.0.2.2 id=4660 seq=2
+[ETH] len=98 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=4660 seq=2 ttl=255
+64 bytes from 10.0.2.2: icmp_seq=2 ttl=255 time=1.77 ms
+[ICMP] Sent echo request to 10.0.2.2 id=4660 seq=3
+[ETH] len=98 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=4660 seq=3 ttl=255
+64 bytes from 10.0.2.2: icmp_seq=3 ttl=255 time=1.63 ms
+[ICMP] Sent echo request to 10.0.2.2 id=4660 seq=4
+[ETH] len=98 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=4660 seq=4 ttl=255
+64 bytes from 10.0.2.2: icmp_seq=4 ttl=255 time=1.66 ms
+
+--- 10.0.2.2 ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss
+rtt min/avg/max = 1.633/3.183/7.664 ms
+[21:27:00] trustos:/$ 
+
+=== nslookup google.com (nslookup google.com) ===
+nslookup google.com
+[      2310][CPU0][DEBUG] [ARP] Sent request for 10.0.2.3
+[ETH] len=64 etype=0x0806 dst=52:54:00:12:34:56
+[      2310][CPU0][DEBUG] [ARP] Reply from 10.0.2.3 = 52:55:0A:00:02:03
+Server: 8.8.8.8
+Name: google.com
+Address: 142.250.137.138
+[21:27:01] trustos:/$ 
+
+=== ping google.com (ping google.com) ===
+ping google.com
+PING google.com (142.250.137.138) 56 data bytes
+[ICMP] Sent echo request to 142.250.137.138 id=4660 seq=5
+[ETH] len=98 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=4660 seq=5 ttl=255
+64 bytes from 142.250.137.138: icmp_seq=5 ttl=255 time=13.60 ms
+[ICMP] Sent echo request to 142.250.137.138 id=4660 seq=6
+[ETH] len=98 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=4660 seq=6 ttl=255
+64 bytes from 142.250.137.138: icmp_seq=6 ttl=255 time=12.22 ms
+[ICMP] Sent echo request to 142.250.137.138 id=4660 seq=7
+[ETH] len=98 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=4660 seq=7 ttl=255
+64 bytes from 142.250.137.138: icmp_seq=7 ttl=255 time=11.69 ms
+[ICMP] Sent echo request to 142.250.137.138 id=4660 seq=8
+[ETH] len=98 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=4660 seq=8 ttl=255
+64 bytes from 142.250.137.138: icmp_seq=8 ttl=255 time=12.71 ms
+
+--- google.com ping statistics ---
+4 packets transmitted, 4 received, 0% packet loss
+rtt min/avg/max = 11.692/12.559/13.605 ms
+[21:27:06] trustos:/$ 
+
+=== nmap google.com (nmap google.com) ===
+nmap google.com
+Starting TrustScan SYN scan on 142.250.137.138
+TrustScan 1.0 ??? TrustOS Network Security Scanner
+
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+PORT       STATE          SERVICE
+21/tcp    filtered       ftp
+22/tcp    filtered       ssh
+23/tcp    filtered       telnet
+25/tcp    filtered       smtp
+53/tcp    filtered       dns
+80/tcp    open           http
+110/tcp    filtered       pop3
+111/tcp    filtered       rpcbind
+135/tcp    filtered       msrpc
+139/tcp    filtered       netbios-ssn
+143/tcp    filtered       imap
+443/tcp    open           https
+445/tcp    filtered       microsoft-ds
+993/tcp    filtered       imaps
+995/tcp    filtered       pop3s
+1433/tcp    filtered       ms-sql
+1521/tcp    filtered       oracle
+3306/tcp    filtered       mysql
+3389/tcp    filtered       rdp
+5432/tcp    filtered       postgresql
+5900/tcp    filtered       vnc
+6379/tcp    filtered       redis
+8080/tcp    filtered       http-proxy
+8443/tcp    filtered       https-alt
+9200/tcp    filtered       elasticsearch
+
+Scan complete: 25 ports scanned in 2078 ms
+  2 open, 0 closed, 23 filtered
+[21:27:18] trustos:/$ 
+
+=== nmap google.com -A (nmap google.com -A) ===
+nmap google.com -A
+Starting TrustScan SYN scan on 142.250.137.138
+TrustScan 1.0 ??? TrustOS Network Security Scanner
+
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+
+
+=== banner google.com 80 (banner google.com 80) ===
+
+
+=== curl google.com (curl http://google.com) ===
+PORT       STATE          SERVICE
+7/tcp    filtered       echo
+9/tcp    filtered       discard
+13/tcp    filtered       daytime
+21/tcp    filtered       ftp
+22/tcp    filtered       ssh
+23/tcp    filtered       telnet
+25/tcp    filtered       smtp
+26/tcp    filtered       unknown
+37/tcp    filtered       time
+53/tcp    filtered       dns
+79/tcp    filtered       finger
+80/tcp    open           http
+81/tcp    filtered       unknown
+88/tcp    filtered       kerberos
+106/tcp    filtered       unknown
+110/tcp    filtered       pop3
+111/tcp    filtered       rpcbind
+113/tcp    filtered       ident
+119/tcp    filtered       nntp
+135/tcp    filtered       msrpc
+139/tcp    filtered       netbios-ssn
+143/tcp    filtered       imap
+144/tcp    filtered       unknown
+179/tcp    filtered       bgp
+199/tcp    filtered       unknown
+389/tcp    filtered       ldap
+427/tcp    filtered       unknown
+443/tcp    open           https
+444/tcp    filtered       unknown
+445/tcp    filtered       microsoft-ds
+465/tcp    filtered       smtps
+513/tcp    filtered       unknown
+514/tcp    filtered       syslog
+515/tcp    filtered       printer
+543/tcp    filtered       klogin
+544/tcp    filtered       kshell
+548/tcp    filtered       unknown
+554/tcp    filtered       rtsp
+587/tcp    filtered       submission
+631/tcp    filtered       ipp
+646/tcp    filtered       unknown
+873/tcp    filtered       rsync
+990/tcp    filtered       ftps
+993/tcp    filtered       imaps
+995/tcp    filtered       pop3s
+1025/tcp    filtered       unknown
+1026/tcp    filtered       unknown
+1027/tcp    filtered       unknown
+1028/tcp    filtered       unknown
+1029/tcp    filtered       unknown
+1110/tcp    filtered       unknown
+1433/tcp    filtered       ms-sql
+1720/tcp    filtered       unknown
+1723/tcp    filtered       pptp
+1755/tcp    filtered       unknown
+1900/tcp    filtered       unknown
+2000/tcp    filtered       unknown
+2001/tcp    filtered       unknown
+2049/tcp    filtered       nfs
+2121/tcp    filtered       unknown
+2717/tcp    filtered       unknown
+3000/tcp    filtered       grafana
+3128/tcp    filtered       squid
+3306/tcp    filtered       mysql
+3389/tcp    filtered       rdp
+3986/tcp    filtered       unknown
+4899/tcp    filtered       unknown
+5000/tcp    filtered       upnp
+5009/tcp    filtered       unknown
+5051/tcp    filtered       unknown
+5060/tcp    filtered       sip
+5101/tcp    filtered       unknown
+5190/tcp    filtered       unknown
+5357/tcp    filtered       unknown
+5432/tcp    filtered       postgresql
+5631/tcp    filtered       unknown
+5666/tcp    filtered       unknown
+5800/tcp    filtered       unknown
+5900/tcp    filtered       vnc
+6000/tcp    filtered       unknown
+6001/tcp    filtered       unknown
+6646/tcp    filtered       unknown
+7070/tcp    filtered       unknown
+8000/tcp    filtered       http-alt
+8008/tcp    filtered       http-alt2
+8009/tcp    filtered       unknown
+8080/tcp    filtered       http-proxy
+8081/tcp    filtered       unknown
+8443/tcp    filtered       https-alt
+8888/tcp    filtered       http-alt3
+9100/tcp    filtered       unknown
+9999/tcp    filtered       unknown
+10000/tcp    filtered       unknown
+32768/tcp    filtered       unknown
+49152/tcp    filtered       unknown
+49153/tcp    filtered       unknown
+49154/tcp    filtered       unknown
+49155/tcp    filtered       unknown
+49156/tcp    filtered       unknown
+
+Scan complete: 99 ports scanned in 10714 ms
+  2 open, 0 closed, 97 filtered
+
+Banner Grabbing...
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+  80/tcp HTTP/1.0 404 Not Found Content-Type: text/html; charset=UTF-8 Referrer-Policy: no-referrer Content-Length: 1561 Date: Thu, 19 Feb 2026 21:28:16 GMT <!DOCTYPE html> <html lang=en>   <meta charset=utf-8>   <meta name=viewport content="initial-scale=1,
+
+Vulnerability Assessment...
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[INFO] 80/http ??? HTTP service detected (unencrypted)
+[INFO] 443/https ??? HTTPS service detected
+[21:28:15] trustos:/$ banner google.com 80
+Banner Grabbing 142.250.137.138 (1 ports)
+
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+80/tcp http           
+  HTTP/1.0 404 Not Found Content-Type: text/html; charset=UTF-8 Referrer-Policy: no-referrer Content-Length: 1561 Date: Thu, 19 Feb 2026 21:28:17 GMT <!DOCTYPE html> <html lang=en>   <meta charset=utf-8>   <meta name=viewport content="initial-scale=1,
+[21:28:15] trustos:/$ curl http://google.com
+Connecting to google.com:80...
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+--- HTTP response ---
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+HTTP/1.1 301 Moved Permanently
+Location: http://www.google.com/
+Content-Type: text/html; charset=UTF-8
+Content-Security-Policy-Report-Only: object-src 'none';base-uri 'self';script-src 'nonce-kz_LhHgeO_qu9RFkjj_9yA' 'strict-dynamic' 'report-sample' 'unsafe-eval' 'unsafe-inline' https: http:;report-uri https://csp.withgoogle.com/csp/gws/other-hp
+Reporting-Endpoints: default="//www.google.com/httpservice/retry/jserror?ei=cYCXaZPYK-Kjvr0P5-Hz6QE&cad=crash&error=Page%20Crash&jsel=1&bver=2382&dpf=cQj9_axLQvCkcwTIUAMP4khDvz3_lEHysBOjcZ0eQRE"
+Date: Thu, 19 Feb 2026 21:28:17 GMT
+Expires: Sat, 21 Mar 2026 21:28:17 GMT
+Cache-Control: public, max-age=2592000
+Server: gws
+Content-Length: 219
+X-XSS-Protection: 0
+X-Frame-Options: SAMEORIGIN
+Connection: close
+
+<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">
+<TITLE>301 Moved</TITLE></HEAD><BODY>
+<H1>301 Moved</H1>
+The document has moved
+<A HREF="http://www.google.com/">here</A>.
+</BODY></HTML>
+
+--- end (988 bytes) ---
+[21:28:15] trustos:/$ [ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+
+
+=== discover (discover) ===
+discover
+TrustScan ??? Network Discovery
+Usage:
+  discover                   ARP sweep local subnet
+  discover arp               ARP sweep (fast, local only)
+  discover ping <base_ip>    ICMP ping sweep /24 subnet
+  discover full              Full discovery (ARP + ping)
+[21:28:20] trustos:/$ 
+
+=== scantest google.com (scantest google.com) ===
+scantest google.com
+=== TrustScan Live Network Test Suite ===
+
+[PRE] Network connectivity check
+  NIC driver... [OK]
+  our IP... [OK] 10.0.2.15
+  target: google.com (142.250.137.138)
+
+[1/8] ICMP Ping ??? reachability
+  ping 142.250.137.138... [ICMP] Sent echo request to 142.250.137.138 id=4660 seq=9
+[ETH] len=98 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=4660 seq=9 ttl=255
+[OK] rtt=18701 us  ttl=255
+[2/8] ARP Resolution
+  ARP 10.0.2.2... [     18121][CPU0][DEBUG] [ARP] Sent request for 10.0.2.2
+[ETH] len=64 etype=0x0806 dst=52:54:00:12:34:56
+[     18121][CPU0][DEBUG] [ARP] Reply from 10.0.2.2 = 52:55:0A:00:02:02
+[OK] MAC=52:55:0A:00:02:02
+[3/8] DNS Resolution
+  resolve google.com... [OK] 142.250.137.138
+  resolve example.com... [ETH] len=71 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[WARN] no DNS ??? limited test
+[4/8] TCP SYN Port Scan
+  SYN scan 142.250.137.138 (5 ports)... [ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[OK] 2 open, 0 closed, 3 filtered (366 ms)
+       80/tcp  http          OPEN
+      443/tcp  https         OPEN
+[5/8] TCP Connect Scan + Banner Grab
+[ETH] len=71 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+  connect scan 142.250.137.138:80... [ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[OK] port 80 open
+  banner grab :80... [ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[OK] 'HTTP/1.0 404 Not Found Content-Type: text/html; charset=UTF-'
+[6/8] Packet Sniffer (live capture)
+  capture during ping... [SNIFFER] Capture started
+[ICMP] Sent echo request to 142.250.137.138 id=4660 seq=10
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=98 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=4660 seq=10 ttl=255
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[SNIFFER] Capture stopped
+[OK] captured 3 packets, 218 bytes
+  packet details... [OK] 3 in buffer
+    [TCP ] 142.250.137.138 79 -> 49187 [ACK][RST] seq=0 len=6
+    [ICMP] 142.250.137.138 Echo Reply seq=10
+    [HTTP] 142.250.137.138 80 -> 49287 [ACK] seq=13249719 len=6
+[7/8] Traceroute (TTL)
+  trace to 10.0.2.2 (5 hops max)... [ETH] len=66 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=23713 seq=1000 ttl=255
+[ETH] len=66 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=23713 seq=1001 ttl=255
+[ETH] len=66 etype=0x0800 dst=52:54:00:12:34:56
+[ICMP] Echo reply id=23713 seq=1002 ttl=255
+[OK] 1 hops recorded
+     1  10.0.2.2        *    2 ms  *     [REACHED]
+[8/8] Vulnerability Scanner
+[ETH] len=71 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+  vuln check 142.250.137.138:80,443... [ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[OK] 2 findings
+    [INFO    ] 80/http: HTTP service detected (unencrypted)
+    [INFO    ] 443/https: HTTPS service detected
+
+=== ALL 11/11 LIVE TESTS PASSED ===
+
+Tip: For more detailed testing, try:
+  nmap example.com -sT -p 80,443 -A
+  banner example.com 80
+  traceroute 8.8.8.8
+  sniff start   (then generate traffic)
+  vulnscan example.com
+[21:28:47] trustos:/$ [ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+[ETH] len=60 etype=0x0800 dst=52:54:00:12:34:56
+
+
