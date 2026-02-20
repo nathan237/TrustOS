@@ -136,6 +136,7 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    lshw / hwinfo       Full hardware inventory");
     crate::println!("    gpu [info|dcn|modes] AMD GPU info & display engine status");
     crate::println!("    gpuexec <agent> [N] Dispatch RDNA compute agent on GPU CUs");
+    crate::println!("    sdma <cmd>          SDMA engine DMA transfers (copy/fill/bench)");
     crate::println!("    a11y [hc|font|...]  Accessibility settings (Win+H = contrast)");
     crate::println!("    lscpu               CPU model, cores, features, frequency");
     crate::println!("    lsmem               Memory layout and total RAM");
@@ -3680,6 +3681,183 @@ pub(super) fn cmd_gpuexec(args: &[&str]) {
         _ => {
             crate::println_color!(COLOR_RED, "Unknown subcommand: {}", args[0]);
             crate::println!("Use 'gpuexec' for help");
+        }
+    }
+}
+
+/// SDMA Engine — bare-metal DMA transfers via AMD SDMA hardware
+pub(super) fn cmd_sdma(args: &[&str]) {
+    use crate::drivers::amdgpu::sdma;
+
+    const COLOR_CYAN: u32 = 0xFF00FFFF;
+    const COLOR_GREEN: u32 = 0xFF00FF00;
+    const COLOR_RED: u32 = 0xFFFF4444;
+    const COLOR_YELLOW: u32 = 0xFFFFFF00;
+
+    if args.is_empty() {
+        crate::println_color!(COLOR_CYAN, "╔══════════════════════════════════════════════╗");
+        crate::println_color!(COLOR_CYAN, "║    SDMA Engine — Bare-metal DMA Transfers     ║");
+        crate::println_color!(COLOR_CYAN, "╠══════════════════════════════════════════════╣");
+        crate::println!("║ Usage:                                       ║");
+        crate::println!("║   sdma info           Engine status + stats   ║");
+        crate::println!("║   sdma test           Self-test (5 tests)     ║");
+        crate::println!("║   sdma bench [KB]     Bandwidth benchmark     ║");
+        crate::println!("║   sdma fill <KB> [V]  Fill memory via DMA     ║");
+        crate::println!("║   sdma copy <KB>      Copy memory via DMA     ║");
+        crate::println_color!(COLOR_CYAN, "╚══════════════════════════════════════════════╝");
+        return;
+    }
+
+    match args[0] {
+        "info" | "status" => {
+            if !sdma::is_ready() {
+                crate::println_color!(COLOR_YELLOW, "SDMA not initialized");
+                crate::println!("(Requires AMD GPU with MMIO — bare metal or GPU passthrough)");
+                return;
+            }
+            for line in sdma::info_lines() {
+                crate::println!("{}", line);
+            }
+        }
+        "test" => {
+            if !sdma::is_ready() {
+                crate::println_color!(COLOR_YELLOW, "SDMA not initialized");
+                return;
+            }
+            crate::println_color!(COLOR_CYAN, "=== SDMA Self-Test ===");
+            let (pass, fail) = sdma::self_test();
+            crate::println!();
+            if fail == 0 {
+                crate::println_color!(COLOR_GREEN, "=== ALL PASSED: {}/{} ===", pass, pass + fail);
+            } else {
+                crate::println_color!(COLOR_RED, "=== {}/{} passed, {} FAILED ===",
+                    pass, pass + fail, fail);
+            }
+        }
+        "bench" | "benchmark" => {
+            if !sdma::is_ready() {
+                crate::println_color!(COLOR_YELLOW, "SDMA not initialized");
+                return;
+            }
+            let size_kb: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(64);
+            crate::println!("Benchmarking SDMA ({} KB, 16 iterations)...", size_kb);
+            match sdma::benchmark(size_kb) {
+                Ok((fill_bw, copy_bw)) => {
+                    crate::println_color!(COLOR_GREEN, "  Fill BW: ~{} KB/s", fill_bw);
+                    crate::println_color!(COLOR_GREEN, "  Copy BW: ~{} KB/s", copy_bw);
+                    crate::println!("  (Measured via system timer — bare metal will show true GPU bandwidth)");
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Benchmark error: {}", e),
+            }
+        }
+        "fill" => {
+            if !sdma::is_ready() {
+                crate::println_color!(COLOR_YELLOW, "SDMA not initialized");
+                return;
+            }
+            let size_kb: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(4);
+            let fill_val: u32 = args.get(2).and_then(|s| {
+                if s.starts_with("0x") || s.starts_with("0X") {
+                    u32::from_str_radix(&s[2..], 16).ok()
+                } else {
+                    s.parse().ok()
+                }
+            }).unwrap_or(0xDEAD_BEEF);
+            let byte_count = (size_kb * 1024).min(256 * 1024);
+
+            // Allocate temp buffer
+            let layout = alloc::alloc::Layout::from_size_align(byte_count as usize, 4096);
+            if layout.is_err() {
+                crate::println_color!(COLOR_RED, "Allocation error");
+                return;
+            }
+            let layout = layout.unwrap();
+            let buf = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+            let phys = crate::memory::virt_to_phys(buf).unwrap_or(0);
+            if phys == 0 {
+                crate::println_color!(COLOR_RED, "Cannot get physical address");
+                unsafe { alloc::alloc::dealloc(buf as *mut u8, layout); }
+                return;
+            }
+
+            crate::println!("SDMA fill: {} bytes at {:#X} with {:#010X}", byte_count, phys, fill_val);
+            match sdma::fill(phys, fill_val, byte_count, 0) {
+                Ok(seq) => {
+                    // Verify first 4 dwords
+                    let ptr = buf as *const u32;
+                    let v0 = unsafe { core::ptr::read_volatile(ptr) };
+                    let v1 = unsafe { core::ptr::read_volatile(ptr.add(1)) };
+                    let v2 = unsafe { core::ptr::read_volatile(ptr.add(2)) };
+                    let v3 = unsafe { core::ptr::read_volatile(ptr.add(3)) };
+                    crate::println_color!(COLOR_GREEN, "  Done (fence={}), first 4: {:#010X} {:#010X} {:#010X} {:#010X}",
+                        seq, v0, v1, v2, v3);
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+            unsafe { alloc::alloc::dealloc(buf as *mut u8, layout); }
+        }
+        "copy" => {
+            if !sdma::is_ready() {
+                crate::println_color!(COLOR_YELLOW, "SDMA not initialized");
+                return;
+            }
+            let size_kb: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(4);
+            let byte_count = (size_kb * 1024).min(256 * 1024);
+
+            let layout = alloc::alloc::Layout::from_size_align(byte_count as usize, 4096);
+            if layout.is_err() {
+                crate::println_color!(COLOR_RED, "Allocation error");
+                return;
+            }
+            let layout = layout.unwrap();
+            let buf_a = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+            let buf_b = unsafe { alloc::alloc::alloc_zeroed(layout) } as u64;
+            let phys_a = crate::memory::virt_to_phys(buf_a).unwrap_or(0);
+            let phys_b = crate::memory::virt_to_phys(buf_b).unwrap_or(0);
+            if phys_a == 0 || phys_b == 0 {
+                crate::println_color!(COLOR_RED, "Cannot get physical addresses");
+                unsafe {
+                    alloc::alloc::dealloc(buf_a as *mut u8, layout);
+                    alloc::alloc::dealloc(buf_b as *mut u8, layout);
+                }
+                return;
+            }
+
+            // Fill src with pattern
+            let src = buf_a as *mut u32;
+            for i in 0..(byte_count / 4) {
+                unsafe { core::ptr::write_volatile(src.add(i as usize), 0xA000_0000 + i); }
+            }
+
+            crate::println!("SDMA copy: {} bytes {:#X} → {:#X}", byte_count, phys_a, phys_b);
+            match sdma::copy(phys_a, phys_b, byte_count, 0) {
+                Ok(seq) => {
+                    // Verify first 4 dwords at destination
+                    let dst = buf_b as *const u32;
+                    let v0 = unsafe { core::ptr::read_volatile(dst) };
+                    let v1 = unsafe { core::ptr::read_volatile(dst.add(1)) };
+                    let v2 = unsafe { core::ptr::read_volatile(dst.add(2)) };
+                    let v3 = unsafe { core::ptr::read_volatile(dst.add(3)) };
+                    crate::println_color!(COLOR_GREEN, "  Done (fence={}), dst[0..3]: {:#010X} {:#010X} {:#010X} {:#010X}",
+                        seq, v0, v1, v2, v3);
+                    // Quick verify
+                    let mut ok = 0u32;
+                    for i in 0..(byte_count / 4) {
+                        let got = unsafe { core::ptr::read_volatile(dst.add(i as usize)) };
+                        if got == 0xA000_0000 + i { ok += 1; }
+                    }
+                    crate::println!("  Verified: {}/{} dwords correct", ok, byte_count / 4);
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+            unsafe {
+                alloc::alloc::dealloc(buf_a as *mut u8, layout);
+                alloc::alloc::dealloc(buf_b as *mut u8, layout);
+            }
+        }
+        _ => {
+            crate::println_color!(COLOR_RED, "Unknown subcommand: {}", args[0]);
+            crate::println!("Use 'sdma' for help");
         }
     }
 }

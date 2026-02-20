@@ -311,22 +311,146 @@ pub mod dcn {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SDMA — System DMA Engines (for Phase 3: DMA transfers)
+// SDMA — System DMA Engines (Navi 10 — 2 engines: SDMA0 + SDMA1)
 // ═══════════════════════════════════════════════════════════════════════════════
+//
+// SDMA engines perform asynchronous DMA transfers independently of the
+// Graphics/Compute command processors. Each engine has its own ring buffer
+// and can run in parallel with GFX/Compute workloads.
+//
+// Navi 10 SDMA register layout (per engine):
+//   SDMA0: base 0x4980 (GFX ring) / 0x4A00 (Page ring)
+//   SDMA1: base 0x4A80 (GFX ring) / 0x4B00 (Page ring)
+//
+// Each ring has: CNTL, BASE, BASE_HI, RPTR, RPTR_HI, WPTR, WPTR_HI,
+//                WPTR_POLL_ADDR, DOORBELL, etc.
+//
+// SDMA packet opcodes use a different format than PM4:
+//   DW0: [31:28]=0 (always), [27:26]=sub_op, [25:8]=op, [7:0]=extra
+//
 
-/// SDMA engine 0 base
-pub const SDMA0_BASE: u32 = 0x4980;
-/// SDMA GFX RB CNTL
-pub const SDMA0_GFX_RB_CNTL: u32 = 0x4980;
-/// SDMA GFX RB BASE
-pub const SDMA0_GFX_RB_BASE: u32 = 0x4984;
-/// SDMA GFX RB RPTR
-pub const SDMA0_GFX_RB_RPTR: u32 = 0x4998;
-/// SDMA GFX RB WPTR
-pub const SDMA0_GFX_RB_WPTR: u32 = 0x499C;
+/// SDMA engine instance offsets (from MMIO base)
+pub const SDMA0_BASE: u32 = 0x0000_4980;
+pub const SDMA1_BASE: u32 = 0x0000_4A80;
 
-/// SDMA engine 1 base (Navi 10 has 2 SDMA engines)
-pub const SDMA1_BASE: u32 = 0x4A80;
+/// Stride between SDMA0 and SDMA1 register sets
+pub const SDMA_ENGINE_STRIDE: u32 = SDMA1_BASE - SDMA0_BASE;
+
+/// Number of SDMA engines on Navi 10
+pub const SDMA_NUM_ENGINES: usize = 2;
+
+// ── SDMA GFX Ring Buffer Registers (offsets from SDMAx_BASE) ────────────────
+
+/// Ring buffer control: size (log2), enable, etc.
+pub const SDMA_GFX_RB_CNTL: u32 = 0x00;
+/// Ring buffer base address [31:0] (256-byte aligned → bits [31:8] valid)
+pub const SDMA_GFX_RB_BASE: u32 = 0x04;
+/// Ring buffer base address [63:32]
+pub const SDMA_GFX_RB_BASE_HI: u32 = 0x08;
+/// Ring buffer read pointer (hardware-managed)
+pub const SDMA_GFX_RB_RPTR: u32 = 0x18;
+/// Ring buffer read pointer [63:32]
+pub const SDMA_GFX_RB_RPTR_HI: u32 = 0x1C;
+/// Ring buffer write pointer (software-managed, doorbell-writeable)
+pub const SDMA_GFX_RB_WPTR: u32 = 0x20;
+/// Ring buffer write pointer [63:32]
+pub const SDMA_GFX_RB_WPTR_HI: u32 = 0x24;
+/// Write pointer poll address [31:0] — GPU writes RPTR here for CPU to read
+pub const SDMA_GFX_RB_WPTR_POLL_ADDR_LO: u32 = 0x28;
+/// Write pointer poll address [63:32]
+pub const SDMA_GFX_RB_WPTR_POLL_ADDR_HI: u32 = 0x2C;
+/// Ring buffer read pointer report address [31:0]
+pub const SDMA_GFX_RB_RPTR_ADDR_LO: u32 = 0x30;
+/// Ring buffer read pointer report address [63:32]
+pub const SDMA_GFX_RB_RPTR_ADDR_HI: u32 = 0x34;
+/// Doorbell control for this ring
+pub const SDMA_GFX_DOORBELL: u32 = 0x38;
+/// Doorbell offset within the BAR4 doorbell page
+pub const SDMA_GFX_DOORBELL_OFFSET: u32 = 0x3C;
+
+// ── SDMA Engine-Level Status/Control (absolute offsets from MMIO base) ──────
+
+/// SDMA0 status register — engine idle/busy + error flags
+pub const SDMA0_STATUS_REG: u32 = 0x4D68;
+/// SDMA0 chicken bits (enable/disable hardware features)
+pub const SDMA0_CHICKEN_BITS: u32 = 0x4D6C;
+/// SDMA0 clock gating control
+pub const SDMA0_CLK_CTRL: u32 = 0x4D70;
+/// SDMA0 power cntl
+pub const SDMA0_POWER_CNTL: u32 = 0x4D74;
+/// SDMA0 freeze — halt engine for programming
+pub const SDMA0_F32_CNTL: u32 = 0x4D78;
+/// SDMA0 version
+pub const SDMA0_VERSION: u32 = 0x4D80;
+
+/// SDMA1 status register
+pub const SDMA1_STATUS_REG: u32 = 0x4E68;
+/// SDMA1 chicken bits
+pub const SDMA1_CHICKEN_BITS: u32 = 0x4E6C;
+/// SDMA1 freeze
+pub const SDMA1_F32_CNTL: u32 = 0x4E78;
+
+// ── SDMA_GFX_RB_CNTL bit definitions ───────────────────────────────────────
+
+/// Ring buffer size in log2 DWORDs (bits [6:1])
+/// E.g., 12 → 4096 DWORDs = 16KB ring
+pub const SDMA_RB_CNTL_RB_SIZE_SHIFT: u32 = 1;
+pub const SDMA_RB_CNTL_RB_SIZE_MASK: u32 = 0x3F << 1;
+/// Ring buffer read pointer writeback enable (bit 12)
+pub const SDMA_RB_CNTL_RPTR_WRITEBACK_ENABLE: u32 = 1 << 12;
+/// Ring buffer enable (bit 0)
+pub const SDMA_RB_CNTL_RB_ENABLE: u32 = 1 << 0;
+/// Ring VMID (bits [19:16]) — 0 for bare-metal (no IOMMU)
+pub const SDMA_RB_CNTL_RB_VMID_SHIFT: u32 = 16;
+/// RPTR writeback interval timer (bits [27:20])
+pub const SDMA_RB_CNTL_RPTR_WRITEBACK_TIMER_SHIFT: u32 = 20;
+
+// ── SDMA_STATUS_REG bit definitions ─────────────────────────────────────────
+
+/// SDMA engine idle (all queues drained)
+pub const SDMA_STATUS_IDLE: u32 = 1 << 0;
+/// SDMA had a context-switch
+pub const SDMA_STATUS_CTXSW: u32 = 1 << 4;
+
+// ── SDMA Packet Opcodes ─────────────────────────────────────────────────────
+//
+// SDMA packets differ from PM4. Format:
+//   DW0: [31:28]=0, [27:26]=sub_op, [25:8]=op, [7:0]=extra_info
+//
+// Reference: drivers/gpu/drm/amd/amdgpu/navi10_sdma_pkt_open.h
+
+/// NOP — padding / alignment
+pub const SDMA_OP_NOP: u32 = 0;
+/// COPY — linear DMA copy (sub_op=0=linear, sub_op=1=tiled, sub_op=3=SOA, sub_op=4=dirty_page)
+pub const SDMA_OP_COPY: u32 = 1;
+/// WRITE — write immediate data to GPU address
+pub const SDMA_OP_WRITE: u32 = 2;
+/// INDIRECT_BUFFER — jump to indirect buffer
+pub const SDMA_OP_INDIRECT: u32 = 4;
+/// FENCE — write a fence value to memory
+pub const SDMA_OP_FENCE: u32 = 5;
+/// TRAP — generate interrupt on completion
+pub const SDMA_OP_TRAP: u32 = 6;
+/// POLL_REGMEM — poll a register/memory location
+pub const SDMA_OP_POLL_REGMEM: u32 = 8;
+/// TIMESTAMP — write GPU timestamp to memory
+pub const SDMA_OP_TIMESTAMP: u32 = 13;
+/// SRBM_WRITE — write a register via SRBM bridge
+pub const SDMA_OP_SRBM_WRITE: u32 = 14;
+/// CONST_FILL — fill memory with a constant value (32-bit)
+pub const SDMA_OP_CONST_FILL: u32 = 11;
+/// GCR — Global Cache Request (flush/invalidate)
+pub const SDMA_OP_GCR: u32 = 17;
+
+/// SDMA COPY sub-operations
+pub const SDMA_COPY_SUB_LINEAR: u32 = 0;
+pub const SDMA_COPY_SUB_TILED: u32 = 1;
+pub const SDMA_COPY_SUB_SOA: u32 = 3;
+pub const SDMA_COPY_SUB_DIRTY_PAGE: u32 = 4;
+
+/// SDMA WRITE sub-operations
+pub const SDMA_WRITE_SUB_LINEAR: u32 = 0;
+pub const SDMA_WRITE_SUB_TILED: u32 = 1;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // PM4 / CP — Command Processor packet types (for Phase 4: command submission)
