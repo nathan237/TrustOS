@@ -221,23 +221,20 @@ fn handle_status() {
     respond(&format!("STATUS:{}", stats));
 }
 
-/// Save weights to a memory snapshot (disk integration later)
+/// Save weights to RamFS disk
 fn handle_save() {
-    if let Some(model) = super::MODEL.lock().as_ref() {
-        let data = model.serialize();
-        // For now, report that we have the data ready
-        // Disk save would use: crate::disk::write_file("/jarvis/weights.bin", ...)
-        respond(&format!("OK:Weights serialized ({} floats, {} KB)",
-            data.len(), data.len() * 4 / 1024));
-    } else {
-        respond("ERROR:No model to save");
+    match super::save_weights() {
+        Ok(bytes) => respond(&format!("OK:Saved {} KB to /jarvis/weights.bin", bytes / 1024)),
+        Err(e) => respond(&format!("ERROR:{}", e)),
     }
 }
 
-/// Load weights from snapshot
+/// Load weights from RamFS disk
 fn handle_load() {
-    // Placeholder — would load from disk: crate::disk::read_file("/jarvis/weights.bin")
-    respond("OK:Load from disk not yet implemented (using current weights)");
+    match super::load_weights() {
+        Ok(bytes) => respond(&format!("OK:Loaded {} KB from /jarvis/weights.bin", bytes / 1024)),
+        Err(e) => respond(&format!("ERROR:{}", e)),
+    }
 }
 
 /// Reset all weights to random initialization

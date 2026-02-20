@@ -906,10 +906,22 @@ fn process_query(raw: &str) {
             crate::print_color!(0xFF444444, " {:?}={}", e.kind, e.value);
         }
     }
+    if intent == Intent::Unknown && crate::jarvis::is_ready() {
+        crate::print_color!(0xFF444444, " ->brain");
+    }
     crate::println!();
     
-    // Plan & execute
-    let action = plan_action(intent, &entities, lang);
+    // Plan & execute — use neural fallback for unknown intents
+    let action = if intent == Intent::Unknown {
+        // Try the neural brain for unknown intents
+        if let Some(neural_response) = crate::jarvis::neural_respond(raw) {
+            Action::Respond(neural_response)
+        } else {
+            plan_action(intent, &entities, lang)
+        }
+    } else {
+        plan_action(intent, &entities, lang)
+    };
     execute_action(action);
 }
 
@@ -987,6 +999,8 @@ fn cmd_brain(args: &[&str]) {
         crate::println!("    weights       Show weight statistics per layer");
         crate::println!("    hardware      Show available hardware for inference");
         crate::println!("    mentor        Start serial mentoring listener");
+        crate::println!("    save          Save weights to /jarvis/weights.bin");
+        crate::println!("    load          Load weights from /jarvis/weights.bin");
         crate::println!("    reset         Reset weights to random");
         crate::println!();
         crate::println!("  The neural brain is a 4-layer transformer (312K params)");
@@ -1141,6 +1155,23 @@ fn cmd_brain(args: &[&str]) {
             crate::println_color!(COLOR_YELLOW, "  Resetting all weights to random...");
             crate::jarvis::reset();
             crate::println_color!(COLOR_GREEN, "  Weights reset. Training steps cleared.");
+        }
+
+        "save" => {
+            if !ensure_brain() { return; }
+            crate::println_color!(JARVIS_BRAIN, "  Saving weights to /jarvis/weights.bin...");
+            match crate::jarvis::save_weights() {
+                Ok(bytes) => crate::println_color!(COLOR_GREEN, "  Saved {} KB", bytes / 1024),
+                Err(e) => crate::println_color!(COLOR_RED, "  Save failed: {}", e),
+            }
+        }
+
+        "load" => {
+            crate::println_color!(JARVIS_BRAIN, "  Loading weights from /jarvis/weights.bin...");
+            match crate::jarvis::load_weights() {
+                Ok(bytes) => crate::println_color!(COLOR_GREEN, "  Loaded {} KB", bytes / 1024),
+                Err(e) => crate::println_color!(COLOR_RED, "  Load failed: {}", e),
+            }
         }
 
         _ => {

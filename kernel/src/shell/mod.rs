@@ -589,6 +589,10 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                 if count % 5000 == 0 {
                     crate::netstack::poll();
                 }
+                // Poll Jarvis mentor serial commands (learn from external AI)
+                if count % 10000 == 0 {
+                    crate::jarvis::mentor::poll_serial();
+                }
             }
             for _ in 0..100 { core::hint::spin_loop(); }
         }

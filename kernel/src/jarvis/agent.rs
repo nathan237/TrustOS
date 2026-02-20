@@ -194,28 +194,73 @@ pub fn introspect(target: &IntrospectTarget) -> Vec<String> {
 
         IntrospectTarget::SourceCode { module } => {
             lines.push(format!("= Source: jarvis/{}.rs =", module));
-            lines.push(String::from("(Reading from embedded knowledge — VFS integration pending)"));
-            match module.as_str() {
-                "mod" => {
-                    lines.push(String::from("// Module: jarvis/mod.rs"));
-                    lines.push(String::from("// Public API: init(), generate(), train_on_text(), info_lines()"));
-                    lines.push(String::from("// Global state: MODEL (Mutex<Option<TransformerWeights>>)"));
-                    lines.push(String::from("// Submodules: tokenizer, model, inference, agent, mentor, training"));
+            // Try reading from VFS first (if source was embedded at build time)
+            let vfs_path = format!("/jarvis/src/{}.rs", module);
+            let source = crate::ramfs::with_fs(|fs| {
+                fs.read_file(&vfs_path).map(|d| d.to_vec()).ok()
+            });
+            if let Some(data) = source {
+                lines.push(String::from("(Read from VFS)"));
+                if let Ok(text) = core::str::from_utf8(&data) {
+                    // Show first 30 lines to avoid flooding
+                    for (i, line) in text.lines().enumerate() {
+                        if i >= 30 {
+                            lines.push(format!("  ... ({} more lines)", text.lines().count() - 30));
+                            break;
+                        }
+                        lines.push(format!("  {}", line));
+                    }
                 }
-                "model" => {
-                    lines.push(format!("// TransformerWeights: {}L × d{} × {}H × ff{}",
-                        model::N_LAYERS, model::D_MODEL, model::N_HEADS, model::D_FF));
-                    lines.push(format!("// LayerWeights: rms_attn, W_q/k/v/o, rms_ffn, W_gate/up/down"));
-                    lines.push(format!("// Serialization: serialize() → Vec<f32>, deserialize(&[f32])"));
-                }
-                "inference" => {
-                    lines.push(String::from("// InferenceEngine: KV cache, scratch buffers, PRNG"));
-                    lines.push(String::from("// forward_one(): embed → N×(attn + ffn) → logits"));
-                    lines.push(String::from("// sample_token(): temperature + top-k sampling"));
-                    lines.push(String::from("// compute_loss(): teacher forcing cross-entropy"));
-                }
-                _ => {
-                    lines.push(format!("// Module '{}' — structure available via introspect", module));
+            } else {
+                lines.push(String::from("(From embedded knowledge)"));
+                match module.as_str() {
+                    "mod" => {
+                        lines.push(String::from("// Module: jarvis/mod.rs"));
+                        lines.push(String::from("// Public API: init(), generate(), train_on_text(), info_lines()"));
+                        lines.push(String::from("// Global state: MODEL (Mutex<Option<TransformerWeights>>)"));
+                        lines.push(String::from("// Persistence: save_weights(), load_weights() → /jarvis/weights.bin"));
+                        lines.push(String::from("// Submodules: tokenizer, model, inference, agent, mentor, training"));
+                    }
+                    "model" => {
+                        lines.push(format!("// TransformerWeights: {}L × d{} × {}H × ff{}",
+                            model::N_LAYERS, model::D_MODEL, model::N_HEADS, model::D_FF));
+                        lines.push(format!("// LayerWeights: rms_attn, W_q/k/v/o, rms_ffn, W_gate/up/down"));
+                        lines.push(format!("// Serialization: serialize() → Vec<f32>, deserialize(&[f32])"));
+                        lines.push(format!("// Persistence: /jarvis/weights.bin ({} KB)",
+                            param_count_estimate() * 4 / 1024));
+                    }
+                    "inference" => {
+                        lines.push(String::from("// InferenceEngine: KV cache, scratch buffers, PRNG"));
+                        lines.push(String::from("// forward_one(): embed → N×(attn + ffn) → logits"));
+                        lines.push(String::from("// sample_token(): temperature + top-k sampling"));
+                        lines.push(String::from("// compute_loss(): teacher forcing cross-entropy"));
+                    }
+                    "training" => {
+                        lines.push(String::from("// train_step(): stochastic numerical gradients (1% params/step)"));
+                        lines.push(String::from("// train_step_random(): evolution strategies"));
+                        lines.push(String::from("// Rotates through: embeddings → W_q → W_k → W_o → W_gate → W_output"));
+                        lines.push(format!("// Batch mode via MENTOR:BATCH_START/END"));
+                    }
+                    "agent" => {
+                        lines.push(String::from("// classify_input(): route to Generate/Execute/Introspect/Train"));
+                        lines.push(String::from("// introspect(): Architecture, WeightStats, Hardware, SourceCode"));
+                        lines.push(String::from("// bench_inference(): measure tokens/sec"));
+                    }
+                    "mentor" => {
+                        lines.push(String::from("// Serial mentoring: MENTOR:TEACH/CORRECT/EVAL/GENERATE/..."));
+                        lines.push(String::from("// poll_serial(): non-blocking check on COM1"));
+                        lines.push(String::from("// Batch training with loss accumulation"));
+                        lines.push(String::from("// Save/load: /jarvis/weights.bin via ramfs"));
+                    }
+                    "tokenizer" => {
+                        lines.push(String::from("// Byte-level tokenizer (vocab=256, zero-cost)"));
+                        lines.push(String::from("// encode(text) → [BOS, byte0, byte1, ..., EOS]"));
+                        lines.push(String::from("// decode(tokens) → String (lossy UTF-8)"));
+                        lines.push(String::from("// Special: PAD=0x00, BOS=0x01, EOS=0x02, SEP=0x03"));
+                    }
+                    _ => {
+                        lines.push(format!("// Module '{}' — use 'source model/inference/training/agent/mentor/tokenizer'", module));
+                    }
                 }
             }
         }

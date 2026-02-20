@@ -250,3 +250,122 @@ pub fn reset() {
         GENERATION_COUNT.store(0, Ordering::Relaxed);
     }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Persistence — Save/Load weights to disk (RamFS)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const WEIGHTS_DIR: &str = "/jarvis";
+const WEIGHTS_PATH: &str = "/jarvis/weights.bin";
+const WEIGHTS_META: &str = "/jarvis/meta.txt";
+
+/// Save model weights to /jarvis/weights.bin in RamFS
+pub fn save_weights() -> Result<usize, &'static str> {
+    let model_guard = MODEL.lock();
+    let model = model_guard.as_ref().ok_or("Model not loaded")?;
+
+    let floats = model.serialize();
+    let byte_count = floats.len() * 4;
+
+    // Convert f32 slice to u8 slice (safe: same alignment guarantees in our allocator)
+    let bytes: &[u8] = unsafe {
+        core::slice::from_raw_parts(floats.as_ptr() as *const u8, byte_count)
+    };
+
+    // Ensure /jarvis directory exists
+    crate::ramfs::with_fs(|fs| {
+        let _ = fs.mkdir(WEIGHTS_DIR); // Ignore AlreadyExists
+    });
+
+    // Create file if needed, then write
+    crate::ramfs::with_fs(|fs| {
+        let _ = fs.touch(WEIGHTS_PATH);
+        fs.write_file(WEIGHTS_PATH, bytes).map_err(|_| "Write failed")
+    })?;
+
+    // Save metadata
+    let meta = format!("params={}\nsteps={}\ngens={}\nbytes={}\n",
+        model.param_count(),
+        TRAINING_STEPS.load(Ordering::Relaxed),
+        GENERATION_COUNT.load(Ordering::Relaxed),
+        byte_count);
+    crate::ramfs::with_fs(|fs| {
+        let _ = fs.touch(WEIGHTS_META);
+        let _ = fs.write_file(WEIGHTS_META, meta.as_bytes());
+    });
+
+    crate::serial_println!("[JARVIS] Saved {} floats ({} KB) to {}",
+        floats.len(), byte_count / 1024, WEIGHTS_PATH);
+
+    Ok(byte_count)
+}
+
+/// Load model weights from /jarvis/weights.bin
+pub fn load_weights() -> Result<usize, &'static str> {
+    let data = crate::ramfs::with_fs(|fs| {
+        fs.read_file(WEIGHTS_PATH).map(|d| d.to_vec())
+    }).map_err(|_| "No saved weights found")?;
+
+    if data.len() % 4 != 0 {
+        return Err("Invalid weight file (size not multiple of 4)");
+    }
+
+    let float_count = data.len() / 4;
+    let floats: &[f32] = unsafe {
+        core::slice::from_raw_parts(data.as_ptr() as *const f32, float_count)
+    };
+
+    let new_model = model::TransformerWeights::deserialize(floats)
+        .ok_or("Deserialization failed (wrong size)")?;
+
+    let param_count = new_model.param_count();
+    *MODEL.lock() = Some(new_model);
+
+    if !INITIALIZED.load(Ordering::Acquire) {
+        *ENGINE.lock() = Some(InferenceEngine::new());
+        INITIALIZED.store(true, Ordering::Release);
+    }
+
+    crate::serial_println!("[JARVIS] Loaded {} params ({} KB) from {}",
+        param_count, data.len() / 1024, WEIGHTS_PATH);
+
+    Ok(data.len())
+}
+
+/// Check if saved weights exist on disk
+pub fn has_saved_weights() -> bool {
+    crate::ramfs::with_fs(|fs| fs.exists(WEIGHTS_PATH))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Neural Fallback — Used by shell/jarvis.rs when rule-based has no answer
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Generate a neural response for the shell Jarvis (auto-init if needed)
+/// Returns None if brain is not available
+pub fn neural_respond(query: &str) -> Option<String> {
+    if !is_ready() {
+        // Try loading saved weights first
+        if has_saved_weights() {
+            let _ = load_weights();
+        } else {
+            init();
+        }
+    }
+    if !is_ready() { return None; }
+
+    let output = generate(query, 64);
+    if output.is_empty() { return None; }
+    Some(output)
+}
+
+/// Train the neural brain on a conversation exchange (background learning)
+pub fn learn_from_exchange(user_input: &str, good_response: &str) {
+    if !is_ready() { return; }
+    // Train on the pattern: <user_input>\n<good_response>
+    let mut training_text = String::with_capacity(user_input.len() + good_response.len() + 1);
+    training_text.push_str(user_input);
+    training_text.push('\n');
+    training_text.push_str(good_response);
+    let _ = train_on_text(&training_text, 0.0005); // Lower LR for background learning
+}
