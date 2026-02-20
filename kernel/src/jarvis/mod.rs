@@ -58,6 +58,7 @@ pub mod inference;
 pub mod agent;
 pub mod mentor;
 pub mod training;
+pub mod corpus;
 
 use alloc::string::String;
 use alloc::format;
@@ -368,4 +369,129 @@ pub fn learn_from_exchange(user_input: &str, good_response: &str) {
     training_text.push('\n');
     training_text.push_str(good_response);
     let _ = train_on_text(&training_text, 0.0005); // Lower LR for background learning
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Pre-Training — Boot-time learning from embedded corpus
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Pre-train on the entire embedded corpus.
+/// Returns (total_steps, final_avg_loss, elapsed_ms)
+pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
+    if !is_ready() { init(); }
+    if !is_ready() { return (0, f32::MAX, 0); }
+
+    let start = crate::time::uptime_ticks();
+    let mut total_steps = 0usize;
+    let mut total_loss = 0.0f32;
+    let mut loss_count = 0u32;
+
+    crate::serial_println!("[JARVIS] Pre-training: {} phases, {} sequences, {} epoch(s), lr={}",
+        corpus::num_phases(), corpus::total_sequences(), epochs, lr);
+
+    for epoch in 0..epochs {
+        for (phase_idx, phase) in corpus::CORPUS.iter().enumerate() {
+            let mut phase_loss = 0.0f32;
+            let mut phase_count = 0u32;
+
+            for &text in *phase {
+                let loss = train_on_text(text, lr);
+                if loss.is_finite() {
+                    phase_loss += loss;
+                    phase_count += 1;
+                    total_loss += loss;
+                    loss_count += 1;
+                }
+                total_steps += 1;
+            }
+
+            let avg = if phase_count > 0 { phase_loss / phase_count as f32 } else { 0.0 };
+            crate::serial_println!("[JARVIS] Epoch {}/{} Phase {} ({}) — {} seqs, avg loss={:.3}",
+                epoch + 1, epochs, phase_idx, corpus::phase_name(phase_idx),
+                phase_count, avg);
+        }
+    }
+
+    let elapsed = crate::time::uptime_ticks().saturating_sub(start);
+    let avg_loss = if loss_count > 0 { total_loss / loss_count as f32 } else { f32::MAX };
+
+    crate::serial_println!("[JARVIS] Pre-training done: {} steps, avg loss={:.3}, {} ms",
+        total_steps, avg_loss, elapsed);
+
+    (total_steps, avg_loss, elapsed)
+}
+
+/// Pre-train a single phase (0-based index).
+/// Returns (steps, avg_loss, elapsed_ms)
+pub fn pretrain_phase(phase: usize, epochs: usize, lr: f32) -> (usize, f32, u64) {
+    if !is_ready() { init(); }
+    if !is_ready() { return (0, f32::MAX, 0); }
+    if phase >= corpus::num_phases() { return (0, f32::MAX, 0); }
+
+    let start = crate::time::uptime_ticks();
+    let mut total_steps = 0usize;
+    let mut total_loss = 0.0f32;
+    let mut loss_count = 0u32;
+
+    let sequences = corpus::CORPUS[phase];
+    crate::serial_println!("[JARVIS] Training phase {} ({}) — {} sequences, {} epoch(s)",
+        phase, corpus::phase_name(phase), sequences.len(), epochs);
+
+    for epoch in 0..epochs {
+        for &text in sequences {
+            let loss = train_on_text(text, lr);
+            if loss.is_finite() {
+                total_loss += loss;
+                loss_count += 1;
+            }
+            total_steps += 1;
+        }
+        if epochs > 1 {
+            let avg = if loss_count > 0 { total_loss / loss_count as f32 } else { 0.0 };
+            crate::serial_println!("[JARVIS]   Epoch {}/{}: avg loss={:.3}", epoch + 1, epochs, avg);
+        }
+    }
+
+    let elapsed = crate::time::uptime_ticks().saturating_sub(start);
+    let avg_loss = if loss_count > 0 { total_loss / loss_count as f32 } else { f32::MAX };
+
+    (total_steps, avg_loss, elapsed)
+}
+
+/// Quick evaluation: compute average loss across the full corpus (no training)
+pub fn eval_corpus() -> f32 {
+    if !is_ready() { return f32::MAX; }
+
+    let model_guard = MODEL.lock();
+    let model = match model_guard.as_ref() {
+        Some(m) => m,
+        None => return f32::MAX,
+    };
+
+    let mut total_loss = 0.0f32;
+    let mut count = 0u32;
+
+    for phase in corpus::CORPUS {
+        for &text in *phase {
+            let tokens = tokenizer::encode(text);
+            if tokens.len() < 2 { continue; }
+            let (loss, _) = inference::compute_loss(model, &tokens);
+            if loss.is_finite() {
+                total_loss += loss;
+                count += 1;
+            }
+        }
+    }
+
+    if count > 0 { total_loss / count as f32 } else { f32::MAX }
+}
+
+/// Get training steps count
+pub fn training_steps() -> u64 {
+    TRAINING_STEPS.load(Ordering::Relaxed)
+}
+
+/// Get generation count
+pub fn generation_count() -> u64 {
+    GENERATION_COUNT.load(Ordering::Relaxed)
 }

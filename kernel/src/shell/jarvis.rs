@@ -1002,6 +1002,9 @@ fn cmd_brain(args: &[&str]) {
         crate::println!("    save          Save weights to /jarvis/weights.bin");
         crate::println!("    load          Load weights from /jarvis/weights.bin");
         crate::println!("    reset         Reset weights to random");
+        crate::println!("    pretrain [N]  Pre-train on embedded corpus (N epochs)");
+        crate::println!("    eval          Evaluate loss across entire corpus");
+        crate::println!("    chat <text>   Chat with neural brain directly");
         crate::println!();
         crate::println!("  The neural brain is a 4-layer transformer (312K params)");
         crate::println!("  that learns from text, generates responses, and self-improves.");
@@ -1172,6 +1175,117 @@ fn cmd_brain(args: &[&str]) {
                 Ok(bytes) => crate::println_color!(COLOR_GREEN, "  Loaded {} KB", bytes / 1024),
                 Err(e) => crate::println_color!(COLOR_RED, "  Load failed: {}", e),
             }
+        }
+
+        "pretrain" | "pt" => {
+            if !ensure_brain() { return; }
+            let epochs: usize = if args.len() > 1 {
+                args[1].parse().unwrap_or(1)
+            } else { 1 };
+            crate::println_color!(JARVIS_BRAIN, "  Pre-training on embedded corpus ({} epoch(s))...", epochs);
+            crate::println!();
+
+            // Show loss before
+            let loss_before = crate::jarvis::eval_corpus();
+            crate::println_color!(COLOR_GRAY, "  Loss before: {:.3}", loss_before);
+            crate::println!();
+
+            // Train each phase with progress
+            for phase in 0..crate::jarvis::corpus::num_phases() {
+                let name = crate::jarvis::corpus::phase_name(phase);
+                let seqs = crate::jarvis::corpus::CORPUS[phase].len();
+                crate::print_color!(JARVIS_BRAIN, "  Phase {} ", phase);
+                crate::print_color!(COLOR_WHITE, "({}) ", name);
+                crate::print_color!(COLOR_GRAY, "[{} seqs] ", seqs);
+
+                let (steps, avg_loss, elapsed) =
+                    crate::jarvis::pretrain_phase(phase, epochs, 0.001);
+
+                crate::print_color!(COLOR_GREEN, "loss={:.3} ", avg_loss);
+                crate::println_color!(COLOR_GRAY, "({}ms, {} steps)", elapsed, steps);
+            }
+
+            // Show loss after
+            crate::println!();
+            let loss_after = crate::jarvis::eval_corpus();
+            crate::print_color!(COLOR_GRAY, "  Loss after:  {:.3}", loss_after);
+            if loss_after < loss_before {
+                crate::println_color!(COLOR_GREEN, " (improved by {:.3})", loss_before - loss_after);
+            } else {
+                crate::println_color!(COLOR_YELLOW, " (no improvement)");
+            }
+            crate::println!();
+            crate::println_color!(COLOR_GRAY, "  Total steps: {} | Training steps global: {}",
+                crate::jarvis::corpus::total_sequences() * epochs,
+                crate::jarvis::training_steps());
+        }
+
+        "eval" => {
+            if !ensure_brain() { return; }
+            crate::println_color!(JARVIS_BRAIN, "  Evaluating on embedded corpus...");
+            let avg_loss = crate::jarvis::eval_corpus();
+            crate::println!();
+
+            // Per-phase breakdown
+            let model_guard_unavailable = !crate::jarvis::is_ready();
+            if !model_guard_unavailable {
+                for phase in 0..crate::jarvis::corpus::num_phases() {
+                    let name = crate::jarvis::corpus::phase_name(phase);
+                    // Quick eval of this phase
+                    let mut phase_loss = 0.0f32;
+                    let mut count = 0u32;
+                    for &text in crate::jarvis::corpus::CORPUS[phase] {
+                        let tokens = crate::jarvis::tokenizer::encode(text);
+                        if tokens.len() >= 2 {
+                            // We can't easily call compute_loss without the model guard
+                            // So just report the total
+                            count += 1;
+                        }
+                    }
+                    crate::print_color!(JARVIS_BRAIN, "  Phase {} ", phase);
+                    crate::print_color!(COLOR_WHITE, "({}) ", name);
+                    crate::println_color!(COLOR_GRAY, "{} sequences", count);
+                }
+            }
+
+            crate::println!();
+            crate::print_color!(COLOR_WHITE, "  Average loss: ");
+            if avg_loss < 4.0 {
+                crate::println_color!(COLOR_GREEN, "{:.3} (learning!)", avg_loss);
+            } else if avg_loss < 5.5 {
+                crate::println_color!(COLOR_YELLOW, "{:.3} (early stage)", avg_loss);
+            } else {
+                crate::println_color!(COLOR_RED, "{:.3} (random/untrained)", avg_loss);
+            }
+
+            crate::println_color!(COLOR_GRAY, "  (Random baseline: ~5.5, Good: <3.0, Memorized: <1.0)");
+        }
+
+        "chat" => {
+            if !ensure_brain() { return; }
+            if args.len() < 2 {
+                crate::println!("  Usage: jarvis brain chat <text>");
+                return;
+            }
+            let prompt = args[1..].join(" ");
+            crate::print_color!(COLOR_WHITE, "  You: ");
+            crate::println!("{}", prompt);
+
+            let start = crate::time::uptime_ticks();
+            let output = crate::jarvis::generate(&prompt, 64);
+            let elapsed = crate::time::uptime_ticks().saturating_sub(start);
+
+            crate::print_color!(JARVIS_BRAIN, "  Jarvis: ");
+            // Show printable chars, replace control chars with dots
+            for c in output.chars() {
+                if c.is_ascii_graphic() || c == ' ' {
+                    crate::print!("{}", c);
+                } else {
+                    crate::print_color!(COLOR_GRAY, ".");
+                }
+            }
+            crate::println!();
+            crate::println_color!(COLOR_GRAY, "  ({} ms, {} chars)", elapsed, output.len());
         }
 
         _ => {
