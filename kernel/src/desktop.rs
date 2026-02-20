@@ -455,8 +455,11 @@ pub enum IconAction {
     OpenBrowser,
     OpenModelEditor,
     OpenGame3D,
+    #[cfg(feature = "emulators")]
     OpenNes,
+    #[cfg(feature = "emulators")]
     OpenGameBoy,
+    #[cfg(feature = "emulators")]
     OpenGameLab,
 }
 
@@ -482,11 +485,15 @@ pub enum WindowType {
     Game3D,  // 3D FPS raycasting game
     Chess,   // Chess game vs AI
     Chess3D, // 3D Matrix-style chess
+    #[cfg(feature = "emulators")]
     NesEmu,  // NES emulator
+    #[cfg(feature = "emulators")]
     GameBoyEmu, // Game Boy emulator
+    #[cfg(feature = "emulators")]
     GameBoyInput, // Game Boy input display (separate window)
     BinaryViewer, // TrustView binary analyzer
     LabMode,      // TrustLab introspection laboratory
+    #[cfg(feature = "emulators")]
     GameLab,      // Game Boy emulator analysis dashboard
 }
 
@@ -810,14 +817,18 @@ pub struct Desktop {
     // Binary viewer states (window_id -> BinaryViewerState)
     pub binary_viewer_states: BTreeMap<u32, crate::apps::binary_viewer::BinaryViewerState>,
     // NES emulator states
+    #[cfg(feature = "emulators")]
     pub nes_states: BTreeMap<u32, crate::nes::NesEmulator>,
     // Game Boy emulator states
+    #[cfg(feature = "emulators")]
     pub gameboy_states: BTreeMap<u32, crate::gameboy::GameBoyEmulator>,
     // Lab mode states (window_id -> LabState)
     pub lab_states: BTreeMap<u32, crate::lab_mode::LabState>,
     // GameLab states (window_id -> GameLabState)
+    #[cfg(feature = "emulators")]
     pub gamelab_states: BTreeMap<u32, crate::game_lab::GameLabState>,
     // GameBoy Input window links (input_window_id -> gb_window_id)
+    #[cfg(feature = "emulators")]
     pub gb_input_links: BTreeMap<u32, u32>,
     // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
     pub scale_factor: u32,
@@ -1375,11 +1386,15 @@ impl Desktop {
             game3d_states: BTreeMap::new(),
             chess_states: BTreeMap::new(),
             chess3d_states: BTreeMap::new(),
+            #[cfg(feature = "emulators")]
             nes_states: BTreeMap::new(),
+            #[cfg(feature = "emulators")]
             gameboy_states: BTreeMap::new(),
             binary_viewer_states: BTreeMap::new(),
             lab_states: BTreeMap::new(),
+            #[cfg(feature = "emulators")]
             gamelab_states: BTreeMap::new(),
+            #[cfg(feature = "emulators")]
             gb_input_links: BTreeMap::new(),
             scale_factor: 1,
             matrix_chars: Vec::new(),
@@ -1411,7 +1426,9 @@ impl Desktop {
         self.snake_states.clear();
         self.game3d_states.clear();
         self.chess3d_states.clear();
+        #[cfg(feature = "emulators")]
         self.nes_states.clear();
+        #[cfg(feature = "emulators")]
         self.gameboy_states.clear();
         self.binary_viewer_states.clear();
         self.lab_states.clear();
@@ -1639,7 +1656,9 @@ struct AppConfig {
             ("TrustEd", IconType::ModelEditor, IconAction::OpenModelEditor),
             ("Settings", IconType::Settings, IconAction::OpenSettings),
             ("About", IconType::About, IconAction::OpenAbout),
+            #[cfg(feature = "emulators")]
             ("GameBoy", IconType::GameBoy, IconAction::OpenGameBoy),
+            #[cfg(feature = "emulators")]
             ("GameLab", IconType::GameLab, IconAction::OpenGameLab),
         ];
         
@@ -1855,6 +1874,7 @@ struct AppConfig {
             WindowType::Chess3D => {
                 self.chess3d_states.insert(window.id, crate::chess3d::Chess3DState::new());
             },
+            #[cfg(feature = "emulators")]
             WindowType::NesEmu => {
                 let mut emu = crate::nes::NesEmulator::new();
                 // Auto-load embedded ROM if available
@@ -1863,6 +1883,7 @@ struct AppConfig {
                 }
                 self.nes_states.insert(window.id, emu);
             },
+            #[cfg(feature = "emulators")]
             WindowType::GameBoyEmu => {
                 let mut emu = crate::gameboy::GameBoyEmulator::new();
                 // Auto-load embedded ROM if available
@@ -1877,6 +1898,7 @@ struct AppConfig {
             WindowType::LabMode => {
                 self.lab_states.insert(window.id, crate::lab_mode::LabState::new());
             },
+            #[cfg(feature = "emulators")]
             WindowType::GameLab => {
                 self.gamelab_states.insert(window.id, crate::game_lab::GameLabState::new());
             },
@@ -1897,10 +1919,13 @@ struct AppConfig {
             if w.animate_close() {
                 // Animation started — immediately free heavyweight emulator/game states
                 // (the window chrome will still animate, but we don't need the state)
+                #[cfg(feature = "emulators")]
                 self.gameboy_states.remove(&id);
+                #[cfg(feature = "emulators")]
                 self.nes_states.remove(&id);
                 self.game3d_states.remove(&id);
                 self.chess3d_states.remove(&id);
+                #[cfg(feature = "emulators")]
                 self.gamelab_states.remove(&id);
                 self.lab_states.remove(&id);
                 return;
@@ -1916,11 +1941,15 @@ struct AppConfig {
         self.game3d_states.remove(&id);
         self.chess_states.remove(&id);
         self.chess3d_states.remove(&id);
+        #[cfg(feature = "emulators")]
         self.nes_states.remove(&id);
+        #[cfg(feature = "emulators")]
         self.gameboy_states.remove(&id);
         self.binary_viewer_states.remove(&id);
         self.lab_states.remove(&id);
+        #[cfg(feature = "emulators")]
         self.gamelab_states.remove(&id);
+        #[cfg(feature = "emulators")]
         self.gb_input_links.remove(&id);
     }
     
@@ -1953,8 +1982,11 @@ struct AppConfig {
             self.model_editor_states.remove(&id);
             self.game3d_states.remove(&id);
             self.chess3d_states.remove(&id);
+            #[cfg(feature = "emulators")]
             self.nes_states.remove(&id);
+            #[cfg(feature = "emulators")]
             self.gameboy_states.remove(&id);
+            #[cfg(feature = "emulators")]
             self.gamelab_states.remove(&id);
         }
     }
@@ -2232,6 +2264,7 @@ struct AppConfig {
                     }
 
                     // Handle Game Boy menu bar clicks (LAB / INPUT buttons)
+                    #[cfg(feature = "emulators")]
                     if self.windows[i].window_type == WindowType::GameBoyEmu {
                         let win = &self.windows[i];
                         let content_x = win.x as u32;
@@ -2279,6 +2312,7 @@ struct AppConfig {
                     }
 
                     // Handle Game Boy Input window clicks (forward to linked emulator)
+                    #[cfg(feature = "emulators")]
                     if self.windows[i].window_type == WindowType::GameBoyInput {
                         let win = &self.windows[i];
                         let cx = win.x as u32;
@@ -2306,6 +2340,7 @@ struct AppConfig {
                     }
 
                     // Handle GameLab panel clicks
+                    #[cfg(feature = "emulators")]
                     if self.windows[i].window_type == WindowType::GameLab {
                         let win = &self.windows[i];
                         let rel_x = x - win.x;
@@ -2490,6 +2525,8 @@ struct AppConfig {
             }
             
             // Release all input buttons on Game Boy Input windows on mouse up
+            #[cfg(feature = "emulators")]
+            {
             let input_ids: Vec<(u32, Option<u32>)> = self.windows.iter()
                 .filter(|w| w.window_type == WindowType::GameBoyInput && w.focused)
                 .map(|w| (w.id, self.gb_input_links.get(&w.id).copied()))
@@ -2508,6 +2545,7 @@ struct AppConfig {
                         emu.handle_key_release(b'\r');
                     }
                 }
+            }
             }
         }
     }
@@ -2747,12 +2785,15 @@ struct AppConfig {
             IconAction::OpenGame3D => {
                 self.create_window("TrustDoom 3D", 80 + offset, 50 + offset, 640, 480, WindowType::Game3D)
             },
+            #[cfg(feature = "emulators")]
             IconAction::OpenNes => {
                 self.create_window("NES Emulator", 80 + offset, 50 + offset, 512, 480, WindowType::NesEmu)
             },
+            #[cfg(feature = "emulators")]
             IconAction::OpenGameBoy => {
                 self.create_window("Game Boy", 100 + offset, 60 + offset, 480, 432, WindowType::GameBoyEmu)
             },
+            #[cfg(feature = "emulators")]
             IconAction::OpenGameLab => {
                 let sw = self.width;
                 let sh = self.height;
@@ -2949,9 +2990,11 @@ struct AppConfig {
                 }
             },
             10 => { // NES Emulator
+                #[cfg(feature = "emulators")]
                 self.create_window("NES Emulator", 80, 50, 512, 480, WindowType::NesEmu);
             },
             11 => { // Game Boy
+                #[cfg(feature = "emulators")]
                 self.create_window("Game Boy", 100, 60, 480, 432, WindowType::GameBoyEmu);
             },
             12 => { // TrustLab
@@ -3126,11 +3169,13 @@ struct AppConfig {
                         state.handle_key(key);
                     }
                 },
+                #[cfg(feature = "emulators")]
                 WindowType::NesEmu => {
                     if let Some(emu) = self.nes_states.get_mut(&win_id) {
                         emu.handle_key(key);
                     }
                 },
+                #[cfg(feature = "emulators")]
                 WindowType::GameBoyEmu => {
                     if let Some(emu) = self.gameboy_states.get_mut(&win_id) {
                         emu.handle_key(key);
@@ -3164,6 +3209,7 @@ struct AppConfig {
                         }
                     }
                 },
+                #[cfg(feature = "emulators")]
                 WindowType::GameLab => {
                     if let Some(lab) = self.gamelab_states.get_mut(&win_id) {
                         // Handle Enter for search scan/filter
@@ -4608,6 +4654,8 @@ struct AppConfig {
         }
         
         // Tick NES emulator — only when window is focused and visible
+        #[cfg(feature = "emulators")]
+        {
         let nes_ids: Vec<u32> = self.nes_states.keys().copied().collect();
         for id in nes_ids {
             let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
@@ -4617,9 +4665,12 @@ struct AppConfig {
                 }
             }
         }
+        }
         
         // Tick Game Boy emulator — runs whenever visible (not just focused)
         // Integrates GameLab speed control, pausing, breakpoints, trace
+        #[cfg(feature = "emulators")]
+        {
         let gb_ids: Vec<u32> = self.gameboy_states.keys().copied().collect();
         for id in gb_ids {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized && !w.pending_close);
@@ -4739,6 +4790,7 @@ struct AppConfig {
                 }
             }
         }
+        }
         
         // Tick chess timers (~60fps → ~16ms per frame)
         let chess_ids: Vec<u32> = self.chess_states.keys().copied().collect();
@@ -4763,6 +4815,8 @@ struct AppConfig {
         }
         
         // Tick GameLab states
+        #[cfg(feature = "emulators")]
+        {
         let gamelab_ids: Vec<u32> = self.gamelab_states.keys().copied().collect();
         for id in gamelab_ids {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
@@ -4771,6 +4825,7 @@ struct AppConfig {
                     lab.tick();
                 }
             }
+        }
         }
         
         // Toggle cursor blink every ~45 frames (slower for readability)
@@ -4827,7 +4882,9 @@ struct AppConfig {
         self.draw_chess3d_windows();
         
         // Sixth pass: render emulator windows
+        #[cfg(feature = "emulators")]
         self.draw_nes_windows();
+        #[cfg(feature = "emulators")]
         self.draw_gameboy_windows();
         
         // ALWAYS draw taskbar last (on top of everything, never covered by windows)
@@ -6411,6 +6468,7 @@ struct AppConfig {
         }
 
         // Emulator windows are rendered in separate late passes
+        #[cfg(feature = "emulators")]
         if window.window_type == WindowType::GameBoyEmu
             || window.window_type == WindowType::GameBoyInput
             || window.window_type == WindowType::NesEmu
@@ -6470,6 +6528,7 @@ struct AppConfig {
         }
         
         // GameLab — Game Boy emulator analysis dashboard
+        #[cfg(feature = "emulators")]
         if window.window_type == WindowType::GameLab {
             if let Some(lab_state) = self.gamelab_states.get(&window.id) {
                 // Find the linked Game Boy emulator (use linked_gb_id or first available)
@@ -6766,6 +6825,7 @@ struct AppConfig {
     }
     
     /// Render NES emulator windows
+    #[cfg(feature = "emulators")]
     fn draw_nes_windows(&mut self) {
         let nes_windows: Vec<(u32, i32, i32, u32, u32)> = self.windows.iter()
             .filter(|w| w.window_type == WindowType::NesEmu && w.visible && !w.minimized && !w.pending_close)
@@ -6800,6 +6860,7 @@ struct AppConfig {
     }
     
     /// Render Game Boy emulator windows
+    #[cfg(feature = "emulators")]
     fn draw_gameboy_windows(&mut self) {
         let gb_windows: Vec<(u32, i32, i32, u32, u32, bool)> = self.windows.iter()
             .filter(|w| w.window_type == WindowType::GameBoyEmu && w.visible && !w.minimized && !w.pending_close)

@@ -29,7 +29,7 @@ $global:results = @()
 # ---------------------------------------------------------------
 
 function Send-Command {
-    param($writer, $stream, $cmd, [int]$timeout = $CmdTimeout)
+    param($writer, $stream, $cmd, [int]$timeout = $CmdTimeout, [string]$waitFor = "")
 
     $buffer = New-Object byte[] 16384
 
@@ -53,6 +53,8 @@ function Send-Command {
     # Collect output with polling until prompt or timeout
     $output = ""
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    # More aggressive polling for long-running commands (WaitFor mode) to avoid serial backpressure
+    $sleepMs = if ($waitFor) { 5 } else { 50 }
 
     while ($sw.Elapsed.TotalSeconds -lt $timeout) {
         if ($stream.DataAvailable) {
@@ -61,11 +63,21 @@ function Send-Command {
                 $output += [System.Text.Encoding]::ASCII.GetString($buffer, 0, $read)
             }
         } else {
-            Start-Sleep -Milliseconds 50
+            Start-Sleep -Milliseconds $sleepMs
+        }
+
+        # If caller specified a WaitFor pattern, use that instead of prompt detection
+        if ($waitFor -and $output.Length -gt 20 -and $output -match $waitFor) {
+            Start-Sleep -Milliseconds 200
+            while ($stream.DataAvailable) {
+                $read = $stream.Read($buffer, 0, $buffer.Length)
+                if ($read -gt 0) { $output += [System.Text.Encoding]::ASCII.GetString($buffer, 0, $read) }
+            }
+            break
         }
 
         # After 500ms + some data, check for prompt at end of output
-        if ($sw.ElapsedMilliseconds -ge 500 -and $output.Length -gt 5) {
+        if (-not $waitFor -and $sw.ElapsedMilliseconds -ge 500 -and $output.Length -gt 5) {
             if ($output -match "\d{2}:\d{2}:\d{2}\]\s*trustos:[^\r\n]*\$\s*$") {
                 Start-Sleep -Milliseconds 100
                 while ($stream.DataAvailable) {
@@ -118,9 +130,15 @@ function Run-Test {
     Write-Host ("  [{0}] {1} ... " -f $category, $name) -NoNewline
 
     try {
-        $result = Send-Command -writer $writer -stream $stream -cmd $cmd -timeout $testTimeout
+        $waitFor = if ($test.WaitFor) { $test.WaitFor } else { "" }
+        $result = Send-Command -writer $writer -stream $stream -cmd $cmd -timeout $testTimeout -waitFor $waitFor
         $output = $result.Cleaned
         $rawOut = $result.Raw
+        # Save raw inttest output for debugging
+        if ($category -eq "INTTEST") {
+            $rawOut | Out-File -FilePath "$PSScriptRoot\inttest_raw_output.txt" -Encoding UTF8
+            Write-Host "  [inttest raw: $($rawOut.Length) chars]" -ForegroundColor DarkGray -NoNewline
+        }
         $success = & $validate $output
 
         if ($success) {
@@ -231,8 +249,8 @@ $tests = @(
     # -- SELFTEST --
     @{ Category="SELFTEST"; Name="builtin self-test"; Cmd="test"; Validate={ param($o) $o -match "self-test|Self-Test|OK|Done|PASS" } }
 
-    # -- INTTEST (25-test integration suite) --
-    @{ Category="INTTEST"; Name="integration test suite"; Cmd="inttest"; Validate={ param($o) $o -match "ALL.*TESTS PASSED" }; Timeout=30 }
+    # -- INTTEST (32-test integration suite) --
+    @{ Category="INTTEST"; Name="integration test suite"; Cmd="inttest"; Validate={ param($o) $o -match "ALL.*TESTS PASSED" }; Timeout=300; WaitFor="TESTS PASSED|FAILED" }
 
     # -- TRUSTLANG --
     @{ Category="TRUSTLANG"; Name="eval println"; Cmd='trustlang eval println("hello_tl")'; Validate={ param($o) $o -match "hello_tl" } }
@@ -275,7 +293,7 @@ $tests = @(
     @{ Category="NET"; Name="route"; Cmd="route"; Validate={ param($o) $o -match "Route|route|Gateway|gateway|Destination" -or $o.Length -gt 5 } }
     @{ Category="NET"; Name="netstat"; Cmd="netstat"; Validate={ param($o) $o -match "Active|Proto|Local|tcp|udp" -or $o.Length -gt 5 } }
     @{ Category="NET"; Name="ping gateway"; Cmd="ping 10.0.2.2"; Validate={ param($o) $o -match "ping|PING|reply|Reply|from|bytes|timeout|Timeout" } }
-    @{ Category="NET"; Name="nslookup"; Cmd="nslookup example.com"; Validate={ param($o) $o -match "DNS|dns|Server|Address|Name|example" } }
+    @{ Category="NET"; Name="nslookup"; Cmd="nslookup example.com"; Validate={ param($o) $o -match "DNS|dns|Server|Address|Name|example" }; Timeout=15 }
 
     # -- DEBUG (before SECURITY to avoid sig sign crypto blocking kernel) --
     @{ Category="DEBUG"; Name="irqstat"; Cmd="irqstat"; Validate={ param($o) $o -match "IRQ|irq|interrupt|Interrupt|\d+" } }

@@ -1,8 +1,9 @@
 //! TCP Protocol (minimal scaffolding)
 
 use alloc::collections::{BTreeMap, VecDeque};
+use alloc::string::String;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU16, AtomicU32, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU16, Ordering};
 use spin::Mutex;
 
 /// TCP flags
@@ -58,7 +59,33 @@ struct TcpConnection {
 static CONNECTIONS: Mutex<BTreeMap<ConnectionId, TcpConnection>> = Mutex::new(BTreeMap::new());
 static RX_DATA: Mutex<BTreeMap<ConnectionId, VecDeque<Vec<u8>>>> = Mutex::new(BTreeMap::new());
 static NEXT_EPHEMERAL_PORT: AtomicU16 = AtomicU16::new(49152);
-static NEXT_SEQ: AtomicU32 = AtomicU32::new(1);
+/// Secret key for RFC 6528 ISN generation (set once at boot)
+static ISN_SECRET: Mutex<[u8; 16]> = Mutex::new([0u8; 16]);
+
+/// Generate a cryptographically unpredictable Initial Sequence Number (RFC 6528).
+/// ISN = SHA-256(src_ip, dst_ip, src_port, dst_port, secret)[0..4] + time_component
+fn generate_isn(src_ip: [u8; 4], dst_ip: [u8; 4], src_port: u16, dst_port: u16) -> u32 {
+    let secret = ISN_SECRET.lock();
+    let mut data = [0u8; 28]; // 4+4+2+2+16
+    data[0..4].copy_from_slice(&src_ip);
+    data[4..8].copy_from_slice(&dst_ip);
+    data[8..10].copy_from_slice(&src_port.to_be_bytes());
+    data[10..12].copy_from_slice(&dst_port.to_be_bytes());
+    data[12..28].copy_from_slice(&*secret);
+    drop(secret);
+    let hash = crate::tls13::crypto::sha256(&data);
+    let h = u32::from_be_bytes([hash[0], hash[1], hash[2], hash[3]]);
+    // Add a time component (4 µs clock) to prevent ISN reuse across connections
+    let ticks = crate::logger::get_ticks() as u32;
+    h.wrapping_add(ticks)
+}
+
+/// Initialize the ISN secret key (call once at boot, after RNG init)
+pub fn init_isn_secret() {
+    let mut s = ISN_SECRET.lock();
+    crate::rng::secure_fill_bytes(&mut *s);
+    crate::serial_println!("[TCP] ISN secret initialized (RFC 6528)");
+}
 
 /// Listener for server-side TCP (tracks port → accept queue)
 struct Listener {
@@ -107,35 +134,98 @@ const RETRANSMIT_TIMEOUT_MS: u64 = 1000;
 /// Maximum retransmission attempts
 const MAX_RETRANSMITS: u8 = 3;
 
+/// Maximum simultaneous TCP connections (DoS protection)
+const MAX_CONNECTIONS: usize = 512;
+/// TIME_WAIT duration in ticks (~60 s at 1 kHz)
+const TIME_WAIT_TICKS: u64 = 60_000;
+
 fn ip_to_u32(ip: [u8; 4]) -> u32 {
     ((ip[0] as u32) << 24) | ((ip[1] as u32) << 16) | ((ip[2] as u32) << 8) | (ip[3] as u32)
 }
 
-fn checksum(data: &[u8]) -> u16 {
-    let mut sum: u32 = 0;
+/// Incremental Internet checksum — accumulate 16-bit words into a running sum
+fn checksum_accumulate(sum: &mut u32, data: &[u8]) {
     let mut i = 0;
     while i + 1 < data.len() {
-        sum += ((data[i] as u32) << 8) | (data[i + 1] as u32);
+        *sum += ((data[i] as u32) << 8) | (data[i + 1] as u32);
         i += 2;
     }
     if i < data.len() {
-        sum += (data[i] as u32) << 8;
+        *sum += (data[i] as u32) << 8;
     }
+}
+
+fn checksum_finalize(mut sum: u32) -> u16 {
     while (sum >> 16) != 0 {
         sum = (sum & 0xFFFF) + (sum >> 16);
     }
     !(sum as u16)
 }
 
+fn checksum(data: &[u8]) -> u16 {
+    let mut sum: u32 = 0;
+    checksum_accumulate(&mut sum, data);
+    checksum_finalize(sum)
+}
+
+/// TCP checksum using pseudo-header — **zero-allocation** (stack-only).
 fn tcp_checksum(src_ip: [u8; 4], dst_ip: [u8; 4], segment: &[u8]) -> u16 {
-    let mut pseudo = Vec::with_capacity(12 + segment.len());
-    pseudo.extend_from_slice(&src_ip);
-    pseudo.extend_from_slice(&dst_ip);
-    pseudo.push(0);
-    pseudo.push(6); // TCP protocol
-    pseudo.extend_from_slice(&(segment.len() as u16).to_be_bytes());
-    pseudo.extend_from_slice(segment);
-    checksum(&pseudo)
+    let mut sum: u32 = 0;
+    // Pseudo-header fields fed incrementally — no heap Vec needed
+    checksum_accumulate(&mut sum, &src_ip);
+    checksum_accumulate(&mut sum, &dst_ip);
+    let proto_len: [u8; 4] = [0, 6, (segment.len() >> 8) as u8, segment.len() as u8];
+    checksum_accumulate(&mut sum, &proto_len);
+    checksum_accumulate(&mut sum, segment);
+    checksum_finalize(sum)
+}
+
+/// Public TCP checksum for use by packet crafting / replay modules.
+pub fn tcp_checksum_external(src_ip: [u8; 4], dst_ip: [u8; 4], segment: &[u8]) -> u16 {
+    tcp_checksum(src_ip, dst_ip, segment)
+}
+
+/// Garbage-collect stale TIME_WAIT / dead connections.
+/// Called periodically (e.g. from `tcp_poll` or timer tick).
+pub fn gc_stale_connections() {
+    let now = crate::logger::get_ticks();
+    let mut conns = CONNECTIONS.lock();
+    let mut rx = RX_DATA.lock();
+    conns.retain(|id, conn| {
+        let keep = match conn.state {
+            TcpState::TimeWait => now.wrapping_sub(conn.last_ack_time) < TIME_WAIT_TICKS,
+            TcpState::Closed => false,
+            _ => true,
+        };
+        if !keep {
+            rx.remove(id);
+        }
+        keep
+    });
+}
+
+/// Number of active TCP connections.
+pub fn connection_count() -> usize {
+    CONNECTIONS.lock().len()
+}
+
+/// List active connections as human-readable strings for dashboard display.
+pub fn list_connections() -> Vec<String> {
+    let conns = CONNECTIONS.lock();
+    let mut out = Vec::with_capacity(conns.len());
+    for (id, conn) in conns.iter() {
+        let dst = [
+            ((id.dst_ip >> 24) & 0xFF) as u8,
+            ((id.dst_ip >> 16) & 0xFF) as u8,
+            ((id.dst_ip >> 8) & 0xFF) as u8,
+            (id.dst_ip & 0xFF) as u8,
+        ];
+        out.push(alloc::format!(
+            "{:<6} {}.{}.{}.{}:{:<5}  {:?}",
+            id.src_port, dst[0], dst[1], dst[2], dst[3], id.dst_port, conn.state
+        ));
+    }
+    out
 }
 
 fn get_source_ip() -> [u8; 4] {
@@ -264,6 +354,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
                     conn.ack = seq.wrapping_add(1);
                     conn.fin_received = true;
                     conn.state = TcpState::TimeWait;
+                    conn.last_ack_time = crate::logger::get_ticks();
                     drop(conns);
                     let _ = send_ack(src_ip, src_port, dst_port);
                 } else if fin {
@@ -282,6 +373,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
                     conn.ack = seq.wrapping_add(1);
                     conn.fin_received = true;
                     conn.state = TcpState::TimeWait;
+                    conn.last_ack_time = crate::logger::get_ticks();
                     drop(conns);
                     let _ = send_ack(src_ip, src_port, dst_port);
                 }
@@ -290,6 +382,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
             TcpState::Closing => {
                 if ack {
                     conn.state = TcpState::TimeWait;
+                    conn.last_ack_time = crate::logger::get_ticks(); // start TIME_WAIT timer
                 }
             }
 
@@ -313,10 +406,40 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
     } else {
         // ── No existing connection — check listeners for incoming SYN ──
         if syn && !ack {
+            // Enforce connection limit (DoS protection) — inline GC to avoid double lock
+            if conns.len() >= MAX_CONNECTIONS {
+                let now = crate::logger::get_ticks();
+                let mut rx = RX_DATA.lock();
+                conns.retain(|id, c| {
+                    let keep = match c.state {
+                        TcpState::TimeWait => now.wrapping_sub(c.last_ack_time) < TIME_WAIT_TICKS,
+                        TcpState::Closed => false,
+                        _ => true,
+                    };
+                    if !keep { rx.remove(id); }
+                    keep
+                });
+            }
+            if conns.len() >= MAX_CONNECTIONS {
+                crate::serial_println!("[TCP] Connection limit reached ({}), dropping SYN", MAX_CONNECTIONS);
+                return;
+            }
             let mut listeners = LISTENERS.lock();
             if let Some(listener) = listeners.get_mut(&dst_port) {
                 if listener.accept_queue.len() < listener.backlog as usize + 16 {
-                    let init_seq = NEXT_SEQ.fetch_add(1, Ordering::Relaxed);
+                    let src_ip_bytes = [
+                        ((conn_id.src_ip >> 24) & 0xFF) as u8,
+                        ((conn_id.src_ip >> 16) & 0xFF) as u8,
+                        ((conn_id.src_ip >> 8) & 0xFF) as u8,
+                        (conn_id.src_ip & 0xFF) as u8,
+                    ];
+                    let dst_ip_bytes = [
+                        ((conn_id.dst_ip >> 24) & 0xFF) as u8,
+                        ((conn_id.dst_ip >> 16) & 0xFF) as u8,
+                        ((conn_id.dst_ip >> 8) & 0xFF) as u8,
+                        (conn_id.dst_ip & 0xFF) as u8,
+                    ];
+                    let init_seq = generate_isn(src_ip_bytes, dst_ip_bytes, conn_id.src_port, conn_id.dst_port);
                     let new_conn = TcpConnection {
                         state: TcpState::SynReceived,
                         seq: init_seq.wrapping_add(1),
@@ -346,7 +469,7 @@ pub fn send_syn(dest_ip: [u8; 4], dest_port: u16) -> Result<u16, &'static str> {
     let src_ip = get_source_ip();
     // (SYN IP log removed)
     let src_port = NEXT_EPHEMERAL_PORT.fetch_add(1, Ordering::Relaxed);
-    let seq = NEXT_SEQ.fetch_add(1, Ordering::Relaxed);
+    let seq = generate_isn(src_ip, dest_ip, src_port, dest_port);
 
     let mut segment = Vec::with_capacity(20);
     segment.extend_from_slice(&src_port.to_be_bytes());

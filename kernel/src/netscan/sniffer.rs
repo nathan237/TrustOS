@@ -113,6 +113,11 @@ pub fn get_stats() -> (u64, u64, usize) {
     (count, bytes, buffered)
 }
 
+/// Total packets seen since last reset
+pub fn packet_count() -> u64 {
+    PACKET_COUNT.load(Ordering::Relaxed)
+}
+
 /// Get captured packets (drains buffer)
 pub fn get_captured_packets() -> Vec<CapturedPacket> {
     let mut buf = CAPTURE_BUFFER.lock();

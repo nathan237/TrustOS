@@ -41,9 +41,13 @@ mod browser;
 mod game3d; // 3D raycasting FPS game engine
 mod chess;   // Chess game engine with AI
 mod chess3d; // 3D Matrix-style chess renderer
+#[cfg(feature = "emulators")]
 mod nes;     // NES emulator (MOS 6502 + 2C02 PPU, iNES ROMs)
+#[cfg(feature = "emulators")]
 mod gameboy; // Game Boy emulator (Sharp LR35902, MBC1/3/5)
+#[cfg(feature = "emulators")]
 mod game_lab; // GameLab — real-time Game Boy emulator analysis dashboard
+#[cfg(feature = "emulators")]
 mod embedded_roms; // ROM data embedded at compile time from kernel/roms/
 mod cosmic; // COSMIC-style UI framework (libcosmic-inspired)
 mod compositor; // Multi-layer compositor for flicker-free rendering
@@ -598,6 +602,10 @@ pub unsafe extern "C" fn kmain() -> ! {
     } else {
         framebuffer::print_boot_status("RTC disabled", BootStatus::Skip);
     }
+
+    // Phase 6.1: RNG — detect RDRAND/RDSEED hardware support
+    rng::init();
+    framebuffer::print_boot_status("RNG (CSPRNG)", BootStatus::Ok);
     
     // Phase 7: Mouse driver
     mouse::init();
@@ -784,6 +792,7 @@ pub unsafe extern "C" fn kmain() -> ! {
             // Start network stack
             netstack::dhcp::start();
             netstack::ipv6::init();
+            netstack::tcp::init_isn_secret();
         }
     } else {
         framebuffer::print_boot_status("Network disabled", BootStatus::Skip);

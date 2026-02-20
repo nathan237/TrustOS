@@ -17,6 +17,7 @@ pub mod banner;
 pub mod sniffer;
 pub mod traceroute;
 pub mod vuln;
+pub mod replay;
 
 use alloc::string::String;
 use alloc::format;
@@ -69,6 +70,7 @@ pub const TOP_100_PORTS: &[u16] = &[
     5000, 5009, 5051, 5060, 5101, 5190, 5357, 5432, 5631, 5666, 5800,
     5900, 6000, 6001, 6646, 7070, 8000, 8008, 8009, 8080, 8081, 8443,
     8888, 9100, 9999, 10000, 32768, 49152, 49153, 49154, 49155, 49156,
+    49157,
 ];
 
 /// Get service name for a well-known port

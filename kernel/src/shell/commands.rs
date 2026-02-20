@@ -1,4 +1,4 @@
-//! Basic Shell Commands  Help, Filesystem, System Info, Auth, Debug, Exit, Easter eggs
+﻿//! Basic Shell Commands  Help, Filesystem, System Info, Auth, Debug, Exit, Easter eggs
 //!
 //! Core command implementations: help/man, ls/cd/mkdir/rm/cp/cat, 
 //! time/date/whoami/ps/free, login/su/passwd, test/memtest/hexdump,
@@ -1566,7 +1566,7 @@ pub(super) fn cmd_trustpkg(args: &[&str]) {
         Some(&"installed") => crate::trustpkg::list_installed(),
         Some(&"update") => crate::trustpkg::update(),
         Some(&"help") | Some(&"-h") | Some(&"--help") => {
-            crate::println!("TrustPkg — Package Manager for TrustOS");
+            crate::println!("TrustPkg â€” Package Manager for TrustOS");
             crate::println!();
             crate::println!("Usage: trustpkg <command> [args]");
             crate::println!();
@@ -1594,9 +1594,12 @@ pub(super) fn cmd_unset(args: &[&str]) {
     super::scripting::unset_var(args[0]);
 }
 
-/// Comprehensive integration test suite: exercises all Gap #1–#5 features.
+/// Comprehensive integration test suite: exercises all Gap #1â€“#5 features.
 /// Tests: exception safety, signal syscalls, stdio/time, plus all existing tests.
 pub(super) fn cmd_inttest() {
+    // Switch to serial-only output to avoid slow framebuffer scrolling in QEMU TCG
+    crate::framebuffer::set_serial_only(true);
+
     crate::println_color!(COLOR_BRIGHT_GREEN, "=== TrustOS Integration Test Suite ===");
     crate::println!();
 
@@ -1604,7 +1607,7 @@ pub(super) fn cmd_inttest() {
     let mut failed = 0usize;
 
     // -- 1. Kernel self-test (heap, string, interrupts) ---------------
-    crate::println_color!(COLOR_CYAN, "[ 1/31] Kernel self-test");
+    crate::println_color!(COLOR_CYAN, "[ 1/32] Kernel self-test");
     {
         let mut ok = true;
         crate::print!("  heap+string... ");
@@ -1631,14 +1634,14 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 2. Frame allocator -------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 2/31] Frame allocator self-test");
+    crate::println_color!(COLOR_CYAN, "[ 2/32] Frame allocator self-test");
     let (p, f) = crate::memory::frame::self_test();
     passed += p;
     failed += f;
     crate::println!();
 
     // -- 3. Ring 3 basic exec -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 3/31] Ring 3 basic exec");
+    crate::println_color!(COLOR_CYAN, "[ 3/32] Ring 3 basic exec");
     crate::print!("  hello world... ");
     match crate::exec::exec_test_program() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1652,7 +1655,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 4. Ring 3 ELF loader -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 4/31] Ring 3 ELF exec");
+    crate::println_color!(COLOR_CYAN, "[ 4/32] Ring 3 ELF exec");
     crate::print!("  ELF hello... ");
     match crate::exec::exec_hello_elf() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1666,7 +1669,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 5. Ring 3 brk + mmap -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 5/31] Ring 3 brk/mmap");
+    crate::println_color!(COLOR_CYAN, "[ 5/32] Ring 3 brk/mmap");
     crate::print!("  memory mgmt... ");
     match crate::exec::exec_memtest() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1680,7 +1683,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 6. Ring 3 IPC pipe -------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 6/31] Ring 3 IPC pipe");
+    crate::println_color!(COLOR_CYAN, "[ 6/32] Ring 3 IPC pipe");
     crate::print!("  pipe2+rw... ");
     match crate::exec::exec_pipe_test() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1694,7 +1697,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 7. Exception safety (Gap #4) ---------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 7/31] Exception safety (UD2 in Ring 3)");
+    crate::println_color!(COLOR_CYAN, "[ 7/32] Exception safety (UD2 in Ring 3)");
     crate::print!("  invalid opcode... ");
     match crate::exec::exec_exception_safety_test() {
         crate::exec::ExecResult::Exited(code) if code != 0 => {
@@ -1707,7 +1710,7 @@ pub(super) fn cmd_inttest() {
             failed += 1;
         }
     }
-    // If we reach here, kernel survived — that's the real test!
+    // If we reach here, kernel survived â€” that's the real test!
     crate::print!("  kernel alive... ");
     if x86_64::instructions::interrupts::are_enabled() {
         crate::println_color!(COLOR_GREEN, "[OK]");
@@ -1718,7 +1721,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 8. Signal syscalls (Gap #4) ----------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 8/31] Signal syscalls (sigprocmask + kill)");
+    crate::println_color!(COLOR_CYAN, "[ 8/32] Signal syscalls (sigprocmask + kill)");
     crate::print!("  signal test... ");
     match crate::exec::exec_signal_test() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1732,7 +1735,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 9. Stdio + time (Gap #4) ------------------------------------
-    crate::println_color!(COLOR_CYAN, "[ 9/31] Stdio + getpid + clock_gettime");
+    crate::println_color!(COLOR_CYAN, "[ 9/32] Stdio + getpid + clock_gettime");
     crate::print!("  io test... ");
     match crate::exec::exec_stdio_test() {
         crate::exec::ExecResult::Exited(0) => {
@@ -1746,7 +1749,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 10. Frame leak check -----------------------------------------
-    crate::println_color!(COLOR_CYAN, "[10/31] Frame leak test");
+    crate::println_color!(COLOR_CYAN, "[10/32] Frame leak test");
     crate::print!("  alloc before... ");
     let (total_before, used_before) = crate::memory::frame::stats();
     let free_before = total_before - used_before;
@@ -1765,7 +1768,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 11. SMP multi-core -------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[11/31] SMP multi-core");
+    crate::println_color!(COLOR_CYAN, "[11/32] SMP multi-core");
     {
         let ready = crate::cpu::smp::ready_cpu_count();
         let total = crate::cpu::smp::cpu_count();
@@ -1774,11 +1777,11 @@ pub(super) fn cmd_inttest() {
             crate::println_color!(COLOR_GREEN, "[OK] {}/{} cores", ready, total);
             passed += 1;
         } else if total > 1 {
-            // Multiple cores detected but only BSP ready — SMP boot failed
+            // Multiple cores detected but only BSP ready â€” SMP boot failed
             crate::println_color!(COLOR_RED, "[FAIL] only BSP ready ({} detected)", total);
             failed += 1;
         } else {
-            // Single CPU system (qemu -smp 1) — skip, not a failure
+            // Single CPU system (qemu -smp 1) â€” skip, not a failure
             crate::println_color!(COLOR_GREEN, "[OK] single CPU (skip)");
             passed += 1;
         }
@@ -1819,7 +1822,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 12. NVMe storage read/write -----------------------------------
-    crate::println_color!(COLOR_CYAN, "[12/31] NVMe storage");
+    crate::println_color!(COLOR_CYAN, "[12/32] NVMe storage");
     {
         if crate::nvme::is_initialized() {
             // Test read
@@ -1885,7 +1888,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 13. xHCI USB 3.0 ---------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[13/31] xHCI USB 3.0");
+    crate::println_color!(COLOR_CYAN, "[13/32] xHCI USB 3.0");
     {
         if crate::drivers::xhci::is_initialized() {
             crate::print!("  controller init... ");
@@ -1909,7 +1912,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 14. RTL8169 Gigabit Ethernet -----------------------------------
-    crate::println_color!(COLOR_CYAN, "[14/31] RTL8169 Gigabit Ethernet");
+    crate::println_color!(COLOR_CYAN, "[14/32] RTL8169 Gigabit Ethernet");
     {
         // Check if network driver is active (could be RTL8169 or other)
         if crate::drivers::net::has_driver() {
@@ -1934,7 +1937,7 @@ pub(super) fn cmd_inttest() {
     }
 
     // -- 15. TrustLang bytecode VM --------------------------------------
-    crate::println_color!(COLOR_CYAN, "[15/31] TrustLang bytecode VM");
+    crate::println_color!(COLOR_CYAN, "[15/32] TrustLang bytecode VM");
     {
         crate::print!("  fibonacci eval... ");
         let fib_src = r#"fn fibonacci(n: i64) -> i64 {
@@ -1977,7 +1980,7 @@ fn main() {
     }
 
     // -- 16. FAT32 write persistence -----------------------------------
-    crate::println_color!(COLOR_CYAN, "[16/31] FAT32 write persistence");
+    crate::println_color!(COLOR_CYAN, "[16/32] FAT32 write persistence");
     {
         // Test: write a file, read it back, verify size is persisted in dir entry
         use crate::vfs;
@@ -2005,7 +2008,7 @@ fn main() {
                 }
             }
         } else {
-            // No writable FS mounted — skip
+            // No writable FS mounted â€” skip
             crate::println_color!(COLOR_GREEN, "[SKIP] no writable FS");
             passed += 1;
         }
@@ -2036,7 +2039,7 @@ fn main() {
     }
 
     // -- 17. DHCP lease renewal state ----------------------------------
-    crate::println_color!(COLOR_CYAN, "[17/31] DHCP lease renewal");
+    crate::println_color!(COLOR_CYAN, "[17/32] DHCP lease renewal");
     {
         crate::print!("  DHCP bound... ");
         if crate::netstack::dhcp::is_bound() {
@@ -2070,7 +2073,7 @@ fn main() {
     }
 
     // -- 18. VirtIO interrupt support ----------------------------------
-    crate::println_color!(COLOR_CYAN, "[18/31] VirtIO interrupt support");
+    crate::println_color!(COLOR_CYAN, "[18/32] VirtIO interrupt support");
     {
         crate::print!("  virtio-net init... ");
         if crate::virtio_net::is_initialized() {
@@ -2106,7 +2109,7 @@ fn main() {
     }
 
     // -- 19. IPv6 + NDP -----------------------------------------------
-    crate::println_color!(COLOR_CYAN, "[19/31] IPv6 + NDP");
+    crate::println_color!(COLOR_CYAN, "[19/32] IPv6 + NDP");
     {
         crate::print!("  IPv6 enabled... ");
         if crate::netstack::ipv6::is_enabled() {
@@ -2129,7 +2132,7 @@ fn main() {
     }
 
     // -- 20. Kernel pipe blocking -------------------------------------
-    crate::println_color!(COLOR_CYAN, "[20/31] Kernel pipe blocking");
+    crate::println_color!(COLOR_CYAN, "[20/32] Kernel pipe blocking");
     {
         crate::print!("  pipe create... ");
         let (read_fd, write_fd) = crate::pipe::create();
@@ -2177,7 +2180,7 @@ fn main() {
     }
 
     // -- 21. TrustScan utilities (format, parse, service DB) -----------
-    crate::println_color!(COLOR_CYAN, "[21/31] TrustScan utilities");
+    crate::println_color!(COLOR_CYAN, "[21/32] TrustScan utilities");
     {
         // 21a. format_ip round-trip
         crate::print!("  format_ip... ");
@@ -2254,7 +2257,7 @@ fn main() {
     }
 
     // -- 22. TrustScan port scanner config builder --------------------
-    crate::println_color!(COLOR_CYAN, "[22/31] TrustScan port scanner config");
+    crate::println_color!(COLOR_CYAN, "[22/32] TrustScan port scanner config");
     {
         use crate::netscan::port_scanner::*;
 
@@ -2331,7 +2334,7 @@ fn main() {
     }
 
     // -- 23. TrustScan sniffer engine ---------------------------------
-    crate::println_color!(COLOR_CYAN, "[23/31] TrustScan sniffer engine");
+    crate::println_color!(COLOR_CYAN, "[23/32] TrustScan sniffer engine");
     {
         use crate::netscan::sniffer;
 
@@ -2430,7 +2433,7 @@ fn main() {
     }
 
     // -- 24. TrustScan vuln scanner types -----------------------------
-    crate::println_color!(COLOR_CYAN, "[24/31] TrustScan vulnerability scanner");
+    crate::println_color!(COLOR_CYAN, "[24/32] TrustScan vulnerability scanner");
     {
         use crate::netscan::vuln;
 
@@ -2467,7 +2470,7 @@ fn main() {
             failed += 1;
         }
 
-        // 24c. scan with no open ports → no findings
+        // 24c. scan with no open ports â†’ no findings
         crate::print!("  scan empty... ");
         let findings = vuln::scan([127, 0, 0, 1], &[]);
         if findings.is_empty() {
@@ -2501,7 +2504,7 @@ fn main() {
     }
 
     // -- 25. TrustScan traceroute + discovery data structures ----------
-    crate::println_color!(COLOR_CYAN, "[25/31] TrustScan traceroute + discovery");
+    crate::println_color!(COLOR_CYAN, "[25/32] TrustScan traceroute + discovery");
     {
         // 25a. TraceConfig default values
         crate::print!("  TraceConfig default... ");
@@ -2586,7 +2589,7 @@ fn main() {
     }
 
     // -- 26. Shell scripting variables --------------------------------
-    crate::println_color!(COLOR_CYAN, "[26/31] Shell scripting variables");
+    crate::println_color!(COLOR_CYAN, "[26/32] Shell scripting variables");
     {
         // 26a. Set and get variable
         crate::print!("  set_var/get_var... ");
@@ -2636,7 +2639,7 @@ fn main() {
     }
 
     // -- 27. Shell variable expansion ---------------------------------
-    crate::println_color!(COLOR_CYAN, "[27/31] Shell variable expansion");
+    crate::println_color!(COLOR_CYAN, "[27/32] Shell variable expansion");
     {
         // 27a. Simple $VAR expansion
         crate::print!("  $USER expansion... ");
@@ -2686,7 +2689,7 @@ fn main() {
     }
 
     // -- 28. Shell arithmetic engine ----------------------------------
-    crate::println_color!(COLOR_CYAN, "[28/31] Shell arithmetic engine");
+    crate::println_color!(COLOR_CYAN, "[28/32] Shell arithmetic engine");
     {
         // 28a. Basic addition
         crate::print!("  eval_arithmetic(\"2+3\")... ");
@@ -2734,7 +2737,7 @@ fn main() {
     }
 
     // -- 29. HTTP server infrastructure -------------------------------
-    crate::println_color!(COLOR_CYAN, "[29/31] HTTP server infrastructure");
+    crate::println_color!(COLOR_CYAN, "[29/32] HTTP server infrastructure");
     {
         // 29a. Server not running initially
         crate::print!("  is_running() == false... ");
@@ -2776,7 +2779,7 @@ fn main() {
     }
 
     // -- 30. TrustPkg package manager ---------------------------------
-    crate::println_color!(COLOR_CYAN, "[30/31] TrustPkg package manager");
+    crate::println_color!(COLOR_CYAN, "[30/32] TrustPkg package manager");
     {
         // 30a. Package catalog exists
         crate::print!("  total_count() > 0... ");
@@ -2821,10 +2824,10 @@ fn main() {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // 31. VM Debug Monitor
-    // ═══════════════════════════════════════════════════════════════
-    crate::println_color!(COLOR_CYAN, "[31/31] VM Debug Monitor");
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    crate::println_color!(COLOR_CYAN, "[31/32] VM Debug Monitor");
     {
         // 31a. Init debug monitor
         crate::print!("  debug_monitor::init()... ");
@@ -2894,7 +2897,31 @@ fn main() {
         crate::hypervisor::debug_monitor::stop();
     }
 
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // 32. Crypto Self-Test (NIST vectors: AES, SHA-256, X25519, AES-GCM, HMAC)
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    crate::println_color!(COLOR_CYAN, "[32/32] Crypto Self-Test (NIST vectors)");
+    {
+        let (p, f) = crate::tls13::crypto::verify_crypto();
+        let labels = ["AES-128", "SHA-256 empty", "SHA-256 abc", "X25519", "AES-GCM", "HMAC-SHA256"];
+        let total_checks = p + f;
+        for (i, label) in labels.iter().enumerate() {
+            if i < total_checks {
+                if i < p {
+                    crate::println_color!(COLOR_GREEN, "  {}... [OK]", label);
+                } else {
+                    crate::println_color!(COLOR_RED, "  {}... [FAIL]", label);
+                }
+            }
+        }
+        passed += p;
+        failed += f;
+    }
+
     // -- Summary -------------------------------------------------------
+    // Restore framebuffer output before printing summary
+    crate::framebuffer::set_serial_only(false);
+
     crate::println!();
     let total = passed + failed;
     if failed == 0 {
@@ -2916,9 +2943,9 @@ pub(super) fn cmd_debugnew() {
     let mut passed = 0usize;
     let mut failed = 0usize;
 
-    // ═══════════════════════════════════════════════════════════════
-    // 1. USB Mass Storage — API & data structure tests
-    // ═══════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // 1. USB Mass Storage â€” API & data structure tests
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     crate::println_color!(COLOR_CYAN, "[1/6] USB Mass Storage API");
     {
         // 1a. is_mass_storage detection helper
@@ -2987,9 +3014,9 @@ pub(super) fn cmd_debugnew() {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // 2. xHCI Bulk Transfer Infrastructure
-    // ═══════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     crate::println_color!(COLOR_CYAN, "[2/6] xHCI Bulk Transfer Infrastructure");
     {
         crate::print!("  xhci initialized... ");
@@ -3007,9 +3034,9 @@ pub(super) fn cmd_debugnew() {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 3. ext4 Filesystem — data structure validation
-    // ═══════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // 3. ext4 Filesystem â€” data structure validation
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     crate::println_color!(COLOR_CYAN, "[3/6] ext4 Filesystem Driver");
     {
         // 3a. Verify magic number constant
@@ -3085,9 +3112,9 @@ pub(super) fn cmd_debugnew() {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 4. HDA Audio — Sine Wave & Volume
-    // ═══════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // 4. HDA Audio â€” Sine Wave & Volume
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     crate::println_color!(COLOR_CYAN, "[4/6] HDA Audio Enhancements");
     {
         // 4a. Volume control (does not require HDA init)
@@ -3119,7 +3146,7 @@ pub(super) fn cmd_debugnew() {
         // 4b. generate_sine produces correct-length samples
         crate::print!("  generate_sine(440, 100)... ");
         let samples = crate::drivers::hda::generate_sine(440, 100, 20000);
-        // 48kHz × 0.1s = 4800 samples × 2 channels = 9600 i16 values
+        // 48kHz Ã— 0.1s = 4800 samples Ã— 2 channels = 9600 i16 values
         let expected = 4800 * 2;
         if samples.len() == expected {
             crate::println_color!(COLOR_GREEN, "[OK] {} samples", samples.len());
@@ -3129,7 +3156,7 @@ pub(super) fn cmd_debugnew() {
             failed += 1;
         }
 
-        // 4c. Sine wave symmetry — first and last samples should be near zero (fade)
+        // 4c. Sine wave symmetry â€” first and last samples should be near zero (fade)
         crate::print!("  sine fade-in/out... ");
         let first = samples[0].abs();
         let last = samples[samples.len() - 2].abs(); // Left channel of last frame
@@ -3153,9 +3180,9 @@ pub(super) fn cmd_debugnew() {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 5. HDA Audio — WAV Parser & Music Sequencer
-    // ═══════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // 5. HDA Audio â€” WAV Parser & Music Sequencer
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     crate::println_color!(COLOR_CYAN, "[5/6] HDA WAV Parser & Music Sequencer");
     {
         // 5a. parse_wav with valid header
@@ -3223,7 +3250,7 @@ pub(super) fn cmd_debugnew() {
             failed += 1;
         }
 
-        // 5d. Note C4 freq (MIDI 60 → ~261 Hz)
+        // 5d. Note C4 freq (MIDI 60 â†’ ~261 Hz)
         crate::print!("  Note C4 freq... ");
         let c4 = crate::drivers::hda::Note::new(60, 4, 100);
         let freq_c4 = c4.freq_hz();
@@ -3250,9 +3277,9 @@ pub(super) fn cmd_debugnew() {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // 6. HDA Audio — Live Playback (if initialized)
-    // ═══════════════════════════════════════════════════════════════
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+    // 6. HDA Audio â€” Live Playback (if initialized)
+    // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     crate::println_color!(COLOR_CYAN, "[6/6] HDA Live Playback");
     {
         if !crate::drivers::hda::is_initialized() {

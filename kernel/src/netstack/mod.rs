@@ -71,14 +71,6 @@ pub fn process_packet(data: Vec<u8>) {
     
     let payload = &data[EthernetFrame::SIZE..];
     
-    // Debug: log all packets to see what we're receiving
-    if data.len() <= 100 {
-        crate::serial_println!("[ETH] len={} etype=0x{:04x} dst={:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-            data.len(), frame.ethertype(),
-            frame.dst_mac[0], frame.dst_mac[1], frame.dst_mac[2],
-            frame.dst_mac[3], frame.dst_mac[4], frame.dst_mac[5]);
-    }
-    
     match frame.ethertype() {
         ethertype::ARP => {
             arp::handle_packet(payload);

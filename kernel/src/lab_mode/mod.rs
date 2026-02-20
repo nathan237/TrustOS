@@ -27,6 +27,7 @@ pub mod hex_editor;
 pub mod demo;
 pub mod ux_test;
 pub mod vm_inspector;
+pub mod network_panel;
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -77,6 +78,7 @@ pub enum PanelId {
     Pipeline = 5,
     HexEditor = 6,
     VmInspector = 7,
+    NetworkDashboard = 8,
 }
 
 impl PanelId {
@@ -89,7 +91,8 @@ impl PanelId {
             4 => PanelId::TrustLangEditor,
             5 => PanelId::Pipeline,
             6 => PanelId::HexEditor,
-            _ => PanelId::VmInspector,
+            7 => PanelId::VmInspector,
+            _ => PanelId::NetworkDashboard,
         }
     }
     
@@ -103,6 +106,7 @@ impl PanelId {
             PanelId::Pipeline => "⚙ Pipeline View",
             PanelId::HexEditor => "🔍 Hex Editor",
             PanelId::VmInspector => "🖥 VM Inspector",
+            PanelId::NetworkDashboard => "🌐 Network",
         }
     }
     
@@ -116,15 +120,16 @@ impl PanelId {
             PanelId::Pipeline => COL_YELLOW,
             PanelId::HexEditor => COL_RED,
             PanelId::VmInspector => 0xFFFF6B6B,
+            PanelId::NetworkDashboard => 0xFF00CED1,
         }
     }
 
     /// All module types in order
-    pub fn all() -> [PanelId; 8] {
+    pub fn all() -> [PanelId; 9] {
         [
             PanelId::HardwareStatus, PanelId::KernelTrace, PanelId::CommandGuide,
             PanelId::FileTree, PanelId::TrustLangEditor, PanelId::Pipeline,
-            PanelId::HexEditor, PanelId::VmInspector,
+            PanelId::HexEditor, PanelId::VmInspector, PanelId::NetworkDashboard,
         ]
     }
 
@@ -139,6 +144,7 @@ impl PanelId {
             PanelId::Pipeline => "Pipeline",
             PanelId::HexEditor => "Hex Editor",
             PanelId::VmInspector => "VM Inspector",
+            PanelId::NetworkDashboard => "Network",
         }
     }
 
@@ -146,6 +152,7 @@ impl PanelId {
     pub fn category(&self) -> &'static str {
         match self {
             PanelId::VmInspector => "Hypervisor",
+            PanelId::NetworkDashboard => "Network",
             _ => "Core",
         }
     }
@@ -215,6 +222,7 @@ pub struct LabState {
     pub pipeline_state: pipeline::PipelineState,
     pub hex_state: hex_editor::HexEditorState,
     pub vm_inspector_state: vm_inspector::VmInspectorState,
+    pub network_panel_state: network_panel::NetworkPanelState,
     pub demo_state: demo::DemoState,
     /// Frame counter
     pub frame: u64,
@@ -239,6 +247,7 @@ impl LabState {
             pipeline_state: pipeline::PipelineState::new(),
             hex_state: hex_editor::HexEditorState::new(),
             vm_inspector_state: vm_inspector::VmInspectorState::new(),
+            network_panel_state: network_panel::NetworkPanelState::new(),
             demo_state: demo::DemoState::new(),
             frame: 0,
             auto_scroll: true,
@@ -312,6 +321,7 @@ impl LabState {
             PanelId::Pipeline => self.pipeline_state.handle_key(key),
             PanelId::HexEditor => self.hex_state.handle_key(key),
             PanelId::VmInspector => self.vm_inspector_state.handle_key(key),
+            PanelId::NetworkDashboard => self.network_panel_state.handle_key(key),
         }
     }
     
@@ -371,6 +381,9 @@ impl LabState {
             }
             "vm" | "vmi" | "inspector" | "hypervisor" => {
                 self.focus_module(PanelId::VmInspector);
+            }
+            "net" | "network" | "tcp" | "packets" => {
+                self.focus_module(PanelId::NetworkDashboard);
             }
             _ if cmd.starts_with("hex ") => {
                 let path = raw[4..].trim();
@@ -511,6 +524,7 @@ impl LabState {
             PanelId::Pipeline => self.pipeline_state.handle_click(lx, ly, w, h),
             PanelId::HexEditor => self.hex_state.handle_click(lx, ly, w, h),
             PanelId::VmInspector => self.vm_inspector_state.handle_click(lx, ly, w, h),
+            PanelId::NetworkDashboard => self.network_panel_state.handle_click(lx, ly, w, h),
         }
     }
 
@@ -778,6 +792,7 @@ fn draw_module_content(state: &LabState, pid: PanelId, x: i32, y: i32, w: u32, h
         PanelId::Pipeline => pipeline::draw(&state.pipeline_state, x, y, w, h),
         PanelId::HexEditor => hex_editor::draw(&state.hex_state, x, y, w, h),
         PanelId::VmInspector => vm_inspector::draw(&state.vm_inspector_state, x, y, w, h),
+        PanelId::NetworkDashboard => network_panel::draw(&state.network_panel_state, x, y, w, h),
     }
 }
 
@@ -859,7 +874,7 @@ fn draw_shell_bar(state: &LabState, x: i32, y: i32, w: u32, h: u32) {
     // Input
     let input_x = x + 8 + (prompt.len() as i32 * char_w());
     if state.shell_input.is_empty() {
-        draw_lab_text(input_x, y + 7, "hw|trace|fs|edit|hex|vm|swap|layout|run|test", COL_DIM);
+        draw_lab_text(input_x, y + 7, "hw|trace|fs|edit|hex|vm|net|swap|layout|run|test", COL_DIM);
     } else {
         draw_lab_text(input_x, y + 7, &state.shell_input, COL_TEXT);
     }

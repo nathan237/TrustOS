@@ -1097,6 +1097,16 @@ impl fmt::Write for Writer {
     }
 }
 
+/// When true, println!/print! skip framebuffer write (serial only).
+/// Used by inttest to avoid slow QEMU framebuffer scrolling.
+static SERIAL_ONLY_MODE: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
+
+/// Enable serial-only mode (println writes to serial, skips framebuffer)
+pub fn set_serial_only(on: bool) {
+    SERIAL_ONLY_MODE.store(on, core::sync::atomic::Ordering::Relaxed);
+}
+
 /// Internal print function (framebuffer + serial)
 #[doc(hidden)]
 pub fn _print(args: fmt::Arguments) {
@@ -1108,7 +1118,9 @@ pub fn _print(args: fmt::Arguments) {
         crate::shell::capture_write(&s);
         return;
     }
-    Writer.write_fmt(args).unwrap();
+    if !SERIAL_ONLY_MODE.load(core::sync::atomic::Ordering::Relaxed) {
+        Writer.write_fmt(args).unwrap();
+    }
     crate::serial::_print(args);
 }
 

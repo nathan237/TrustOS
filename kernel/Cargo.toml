@@ -29,3 +29,8 @@ tiny-skia-path = { version = "0.12", default-features = false, features = ["no-s
 [[bin]]
 name = "trustos_kernel"
 path = "src/main.rs"
+
+[features]
+default = ["emulators"]
+## NES + Game Boy emulators and GameLab analysis dashboard
+emulators = []
