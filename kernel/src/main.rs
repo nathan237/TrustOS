@@ -170,6 +170,9 @@ mod ptrace;
 // Safe user/kernel memory copy
 mod usercopy;
 
+// Jarvis Neural Brain — self-hosted tiny transformer for on-device AI
+mod jarvis;
+
 use core::panic::PanicInfo;
 use core::alloc::Layout;
 use limine::request::{

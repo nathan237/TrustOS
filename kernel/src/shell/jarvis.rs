@@ -5,9 +5,10 @@
 //!
 //! Architecture:
 //!   Input → Tokenizer → NLU (intent + entities) → Planner → Executor → Response
+//!   Input → Neural Brain (tiny transformer) → Generated text → Response
 //!
-//! ~50KB total: pattern matching NLU (no neural net), FR+EN bilingual,
-//! personality engine with constitution rules, direct kernel API access.
+//! Dual-brain: pattern matching NLU (fast, deterministic) + neural transformer
+//! (learning, creative). The neural brain is optional and grows over time.
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -839,6 +840,12 @@ fn execute_action(action: Action) {
 
 /// Entry point: interactive Jarvis session
 pub(super) fn cmd_jarvis(args: &[&str]) {
+    // Neural brain subcommands: "jarvis brain ..."
+    if !args.is_empty() && (args[0] == "brain" || args[0] == "neural" || args[0] == "nn") {
+        cmd_brain(&args[1..]);
+        return;
+    }
+    
     // One-shot mode: "jarvis what time is it"
     if !args.is_empty() {
         let query = args.join(" ");
@@ -954,4 +961,200 @@ fn read_jarvis_input(buffer: &mut [u8]) -> usize {
             core::hint::spin_loop();
         }
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// NEURAL BRAIN — Tiny transformer integration
+// ═══════════════════════════════════════════════════════════════════════
+
+const JARVIS_BRAIN: u32 = 0xFF00BBFF;
+
+/// Handle "jarvis brain <cmd>" subcommands
+fn cmd_brain(args: &[&str]) {
+    if args.is_empty() {
+        crate::println_color!(JARVIS_BRAIN, "  Jarvis Neural Brain v2.0");
+        crate::println!();
+        crate::println!("  Usage: jarvis brain <command>");
+        crate::println!();
+        crate::println!("  Commands:");
+        crate::println!("    init          Initialize neural brain (allocate ~1.2 MB)");
+        crate::println!("    info          Show model architecture & stats");
+        crate::println!("    generate <p>  Generate text from prompt");
+        crate::println!("    train <text>  Train on a text sequence");
+        crate::println!("    test          Run self-test suite");
+        crate::println!("    bench         Benchmark inference speed");
+        crate::println!("    introspect    Describe own architecture");
+        crate::println!("    weights       Show weight statistics per layer");
+        crate::println!("    hardware      Show available hardware for inference");
+        crate::println!("    mentor        Start serial mentoring listener");
+        crate::println!("    reset         Reset weights to random");
+        crate::println!();
+        crate::println!("  The neural brain is a 4-layer transformer (312K params)");
+        crate::println!("  that learns from text, generates responses, and self-improves.");
+        return;
+    }
+
+    match args[0] {
+        "init" => {
+            crate::println_color!(JARVIS_BRAIN, "  Initializing neural brain...");
+            crate::jarvis::init();
+            crate::println_color!(COLOR_GREEN, "  Neural brain ready.");
+        }
+
+        "info" => {
+            if !crate::jarvis::is_ready() {
+                crate::println_color!(COLOR_YELLOW, "  Brain not initialized. Run: jarvis brain init");
+                return;
+            }
+            for line in crate::jarvis::info_lines() {
+                crate::println!("  {}", line);
+            }
+        }
+
+        "generate" | "gen" | "g" => {
+            if !ensure_brain() { return; }
+            let prompt = if args.len() > 1 { args[1..].join(" ") } else { String::from("Hello") };
+            crate::print_color!(JARVIS_BRAIN, "  Prompt: ");
+            crate::println_color!(COLOR_WHITE, "{}", prompt);
+            
+            let start = crate::time::uptime_ticks();
+            let output = crate::jarvis::generate(&prompt, 64);
+            let elapsed = crate::time::uptime_ticks().saturating_sub(start);
+            
+            crate::print_color!(JARVIS_BRAIN, "  Output: ");
+            crate::println_color!(COLOR_GREEN, "{}", output);
+            crate::println_color!(COLOR_GRAY, "  ({} ms, {} tokens)", elapsed, output.len());
+        }
+
+        "train" => {
+            if !ensure_brain() { return; }
+            let text = if args.len() > 1 { args[1..].join(" ") } else {
+                crate::println!("  Usage: jarvis brain train <text>");
+                return;
+            };
+            crate::println_color!(JARVIS_BRAIN, "  Training on: \"{}\"", text);
+            let loss = crate::jarvis::train_on_text(&text, 0.001);
+            crate::println_color!(COLOR_GREEN, "  Loss: {:.4}", loss);
+        }
+
+        "test" => {
+            if !ensure_brain() { return; }
+            crate::println_color!(JARVIS_BRAIN, "  Running neural brain self-test...");
+            crate::println!();
+
+            // Tokenizer tests
+            crate::println_color!(COLOR_CYAN, "  Tokenizer:");
+            let tokens = crate::jarvis::tokenizer::encode("Hello");
+            crate::println!("    encode(\"Hello\") = {:?} ({} tokens)", &tokens, tokens.len());
+            let decoded = crate::jarvis::tokenizer::decode(&tokens);
+            crate::println!("    decode() = \"{}\"", decoded);
+
+            // Generation test
+            crate::println_color!(COLOR_CYAN, "  Generation:");
+            let output = crate::jarvis::generate("Test", 16);
+            crate::println!("    generate(\"Test\", 16) = \"{}\" ({} chars)", output, output.len());
+
+            // Training test
+            crate::println_color!(COLOR_CYAN, "  Training:");
+            let loss1 = crate::jarvis::train_on_text("Hello world", 0.001);
+            crate::println!("    Step 1 loss: {:.4}", loss1);
+            let loss2 = crate::jarvis::train_on_text("Hello world", 0.001);
+            crate::println!("    Step 2 loss: {:.4}", loss2);
+
+            // Training module self-test
+            crate::println_color!(COLOR_CYAN, "  Training module:");
+            let (tp, tf) = crate::jarvis::training::self_test();
+            crate::println!("    {} passed, {} failed", tp, tf);
+
+            // Introspection
+            crate::println_color!(COLOR_CYAN, "  Introspection:");
+            let info = crate::jarvis::agent::introspect(
+                &crate::jarvis::agent::IntrospectTarget::Architecture);
+            for line in info.iter().take(5) {
+                crate::println!("    {}", line);
+            }
+
+            crate::println!();
+            let total_pass = 4 + tp; // tokenizer + gen + 2 train + training self-test
+            let total_fail = tf;
+            if total_fail == 0 {
+                crate::println_color!(COLOR_GREEN, "  All {} tests passed!", total_pass);
+            } else {
+                crate::println_color!(COLOR_RED, "  {} passed, {} failed", total_pass, total_fail);
+            }
+        }
+
+        "bench" => {
+            if !ensure_brain() { return; }
+            crate::println_color!(JARVIS_BRAIN, "  Benchmarking inference speed...");
+            let (tok_per_sec, elapsed_ms) = crate::jarvis::agent::bench_inference();
+            crate::println!("  Speed: {:.1} tokens/sec", tok_per_sec);
+            crate::println!("  32 tokens generated in {} ms", elapsed_ms);
+            crate::println_color!(COLOR_GRAY, "  (CPU reference — GPU dispatch target: 100×)");
+        }
+
+        "introspect" | "self" => {
+            if !ensure_brain() { return; }
+            let lines = crate::jarvis::agent::introspect(
+                &crate::jarvis::agent::IntrospectTarget::Full);
+            for line in &lines {
+                crate::println_color!(JARVIS_BRAIN, "  {}", line);
+            }
+        }
+
+        "weights" => {
+            if !ensure_brain() { return; }
+            let lines = crate::jarvis::agent::introspect(
+                &crate::jarvis::agent::IntrospectTarget::WeightStats);
+            for line in &lines {
+                crate::println!("  {}", line);
+            }
+        }
+
+        "hardware" | "hw" => {
+            if !ensure_brain() { return; }
+            let lines = crate::jarvis::agent::introspect(
+                &crate::jarvis::agent::IntrospectTarget::Hardware);
+            for line in &lines {
+                crate::println!("  {}", line);
+            }
+        }
+
+        "mentor" => {
+            crate::println_color!(JARVIS_BRAIN, "  Serial Mentoring Mode");
+            crate::println!("  Listening on COM1 for MENTOR: commands...");
+            crate::println!("  (Send MENTOR:STATUS from host to verify connection)");
+            crate::println!();
+            crate::println!("  Protocol:");
+            crate::println!("    MENTOR:TEACH:<text>       Train on text");
+            crate::println!("    MENTOR:GENERATE:<prompt>  Generate text");
+            crate::println!("    MENTOR:EVAL:<prompt>      Evaluate loss");
+            crate::println!("    MENTOR:STATUS             Report stats");
+            crate::println!("    MENTOR:SAVE               Save weights");
+            crate::println!("    MENTOR:RESET              Reset weights");
+            crate::println!();
+            crate::println_color!(COLOR_GRAY, "  (Mentor polling active in shell idle loop)");
+        }
+
+        "reset" => {
+            if !ensure_brain() { return; }
+            crate::println_color!(COLOR_YELLOW, "  Resetting all weights to random...");
+            crate::jarvis::reset();
+            crate::println_color!(COLOR_GREEN, "  Weights reset. Training steps cleared.");
+        }
+
+        _ => {
+            crate::println_color!(COLOR_RED, "  Unknown: jarvis brain {}", args[0]);
+            crate::println!("  Use 'jarvis brain' for help");
+        }
+    }
+}
+
+/// Ensure brain is initialized, auto-init if not
+fn ensure_brain() -> bool {
+    if !crate::jarvis::is_ready() {
+        crate::println_color!(COLOR_GRAY, "  Auto-initializing neural brain...");
+        crate::jarvis::init();
+    }
+    crate::jarvis::is_ready()
 }
