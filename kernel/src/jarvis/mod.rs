@@ -59,6 +59,8 @@ pub mod agent;
 pub mod mentor;
 pub mod training;
 pub mod corpus;
+pub mod backprop;
+pub mod optimizer;
 
 use alloc::string::String;
 use alloc::format;
@@ -68,6 +70,7 @@ use spin::Mutex;
 
 use model::TransformerWeights;
 use inference::InferenceEngine;
+use optimizer::AdamState;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Global State
@@ -82,6 +85,9 @@ static MODEL: Mutex<Option<TransformerWeights>> = Mutex::new(None);
 
 /// Global inference engine
 static ENGINE: Mutex<Option<InferenceEngine>> = Mutex::new(None);
+
+/// Global Adam optimizer state
+static OPTIMIZER: Mutex<Option<AdamState>> = Mutex::new(None);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Initialization
@@ -104,8 +110,14 @@ pub fn init() {
     // Create inference engine
     let engine = InferenceEngine::new();
 
+    // Create Adam optimizer (2× model memory for m/v buffers)
+    let adam = AdamState::with_lr(param_count, 0.001);
+    crate::serial_println!("[JARVIS] Optimizer: Adam (lr=0.001, {} KB state)",
+        adam.memory_bytes() / 1024);
+
     *MODEL.lock() = Some(weights);
     *ENGINE.lock() = Some(engine);
+    *OPTIMIZER.lock() = Some(adam);
 
     INITIALIZED.store(true, Ordering::Release);
     crate::serial_println!("[JARVIS] Neural brain ready. Awaiting input or mentoring.");
@@ -173,22 +185,40 @@ pub fn predict_next(context: &[u8]) -> u8 {
 // Training API
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Train on a text sequence (teacher forcing)
+/// Train on a text sequence using analytical backprop + Adam optimizer.
+/// The learning_rate parameter sets Adam's lr for this step.
+/// Falls back to numerical gradients if optimizer not available.
 pub fn train_on_text(text: &str, learning_rate: f32) -> f32 {
     if !is_ready() { return f32::MAX; }
 
+    let tokens = tokenizer::encode(text);
+    if tokens.len() < 2 { return f32::MAX; }
+
+    // Try backprop + Adam (fast path: 1 forward + 1 backward)
+    let mut opt_guard = OPTIMIZER.lock();
+    if let Some(adam) = opt_guard.as_mut() {
+        let mut model_guard = MODEL.lock();
+        let model = match model_guard.as_mut() {
+            Some(m) => m,
+            None => return f32::MAX,
+        };
+
+        adam.lr = learning_rate;
+        let (loss, grads) = backprop::forward_backward(model, &tokens);
+        adam.step(model, &grads);
+        TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
+        return loss;
+    }
+    drop(opt_guard);
+
+    // Fallback: numerical gradients (slow path)
     let mut model_guard = MODEL.lock();
     let model = match model_guard.as_mut() {
         Some(m) => m,
         None => return f32::MAX,
     };
-
-    let tokens = tokenizer::encode(text);
-    if tokens.len() < 2 { return f32::MAX; }
-
     let loss = training::train_step(model, &tokens, learning_rate);
     TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
-
     loss
 }
 
