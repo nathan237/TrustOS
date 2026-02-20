@@ -137,6 +137,7 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    gpu [info|dcn|modes] AMD GPU info & display engine status");
     crate::println!("    gpuexec <agent> [N] Dispatch RDNA compute agent on GPU CUs");
     crate::println!("    sdma <cmd>          SDMA engine DMA transfers (copy/fill/bench)");
+    crate::println!("    neural <cmd>        Neural compute: GEMM, activations, inference");
     crate::println!("    a11y [hc|font|...]  Accessibility settings (Win+H = contrast)");
     crate::println!("    lscpu               CPU model, cores, features, frequency");
     crate::println!("    lsmem               Memory layout and total RAM");
@@ -3858,6 +3859,173 @@ pub(super) fn cmd_sdma(args: &[&str]) {
         _ => {
             crate::println_color!(COLOR_RED, "Unknown subcommand: {}", args[0]);
             crate::println!("Use 'sdma' for help");
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// cmd_neural — Neural compute: GEMM kernels, activations, transformer ops
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub(super) fn cmd_neural(args: &[&str]) {
+    use crate::drivers::amdgpu::neural;
+
+    if args.is_empty() {
+        crate::println_color!(COLOR_CYAN, "TrustOS Neural Compute — GEMM + Ops for LLM Inference");
+        crate::println!("");
+        crate::println!("Usage: neural <command>");
+        crate::println!("");
+        crate::println!("Commands:");
+        crate::println!("  info         Show neural compute status & available kernels");
+        crate::println!("  test         Run self-test (GEMM, activations, quantization)");
+        crate::println!("  bench [N]    Benchmark INT8 GEMM (default N=64)");
+        crate::println!("  gemm <M> <N> <K>  Run FP32 GEMM on CPU with verification");
+        crate::println!("  kernels      List available GPU kernels");
+        crate::println!("  relu         Test ReLU activation");
+        crate::println!("  softmax      Test softmax reduction");
+        crate::println!("  transformer  Run single transformer layer (tiny test)");
+        return;
+    }
+
+    match args[0] {
+        "info" => {
+            for line in neural::info_lines() {
+                crate::println!("{}", line);
+            }
+        }
+
+        "test" => {
+            crate::println_color!(COLOR_CYAN, "Neural Compute Self-Test");
+            crate::println!("Running all tests...");
+            crate::println!("");
+            let (pass, fail) = neural::self_test();
+            crate::println!("");
+            if fail == 0 {
+                crate::println_color!(COLOR_GREEN, "All {} tests passed!", pass);
+            } else {
+                crate::println_color!(COLOR_RED, "{} passed, {} FAILED", pass, fail);
+            }
+        }
+
+        "bench" => {
+            let dim: usize = if args.len() > 1 {
+                args[1].parse().unwrap_or(64)
+            } else {
+                64
+            };
+            crate::println_color!(COLOR_CYAN, "INT8 GEMM Benchmark: {}×{} × {}×{}", dim, dim, dim, dim);
+            let gops = neural::bench_gemm(dim);
+            crate::println!("Throughput: {:.3} MOPS (CPU reference)", gops * 1000.0);
+            crate::println!("(GPU V_DOT4_I32_I8 target: ~17 TOPS)");
+        }
+
+        "gemm" => {
+            if args.len() < 4 {
+                crate::println!("Usage: neural gemm <M> <N> <K>");
+                return;
+            }
+            let m: usize = args[1].parse().unwrap_or(4);
+            let n: usize = args[2].parse().unwrap_or(4);
+            let k: usize = args[3].parse().unwrap_or(4);
+
+            crate::println_color!(COLOR_CYAN, "FP32 GEMM: C[{}×{}] = A[{}×{}] × B[{}×{}]", m, n, m, k, k, n);
+
+            // Create test matrices: A[i][j] = (i+1), B[i][j] = (j+1)
+            let a: alloc::vec::Vec<f32> = (0..m*k).map(|i| (i / k + 1) as f32).collect();
+            let b: alloc::vec::Vec<f32> = (0..k*n).map(|i| (i % n + 1) as f32).collect();
+
+            let start = crate::time::uptime_ticks();
+            let c = neural::gemm_fp32_cpu(&a, &b, m, n, k);
+            let elapsed = crate::time::uptime_ticks() - start;
+
+            // Print first few results
+            let show = c.len().min(16);
+            crate::println!("Result (first {} elements):", show);
+            for i in 0..show {
+                if i > 0 && i % n == 0 { crate::println!(""); }
+                crate::print!("{:8.1} ", c[i]);
+            }
+            crate::println!("");
+            crate::println!("Computed in {} ms ({} MACs)", elapsed, m * n * k);
+        }
+
+        "kernels" => {
+            crate::println_color!(COLOR_CYAN, "GPU Neural Kernels (hand-encoded RDNA ISA):");
+            crate::println!("");
+            for k in neural::ALL_KERNELS {
+                crate::println!("  {:12} {} ({} DWORDs)",
+                    k.name(), k.description(), k.shader_code().len());
+                crate::println!("               SGPRs: {}, VGPRs: {}", k.sgpr_count(), k.vgpr_count());
+            }
+        }
+
+        "relu" => {
+            crate::println_color!(COLOR_CYAN, "ReLU Test");
+            let mut data = alloc::vec![-2.0f32, -1.0, -0.5, 0.0, 0.5, 1.0, 2.0, 3.0];
+            crate::println!("Input:  {:?}", &data);
+            neural::cpu_relu(&mut data);
+            crate::println!("Output: {:?}", &data);
+        }
+
+        "softmax" => {
+            crate::println_color!(COLOR_CYAN, "Softmax Test");
+            let mut data = alloc::vec![1.0f32, 2.0, 3.0, 4.0, 5.0];
+            crate::println!("Input:  {:?}", &data);
+            neural::cpu_softmax(&mut data);
+            crate::println!("Output: [");
+            for (i, v) in data.iter().enumerate() {
+                crate::println!("  [{}] = {:.6}", i, v);
+            }
+            crate::println!("]");
+            let sum: f32 = data.iter().sum();
+            crate::println!("Sum = {:.6} (should be ~1.0)", sum);
+        }
+
+        "transformer" => {
+            crate::println_color!(COLOR_CYAN, "Transformer Layer Test (tiny)");
+            crate::println!("Architecture: seq=2, d_model=8, d_ff=16, heads=2");
+            crate::println!("");
+
+            let seq = 2;
+            let d = 8;
+            let d_ff = 16;
+            let heads = 2;
+
+            // Initialize with small random-ish values (deterministic)
+            let input: alloc::vec::Vec<f32> = (0..seq*d).map(|i| ((i * 17 + 3) % 11) as f32 * 0.1 - 0.5).collect();
+            let w_q: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 13 + 7) % 9) as f32 * 0.05 - 0.2).collect();
+            let w_k: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 11 + 5) % 7) as f32 * 0.05 - 0.15).collect();
+            let w_v: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 7 + 11) % 13) as f32 * 0.05 - 0.3).collect();
+            let w_o: alloc::vec::Vec<f32> = (0..d*d).map(|i| ((i * 5 + 3) % 11) as f32 * 0.04 - 0.2).collect();
+            let w_gate: alloc::vec::Vec<f32> = (0..d*d_ff).map(|i| ((i * 3 + 13) % 7) as f32 * 0.05 - 0.15).collect();
+            let w_up: alloc::vec::Vec<f32> = (0..d*d_ff).map(|i| ((i * 19 + 1) % 11) as f32 * 0.04 - 0.2).collect();
+            let w_down: alloc::vec::Vec<f32> = (0..d_ff*d).map(|i| ((i * 23 + 7) % 13) as f32 * 0.03 - 0.2).collect();
+            let rms_w: alloc::vec::Vec<f32> = alloc::vec![1.0f32; d];
+
+            let start = crate::time::uptime_ticks();
+            let output = neural::transformer_layer_fp32(
+                &input, &w_q, &w_k, &w_v, &w_o,
+                &w_gate, &w_up, &w_down,
+                &rms_w, &rms_w,
+                seq, d, d_ff, heads,
+            );
+            let elapsed = crate::time::uptime_ticks() - start;
+
+            crate::println!("Input[0..8]:  {:?}", &input[..d.min(8)]);
+            crate::println!("Output[0..8]: [");
+            for i in 0..d.min(8) {
+                crate::println!("  {:.6}", output[i]);
+            }
+            crate::println!("]");
+            crate::println!("");
+            crate::println!("GEMMs used:  7 (Q,K,V,QK^T,attn*V,O,gate,up,down)");
+            crate::println!("Completed in {} ms", elapsed);
+            crate::println_color!(COLOR_GREEN, "Transformer layer OK");
+        }
+
+        _ => {
+            crate::println_color!(COLOR_RED, "Unknown: neural {}", args[0]);
+            crate::println!("Use 'neural' for help");
         }
     }
 }

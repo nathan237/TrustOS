@@ -508,6 +508,18 @@ pub const COMPUTE_USER_DATA_0: u32 = 0x2E40;  // User SGPR data (buffer descript
 pub const COMPUTE_USER_DATA_1: u32 = 0x2E44;
 pub const COMPUTE_USER_DATA_2: u32 = 0x2E48;
 pub const COMPUTE_USER_DATA_3: u32 = 0x2E4C;
+pub const COMPUTE_USER_DATA_4: u32 = 0x2E50;
+pub const COMPUTE_USER_DATA_5: u32 = 0x2E54;
+pub const COMPUTE_USER_DATA_6: u32 = 0x2E58;
+pub const COMPUTE_USER_DATA_7: u32 = 0x2E5C;
+pub const COMPUTE_USER_DATA_8: u32 = 0x2E60;
+pub const COMPUTE_USER_DATA_9: u32 = 0x2E64;
+pub const COMPUTE_USER_DATA_10: u32 = 0x2E68;
+pub const COMPUTE_USER_DATA_11: u32 = 0x2E6C;
+pub const COMPUTE_USER_DATA_12: u32 = 0x2E70;  // GEMM: s12 = M
+pub const COMPUTE_USER_DATA_13: u32 = 0x2E74;  // GEMM: s13 = N
+pub const COMPUTE_USER_DATA_14: u32 = 0x2E78;  // GEMM: s14 = K
+pub const COMPUTE_USER_DATA_15: u32 = 0x2E7C;  // GEMM: reserved
 pub const COMPUTE_RESOURCE_LIMITS: u32 = 0x2E30;
 pub const COMPUTE_DISPATCH_INITIATOR: u32 = 0x2E34;
 

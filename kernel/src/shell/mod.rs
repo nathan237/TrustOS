@@ -183,7 +183,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // Disk
     "disk", "dd", "ahci", "fdisk", "partitions",
     // Hardware
-    "lspci", "lshw", "hwinfo", "gpu", "gpuexec", "sdma", "a11y",
+    "lspci", "lshw", "hwinfo", "gpu", "gpuexec", "sdma", "neural", "a11y",
     // Audio
     "beep", "audio", "synth",
     // Network
@@ -989,6 +989,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "gpu" => vm::cmd_gpu(args),
         "gpuexec" | "gpurun" | "gpuagent" => commands::cmd_gpuexec(args),
         "sdma" | "dma" => commands::cmd_sdma(args),
+        "neural" | "nn" | "gemm" => commands::cmd_neural(args),
         "a11y" | "accessibility" => vm::cmd_a11y(args),
         "beep" => vm::cmd_beep(args),
         "audio" => vm::cmd_audio(args),

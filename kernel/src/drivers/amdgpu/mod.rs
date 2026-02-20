@@ -19,6 +19,7 @@ pub mod regs;
 pub mod dcn;
 pub mod compute;
 pub mod sdma;
+pub mod neural;
 
 use alloc::string::String;
 use alloc::format;
