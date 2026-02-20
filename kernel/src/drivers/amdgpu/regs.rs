@@ -348,3 +348,46 @@ pub const PM4_RELEASE_MEM: u32 = 0x49;
 pub const PM4_EVENT_WRITE: u32 = 0x46;
 pub const PM4_DISPATCH_DIRECT: u32 = 0x15;
 pub const PM4_DRAW_INDEX_AUTO: u32 = 0x2D;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Compute Queue Registers (GFX10 / RDNA 1) — Phase 3/4
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Compute ring 0 registers (MEC pipe 0, queue 0)
+pub const CP_HQD_ACTIVE: u32 = 0x3E54;
+pub const CP_HQD_PQ_BASE_LO: u32 = 0x3E58;
+pub const CP_HQD_PQ_BASE_HI: u32 = 0x3E5C;
+pub const CP_HQD_PQ_RPTR: u32 = 0x3E60;
+pub const CP_HQD_PQ_WPTR_LO: u32 = 0x3E64;
+pub const CP_HQD_PQ_WPTR_HI: u32 = 0x3E68;
+pub const CP_HQD_PQ_CONTROL: u32 = 0x3E6C;
+pub const CP_HQD_PQ_DOORBELL_CONTROL: u32 = 0x3E74;
+pub const CP_HQD_DEQUEUE_REQUEST: u32 = 0x3E80;
+
+/// MEC (Micro Engine Compute) engine control
+pub const CP_MEC_CNTL: u32 = 0x8234;
+/// MEC doorbell range
+pub const CP_MEC_DOORBELL_RANGE_LOWER: u32 = 0x8260;
+pub const CP_MEC_DOORBELL_RANGE_UPPER: u32 = 0x8264;
+
+/// Compute shader SH registers (set via PM4_SET_SH_REG, base 0x2C00)
+pub const SH_REG_BASE: u32 = 0x2C00;
+pub const COMPUTE_PGM_LO: u32 = 0x2E0C;      // Shader program address low
+pub const COMPUTE_PGM_HI: u32 = 0x2E10;      // Shader program address high
+pub const COMPUTE_PGM_RSRC1: u32 = 0x2E14;   // VGPR/SGPR counts, float mode
+pub const COMPUTE_PGM_RSRC2: u32 = 0x2E18;   // LDS, scratch, user SGPR count
+pub const COMPUTE_PGM_RSRC3: u32 = 0x2E1C;   // Wave limit, shared VGPR count
+pub const COMPUTE_NUM_THREAD_X: u32 = 0x2E20; // Threads per workgroup X
+pub const COMPUTE_NUM_THREAD_Y: u32 = 0x2E24; // Threads per workgroup Y
+pub const COMPUTE_NUM_THREAD_Z: u32 = 0x2E28; // Threads per workgroup Z
+pub const COMPUTE_USER_DATA_0: u32 = 0x2E40;  // User SGPR data (buffer descriptors, etc.)
+pub const COMPUTE_USER_DATA_1: u32 = 0x2E44;
+pub const COMPUTE_USER_DATA_2: u32 = 0x2E48;
+pub const COMPUTE_USER_DATA_3: u32 = 0x2E4C;
+pub const COMPUTE_RESOURCE_LIMITS: u32 = 0x2E30;
+pub const COMPUTE_DISPATCH_INITIATOR: u32 = 0x2E34;
+
+/// Fence / event registers
+pub const CP_COHER_CNTL: u32 = 0xA0A0;
+pub const CP_COHER_SIZE: u32 = 0xA0A4;
+pub const CP_COHER_BASE: u32 = 0xA0A8;

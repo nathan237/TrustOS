@@ -135,6 +135,7 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    lspci [-v]          List PCI devices (vendor/class)");
     crate::println!("    lshw / hwinfo       Full hardware inventory");
     crate::println!("    gpu [info|dcn|modes] AMD GPU info & display engine status");
+    crate::println!("    gpuexec <agent> [N] Dispatch RDNA compute agent on GPU CUs");
     crate::println!("    a11y [hc|font|...]  Accessibility settings (Win+H = contrast)");
     crate::println!("    lscpu               CPU model, cores, features, frequency");
     crate::println!("    lsmem               Memory layout and total RAM");
@@ -3510,4 +3511,175 @@ pub(super) fn cmd_cowsay(args: &[&str]) {
     crate::println!("            (__)\\       )\\/\\");
     crate::println!("                ||----w |");
     crate::println!("                ||     ||");
+}
+
+/// GPU Compute Agent — dispatch RDNA compute kernels bare-metal
+pub(super) fn cmd_gpuexec(args: &[&str]) {
+    use crate::drivers::amdgpu::compute;
+    use crate::drivers::amdgpu::compute::AgentKind;
+    
+    const COLOR_CYAN: u32 = 0xFF00FFFF;
+    const COLOR_GREEN: u32 = 0xFF00FF00;
+    const COLOR_RED: u32 = 0xFFFF4444;
+    const COLOR_YELLOW: u32 = 0xFFFFFF00;
+    
+    if args.is_empty() {
+        crate::println_color!(COLOR_CYAN, "╔══════════════════════════════════════════════╗");
+        crate::println_color!(COLOR_CYAN, "║     GPU Compute Agent — RDNA bare-metal      ║");
+        crate::println_color!(COLOR_CYAN, "╠══════════════════════════════════════════════╣");
+        crate::println!("║ Usage:                                       ║");
+        crate::println!("║   gpuexec list         List agents            ║");
+        crate::println!("║   gpuexec info         Compute engine status  ║");
+        crate::println!("║   gpuexec incr [N]     Run INCR agent         ║");
+        crate::println!("║   gpuexec memfill [N] [V] Fill with value     ║");
+        crate::println!("║   gpuexec memcopy [N]  Copy src→dst           ║");
+        crate::println!("║   gpuexec test         Run all + verify       ║");
+        crate::println_color!(COLOR_CYAN, "╚══════════════════════════════════════════════╝");
+        return;
+    }
+    
+    match args[0] {
+        "list" | "agents" => {
+            crate::println_color!(COLOR_CYAN, "Available GPU agents:");
+            for agent in compute::ALL_AGENTS {
+                crate::println!("  {:10} — {} ({} SGPR, {} VGPR, {} insns)",
+                    agent.name(), agent.description(),
+                    agent.sgpr_count(), agent.vgpr_count(),
+                    agent.shader_code().len());
+            }
+        }
+        "info" | "status" => {
+            if !compute::is_ready() {
+                crate::println_color!(COLOR_YELLOW, "GPU compute engine not initialized");
+                crate::println!("(Requires AMD GPU with MMIO — bare metal or GPU passthrough)");
+                return;
+            }
+            for line in compute::info_lines() {
+                crate::println!("{}", line);
+            }
+        }
+        "test" => {
+            if !compute::is_ready() {
+                crate::println_color!(COLOR_YELLOW, "GPU compute engine not initialized");
+                return;
+            }
+            crate::println_color!(COLOR_CYAN, "=== GPU Compute Agent Self-Test ===");
+            let mut total_pass = 0u32;
+            let mut total_fail = 0u32;
+            
+            // Test 1: INCR with 256 elements
+            crate::print!("  incr(256)... ");
+            match compute::dispatch(AgentKind::Incr, 256, 0) {
+                Ok(iters) => {
+                    let (p, f) = compute::verify_results(AgentKind::Incr, 256, 0);
+                    if f == 0 {
+                        crate::println_color!(COLOR_GREEN, "[OK] {}p/{}f in {} iters", p, f, iters);
+                    } else {
+                        crate::println_color!(COLOR_RED, "[FAIL] {}p/{}f in {} iters", p, f, iters);
+                    }
+                    total_pass += p; total_fail += f;
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "[ERR] {}", e);
+                    total_fail += 256;
+                }
+            }
+            
+            // Test 2: MEMFILL with 512 elements, value 0xCAFE1234
+            crate::print!("  memfill(512, 0xCAFE1234)... ");
+            match compute::dispatch(AgentKind::MemFill, 512, 0xCAFE1234) {
+                Ok(iters) => {
+                    let (p, f) = compute::verify_results(AgentKind::MemFill, 512, 0xCAFE1234);
+                    if f == 0 {
+                        crate::println_color!(COLOR_GREEN, "[OK] {}p/{}f in {} iters", p, f, iters);
+                    } else {
+                        crate::println_color!(COLOR_RED, "[FAIL] {}p/{}f in {} iters", p, f, iters);
+                    }
+                    total_pass += p; total_fail += f;
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "[ERR] {}", e);
+                    total_fail += 512;
+                }
+            }
+            
+            // Test 3: MEMCOPY with 128 elements
+            crate::print!("  memcopy(128)... ");
+            match compute::dispatch(AgentKind::MemCopy, 128, 0) {
+                Ok(iters) => {
+                    let (p, f) = compute::verify_results(AgentKind::MemCopy, 128, 0);
+                    if f == 0 {
+                        crate::println_color!(COLOR_GREEN, "[OK] {}p/{}f in {} iters", p, f, iters);
+                    } else {
+                        crate::println_color!(COLOR_RED, "[FAIL] {}p/{}f in {} iters", p, f, iters);
+                    }
+                    total_pass += p; total_fail += f;
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "[ERR] {}", e);
+                    total_fail += 128;
+                }
+            }
+            
+            crate::println!();
+            if total_fail == 0 {
+                crate::println_color!(COLOR_GREEN, "=== ALL PASSED: {}/{} ===", total_pass, total_pass + total_fail);
+            } else {
+                crate::println_color!(COLOR_RED, "=== {}/{} passed, {} FAILED ===", 
+                    total_pass, total_pass + total_fail, total_fail);
+            }
+        }
+        "incr" => {
+            let n: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(64);
+            crate::println!("Dispatching INCR agent ({} elements)...", n);
+            match compute::dispatch(AgentKind::Incr, n, 0) {
+                Ok(iters) => {
+                    let (p, f) = compute::verify_results(AgentKind::Incr, n, 0);
+                    crate::println_color!(COLOR_GREEN, "Done: {}/{} correct in {} iters", p, p+f, iters);
+                    // Show first 8 results
+                    crate::print!("  Data: ");
+                    for i in 0..8.min(n) {
+                        if let Some(v) = compute::read_data(i) {
+                            crate::print!("{:#X} ", v);
+                        }
+                    }
+                    crate::println!("...");
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        "memfill" => {
+            let n: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(64);
+            let v: u32 = args.get(2).and_then(|s| {
+                if s.starts_with("0x") || s.starts_with("0X") {
+                    u32::from_str_radix(&s[2..], 16).ok()
+                } else {
+                    s.parse().ok()
+                }
+            }).unwrap_or(0xDEADBEEF);
+            crate::println!("Dispatching MEMFILL agent ({} elements, value={:#X})...", n, v);
+            match compute::dispatch(AgentKind::MemFill, n, v) {
+                Ok(iters) => {
+                    let (p, f) = compute::verify_results(AgentKind::MemFill, n, v);
+                    crate::println_color!(COLOR_GREEN, "Done: {}/{} correct in {} iters", p, p+f, iters);
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        "memcopy" => {
+            let n: u32 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(64);
+            crate::println!("Dispatching MEMCOPY agent ({} elements)...", n);
+            match compute::dispatch(AgentKind::MemCopy, n, 0) {
+                Ok(iters) => {
+                    let (p, f) = compute::verify_results(AgentKind::MemCopy, n, 0);
+                    crate::println_color!(COLOR_GREEN, "Done: {}/{} correct in {} iters", p, p+f, iters);
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        _ => {
+            crate::println_color!(COLOR_RED, "Unknown subcommand: {}", args[0]);
+            crate::println!("Use 'gpuexec' for help");
+        }
+    }
 }
