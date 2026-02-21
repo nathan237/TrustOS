@@ -359,7 +359,7 @@ pub fn spawn_kernel(name: &str, entry: fn(u64) -> i32, arg: u64) -> Tid {
     let tid = thread.tid;
     
     THREADS.write().insert(tid, thread);
-    READY_QUEUE.lock().push_back(tid);
+    enqueue_thread(tid);
     
     crate::log_debug!("[THREAD] Spawned kernel thread {} '{}'", tid, name);
     tid
@@ -371,7 +371,7 @@ pub fn spawn_user(pid: u32, name: &str, entry: u64, user_stack: u64, arg: u64) -
     let tid = thread.tid;
     
     THREADS.write().insert(tid, thread);
-    READY_QUEUE.lock().push_back(tid);
+    enqueue_thread(tid);
     
     crate::log_debug!("[THREAD] Spawned user thread {} '{}'", tid, name);
     tid
@@ -394,7 +394,7 @@ pub fn wake(tid: Tid) {
         if thread.state == ThreadState::Blocked {
             thread.state = ThreadState::Ready;
             drop(threads);
-            READY_QUEUE.lock().push_back(tid);
+            enqueue_thread(tid);
         }
     }
 }
@@ -454,9 +454,90 @@ pub fn sleep_ns(duration_ns: u64) {
 
 use alloc::collections::VecDeque;
 
+// ============================================================================
+// Per-CPU Run Queues with Work Stealing
+// ============================================================================
+
+/// Per-CPU ready queue  
+struct PerCpuQueue {
+    queue: Mutex<VecDeque<Tid>>,
+}
+
+impl PerCpuQueue {
+    const fn new() -> Self {
+        Self { queue: Mutex::new(VecDeque::new()) }
+    }
+    
+    fn push(&self, tid: Tid) {
+        self.queue.lock().push_back(tid);
+    }
+    
+    fn pop(&self) -> Option<Tid> {
+        self.queue.lock().pop_front()
+    }
+    
+    /// Steal from the back (reduces contention with local dequeue from front)
+    fn steal(&self) -> Option<Tid> {
+        self.queue.lock().pop_back()
+    }
+    
+    fn len(&self) -> usize {
+        self.queue.lock().len()
+    }
+}
+
+/// Per-CPU run queues (indexed by cpu_id)
+static PER_CPU_QUEUES: [PerCpuQueue; MAX_CPUS_SCHED] = {
+    const INIT: PerCpuQueue = PerCpuQueue::new();
+    [INIT; MAX_CPUS_SCHED]
+};
+
+/// Round-robin CPU assignment counter for new threads
+static NEXT_CPU: AtomicU64 = AtomicU64::new(0);
+
+/// Legacy global ready queue (kept for compatibility, used as overflow)
 lazy_static::lazy_static! {
-    /// Ready queue for thread scheduling
     static ref READY_QUEUE: Mutex<VecDeque<Tid>> = Mutex::new(VecDeque::new());
+}
+
+/// Enqueue a thread on the best CPU's run queue
+fn enqueue_thread(tid: Tid) {
+    let num_cpus = crate::cpu::smp::ready_cpu_count().max(1) as usize;
+    
+    // Round-robin assignment across available CPUs
+    let target_cpu = (NEXT_CPU.fetch_add(1, Ordering::Relaxed) % num_cpus as u64) as usize;
+    PER_CPU_QUEUES[target_cpu].push(tid);
+    
+    // If the target CPU is not the current one and is idle, wake it
+    let current_cpu = sched_cpu_id();
+    if target_cpu != current_cpu && target_cpu > 0 {
+        crate::cpu::smp::send_reschedule_ipi(target_cpu as u32);
+    }
+}
+
+/// Try to steal work from the busiest other CPU
+fn try_steal_work(my_cpu: usize) -> Option<Tid> {
+    let num_cpus = crate::cpu::smp::ready_cpu_count().max(1) as usize;
+    
+    // Find the busiest CPU (most items in queue) that isn't us
+    let mut best_cpu = usize::MAX;
+    let mut best_len = 0;
+    
+    for cpu in 0..num_cpus {
+        if cpu == my_cpu { continue; }
+        let len = PER_CPU_QUEUES[cpu].len();
+        if len > best_len {
+            best_len = len;
+            best_cpu = cpu;
+        }
+    }
+    
+    if best_cpu < MAX_CPUS_SCHED && best_len > 1 {
+        return PER_CPU_QUEUES[best_cpu].steal();
+    }
+    
+    // Also check the legacy global queue
+    READY_QUEUE.lock().pop_front()
 }
 
 /// Initialize thread subsystem (BSP only)
@@ -532,45 +613,48 @@ pub fn on_timer_tick() {
     }
 }
 
-/// Schedule next thread (SMP-safe: uses per-CPU current_tid)
+/// Schedule next thread (SMP-safe: per-CPU run queues with work stealing)
 pub fn schedule() {
     let cpu_id = sched_cpu_id();
     let current = current_tid();
     let idle = idle_tid_for(cpu_id);
     
-    // Get next thread from shared ready queue
-    let next_tid = {
-        let mut queue = READY_QUEUE.lock();
-        
-        // Put current thread back if still runnable
-        // NEVER enqueue idle threads — they belong to their CPU
-        if current != TID_INVALID && !is_idle_tid(current) {
-            if let Some(thread) = THREADS.read().get(&current) {
-                if thread.state == ThreadState::Running {
-                    drop(queue);
-                    if let Some(t) = THREADS.write().get_mut(&current) {
-                        t.state = ThreadState::Ready;
-                    }
-                    queue = READY_QUEUE.lock();
-                    queue.push_back(current);
+    // Put current thread back on this CPU's queue if still runnable
+    if current != TID_INVALID && !is_idle_tid(current) {
+        if let Some(thread) = THREADS.read().get(&current) {
+            if thread.state == ThreadState::Running {
+                if let Some(t) = THREADS.write().get_mut(&current) {
+                    t.state = ThreadState::Ready;
                 }
+                PER_CPU_QUEUES[cpu_id].push(current);
             }
         }
-        
-        // Find next ready thread
-        loop {
-            match queue.pop_front() {
-                Some(tid) => {
-                    if let Some(thread) = THREADS.read().get(&tid) {
-                        if thread.state == ThreadState::Ready || thread.state == ThreadState::Running {
-                            break Some(tid);
-                        }
-                    }
-                    // Thread not runnable, skip
+    }
+    
+    // Try to get next thread from: 1) local queue, 2) work stealing, 3) global queue
+    let next_tid = loop {
+        // 1. Try local per-CPU queue
+        if let Some(tid) = PER_CPU_QUEUES[cpu_id].pop() {
+            if let Some(thread) = THREADS.read().get(&tid) {
+                if thread.state == ThreadState::Ready || thread.state == ThreadState::Running {
+                    break Some(tid);
                 }
-                None => break None,
             }
+            continue; // skip non-runnable, try next
         }
+        
+        // 2. Try work stealing from other CPUs
+        if let Some(tid) = try_steal_work(cpu_id) {
+            if let Some(thread) = THREADS.read().get(&tid) {
+                if thread.state == ThreadState::Ready || thread.state == ThreadState::Running {
+                    break Some(tid);
+                }
+            }
+            continue;
+        }
+        
+        // No work available
+        break None;
     };
     
     match next_tid {
@@ -738,8 +822,8 @@ impl ThreadMutex {
         if let Some(waiter) = self.waiters.lock().pop_front() {
             if let Some(thread) = THREADS.write().get_mut(&waiter) {
                 thread.state = ThreadState::Ready;
-                READY_QUEUE.lock().push_back(waiter);
             }
+            enqueue_thread(waiter);
         }
     }
     
@@ -798,8 +882,8 @@ impl Semaphore {
         if let Some(waiter) = self.waiters.lock().pop_front() {
             if let Some(thread) = THREADS.write().get_mut(&waiter) {
                 thread.state = ThreadState::Ready;
-                READY_QUEUE.lock().push_back(waiter);
             }
+            enqueue_thread(waiter);
         }
     }
 }
@@ -843,8 +927,8 @@ impl CondVar {
         if let Some(waiter) = self.waiters.lock().pop_front() {
             if let Some(thread) = THREADS.write().get_mut(&waiter) {
                 thread.state = ThreadState::Ready;
-                READY_QUEUE.lock().push_back(waiter);
             }
+            enqueue_thread(waiter);
         }
     }
     
@@ -854,8 +938,8 @@ impl CondVar {
         while let Some(waiter) = waiters.pop_front() {
             if let Some(thread) = THREADS.write().get_mut(&waiter) {
                 thread.state = ThreadState::Ready;
-                READY_QUEUE.lock().push_back(waiter);
             }
+            enqueue_thread(waiter);
         }
     }
 }

@@ -848,6 +848,8 @@ pub struct Desktop {
     pub start_menu_search: String,
     // Start menu keyboard navigation (selected item index, -1 = none)
     pub start_menu_selected: i32,
+    /// Desktop clipboard: (icon_index, is_cut)
+    clipboard_icon: Option<(usize, bool)>,
 }
 
 /// Calculator state for interactive calculator windows
@@ -1408,6 +1410,7 @@ impl Desktop {
             saved_input: String::new(),
             start_menu_search: String::new(),
             start_menu_selected: -1,
+            clipboard_icon: None,
         }
     }
     
@@ -2696,13 +2699,44 @@ struct AppConfig {
                 }
             },
             ContextAction::Cut => {
-                crate::serial_println!("[GUI] Cut (not implemented)");
+                if let Some(idx) = self.context_menu.target_icon {
+                    self.clipboard_icon = Some((idx, true));
+                    // Also store icon name in text clipboard
+                    let name = self.icons[idx].name.clone();
+                    crate::keyboard::clipboard_set(&name);
+                    crate::serial_println!("[GUI] Cut icon: {}", name);
+                }
             },
             ContextAction::Copy => {
-                crate::serial_println!("[GUI] Copy (not implemented)");
+                if let Some(idx) = self.context_menu.target_icon {
+                    self.clipboard_icon = Some((idx, false));
+                    let name = self.icons[idx].name.clone();
+                    crate::keyboard::clipboard_set(&name);
+                    crate::serial_println!("[GUI] Copied icon: {}", name);
+                }
             },
             ContextAction::Paste => {
-                crate::serial_println!("[GUI] Paste (not implemented)");
+                if let Some((src_idx, is_cut)) = self.clipboard_icon.take() {
+                    if src_idx < self.icons.len() {
+                        if is_cut {
+                            // Move: icon already exists, just log
+                            crate::serial_println!("[GUI] Pasted (moved) icon: {}", self.icons[src_idx].name);
+                        } else {
+                            // Copy: duplicate the icon
+                            let src = self.icons[src_idx].clone();
+                            let new_name = format!("{} (copy)", src.name);
+                            let new_icon = DesktopIcon {
+                                name: new_name.clone(),
+                                icon_type: src.icon_type,
+                                x: src.x + 10,
+                                y: src.y + 10,
+                                action: src.action,
+                            };
+                            self.icons.push(new_icon);
+                            crate::serial_println!("[GUI] Pasted (copied) icon: {}", new_name);
+                        }
+                    }
+                }
             },
             ContextAction::ViewLargeIcons | ContextAction::ViewSmallIcons | ContextAction::ViewList => {
                 crate::serial_println!("[GUI] View mode changed");
@@ -2716,8 +2750,32 @@ struct AppConfig {
             ContextAction::TerminalHere => {
                 self.create_window("Terminal", 200 + offset, 120 + offset, 500, 350, WindowType::Terminal);
             },
-            ContextAction::Delete | ContextAction::Rename | ContextAction::CopyPath => {
-                crate::serial_println!("[GUI] Action not implemented yet");
+            ContextAction::Delete => {
+                if let Some(idx) = self.context_menu.target_icon {
+                    if idx < self.icons.len() {
+                        let name = self.icons[idx].name.clone();
+                        self.icons.remove(idx);
+                        // Clear clipboard if it referenced this or a later icon
+                        self.clipboard_icon = None;
+                        crate::serial_println!("[GUI] Deleted icon: {}", name);
+                    }
+                }
+            },
+            ContextAction::Rename => {
+                if let Some(idx) = self.context_menu.target_icon {
+                    if idx < self.icons.len() {
+                        crate::serial_println!("[GUI] Rename icon: {} (inline rename not yet supported)", self.icons[idx].name);
+                    }
+                }
+            },
+            ContextAction::CopyPath => {
+                if let Some(idx) = self.context_menu.target_icon {
+                    if idx < self.icons.len() {
+                        let path = format!("/desktop/{}", self.icons[idx].name);
+                        crate::keyboard::clipboard_set(&path);
+                        crate::serial_println!("[GUI] Copied path: {}", path);
+                    }
+                }
             },
             ContextAction::Cancel => {},
         }

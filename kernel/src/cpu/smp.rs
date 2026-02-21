@@ -42,6 +42,15 @@ pub fn wake_all_aps() {
     }
 }
 
+/// Send reschedule IPI to a specific CPU (by cpu_id, not APIC ID)
+/// This triggers vector 0xFD on the target CPU, which calls schedule().
+pub fn send_reschedule_ipi(target_cpu: u32) {
+    let apic_id = unsafe { PER_CPU[target_cpu as usize].apic_id };
+    if crate::apic::is_enabled() && apic_id != 0 || target_cpu != 0 {
+        send_ipi_direct(apic_id, 0xFD);
+    }
+}
+
 /// Per-CPU initialization complete flags
 static CPU_READY: [AtomicBool; MAX_CPUS] = {
     const INIT: AtomicBool = AtomicBool::new(false);

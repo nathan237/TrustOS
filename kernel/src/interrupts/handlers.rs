@@ -70,21 +70,30 @@ pub extern "x86-interrupt" fn page_fault_handler(
             && fault_addr >= stack_bottom.saturating_sub(4096 * 16) // allow 16 pages of stack growth
             && fault_addr < UserMemoryRegion::STACK_TOP;
         
-        if in_heap || in_stack {
+        // Check if address is in a VMA (mmap'd region)
+        let cr3_val: u64;
+        unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3_val, options(nostack, preserves_flags)); }
+        let vma = crate::memory::vma::lookup_vma(cr3_val, fault_addr);
+        
+        if in_heap || in_stack || vma.is_some() {
+            // Determine page flags
+            let page_flags = if let Some(ref vma) = vma {
+                crate::memory::vma::prot_to_page_flags(vma.prot)
+            } else {
+                PageFlags::USER_DATA
+            };
+            
             // Allocate a physical frame and map it
             let phys = crate::memory::frame::alloc_frame_zeroed()
                 .or_else(|| crate::memory::swap::try_evict_page()); // try swap eviction on OOM
             if let Some(phys) = phys {
                 let mapped = crate::exec::with_current_address_space(|space| {
-                    space.map_page(page_addr, phys, PageFlags::USER_DATA)
+                    space.map_page(page_addr, phys, page_flags)
                 });
                 
                 if mapped == Some(Some(())) {
                     // Track page for swap subsystem
-                    let cr3_val: u64;
-                    unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3_val, options(nostack, preserves_flags)); }
                     crate::memory::swap::track_page(cr3_val, page_addr, phys);
-                    crate::serial_println!("[PF] Demand-paged {:#x} (phys {:#x})", page_addr, phys);
                     return; // Resume user process — IRET back to the faulting instruction
                 }
                 

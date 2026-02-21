@@ -236,6 +236,13 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         // ====== Pipes ======
         PIPE2 => sys_pipe2(a1, a2 as u32),
         
+        // ====== Epoll ======
+        EPOLL_CREATE => linux::sys_epoll_create(a1 as i32),
+        EPOLL_WAIT => linux::sys_epoll_wait(a1 as i32, a2, a3 as i32, a4 as i32),
+        EPOLL_CTL => linux::sys_epoll_ctl(a1 as i32, a2 as i32, a3 as i32, a4),
+        EPOLL_PWAIT => linux::sys_epoll_pwait(a1 as i32, a2, a3 as i32, a4 as i32, a5, a6),
+        EPOLL_CREATE1 => linux::sys_epoll_create1(a1 as u32),
+        
         // ====== Misc ======
         PRCTL => linux::sys_prctl(a1 as u32, a2, a3, a4, a5),
         SWAPON => linux::sys_swapon(a1),
@@ -320,6 +327,11 @@ fn sys_open(path_ptr: u64, flags: u32) -> i64 {
 }
 
 fn sys_close(fd: i32) -> i64 {
+    // Epoll fd?
+    if linux::is_epoll_fd(fd) {
+        crate::syscall::linux::EPOLL_TABLE.lock().remove(&fd);
+        return 0;
+    }
     // Pipe fd?
     if crate::pipe::is_pipe_fd(fd) {
         return crate::pipe::close(fd);

@@ -347,10 +347,10 @@ static PROGRAM_BREAK: AtomicU64 = AtomicU64::new(0);
 /// Next available mmap address (user region)
 static NEXT_MMAP_ADDR: AtomicU64 = AtomicU64::new(0x4000_0000); // 1 GB, well inside user space
 
-/// sys_mmap - Map memory
+/// sys_mmap - Map memory (lazy: records VMA, pages faulted in on demand)
 /// 
-/// Allocates physical frames via the frame allocator and maps them
-/// into the current user address space at proper user-space addresses.
+/// For anonymous mappings, only metadata is stored. Physical frames are
+/// allocated lazily by the page fault handler on first access.
 pub fn sys_mmap(addr: u64, length: u64, prot: u64, flags: u64, fd: i64, _offset: u64) -> i64 {
     use mmap_flags::*;
     use prot_flags::*;
@@ -362,7 +362,6 @@ pub fn sys_mmap(addr: u64, length: u64, prot: u64, flags: u64, fd: i64, _offset:
     
     let page_size = 4096u64;
     let aligned_length = (length + page_size - 1) & !(page_size - 1);
-    let num_pages = (aligned_length / page_size) as usize;
     
     // Determine the mapping address
     let map_addr = if addr != 0 && (flags & MAP_FIXED) != 0 {
@@ -379,48 +378,21 @@ pub fn sys_mmap(addr: u64, length: u64, prot: u64, flags: u64, fd: i64, _offset:
         return errno::ENOSYS;
     }
     
-    // Determine page flags from protection bits
-    let page_flags = {
-        let mut f = PageFlags::USER_DATA; // default: present + user + writable + NX
-        if (prot & PROT_EXEC) != 0 {
-            f = PageFlags::USER_CODE; // present + user (no NX)
-        }
-        f
-    };
+    // Record the VMA for demand paging
+    let cr3: u64;
+    unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
     
-    // Allocate frames and map them
-    let mapped = crate::exec::with_current_address_space(|space| {
-        for i in 0..num_pages {
-            let virt = map_addr + (i as u64 * page_size);
-            let phys = match crate::memory::frame::alloc_frame_zeroed() {
-                Some(p) => p,
-                None => return false,
-            };
-            if space.map_page(virt, phys, page_flags).is_none() {
-                return false;
-            }
-        }
-        true
+    let vma_prot = (prot & 0x7) as u32; // PROT_READ | PROT_WRITE | PROT_EXEC
+    
+    crate::memory::vma::add_vma(cr3, crate::memory::vma::Vma {
+        start: map_addr,
+        end: map_addr + aligned_length,
+        prot: vma_prot,
+        flags: crate::memory::vma::flags::MAP_ANONYMOUS | crate::memory::vma::flags::MAP_PRIVATE,
     });
     
-    match mapped {
-        Some(true) => {
-            crate::log_debug!("[MMAP] Mapped {} pages at {:#x}", num_pages, map_addr);
-            map_addr as i64
-        }
-        _ => {
-            // Fallback for calls without an active user address space
-            // (e.g. kernel-internal mmap during init — return heap allocation)
-            let layout = core::alloc::Layout::from_size_align(aligned_length as usize, page_size as usize)
-                .unwrap_or(core::alloc::Layout::new::<u8>());
-            let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) };
-            if ptr.is_null() {
-                return errno::ENOMEM;
-            }
-            crate::log_debug!("[MMAP] Fallback heap alloc at {:#x}", ptr as u64);
-            ptr as i64
-        }
-    }
+    crate::log_debug!("[MMAP] Lazy VMA {:#x}..{:#x} prot={:#x}", map_addr, map_addr + aligned_length, prot);
+    map_addr as i64
 }
 
 /// sys_munmap - Unmap memory and free frames
@@ -432,11 +404,17 @@ pub fn sys_munmap(addr: u64, length: u64) -> i64 {
     let page_size = 4096u64;
     let aligned_length = (length + page_size - 1) & !(page_size - 1);
     let num_pages = (aligned_length / page_size) as usize;
+    let start = addr & !(page_size - 1);
     
+    // Remove VMA tracking
+    let cr3: u64;
+    unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
+    crate::memory::vma::remove_vma_range(cr3, start, start + aligned_length);
+    
+    // Free any faulted-in physical frames
     crate::exec::with_current_address_space(|space| {
         for i in 0..num_pages {
-            let virt = (addr & !(page_size - 1)) + (i as u64 * page_size);
-            // Translate to get physical address before unmapping
+            let virt = start + (i as u64 * page_size);
             if let Some(phys) = space.translate(virt) {
                 let phys_page = phys & !0xFFF;
                 space.unmap_page(virt);
@@ -1805,4 +1783,221 @@ pub fn sys_swapoff(path_ptr: u64) -> i64 {
         Ok(()) => 0,
         Err(_) => -1,
     }
+}
+
+// ============================================================================
+// epoll — I/O event notification facility
+// ============================================================================
+
+use alloc::collections::BTreeMap;
+
+/// Epoll event flags (matches Linux)
+pub mod epoll_flags {
+    pub const EPOLLIN: u32 = 0x001;
+    pub const EPOLLOUT: u32 = 0x004;
+    pub const EPOLLERR: u32 = 0x008;
+    pub const EPOLLHUP: u32 = 0x010;
+    pub const EPOLLRDHUP: u32 = 0x2000;
+    pub const EPOLLET: u32 = 0x8000_0000;
+    pub const EPOLLONESHOT: u32 = 0x4000_0000;
+}
+
+/// epoll_ctl operations
+pub mod epoll_op {
+    pub const EPOLL_CTL_ADD: i32 = 1;
+    pub const EPOLL_CTL_DEL: i32 = 2;
+    pub const EPOLL_CTL_MOD: i32 = 3;
+}
+
+/// epoll_event structure (matches Linux layout for x86-64)
+#[repr(C, packed)]
+#[derive(Clone, Copy)]
+pub struct EpollEvent {
+    pub events: u32,
+    pub data: u64,
+}
+
+/// An interest entry for a monitored fd
+#[derive(Clone)]
+struct EpollInterest {
+    fd: i32,
+    events: u32,
+    data: u64,
+}
+
+/// An epoll instance
+pub struct EpollInstance {
+    /// Map of monitored fds to their interest
+    interests: BTreeMap<i32, EpollInterest>,
+}
+
+/// Global table of epoll instances, keyed by epoll fd
+pub static EPOLL_TABLE: Mutex<BTreeMap<i32, EpollInstance>> = Mutex::new(BTreeMap::new());
+
+/// Next epoll fd (using a range unlikely to collide with VFS/socket fds)
+static NEXT_EPOLL_FD: AtomicI32 = AtomicI32::new(500);
+
+use core::sync::atomic::AtomicI32;
+
+/// Check if a given fd is an epoll instance
+pub fn is_epoll_fd(fd: i32) -> bool {
+    EPOLL_TABLE.lock().contains_key(&fd)
+}
+
+/// sys_epoll_create1 — Create an epoll instance
+pub fn sys_epoll_create1(_flags: u32) -> i64 {
+    let fd = NEXT_EPOLL_FD.fetch_add(1, Ordering::SeqCst);
+    let instance = EpollInstance {
+        interests: BTreeMap::new(),
+    };
+    EPOLL_TABLE.lock().insert(fd, instance);
+    crate::log_debug!("[EPOLL] created fd={}", fd);
+    fd as i64
+}
+
+/// sys_epoll_create — Create an epoll instance (legacy, ignores size)
+pub fn sys_epoll_create(_size: i32) -> i64 {
+    sys_epoll_create1(0)
+}
+
+/// sys_epoll_ctl — Control an epoll instance (ADD/MOD/DEL)
+pub fn sys_epoll_ctl(epfd: i32, op: i32, fd: i32, event_ptr: u64) -> i64 {
+    use epoll_op::*;
+    
+    let mut table = EPOLL_TABLE.lock();
+    let instance = match table.get_mut(&epfd) {
+        Some(i) => i,
+        None => return errno::EBADF,
+    };
+    
+    match op {
+        EPOLL_CTL_ADD => {
+            if instance.interests.contains_key(&fd) {
+                return errno::EEXIST;
+            }
+            if event_ptr == 0 || !validate_user_ptr(event_ptr, core::mem::size_of::<EpollEvent>(), false) {
+                return errno::EFAULT;
+            }
+            let ev = unsafe { *(event_ptr as *const EpollEvent) };
+            instance.interests.insert(fd, EpollInterest {
+                fd,
+                events: ev.events,
+                data: ev.data,
+            });
+        }
+        EPOLL_CTL_MOD => {
+            if !instance.interests.contains_key(&fd) {
+                return errno::ENOENT;
+            }
+            if event_ptr == 0 || !validate_user_ptr(event_ptr, core::mem::size_of::<EpollEvent>(), false) {
+                return errno::EFAULT;
+            }
+            let ev = unsafe { *(event_ptr as *const EpollEvent) };
+            instance.interests.insert(fd, EpollInterest {
+                fd,
+                events: ev.events,
+                data: ev.data,
+            });
+        }
+        EPOLL_CTL_DEL => {
+            if instance.interests.remove(&fd).is_none() {
+                return errno::ENOENT;
+            }
+        }
+        _ => return errno::EINVAL,
+    }
+    
+    0
+}
+
+/// sys_epoll_wait — Wait for events on an epoll instance
+pub fn sys_epoll_wait(epfd: i32, events_ptr: u64, maxevents: i32, timeout_ms: i32) -> i64 {
+    if maxevents <= 0 {
+        return errno::EINVAL;
+    }
+    let ev_size = core::mem::size_of::<EpollEvent>();
+    let buf_size = (maxevents as usize) * ev_size;
+    if !validate_user_ptr(events_ptr, buf_size, true) {
+        return errno::EFAULT;
+    }
+    
+    let events_buf = unsafe {
+        core::slice::from_raw_parts_mut(events_ptr as *mut EpollEvent, maxevents as usize)
+    };
+    
+    // Compute deadline
+    let deadline_ns = if timeout_ms < 0 {
+        u64::MAX
+    } else if timeout_ms == 0 {
+        0
+    } else {
+        crate::time::now_ns().saturating_add((timeout_ms as u64) * 1_000_000)
+    };
+    
+    loop {
+        // Snapshot interest list under lock, then release
+        let interests: Vec<EpollInterest> = {
+            let table = EPOLL_TABLE.lock();
+            match table.get(&epfd) {
+                Some(inst) => inst.interests.values().cloned().collect(),
+                None => return errno::EBADF,
+            }
+        };
+        
+        let mut ready = 0usize;
+        for interest in &interests {
+            if ready >= maxevents as usize { break; }
+            
+            let mut revents = 0u32;
+            if let Some(status) = crate::vfs::poll_fd(interest.fd) {
+                if status.readable { revents |= epoll_flags::EPOLLIN; }
+                if status.writable { revents |= epoll_flags::EPOLLOUT; }
+                if status.error    { revents |= epoll_flags::EPOLLERR; }
+                if status.hangup   { revents |= epoll_flags::EPOLLHUP; }
+            }
+            
+            // Only report events the user is interested in (+ always error/hup)
+            let reported = revents & (interest.events | epoll_flags::EPOLLERR | epoll_flags::EPOLLHUP);
+            if reported != 0 {
+                events_buf[ready] = EpollEvent {
+                    events: reported,
+                    data: interest.data,
+                };
+                ready += 1;
+            }
+        }
+        
+        if ready > 0 {
+            // Handle EPOLLONESHOT: remove interests that fired
+            let mut table = EPOLL_TABLE.lock();
+            if let Some(inst) = table.get_mut(&epfd) {
+                for i in 0..ready {
+                    let data = events_buf[i].data;
+                    // Find and disable ONESHOT interests
+                    for interest in inst.interests.values_mut() {
+                        if interest.data == data && (interest.events & epoll_flags::EPOLLONESHOT) != 0 {
+                            interest.events = 0; // disable
+                        }
+                    }
+                }
+            }
+            return ready as i64;
+        }
+        
+        // Non-blocking
+        if timeout_ms == 0 { return 0; }
+        
+        // Check deadline
+        let now = crate::time::now_ns();
+        if now >= deadline_ns { return 0; }
+        
+        // Sleep briefly, then retry
+        let sleep_until = deadline_ns.min(now.saturating_add(10_000_000));
+        crate::thread::sleep_until(sleep_until);
+    }
+}
+
+/// sys_epoll_pwait — epoll_wait with signal mask (signals not yet supported, delegates)
+pub fn sys_epoll_pwait(epfd: i32, events_ptr: u64, maxevents: i32, timeout_ms: i32, _sigmask: u64, _sigsetsize: u64) -> i64 {
+    sys_epoll_wait(epfd, events_ptr, maxevents, timeout_ms)
 }
