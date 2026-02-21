@@ -1006,7 +1006,7 @@ fn cmd_brain(args: &[&str]) {
         crate::println!("    eval          Evaluate loss across entire corpus");
         crate::println!("    chat <text>   Chat with neural brain directly");
         crate::println!();
-        crate::println!("  The neural brain is a 4-layer transformer (312K params)");
+        crate::println!("  The neural brain is a 4-layer transformer (1.15M params)");
         crate::println!("  that learns from text, generates responses, and self-improves.");
         return;
     }

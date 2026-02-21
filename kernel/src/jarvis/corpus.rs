@@ -4,13 +4,13 @@
 //! The corpus is organized by category, from simple byte patterns to
 //! TrustOS-specific knowledge.
 //!
-//! Training strategy for a 312K-param byte-level model:
+//! Training strategy for a 1.15M-param byte-level model:
 //! 1. **Character patterns** — common English/French byte sequences
 //! 2. **Word associations** — simple prompt→response pairs
 //! 3. **Command knowledge** — TrustOS shell commands and their output
 //! 4. **Identity** — who Jarvis is, what it can do
 //!
-//! Each corpus entry is a short text (< 64 bytes ideally, matching MAX_TRAIN_SEQ).
+//! Each corpus entry is a short text (< 128 bytes ideally, matching MAX_TRAIN_SEQ).
 //! Shorter sequences train faster and the model learns patterns better.
 
 /// All training sequences, organized for curriculum learning.
@@ -155,7 +155,7 @@ pub static CORPUS: &[&[&str]] = &[
     // ╚═══════════════════════════════════════════════════════════╝
     &[
         "I am Jarvis, the TrustOS AI.",
-        "I have 312K parameters.",
+        "I have 1.15M parameters.",
         "I am a 4-layer transformer.",
         "My vocabulary is 256 bytes.",
         "I run on bare metal.",
@@ -173,7 +173,7 @@ pub static CORPUS: &[&[&str]] = &[
         "My optimizer is Adam.",
         "I use gradient descent to learn.",
         "I have four attention heads.",
-        "My hidden dimension is 64.",
+        "My hidden dimension is 128.",
         "I am private by default.",
         "I will be public when mature.",
     ],

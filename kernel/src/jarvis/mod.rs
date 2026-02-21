@@ -11,7 +11,7 @@
 //! │                    JARVIS NEURAL BRAIN                       │
 //! │                                                              │
 //! │  tokenizer.rs    Byte-level tokenizer (vocab=256)            │
-//! │  model.rs        Transformer weights (4L, d=64, 312K params) │
+//! │  model.rs        Transformer weights (4L, d=128, 1.15M params)│
 //! │  inference.rs    Forward pass (CPU or GPU GEMM)              │
 //! │  agent.rs        Self-aware agent: introspect, execute, learn│
 //! │  mentor.rs       Serial mentoring protocol (QEMU link)       │
@@ -22,12 +22,12 @@
 //! # Model Specs
 //!
 //! - **Vocab**: 256 (byte-level — no dictionary, works on any text)
-//! - **d_model**: 64
-//! - **n_heads**: 4 (d_k = 16)
+//! - **d_model**: 128
+//! - **n_heads**: 4 (d_k = 32)
 //! - **n_layers**: 4
-//! - **d_ff**: 256 (4×d_model)
+//! - **d_ff**: 512 (4×d_model)
 //! - **max_seq**: 256 tokens
-//! - **Params**: ~312K → ~1.2 MB (FP32) or ~312 KB (INT8)
+//! - **Params**: ~1.15M → ~4.5 MB (FP32) or ~1.15 MB (INT8)
 //!
 //! # Self-Awareness
 //!

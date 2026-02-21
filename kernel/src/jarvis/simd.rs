@@ -4,7 +4,7 @@
 //! in both forward (inference) and backward (backprop) passes.
 //!
 //! Uses 4-wide f32 SSE2 operations with 4 accumulators per dot product
-//! for instruction-level parallelism. All dimensions (D_MODEL=64, D_FF=256,
+//! for instruction-level parallelism. All dimensions (D_MODEL=128, D_FF=512,
 //! VOCAB_SIZE=256) are divisible by 16, so the fast path covers 100% of cases.
 //!
 //! ## Safety
