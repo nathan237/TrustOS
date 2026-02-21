@@ -1184,9 +1184,10 @@ fn cmd_brain(args: &[&str]) {
         "pretrain" | "pt" => {
             if !ensure_brain() { return; }
             let epochs: usize = if args.len() > 1 {
-                args[1].parse().unwrap_or(1)
-            } else { 1 };
+                args[1].parse().unwrap_or(3)
+            } else { 3 }; // 3 epochs default for good convergence
             crate::println_color!(JARVIS_BRAIN, "  Pre-training on embedded corpus ({} epoch(s))...", epochs);
+            crate::println_color!(COLOR_GRAY, "  Using cosine LR schedule + gradient accumulation");
             crate::println!();
 
             // Show loss before

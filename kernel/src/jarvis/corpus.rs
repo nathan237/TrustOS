@@ -45,6 +45,11 @@ pub static CORPUS: &[&[&str]] = &[
         "er er er er er er er er er er",
         "an an an an an an an an an an",
         "on on on on on on on on on on",
+        // Common words
+        "is is is is is is is is is is",
+        "to to to to to to to to to to",
+        "of of of of of of of of of of",
+        "and and and and and and and and",
     ],
 
     // ╔═══════════════════════════════════════════════════════════╗
@@ -69,6 +74,12 @@ pub static CORPUS: &[&[&str]] = &[
         "My brain has four layers.",
         "I think with transformers.",
         "I learn by training.",
+        "I process one byte at a time.",
+        "I use attention to think.",
+        "I was made to help you.",
+        "Ask me anything about TrustOS.",
+        "I get smarter with training.",
+        "Every input teaches me more.",
     ],
 
     // ╔═══════════════════════════════════════════════════════════╗
@@ -97,6 +108,12 @@ pub static CORPUS: &[&[&str]] = &[
         "chess: play chess game",
         "browse: open web browser",
         "beep: play a sound",
+        "date: show current date and time",
+        "whoami: show current user",
+        "hostname: show system hostname",
+        "clear: clear the terminal screen",
+        "history: show command history",
+        "uname: show system information",
     ],
 
     // ╔═══════════════════════════════════════════════════════════╗
@@ -118,6 +135,19 @@ pub static CORPUS: &[&[&str]] = &[
         "Q: qui es-tu? R: Je suis Jarvis.",
         "Q: aide R: Tape help.",
         "Q: ping A: ping 10.0.2.2",
+        "Q: how do I see files? A: Type ls.",
+        "Q: what can you do? A: I can help!",
+        "Q: create a file A: Use touch name.",
+        "Q: delete a file A: Use rm name.",
+        "Q: where am I? A: Use pwd.",
+        "Q: open browser A: Type browse.",
+        "Q: how old are you? A: I am new!",
+        "Q: do you learn? A: Yes, always!",
+        "Q: are you smart? A: Getting there!",
+        "Q: what language? A: Rust.",
+        "Q: CPU info? A: Type cpuid.",
+        "Q: disk space? A: Type df.",
+        "Q: exit A: Type exit to leave.",
     ],
 
     // ╔═══════════════════════════════════════════════════════════╗
@@ -140,6 +170,60 @@ pub static CORPUS: &[&[&str]] = &[
         "I use attention and SwiGLU.",
         "I can train on your text.",
         "I am self-hosted. 100% local.",
+        "My optimizer is Adam.",
+        "I use gradient descent to learn.",
+        "I have four attention heads.",
+        "My hidden dimension is 64.",
+        "I am private by default.",
+        "I will be public when mature.",
+    ],
+
+    // ╔═══════════════════════════════════════════════════════════╗
+    // ║ Phase 6: Conversations — teach dialog flow patterns       ║
+    // ╚═══════════════════════════════════════════════════════════╝
+    &[
+        "User: hi Jarvis: hello!",
+        "User: help Jarvis: what do you need?",
+        "User: thanks Jarvis: you're welcome!",
+        "User: good job Jarvis: thank you!",
+        "User: what is this? Jarvis: TrustOS!",
+        "User: tell me more Jarvis: ask away!",
+        "User: I need help Jarvis: I'm here!",
+        "User: who made you? Jarvis: TrustOS dev.",
+        "User: bye Jarvis: see you later!",
+        "User: error Jarvis: what happened?",
+        "User: slow Jarvis: let me check...",
+        "User: bonjour Jarvis: salut!",
+        "User: merci Jarvis: de rien!",
+        "User: ca va? Jarvis: oui, et toi?",
+        "User: aide Jarvis: que puis-je faire?",
+        "User: how are you Jarvis: I am well!",
+    ],
+
+    // ╔═══════════════════════════════════════════════════════════╗
+    // ║ Phase 7: Technical knowledge — deeper OS concepts         ║
+    // ╚═══════════════════════════════════════════════════════════╝
+    &[
+        "The heap allocates dynamic memory.",
+        "A process has its own address space.",
+        "The scheduler assigns CPU time.",
+        "Interrupts handle hardware events.",
+        "The GDT defines memory segments.",
+        "Page tables map virtual to physical.",
+        "The IDT routes interrupt handlers.",
+        "Serial ports use COM1 at 0x3F8.",
+        "APIC handles advanced interrupts.",
+        "SMP enables multiple CPU cores.",
+        "NVMe is fast storage over PCIe.",
+        "E1000 is the network card driver.",
+        "DHCP assigns IP addresses.",
+        "TCP ensures reliable delivery.",
+        "DNS resolves domain names.",
+        "VFS abstracts file operations.",
+        "RamFS stores files in memory.",
+        "Rust prevents memory bugs.",
+        "No garbage collector needed here.",
+        "We use no_std for bare metal.",
     ],
 ];
 
@@ -161,6 +245,8 @@ pub fn phase_name(phase: usize) -> &'static str {
         2 => "Shell Commands",
         3 => "Q&A Pairs",
         4 => "Self-Knowledge",
+        5 => "Conversations",
+        6 => "Technical Knowledge",
         _ => "Unknown",
     }
 }

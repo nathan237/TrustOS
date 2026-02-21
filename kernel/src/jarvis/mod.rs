@@ -432,40 +432,103 @@ pub fn learn_from_exchange(user_input: &str, good_response: &str) {
 // Pre-Training — Boot-time learning from embedded corpus
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Pre-train on the entire embedded corpus.
+/// Pre-train on the entire embedded corpus with cosine LR schedule
+/// and mini-batch gradient accumulation.
 /// Returns (total_steps, final_avg_loss, elapsed_ms)
 pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
     if !is_ready() { init(); }
     if !is_ready() { return (0, f32::MAX, 0); }
 
     let start = crate::time::uptime_ticks();
-    let mut total_steps = 0usize;
+    let total_seqs = corpus::total_sequences();
+    let total_steps = total_seqs * epochs;
+    let warmup_steps = (total_steps / 10).max(5) as u64; // 10% warmup
+    let lr_min = lr * 0.1; // decay to 10% of peak LR
+    let mut step = 0u64;
     let mut total_loss = 0.0f32;
     let mut loss_count = 0u32;
 
-    crate::serial_println!("[JARVIS] Pre-training: {} phases, {} sequences, {} epoch(s), lr={}",
-        corpus::num_phases(), corpus::total_sequences(), epochs, lr);
+    // Gradient accumulation batch size
+    const ACCUM_BATCH: usize = 4;
 
-    for epoch in 0..epochs {
-        for (phase_idx, phase) in corpus::CORPUS.iter().enumerate() {
-            let mut phase_loss = 0.0f32;
-            let mut phase_count = 0u32;
+    crate::serial_println!("[JARVIS] Pre-training: {} phases, {} sequences, {} epoch(s), lr_peak={}, warmup={}",
+        corpus::num_phases(), total_seqs, epochs, lr, warmup_steps);
 
-            for &text in *phase {
-                let loss = train_on_text(text, lr);
-                if loss.is_finite() {
-                    phase_loss += loss;
-                    phase_count += 1;
-                    total_loss += loss;
-                    loss_count += 1;
+    let mut opt_guard = OPTIMIZER.lock();
+    let mut model_guard = MODEL.lock();
+
+    if let (Some(adam), Some(model)) = (opt_guard.as_mut(), model_guard.as_mut()) {
+        for epoch in 0..epochs {
+            for (phase_idx, phase) in corpus::CORPUS.iter().enumerate() {
+                let mut phase_loss = 0.0f32;
+                let mut phase_count = 0u32;
+                let mut accum_grads = backprop::ModelGrads::new();
+                let mut accum_count = 0usize;
+                let mut accum_loss = 0.0f32;
+
+                for &text in *phase {
+                    let tokens = tokenizer::encode(text);
+                    if tokens.len() < 2 { step += 1; continue; }
+
+                    // Cosine LR schedule
+                    let current_lr = optimizer::cosine_lr(
+                        step, total_steps as u64, warmup_steps, lr, lr_min
+                    );
+                    adam.lr = current_lr;
+
+                    // Forward + backward (accumulate, don't step yet)
+                    let (loss, grads) = backprop::forward_backward(model, &tokens);
+                    if loss.is_finite() {
+                        accum_grads.accumulate(&grads);
+                        accum_loss += loss;
+                        accum_count += 1;
+                        phase_loss += loss;
+                        phase_count += 1;
+                        total_loss += loss;
+                        loss_count += 1;
+                    }
+
+                    // Flush accumulated gradients every ACCUM_BATCH sequences
+                    if accum_count >= ACCUM_BATCH {
+                        accum_grads.scale(1.0 / accum_count as f32);
+                        accum_grads.clip_norm(1.0);
+                        adam.step(model, &accum_grads);
+                        TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
+                        accum_grads.zero();
+                        accum_count = 0;
+                        accum_loss = 0.0;
+                    }
+
+                    step += 1;
                 }
-                total_steps += 1;
-            }
 
-            let avg = if phase_count > 0 { phase_loss / phase_count as f32 } else { 0.0 };
-            crate::serial_println!("[JARVIS] Epoch {}/{} Phase {} ({}) — {} seqs, avg loss={:.3}",
-                epoch + 1, epochs, phase_idx, corpus::phase_name(phase_idx),
-                phase_count, avg);
+                // Flush remaining accumulated gradients for this phase
+                if accum_count > 0 {
+                    accum_grads.scale(1.0 / accum_count as f32);
+                    accum_grads.clip_norm(1.0);
+                    adam.step(model, &accum_grads);
+                    TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
+                    accum_grads.zero();
+                }
+
+                let avg = if phase_count > 0 { phase_loss / phase_count as f32 } else { 0.0 };
+                crate::serial_println!("[JARVIS] Epoch {}/{} Phase {} ({}) — {} seqs, avg loss={:.3}",
+                    epoch + 1, epochs, phase_idx, corpus::phase_name(phase_idx),
+                    phase_count, avg);
+            }
+        }
+    } else {
+        // Fallback: no optimizer (shouldn't happen)
+        drop(opt_guard);
+        drop(model_guard);
+        for _epoch in 0..epochs {
+            for phase in corpus::CORPUS {
+                for &text in *phase {
+                    let loss = train_on_text(text, lr);
+                    if loss.is_finite() { total_loss += loss; loss_count += 1; }
+                    step += 1;
+                }
+            }
         }
     }
 
@@ -473,12 +536,12 @@ pub fn pretrain(epochs: usize, lr: f32) -> (usize, f32, u64) {
     let avg_loss = if loss_count > 0 { total_loss / loss_count as f32 } else { f32::MAX };
 
     crate::serial_println!("[JARVIS] Pre-training done: {} steps, avg loss={:.3}, {} ms",
-        total_steps, avg_loss, elapsed);
+        step, avg_loss, elapsed);
 
-    (total_steps, avg_loss, elapsed)
+    (step as usize, avg_loss, elapsed)
 }
 
-/// Pre-train a single phase (0-based index).
+/// Pre-train a single phase (0-based index) with LR schedule.
 /// Returns (steps, avg_loss, elapsed_ms)
 pub fn pretrain_phase(phase: usize, epochs: usize, lr: f32) -> (usize, f32, u64) {
     if !is_ready() { init(); }
@@ -491,17 +554,24 @@ pub fn pretrain_phase(phase: usize, epochs: usize, lr: f32) -> (usize, f32, u64)
     let mut loss_count = 0u32;
 
     let sequences = corpus::CORPUS[phase];
+    let total_seqs = sequences.len() * epochs;
+    let warmup = (total_seqs / 10).max(2) as u64;
+    let lr_min = lr * 0.1;
+    let mut step = 0u64;
+
     crate::serial_println!("[JARVIS] Training phase {} ({}) — {} sequences, {} epoch(s)",
         phase, corpus::phase_name(phase), sequences.len(), epochs);
 
     for epoch in 0..epochs {
         for &text in sequences {
-            let loss = train_on_text(text, lr);
+            let current_lr = optimizer::cosine_lr(step, total_seqs as u64, warmup, lr, lr_min);
+            let loss = train_on_text(text, current_lr);
             if loss.is_finite() {
                 total_loss += loss;
                 loss_count += 1;
             }
             total_steps += 1;
+            step += 1;
         }
         if epochs > 1 {
             let avg = if loss_count > 0 { total_loss / loss_count as f32 } else { 0.0 };

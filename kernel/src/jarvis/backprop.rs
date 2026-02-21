@@ -138,6 +138,39 @@ impl ModelGrads {
             sc(&mut self.d_output, s);
         }
     }
+
+    /// Accumulate gradients from another ModelGrads (for mini-batch accumulation)
+    pub fn accumulate(&mut self, other: &ModelGrads) {
+        let add = |dst: &mut [f32], src: &[f32]| {
+            for (d, s) in dst.iter_mut().zip(src.iter()) { *d += *s; }
+        };
+        add(&mut self.d_token_embed, &other.d_token_embed);
+        add(&mut self.d_pos_embed, &other.d_pos_embed);
+        for (dl, sl) in self.layers.iter_mut().zip(other.layers.iter()) {
+            add(&mut dl.d_rms_attn, &sl.d_rms_attn);
+            add(&mut dl.d_wq, &sl.d_wq); add(&mut dl.d_wk, &sl.d_wk);
+            add(&mut dl.d_wv, &sl.d_wv); add(&mut dl.d_wo, &sl.d_wo);
+            add(&mut dl.d_rms_ffn, &sl.d_rms_ffn);
+            add(&mut dl.d_wgate, &sl.d_wgate); add(&mut dl.d_wup, &sl.d_wup);
+            add(&mut dl.d_wdown, &sl.d_wdown);
+        }
+        add(&mut self.d_rms_final, &other.d_rms_final);
+        add(&mut self.d_output, &other.d_output);
+    }
+
+    /// Scale all gradients by a constant (for averaging over mini-batch)
+    pub fn scale(&mut self, s: f32) {
+        let sc = |v: &mut [f32]| { for g in v.iter_mut() { *g *= s; } };
+        sc(&mut self.d_token_embed);
+        sc(&mut self.d_pos_embed);
+        for l in &mut self.layers {
+            sc(&mut l.d_rms_attn); sc(&mut l.d_wq); sc(&mut l.d_wk);
+            sc(&mut l.d_wv); sc(&mut l.d_wo); sc(&mut l.d_rms_ffn);
+            sc(&mut l.d_wgate); sc(&mut l.d_wup); sc(&mut l.d_wdown);
+        }
+        sc(&mut self.d_rms_final);
+        sc(&mut self.d_output);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
