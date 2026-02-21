@@ -433,9 +433,10 @@ pub fn init(bar5: u64) -> bool {
     let pi = hba.pi;
     let cap = hba.cap;
     let num_cmd_slots = ((cap >> 8) & 0x1F) + 1;
+    let s64a = (cap >> 31) & 1 != 0; // 64-bit addressing capable
     
-    crate::serial_println!("[AHCI] {} ports implemented, {} command slots", 
-        pi.count_ones(), num_cmd_slots);
+    crate::serial_println!("[AHCI] {} ports implemented, {} command slots, 64-bit DMA: {}", 
+        pi.count_ones(), num_cmd_slots, s64a);
     
     // Enable AHCI mode
     hba.ghc |= 1 << 31;
@@ -488,10 +489,19 @@ pub fn init(bar5: u64) -> bool {
                     
                     // Set Command List Base Address
                     let clb_phys = virt_to_phys(&*mem.cmd_list as *const _ as u64);
-                    port.clb = clb_phys;
                     
                     // Set FIS Base Address
                     let fb_phys = virt_to_phys(&*mem.fis as *const _ as u64);
+                    
+                    // Verify DMA addresses are within controller capability
+                    if !s64a && (clb_phys > 0xFFFF_FFFF || fb_phys > 0xFFFF_FFFF) {
+                        crate::serial_println!("[AHCI] WARNING: Port {} DMA buffers above 4GB \
+                            but controller lacks S64A! clb={:#x} fb={:#x}", i, clb_phys, fb_phys);
+                        // Skip this port — DMA would silently corrupt memory
+                        continue;
+                    }
+                    
+                    port.clb = clb_phys;
                     port.fb = fb_phys;
                     
                     // Clear interrupt status

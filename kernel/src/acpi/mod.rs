@@ -30,6 +30,8 @@ pub struct AcpiInfo {
     pub io_apics: Vec<madt::IoApic>,
     /// List of interrupt source overrides
     pub int_overrides: Vec<madt::IntSourceOverride>,
+    /// Local APIC NMI configurations (MADT type 4)
+    pub local_apic_nmis: Vec<madt::LocalApicNmiInfo>,
     /// Local APIC address
     pub local_apic_addr: u64,
     /// FADT information
@@ -50,6 +52,7 @@ impl Default for AcpiInfo {
             local_apics: Vec::new(),
             io_apics: Vec::new(),
             int_overrides: Vec::new(),
+            local_apic_nmis: Vec::new(),
             local_apic_addr: 0xFEE0_0000,
             fadt: None,
             mcfg_regions: Vec::new(),
@@ -249,14 +252,15 @@ fn init_internal(rsdp_virt: u64, hhdm: u64) -> bool {
         match &header.signature {
             b"APIC" => {
                 // MADT - Multiple APIC Description Table
-                if let Some((lapic_addr, lapics, ioapics, overrides)) = madt::parse(table_virt) {
+                if let Some((lapic_addr, lapics, ioapics, overrides, nmis)) = madt::parse(table_virt) {
                     info.local_apic_addr = lapic_addr;
                     info.local_apics = lapics;
                     info.io_apics = ioapics;
                     info.int_overrides = overrides;
+                    info.local_apic_nmis = nmis;
                     info.cpu_count = info.local_apics.len();
-                    crate::serial_println!("[ACPI] MADT: {} CPUs, {} I/O APICs", 
-                        info.cpu_count, info.io_apics.len());
+                    crate::serial_println!("[ACPI] MADT: {} CPUs, {} I/O APICs, {} NMI entries", 
+                        info.cpu_count, info.io_apics.len(), info.local_apic_nmis.len());
                 }
             }
             b"FACP" => {

@@ -74,6 +74,18 @@ struct IntSourceOverrideEntry {
     flags: u16,
 }
 
+/// Local APIC NMI entry (type 4)
+#[repr(C, packed)]
+struct LocalApicNmiEntry {
+    header: MadtEntryHeader,
+    /// ACPI Processor UID (0xFF = all processors)
+    acpi_processor_uid: u8,
+    /// Flags (polarity, trigger mode)
+    flags: u16,
+    /// Local APIC LINT# (0 or 1)
+    lint: u8,
+}
+
 /// Local APIC Address Override entry (type 5)
 #[repr(C, packed)]
 struct LocalApicAddrOverrideEntry {
@@ -135,8 +147,21 @@ pub struct IntSourceOverride {
     pub trigger: u8,
 }
 
+/// Parsed Local APIC NMI configuration
+#[derive(Debug, Clone)]
+pub struct LocalApicNmiInfo {
+    /// ACPI Processor UID (0xFF = all processors)
+    pub processor_uid: u8,
+    /// LINT pin (0 or 1)
+    pub lint: u8,
+    /// Polarity (0 = bus default, 1 = active high, 3 = active low)
+    pub polarity: u8,
+    /// Trigger mode (0 = bus default, 1 = edge, 3 = level)
+    pub trigger: u8,
+}
+
 /// Parse MADT table
-pub fn parse(madt_virt: u64) -> Option<(u64, Vec<LocalApic>, Vec<IoApic>, Vec<IntSourceOverride>)> {
+pub fn parse(madt_virt: u64) -> Option<(u64, Vec<LocalApic>, Vec<IoApic>, Vec<IntSourceOverride>, Vec<LocalApicNmiInfo>)> {
     let header = unsafe { &*(madt_virt as *const SdtHeader) };
     
     // Verify signature
@@ -156,6 +181,7 @@ pub fn parse(madt_virt: u64) -> Option<(u64, Vec<LocalApic>, Vec<IoApic>, Vec<In
     let mut local_apics = Vec::new();
     let mut io_apics = Vec::new();
     let mut overrides = Vec::new();
+    let mut nmi_entries = Vec::new();
     
     // Parse entries
     let entries_start = madt_virt + madt_header_offset as u64 + 8;
@@ -218,6 +244,18 @@ pub fn parse(madt_virt: u64) -> Option<(u64, Vec<LocalApic>, Vec<IoApic>, Vec<In
                     };
                 }
             }
+            ENTRY_LOCAL_APIC_NMI => {
+                if entry_header.length >= 6 {
+                    let entry = unsafe { &*(offset as *const LocalApicNmiEntry) };
+                    let flags = unsafe { core::ptr::read_unaligned(core::ptr::addr_of!(entry.flags)) };
+                    nmi_entries.push(LocalApicNmiInfo {
+                        processor_uid: entry.acpi_processor_uid,
+                        lint: entry.lint,
+                        polarity: (flags & 0x03) as u8,
+                        trigger: ((flags >> 2) & 0x03) as u8,
+                    });
+                }
+            }
             ENTRY_LOCAL_X2APIC => {
                 if entry_header.length >= 16 {
                     let entry = unsafe { &*(offset as *const X2ApicEntry) };
@@ -241,5 +279,5 @@ pub fn parse(madt_virt: u64) -> Option<(u64, Vec<LocalApic>, Vec<IoApic>, Vec<In
         offset += entry_header.length as u64;
     }
     
-    Some((local_apic_addr, local_apics, io_apics, overrides))
+    Some((local_apic_addr, local_apics, io_apics, overrides, nmi_entries))
 }

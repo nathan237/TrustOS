@@ -513,6 +513,13 @@ pub unsafe extern "C" fn kmain() -> ! {
         framebuffer::print_boot_status("APIC not available (legacy PIC)", BootStatus::Skip);
     }
 
+    // Phase 3.555c: HPET initialization — high-precision timer
+    if acpi::hpet::init() {
+        framebuffer::print_boot_status("HPET initialized", BootStatus::Ok);
+    } else {
+        framebuffer::print_boot_status("HPET not available", BootStatus::Skip);
+    }
+
     // Phase 3.56: SMP initialization - Start all CPU cores!
     serial_println!("Initializing SMP...");
     cpu::smp::init();
@@ -586,6 +593,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     framebuffer::print_boot_status("Security (basic)", BootStatus::Ok);
 
     // Phase 4: Keyboard driver (interrupts already initialized early)
+    keyboard::init_i8042();
     serial_println!("Keyboard driver ready");
     framebuffer::print_boot_status("Keyboard ready", BootStatus::Ok);
 

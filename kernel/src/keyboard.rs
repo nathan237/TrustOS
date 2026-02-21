@@ -8,6 +8,121 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
 use crate::serial;
+use x86_64::instructions::port::Port;
+
+// ---- i8042 PS/2 controller ports ----
+const PS2_DATA: u16 = 0x60;
+const PS2_STATUS: u16 = 0x64;
+const PS2_COMMAND: u16 = 0x64;
+
+/// Initialize the i8042 PS/2 controller for the keyboard port.
+///
+/// On UEFI systems the controller may be absent or in an unknown state.
+/// This function brings it to a known state: first PS/2 port enabled,
+/// IRQ1 active, scan-code set 1 translation on.  Tolerant of missing hardware.
+pub fn init_i8042() {
+    crate::serial_println!("[i8042] Initializing PS/2 keyboard controller...");
+
+    // 1. Disable both PS/2 ports while we configure
+    i8042_cmd(0xAD); // disable first port  (keyboard)
+    i8042_cmd(0xA7); // disable second port (mouse — may not exist)
+
+    // 2. Flush the output buffer (drain any stale bytes)
+    {
+        let mut data = Port::<u8>::new(PS2_DATA);
+        let mut status = Port::<u8>::new(PS2_STATUS);
+        for _ in 0..64 {
+            if unsafe { status.read() } & 0x01 == 0 { break; }
+            unsafe { data.read(); }
+        }
+    }
+
+    // 3. Read controller configuration byte (command 0x20)
+    i8042_cmd(0x20);
+    let cfg = i8042_read_data();
+    crate::serial_println!("[i8042] Config byte: {:#04x}", cfg);
+
+    // Set bit 0 = IRQ1 enable (keyboard), bit 6 = scancode translation
+    // Clear bit 4 = enable keyboard clock (0 = enabled)
+    let new_cfg = (cfg | 0x41) & !0x10;
+    i8042_cmd(0x60); // write config byte
+    i8042_write_data(new_cfg);
+
+    // 4. Controller self-test (command 0xAA → expect 0x55)
+    i8042_cmd(0xAA);
+    let test = i8042_read_data();
+    if test == 0x55 {
+        crate::serial_println!("[i8042] Self-test PASSED");
+    } else {
+        crate::serial_println!("[i8042] Self-test returned {:#04x} (expected 0x55) — continuing anyway", test);
+        // Some controllers return garbage; don't abort
+    }
+
+    // Self-test may reset the config byte on some chipsets → restore it
+    i8042_cmd(0x60);
+    i8042_write_data(new_cfg);
+
+    // 5. Enable first PS/2 port (keyboard)
+    i8042_cmd(0xAE);
+
+    // 6. Reset keyboard device (send 0xFF → expect 0xFA ACK, then 0xAA BAT pass)
+    i8042_write_data(0xFF);
+    let ack = i8042_read_data();
+    if ack == 0xFA {
+        let bat = i8042_read_data();
+        crate::serial_println!("[i8042] Keyboard reset: ACK={:#04x} BAT={:#04x}", ack, bat);
+    } else {
+        crate::serial_println!("[i8042] Keyboard reset: response {:#04x} (no ACK)", ack);
+    }
+
+    // 7. Flush again in case the reset produced extra bytes
+    {
+        let mut data = Port::<u8>::new(PS2_DATA);
+        let mut status = Port::<u8>::new(PS2_STATUS);
+        for _ in 0..64 {
+            if unsafe { status.read() } & 0x01 == 0 { break; }
+            unsafe { data.read(); }
+        }
+    }
+
+    crate::serial_println!("[i8042] PS/2 keyboard controller ready");
+}
+
+/// Send a command byte to the i8042 controller (port 0x64)
+fn i8042_cmd(cmd: u8) {
+    let mut status = Port::<u8>::new(PS2_STATUS);
+    let mut command = Port::<u8>::new(PS2_COMMAND);
+    // Wait for input buffer empty (bit 1 = 0)
+    for _ in 0..100_000 {
+        if unsafe { status.read() } & 0x02 == 0 { break; }
+        core::hint::spin_loop();
+    }
+    unsafe { command.write(cmd); }
+}
+
+/// Write a data byte to port 0x60 (after waiting for input buffer empty)
+fn i8042_write_data(data: u8) {
+    let mut status = Port::<u8>::new(PS2_STATUS);
+    let mut port = Port::<u8>::new(PS2_DATA);
+    for _ in 0..100_000 {
+        if unsafe { status.read() } & 0x02 == 0 { break; }
+        core::hint::spin_loop();
+    }
+    unsafe { port.write(data); }
+}
+
+/// Read a data byte from port 0x60 (waits for output buffer full, with timeout)
+fn i8042_read_data() -> u8 {
+    let mut status = Port::<u8>::new(PS2_STATUS);
+    let mut port = Port::<u8>::new(PS2_DATA);
+    for _ in 0..100_000 {
+        if unsafe { status.read() } & 0x01 != 0 {
+            return unsafe { port.read() };
+        }
+        core::hint::spin_loop();
+    }
+    0xFF // timeout — no data
+}
 
 /// Keyboard input buffer size
 const BUFFER_SIZE: usize = 256;

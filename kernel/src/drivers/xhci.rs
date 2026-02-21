@@ -354,6 +354,61 @@ pub fn init(bar0: u64) -> bool {
     let doorbell_base = base_virt + (cap.dboff as u64);
     let runtime_base = base_virt + (cap.rtsoff as u64);
     
+    // ---- xHCI BIOS/OS Handoff (USBLEGSUP) ----
+    // Walk Extended Capabilities to find USB Legacy Support and claim ownership
+    // before we halt/reset.  Without this, BIOS SMI handlers may interfere.
+    let xecp = ((cap.hccparams1 >> 16) & 0xFFFF) as u64;
+    if xecp != 0 {
+        let mut ecap_ptr = base_virt + (xecp << 2);
+        for _ in 0..32 {
+            let ecap_val = unsafe { core::ptr::read_volatile(ecap_ptr as *const u32) };
+            let ecap_id = ecap_val & 0xFF;
+            let next_off = (ecap_val >> 8) & 0xFF;
+
+            if ecap_id == 1 {
+                // USB Legacy Support capability (USBLEGSUP)
+                crate::serial_println!("[xHCI] Found USBLEGSUP at offset {:#x}", ecap_ptr - base_virt);
+
+                let bios_owns = (ecap_val >> 16) & 1;
+                if bios_owns != 0 {
+                    crate::serial_println!("[xHCI] BIOS owns controller, requesting handoff...");
+
+                    // Set OS Owned Semaphore (bit 24)
+                    unsafe { core::ptr::write_volatile(ecap_ptr as *mut u32, ecap_val | (1 << 24)); }
+
+                    // Wait up to ~1 s for BIOS to release (bit 16 clears)
+                    let mut ok = false;
+                    for i in 0..1000u32 {
+                        let v = unsafe { core::ptr::read_volatile(ecap_ptr as *const u32) };
+                        if (v >> 16) & 1 == 0 {
+                            ok = true;
+                            crate::serial_println!("[xHCI] BIOS handoff complete ({}ms)", i);
+                            break;
+                        }
+                        for _ in 0..10000 { core::hint::spin_loop(); }
+                    }
+                    if !ok {
+                        crate::serial_println!("[xHCI] WARNING: BIOS handoff timed out, forcing");
+                        let v = unsafe { core::ptr::read_volatile(ecap_ptr as *const u32) };
+                        unsafe { core::ptr::write_volatile(ecap_ptr as *mut u32, (v & !(1u32 << 16)) | (1 << 24)); }
+                    }
+
+                    // Disable all USB SMI in USBLEGCTLSTS (offset +4):
+                    // zero all enable bits (0, 4, 13-15), status bits are W1C so 0 = no change
+                    let ctlsts_ptr = (ecap_ptr + 4) as *mut u32;
+                    unsafe { core::ptr::write_volatile(ctlsts_ptr, 0); }
+                    crate::serial_println!("[xHCI] USB SMI disabled");
+                } else {
+                    crate::serial_println!("[xHCI] No BIOS ownership, handoff not needed");
+                }
+                break;
+            }
+
+            if next_off == 0 { break; }
+            ecap_ptr += (next_off as u64) << 2;
+        }
+    }
+
     // Halt controller if running
     let op = unsafe { &mut *op_regs };
     if (op.usbsts & USBSTS_HCH) == 0 {

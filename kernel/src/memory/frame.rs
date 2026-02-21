@@ -66,6 +66,34 @@ impl FrameAllocator {
         None // Out of memory
     }
     
+    /// Allocate a physical frame with address below `limit`.
+    /// Used for DMA-safe allocations (e.g. below 4 GB for 32-bit DMA devices).
+    fn alloc_below(&mut self, limit: u64) -> Option<u64> {
+        let max_frame_index = if limit <= self.base_phys {
+            return None;
+        } else {
+            ((limit - self.base_phys) / FRAME_SIZE) as usize
+        };
+        let cap = max_frame_index.min(self.total_frames);
+        let words = (cap + 63) / 64;
+        
+        for idx in 0..words {
+            let word = self.bitmap[idx];
+            if word == u64::MAX {
+                continue;
+            }
+            let bit = (!word).trailing_zeros() as usize;
+            let frame_index = idx * 64 + bit;
+            if frame_index >= cap {
+                continue;
+            }
+            self.bitmap[idx] |= 1u64 << bit;
+            USED_FRAMES.fetch_add(1, Ordering::Relaxed);
+            return Some(self.base_phys + frame_index as u64 * FRAME_SIZE);
+        }
+        None
+    }
+    
     /// Free a previously allocated frame
     fn free(&mut self, phys: u64) {
         if phys < self.base_phys {
@@ -187,6 +215,24 @@ pub fn free_frame(phys: u64) {
 /// Allocate a zeroed physical frame (convenience wrapper).
 pub fn alloc_frame_zeroed() -> Option<u64> {
     let phys = alloc_frame()?;
+    let hhdm = crate::memory::hhdm_offset();
+    let virt = phys + hhdm;
+    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+    unsafe {
+        core::ptr::write_bytes(virt as *mut u8, 0, FRAME_SIZE as usize);
+    }
+    Some(phys)
+}
+
+/// Allocate a physical frame guaranteed below 4 GB (for 32-bit DMA devices).
+/// Returns the page-aligned physical address, or `None` if no low frame available.
+pub fn alloc_frame_below_4g() -> Option<u64> {
+    FRAME_ALLOC.lock().as_mut()?.alloc_below(0x1_0000_0000)
+}
+
+/// Allocate a zeroed physical frame below 4 GB (DMA-safe).
+pub fn alloc_frame_below_4g_zeroed() -> Option<u64> {
+    let phys = alloc_frame_below_4g()?;
     let hhdm = crate::memory::hhdm_offset();
     let virt = phys + hhdm;
     core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);

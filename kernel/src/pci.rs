@@ -255,6 +255,106 @@ impl PciDevice {
 /// Global device list
 static DEVICES: Mutex<Vec<PciDevice>> = Mutex::new(Vec::new());
 
+/// Cached PCIe ECAM base address (0 = not available)
+static ECAM_BASE: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+/// Cached ECAM virtual base (mapped MMIO)
+static ECAM_VIRT: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+/// ECAM start bus
+static ECAM_START_BUS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+/// ECAM end bus
+static ECAM_END_BUS: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+/// Initialize PCIe ECAM if MCFG table is available
+fn init_ecam() {
+    if let Some(info) = crate::acpi::get_info() {
+        if let Some(first) = info.mcfg_regions.first() {
+            let base = first.base_address;
+            let size = first.size() as usize;
+            let start_bus = first.start_bus;
+            let end_bus = first.end_bus;
+            
+            crate::serial_println!("[PCI] PCIe ECAM detected: base={:#x} size={:#x} buses={}-{}",
+                base, size, start_bus, end_bus);
+            
+            match crate::memory::map_mmio(base, size) {
+                Ok(virt) => {
+                    ECAM_BASE.store(base, core::sync::atomic::Ordering::SeqCst);
+                    ECAM_VIRT.store(virt, core::sync::atomic::Ordering::SeqCst);
+                    ECAM_START_BUS.store(start_bus, core::sync::atomic::Ordering::SeqCst);
+                    ECAM_END_BUS.store(end_bus, core::sync::atomic::Ordering::SeqCst);
+                    crate::serial_println!("[PCI] PCIe ECAM mapped at virt={:#x}", virt);
+                }
+                Err(e) => {
+                    crate::serial_println!("[PCI] Failed to map ECAM: {} — using legacy PIO only", e);
+                }
+            }
+        }
+    }
+}
+
+/// Read 32-bit value from PCIe ECAM config space (supports full 4K space, offset 0..4095)
+pub fn ecam_config_read32(bus: u8, device: u8, function: u8, offset: u16) -> Option<u32> {
+    let virt = ECAM_VIRT.load(core::sync::atomic::Ordering::Relaxed);
+    if virt == 0 { return None; }
+    let start = ECAM_START_BUS.load(core::sync::atomic::Ordering::Relaxed);
+    let end = ECAM_END_BUS.load(core::sync::atomic::Ordering::Relaxed);
+    if bus < start || bus > end || device > 31 || function > 7 || offset > 4092 {
+        return None;
+    }
+    let addr = virt
+        + ((bus - start) as u64) * (32 * 8 * 4096)
+        + (device as u64) * (8 * 4096)
+        + (function as u64) * 4096
+        + (offset & 0xFFC) as u64;
+    Some(unsafe { core::ptr::read_volatile(addr as *const u32) })
+}
+
+/// Write 32-bit value to PCIe ECAM config space
+pub fn ecam_config_write32(bus: u8, device: u8, function: u8, offset: u16, value: u32) -> bool {
+    let virt = ECAM_VIRT.load(core::sync::atomic::Ordering::Relaxed);
+    if virt == 0 { return false; }
+    let start = ECAM_START_BUS.load(core::sync::atomic::Ordering::Relaxed);
+    let end = ECAM_END_BUS.load(core::sync::atomic::Ordering::Relaxed);
+    if bus < start || bus > end || device > 31 || function > 7 || offset > 4092 {
+        return false;
+    }
+    let addr = virt
+        + ((bus - start) as u64) * (32 * 8 * 4096)
+        + (device as u64) * (8 * 4096)
+        + (function as u64) * 4096
+        + (offset & 0xFFC) as u64;
+    unsafe { core::ptr::write_volatile(addr as *mut u32, value); }
+    true
+}
+
+/// Read from PCIe extended config space (offset 0-4095).
+/// Falls back to legacy PIO for offsets < 256 if ECAM is unavailable.
+pub fn pcie_config_read(dev: &PciDevice, offset: u16) -> u32 {
+    if let Some(val) = ecam_config_read32(dev.bus, dev.device, dev.function, offset) {
+        return val;
+    }
+    // Fallback to legacy PIO for standard config space
+    if offset < 256 {
+        return config_read(dev.bus, dev.device, dev.function, offset as u8);
+    }
+    0xFFFFFFFF // Inaccessible
+}
+
+/// Write to PCIe extended config space
+pub fn pcie_config_write(dev: &PciDevice, offset: u16, value: u32) {
+    if ecam_config_write32(dev.bus, dev.device, dev.function, offset, value) {
+        return;
+    }
+    if offset < 256 {
+        config_write(dev.bus, dev.device, dev.function, offset as u8, value);
+    }
+}
+
+/// Check if PCIe ECAM is available
+pub fn ecam_available() -> bool {
+    ECAM_VIRT.load(core::sync::atomic::Ordering::Relaxed) != 0
+}
+
 /// Read PCI configuration register
 pub fn config_read(bus: u8, device: u8, function: u8, offset: u8) -> u32 {
     let address: u32 = 
@@ -428,6 +528,9 @@ pub fn scan() -> Vec<PciDevice> {
 
 /// Initialize PCI subsystem
 pub fn init() {
+    // Try to enable PCIe ECAM first (for extended config space access)
+    init_ecam();
+    
     let devices = scan();
     let count = devices.len();
     
@@ -605,4 +708,237 @@ pub fn hardware_summary() -> String {
         "PCI: {} devices (Storage:{}, Network:{}, Display:{}, USB:{}, Bridges:{})",
         devices.len(), storage, network, display, usb, bridges
     )
+}
+
+// ============================================================================
+// MSI / MSI-X Support
+// ============================================================================
+
+/// PCI capability IDs
+pub mod cap_id {
+    pub const MSI: u8 = 0x05;
+    pub const MSIX: u8 = 0x11;
+    pub const PCIE: u8 = 0x10;
+}
+
+/// MSI Message Address (for x86_64 LAPIC)
+/// Format: 0xFEE0_0000 | (destination_apic_id << 12)
+pub fn msi_address(dest_apic_id: u8) -> u32 {
+    0xFEE0_0000 | ((dest_apic_id as u32) << 12)
+}
+
+/// MSI Message Data
+/// For fixed delivery: vector number in bits [7:0], edge trigger
+pub fn msi_data(vector: u8) -> u32 {
+    vector as u32 // edge-triggered, fixed delivery
+}
+
+/// Enable MSI for a device (single-vector, targets BSP LAPIC ID 0)
+/// Returns the capability offset used, or None if MSI not supported
+pub fn enable_msi(dev: &PciDevice, vector: u8) -> Option<u8> {
+    let cap_off = find_capability(dev, cap_id::MSI)?;
+    
+    // Read MSI Message Control (cap_off + 2)
+    let msg_ctrl = config_read16(dev.bus, dev.device, dev.function, cap_off + 2);
+    let is_64bit = (msg_ctrl & (1 << 7)) != 0;
+    
+    // Disable MSI first
+    let ctrl_masked = msg_ctrl & !(1u16 << 0); // clear MSI Enable
+    config_write(dev.bus, dev.device, dev.function, (cap_off + 2) & 0xFC, 
+        (config_read(dev.bus, dev.device, dev.function, (cap_off + 2) & 0xFC) 
+            & !(0xFFFF << (((cap_off + 2) & 2) * 8)))
+            | ((ctrl_masked as u32) << (((cap_off + 2) & 2) * 8)));
+    
+    // Write Message Address (cap_off + 4)
+    let addr = msi_address(0); // Target BSP (APIC ID 0)
+    config_write(dev.bus, dev.device, dev.function, cap_off + 4, addr);
+    
+    // Write Message Data
+    let data_offset = if is_64bit {
+        // 64-bit: address upper at +8, data at +12
+        config_write(dev.bus, dev.device, dev.function, cap_off + 8, 0);
+        cap_off + 12
+    } else {
+        cap_off + 8
+    };
+    
+    let data = msi_data(vector);
+    // Data is 16-bit so we need to handle the aligned write carefully
+    let existing = config_read(dev.bus, dev.device, dev.function, data_offset & 0xFC);
+    let shift = ((data_offset & 2) * 8) as u32;
+    let mask = !(0xFFFF << shift);
+    let new_val = (existing & mask) | ((data as u32) << shift);
+    config_write(dev.bus, dev.device, dev.function, data_offset & 0xFC, new_val);
+    
+    // Request single vector (MME = 0)
+    let new_ctrl = (msg_ctrl & !(0x7 << 4)) | (1 << 0); // MSI Enable, MME=000 (1 vector)
+    let ctrl_existing = config_read(dev.bus, dev.device, dev.function, (cap_off + 2) & 0xFC);
+    let ctrl_shift = ((cap_off + 2) & 2) * 8;
+    let ctrl_mask = !(0xFFFF << ctrl_shift);
+    let ctrl_new = (ctrl_existing & ctrl_mask as u32) | ((new_ctrl as u32) << ctrl_shift);
+    config_write(dev.bus, dev.device, dev.function, (cap_off + 2) & 0xFC, ctrl_new);
+    
+    // Disable legacy INTx (set bit 10 in Command register)
+    let cmd = config_read16(dev.bus, dev.device, dev.function, 0x04);
+    config_write(dev.bus, dev.device, dev.function, 0x04, (cmd | (1 << 10)) as u32);
+    
+    crate::serial_println!("[PCI] MSI enabled for {:02X}:{:02X}.{} vector={} {}",
+        dev.bus, dev.device, dev.function, vector,
+        if is_64bit { "64-bit" } else { "32-bit" });
+    
+    Some(cap_off)
+}
+
+/// Enable MSI-X for a device (single entry, table entry 0)
+pub fn enable_msix(dev: &PciDevice, vector: u8) -> Option<u8> {
+    let cap_off = find_capability(dev, cap_id::MSIX)?;
+    
+    // Read MSI-X Message Control (cap_off + 2)
+    let msg_ctrl = config_read16(dev.bus, dev.device, dev.function, cap_off + 2);
+    let table_size = (msg_ctrl & 0x7FF) + 1;
+    
+    // Read Table BIR and offset (cap_off + 4)
+    let table_info = config_read(dev.bus, dev.device, dev.function, cap_off + 4);
+    let table_bir = (table_info & 0x7) as usize;
+    let table_offset = (table_info & !0x7) as u64;
+    
+    // Get BAR address for the MSI-X table
+    let bar_addr = match dev.bar_address(table_bir) {
+        Some(a) => a,
+        None => {
+            crate::serial_println!("[PCI] MSI-X: BAR{} not configured", table_bir);
+            return None;
+        }
+    };
+    
+    // Map the MSI-X table (need at least 16 bytes per entry)
+    let table_phys = bar_addr + table_offset;
+    let table_size_bytes = (table_size as usize) * 16;
+    let table_virt = match crate::memory::map_mmio(table_phys, table_size_bytes.max(4096)) {
+        Ok(v) => v,
+        Err(e) => {
+            crate::serial_println!("[PCI] MSI-X: Failed to map table: {}", e);
+            return None;
+        }
+    };
+    
+    // Enable MSI-X + mask all vectors first
+    let ctrl_val = config_read(dev.bus, dev.device, dev.function, (cap_off + 2) & 0xFC);
+    let ctrl_shift = ((cap_off + 2) & 2) * 8;
+    // Set bit 15 (Enable) and bit 14 (Function Mask)
+    let new_ctrl_bits = (msg_ctrl | (1 << 15) | (1 << 14)) as u32;
+    let masked = (ctrl_val & !(0xFFFF << ctrl_shift)) | (new_ctrl_bits << ctrl_shift);
+    config_write(dev.bus, dev.device, dev.function, (cap_off + 2) & 0xFC, masked);
+    
+    // Write entry 0: address low, address high, data, vector control
+    let entry_addr = table_virt;
+    unsafe {
+        // Message Address Low
+        core::ptr::write_volatile(entry_addr as *mut u32, msi_address(0));
+        // Message Address High
+        core::ptr::write_volatile((entry_addr + 4) as *mut u32, 0);
+        // Message Data
+        core::ptr::write_volatile((entry_addr + 8) as *mut u32, msi_data(vector));
+        // Vector Control — unmask (clear bit 0)
+        core::ptr::write_volatile((entry_addr + 12) as *mut u32, 0);
+    }
+    
+    // Clear Function Mask (keep Enable set)
+    let unmask_ctrl = (msg_ctrl | (1 << 15)) & !(1 << 14);
+    let final_val = (ctrl_val & !(0xFFFF << ctrl_shift)) | ((unmask_ctrl as u32) << ctrl_shift);
+    config_write(dev.bus, dev.device, dev.function, (cap_off + 2) & 0xFC, final_val);
+    
+    // Disable legacy INTx
+    let cmd = config_read16(dev.bus, dev.device, dev.function, 0x04);
+    config_write(dev.bus, dev.device, dev.function, 0x04, (cmd | (1 << 10)) as u32);
+    
+    crate::serial_println!("[PCI] MSI-X enabled for {:02X}:{:02X}.{} vector={} table_size={}",
+        dev.bus, dev.device, dev.function, vector, table_size);
+    
+    Some(cap_off)
+}
+
+/// Try MSI-X first, then MSI. Returns true if either succeeded.
+pub fn enable_msi_any(dev: &PciDevice, vector: u8) -> bool {
+    if enable_msix(dev, vector).is_some() {
+        return true;
+    }
+    if enable_msi(dev, vector).is_some() {
+        return true;
+    }
+    false
+}
+
+/// Disable MSI for a device
+pub fn disable_msi(dev: &PciDevice) {
+    if let Some(cap_off) = find_capability(dev, cap_id::MSI) {
+        let msg_ctrl = config_read16(dev.bus, dev.device, dev.function, cap_off + 2);
+        let new_ctrl = msg_ctrl & !(1u16 << 0);
+        let existing = config_read(dev.bus, dev.device, dev.function, (cap_off + 2) & 0xFC);
+        let shift = ((cap_off + 2) & 2) * 8;
+        let mask = !(0xFFFF << shift);
+        config_write(dev.bus, dev.device, dev.function, (cap_off + 2) & 0xFC,
+            (existing & mask as u32) | ((new_ctrl as u32) << shift));
+    }
+}
+
+/// Check if device supports MSI or MSI-X
+pub fn has_msi_support(dev: &PciDevice) -> (bool, bool) {
+    let msi = find_capability(dev, cap_id::MSI).is_some();
+    let msix = find_capability(dev, cap_id::MSIX).is_some();
+    (msi, msix)
+}
+
+// ============================================================================
+// BAR Size Detection
+// ============================================================================
+
+/// Determine the size of a BAR by writing all 1s and reading back.
+/// Returns the size in bytes, or 0 if the BAR is empty/unreadable.
+/// WARNING: Temporarily disables the device's memory/IO decoding.
+pub fn bar_size(dev: &PciDevice, bar_index: usize) -> u64 {
+    if bar_index >= 6 {
+        return 0;
+    }
+    let bar_offset = (0x10 + bar_index * 4) as u8;
+    let original = config_read(dev.bus, dev.device, dev.function, bar_offset);
+    
+    if original == 0 {
+        return 0; // BAR not configured
+    }
+    
+    let is_io = original & 1 != 0;
+    let is_64bit = !is_io && ((original >> 1) & 0x3) == 2;
+    
+    // Disable memory/IO decoding while probing
+    let cmd = config_read16(dev.bus, dev.device, dev.function, 0x04);
+    config_write(dev.bus, dev.device, dev.function, 0x04, (cmd & !0x03) as u32);
+    
+    // Write all 1s
+    config_write(dev.bus, dev.device, dev.function, bar_offset, 0xFFFFFFFF);
+    let readback = config_read(dev.bus, dev.device, dev.function, bar_offset);
+    // Restore original
+    config_write(dev.bus, dev.device, dev.function, bar_offset, original);
+    
+    let size = if is_io {
+        let mask = readback & 0xFFFFFFFC;
+        if mask == 0 { 0 } else { ((!mask) + 1) as u64 & 0xFFFF }
+    } else if is_64bit && bar_index < 5 {
+        let bar_offset_hi = (0x10 + (bar_index + 1) * 4) as u8;
+        let original_hi = config_read(dev.bus, dev.device, dev.function, bar_offset_hi);
+        config_write(dev.bus, dev.device, dev.function, bar_offset_hi, 0xFFFFFFFF);
+        let readback_hi = config_read(dev.bus, dev.device, dev.function, bar_offset_hi);
+        config_write(dev.bus, dev.device, dev.function, bar_offset_hi, original_hi);
+        
+        let full = ((readback_hi as u64) << 32) | (readback & 0xFFFFFFF0) as u64;
+        if full == 0 { 0 } else { (!full).wrapping_add(1) }
+    } else {
+        let mask = readback & 0xFFFFFFF0;
+        if mask == 0 { 0 } else { ((!mask) + 1) as u64 }
+    };
+    
+    // Restore command register
+    config_write(dev.bus, dev.device, dev.function, 0x04, cmd as u32);
+    
+    size
 }

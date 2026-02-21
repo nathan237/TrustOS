@@ -373,6 +373,48 @@ unsafe fn disable_pic() {
     crate::serial_println!("[APIC] Legacy PIC disabled (all IRQs masked)");
 }
 
+/// Configure LAPIC NMI based on MADT type-4 entries.
+/// Programs LINT0/LINT1 with NMI delivery mode + correct polarity/trigger.
+fn configure_lapic_nmi() {
+    let info = match crate::acpi::get_info() {
+        Some(i) => i,
+        None => return,
+    };
+    
+    if info.local_apic_nmis.is_empty() {
+        // Default: assume LINT1 = NMI (common for most PC hardware)
+        unsafe {
+            // NMI delivery mode (0x400) on LINT1
+            lapic_write(LAPIC_LINT1_LVT, 0x0400);
+        }
+        crate::serial_println!("[APIC] NMI: default LINT1=NMI (no MADT entries)");
+        return;
+    }
+    
+    for nmi in &info.local_apic_nmis {
+        // processor_uid 0xFF means all processors
+        // We configure on current CPU; APs will get the same in init_ap()
+        let lint_reg = if nmi.lint == 0 { LAPIC_LINT0_LVT } else { LAPIC_LINT1_LVT };
+        
+        // Build LVT entry: delivery mode = NMI (0b100 << 8 = 0x400)
+        let mut lvt: u32 = 0x0400; // NMI delivery mode
+        
+        // Polarity: 0/1 = active-high (default), 3 = active-low → set bit 13
+        if nmi.polarity == 3 {
+            lvt |= 1 << 13; // active low
+        }
+        
+        // Trigger: 0/1 = edge (default), 3 = level → set bit 15
+        if nmi.trigger == 3 {
+            lvt |= 1 << 15; // level triggered
+        }
+        
+        unsafe { lapic_write(lint_reg, lvt); }
+        crate::serial_println!("[APIC] NMI: LINT{} = NMI (pol={}, trig={}, lvt={:#x})",
+            nmi.lint, nmi.polarity, nmi.trigger, lvt);
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // PUBLIC API
 // ═══════════════════════════════════════════════════════════════════════
@@ -420,6 +462,9 @@ pub fn init() -> bool {
     // 4. Set up I/O APIC
     setup_ioapic_routing();
     
+    // 4.5. Program LAPIC NMI (from MADT type 4 entries)
+    configure_lapic_nmi();
+    
     // 5. Start periodic timer (10ms = 100 Hz scheduling frequency)
     start_timer(10);
     
@@ -437,6 +482,9 @@ pub fn init_ap() {
     }
     
     enable_lapic();
+    
+    // Configure NMI on this AP too
+    configure_lapic_nmi();
     
     // Use same calibrated timer rate
     let tpm = TICKS_PER_MS.load(Ordering::Relaxed);
