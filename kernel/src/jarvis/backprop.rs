@@ -213,6 +213,8 @@ struct LayerActivations {
 // Math helpers (same as inference.rs but standalone)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// Scalar matvec (replaced by super::simd::matvec — kept as reference)
+#[allow(dead_code)]
 fn matvec(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
     for r in 0..rows {
         let mut sum = 0.0f32;
@@ -224,6 +226,8 @@ fn matvec(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
     }
 }
 
+/// Scalar rmsnorm (replaced by super::simd::rmsnorm — kept as reference)
+#[allow(dead_code)]
 fn rmsnorm(out: &mut [f32], x: &[f32], weight: &[f32]) -> f32 {
     let n = x.len();
     let mut ss = 0.0f32;
@@ -259,7 +263,7 @@ fn approx_exp(x: f32) -> f32 {
     f32::from_bits(bits)
 }
 
-fn approx_sqrt(x: f32) -> f32 {
+pub fn approx_sqrt(x: f32) -> f32 {
     if x <= 0.0 { return 0.0; }
     let bits = x.to_bits();
     let guess = f32::from_bits((bits >> 1) + 0x1FBD_1DF5);
@@ -315,16 +319,15 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
 
             // RMSNorm (attn)
             let mut x_norm = vec![0.0f32; D_MODEL];
-            let inv_rms_attn = rmsnorm(&mut x_norm, &x_in, &layer.rms_attn);
-            let _ = inv_rms_attn; // used in backward
+            let _ = super::simd::rmsnorm(&mut x_norm, &x_in, &layer.rms_attn);
 
-            // QKV
+            // QKV (SSE2 SIMD)
             let mut q = vec![0.0f32; D_MODEL];
             let mut k = vec![0.0f32; D_MODEL];
             let mut v = vec![0.0f32; D_MODEL];
-            matvec(&mut q, &layer.w_q, &x_norm, D_MODEL, D_MODEL);
-            matvec(&mut k, &layer.w_k, &x_norm, D_MODEL, D_MODEL);
-            matvec(&mut v, &layer.w_v, &x_norm, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut q, &layer.w_q, &x_norm, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut k, &layer.w_k, &x_norm, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut v, &layer.w_v, &x_norm, D_MODEL, D_MODEL);
 
             // Store K, V
             all_k[l].push(k.clone());
@@ -357,9 +360,9 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
                 attn_weights_all_heads.push(scores);
             }
 
-            // Output projection
+            // Output projection (SSE2 SIMD)
             let mut proj = vec![0.0f32; D_MODEL];
-            matvec(&mut proj, &layer.w_o, &attn_out, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut proj, &layer.w_o, &attn_out, D_MODEL, D_MODEL);
 
             // Residual
             for i in 0..D_MODEL { x[i] = x_in[i] + proj[i]; }
@@ -367,13 +370,13 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
 
             // RMSNorm (FFN)
             let mut x_norm_ffn = vec![0.0f32; D_MODEL];
-            let _inv_rms_ffn = rmsnorm(&mut x_norm_ffn, &x_mid, &layer.rms_ffn);
+            let _ = super::simd::rmsnorm(&mut x_norm_ffn, &x_mid, &layer.rms_ffn);
 
-            // SwiGLU FFN
+            // SwiGLU FFN (SSE2 SIMD)
             let mut gate_pre = vec![0.0f32; D_FF];
             let mut up = vec![0.0f32; D_FF];
-            matvec(&mut gate_pre, &layer.w_gate, &x_norm_ffn, D_MODEL, D_FF);
-            matvec(&mut up, &layer.w_up, &x_norm_ffn, D_MODEL, D_FF);
+            super::simd::matvec(&mut gate_pre, &layer.w_gate, &x_norm_ffn, D_MODEL, D_FF);
+            super::simd::matvec(&mut up, &layer.w_up, &x_norm_ffn, D_MODEL, D_FF);
 
             let mut gate_act = vec![0.0f32; D_FF];
             let mut gated = vec![0.0f32; D_FF];
@@ -383,7 +386,7 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
             }
 
             let mut ffn_out = vec![0.0f32; D_MODEL];
-            matvec(&mut ffn_out, &layer.w_down, &gated, D_FF, D_MODEL);
+            super::simd::matvec(&mut ffn_out, &layer.w_down, &gated, D_FF, D_MODEL);
 
             // Residual
             for i in 0..D_MODEL { x[i] = x_mid[i] + ffn_out[i]; }
@@ -395,13 +398,13 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
             });
         }
 
-        // Final RMSNorm
+        // Final RMSNorm (SSE2 SIMD)
         let mut x_final = vec![0.0f32; D_MODEL];
-        rmsnorm(&mut x_final, &x, &model.rms_final);
+        super::simd::rmsnorm(&mut x_final, &x, &model.rms_final);
 
-        // Logits
+        // Logits (SSE2 SIMD)
         let mut logits = vec![0.0f32; VOCAB_SIZE];
-        matvec(&mut logits, &model.w_output, &x_final, D_MODEL, VOCAB_SIZE);
+        super::simd::matvec(&mut logits, &model.w_output, &x_final, D_MODEL, VOCAB_SIZE);
 
         all_acts.push(PosActivations {
             x: x.clone(),
@@ -440,24 +443,13 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
         let scale = 1.0 / n_targets as f32;
         for v in d_logits.iter_mut() { *v *= scale; }
 
-        // ── dL/d_w_output ──
+        // ── dL/d_w_output (SSE2 outer product) ──
         // w_output is [VOCAB_SIZE rows × D_MODEL cols]: logits[r] = Σ_c w[r*D_MODEL+c]*x[c]
-        for r in 0..VOCAB_SIZE {
-            let base = r * D_MODEL;
-            for c in 0..D_MODEL {
-                grads.d_output[base + c] += d_logits[r] * acts.x_final_norm[c];
-            }
-        }
+        super::simd::outer_product_accum(&mut grads.d_output, &d_logits, &acts.x_final_norm, D_MODEL, VOCAB_SIZE);
 
-        // ── dL/d_x_final_norm = W_output^T @ d_logits ──
+        // ── dL/d_x_final_norm = W_output^T @ d_logits (SSE2 transpose matvec) ──
         let mut d_xfn = vec![0.0f32; D_MODEL];
-        for c in 0..D_MODEL {
-            let mut s = 0.0f32;
-            for r in 0..VOCAB_SIZE {
-                s += model.w_output[r * D_MODEL + c] * d_logits[r];
-            }
-            d_xfn[c] = s;
-        }
+        super::simd::matvec_transpose(&mut d_xfn, &model.w_output, &d_logits, D_MODEL, VOCAB_SIZE);
 
         // ── Backward through final RMSNorm ──
         let mut d_x = backward_rmsnorm(&d_xfn, &acts.x, &model.rms_final, &mut grads.d_rms_final);
@@ -472,22 +464,11 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
             let d_ffn_out = d_x.clone(); // gradient flows to both branches
             // d_x_mid gets same d_x (residual connection)
 
-            // ── Backward through W_down ──
+            // ── Backward through W_down (SSE2) ──
             // ffn_out[r] = Σ_c w_down[r*D_FF+c] * gated[c], r=0..D_MODEL
             let mut d_gated = vec![0.0f32; D_FF];
-            for r in 0..D_MODEL {
-                let base = r * D_FF;
-                for c in 0..D_FF {
-                    lg.d_wdown[base + c] += d_ffn_out[r] * la.gated[c];
-                }
-            }
-            for c in 0..D_FF {
-                let mut s = 0.0f32;
-                for r in 0..D_MODEL {
-                    s += layer.w_down[r * D_FF + c] * d_ffn_out[r];
-                }
-                d_gated[c] = s;
-            }
+            super::simd::outer_product_accum(&mut lg.d_wdown, &d_ffn_out, &la.gated, D_FF, D_MODEL);
+            super::simd::matvec_transpose(&mut d_gated, &layer.w_down, &d_ffn_out, D_FF, D_MODEL);
 
             // ── Backward through SwiGLU: gated = silu(gate_pre) * up ──
             let mut d_gate_pre = vec![0.0f32; D_FF];
@@ -501,18 +482,15 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
                 d_gate_pre[i] = d_gate_act * silu_grad(la.gate_pre[i]);
             }
 
-            // ── Backward through W_gate and W_up ──
+            // ── Backward through W_gate and W_up (SSE2) ──
             // gate_pre[r] = Σ_c w_gate[r*D_MODEL+c] * x[c], r=0..D_FF (same for w_up)
             let mut d_xnf = vec![0.0f32; D_MODEL];
-            for r in 0..D_FF {
-                let base = r * D_MODEL;
-                for c in 0..D_MODEL {
-                    lg.d_wgate[base + c] += d_gate_pre[r] * la.x_norm_ffn[c];
-                    lg.d_wup[base + c] += d_up[r] * la.x_norm_ffn[c];
-                    d_xnf[c] += layer.w_gate[base + c] * d_gate_pre[r];
-                    d_xnf[c] += layer.w_up[base + c] * d_up[r];
-                }
-            }
+            // Weight gradients (outer products)
+            super::simd::outer_product_accum(&mut lg.d_wgate, &d_gate_pre, &la.x_norm_ffn, D_MODEL, D_FF);
+            super::simd::outer_product_accum(&mut lg.d_wup, &d_up, &la.x_norm_ffn, D_MODEL, D_FF);
+            // Input gradients (transpose matvecs, accumulated)
+            super::simd::matvec_transpose(&mut d_xnf, &layer.w_gate, &d_gate_pre, D_MODEL, D_FF);
+            super::simd::matvec_transpose_accum(&mut d_xnf, &layer.w_up, &d_up, D_MODEL, D_FF);
 
             // ── Backward through FFN RMSNorm ──
             let d_x_mid = backward_rmsnorm(&d_xnf, &la.x_mid, &layer.rms_ffn, &mut lg.d_rms_ffn);
@@ -523,21 +501,10 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
                 d_x_pre_ffn[i] = d_x[i] + d_x_mid[i]; // residual: both paths
             }
 
-            // ── Backward through W_o: proj[r] = Σ_c W_o[r*D+c] * attn_out[c] ──
-            for r in 0..D_MODEL {
-                let base = r * D_MODEL;
-                for c in 0..D_MODEL {
-                    lg.d_wo[base + c] += d_x_pre_ffn[r] * la.attn_out[c];
-                }
-            }
+            // ── Backward through W_o (SSE2): proj[r] = Σ_c W_o[r*D+c] * attn_out[c] ──
+            super::simd::outer_product_accum(&mut lg.d_wo, &d_x_pre_ffn, &la.attn_out, D_MODEL, D_MODEL);
             let mut d_attn_out = vec![0.0f32; D_MODEL];
-            for c in 0..D_MODEL {
-                let mut s = 0.0f32;
-                for r in 0..D_MODEL {
-                    s += layer.w_o[r * D_MODEL + c] * d_x_pre_ffn[r];
-                }
-                d_attn_out[c] = s;
-            }
+            super::simd::matvec_transpose(&mut d_attn_out, &layer.w_o, &d_x_pre_ffn, D_MODEL, D_MODEL);
 
             // ── Backward through multi-head attention (Q + self-position K,V) ──
             let d_k_sqrt = approx_sqrt(D_K as f32);
@@ -574,21 +541,16 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
                 }
             }
 
-            // ── Backward through Q, K, V projections ──
+            // ── Backward through Q, K, V projections (SSE2) ──
+            // Weight gradients (outer products)
+            super::simd::outer_product_accum(&mut lg.d_wq, &d_q, &la.x_norm_attn, D_MODEL, D_MODEL);
+            super::simd::outer_product_accum(&mut lg.d_wk, &d_k_self, &la.x_norm_attn, D_MODEL, D_MODEL);
+            super::simd::outer_product_accum(&mut lg.d_wv, &d_v_self, &la.x_norm_attn, D_MODEL, D_MODEL);
+            // Input gradients (transpose matvecs, accumulated)
             let mut d_xna = vec![0.0f32; D_MODEL];
-            for c in 0..D_MODEL {
-                let mut s = 0.0f32;
-                for r in 0..D_MODEL {
-                    let idx = r * D_MODEL + c;
-                    lg.d_wq[idx] += d_q[r] * la.x_norm_attn[c];
-                    s += layer.w_q[idx] * d_q[r];
-                    lg.d_wk[idx] += d_k_self[r] * la.x_norm_attn[c];
-                    s += layer.w_k[idx] * d_k_self[r];
-                    lg.d_wv[idx] += d_v_self[r] * la.x_norm_attn[c];
-                    s += layer.w_v[idx] * d_v_self[r];
-                }
-                d_xna[c] = s;
-            }
+            super::simd::matvec_transpose(&mut d_xna, &layer.w_q, &d_q, D_MODEL, D_MODEL);
+            super::simd::matvec_transpose_accum(&mut d_xna, &layer.w_k, &d_k_self, D_MODEL, D_MODEL);
+            super::simd::matvec_transpose_accum(&mut d_xna, &layer.w_v, &d_v_self, D_MODEL, D_MODEL);
 
             // ── Backward through attention RMSNorm ──
             let d_x_in = backward_rmsnorm(&d_xna, &la.x_in, &layer.rms_attn, &mut lg.d_rms_attn);

@@ -61,6 +61,7 @@ pub mod training;
 pub mod corpus;
 pub mod backprop;
 pub mod optimizer;
+pub mod simd;
 
 use alloc::string::String;
 use alloc::format;

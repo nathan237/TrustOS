@@ -159,13 +159,13 @@ impl InferenceEngine {
         for layer_idx in 0..N_LAYERS {
             let layer = &model.layers[layer_idx];
 
-            // ── Pre-attention RMSNorm ──
-            rmsnorm(&mut self.buf_xn, &self.buf_x, &layer.rms_attn);
+            // ── Pre-attention RMSNorm (SSE2 SIMD) ──
+            super::simd::rmsnorm(&mut self.buf_xn, &self.buf_x, &layer.rms_attn);
 
-            // ── QKV Projections ── (matmul: [1 × D_MODEL] × [D_MODEL × D_MODEL])
-            matvec(&mut self.buf_q, &layer.w_q, &self.buf_xn, D_MODEL, D_MODEL);
-            matvec(&mut self.buf_k, &layer.w_k, &self.buf_xn, D_MODEL, D_MODEL);
-            matvec(&mut self.buf_v, &layer.w_v, &self.buf_xn, D_MODEL, D_MODEL);
+            // ── QKV Projections (SSE2 SIMD) ──
+            super::simd::matvec(&mut self.buf_q, &layer.w_q, &self.buf_xn, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut self.buf_k, &layer.w_k, &self.buf_xn, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut self.buf_v, &layer.w_v, &self.buf_xn, D_MODEL, D_MODEL);
 
             // ── Store K,V in cache ──
             self.kv_cache.k[layer_idx].extend_from_slice(&self.buf_k);
@@ -204,32 +204,32 @@ impl InferenceEngine {
                 }
             }
 
-            // ── Output Projection ──
+            // ── Output Projection (SSE2 SIMD) ──
             let mut proj_out = vec![0.0f32; D_MODEL];
-            matvec(&mut proj_out, &layer.w_o, &attn_out, D_MODEL, D_MODEL);
+            super::simd::matvec(&mut proj_out, &layer.w_o, &attn_out, D_MODEL, D_MODEL);
 
             // ── Residual ──
             for i in 0..D_MODEL {
                 self.buf_x[i] += proj_out[i];
             }
 
-            // ── Pre-FFN RMSNorm ──
-            rmsnorm(&mut self.buf_xn, &self.buf_x, &layer.rms_ffn);
+            // ── Pre-FFN RMSNorm (SSE2 SIMD) ──
+            super::simd::rmsnorm(&mut self.buf_xn, &self.buf_x, &layer.rms_ffn);
 
-            // ── SwiGLU FFN ──
+            // ── SwiGLU FFN (SSE2 SIMD) ──
             // gate = SiLU(x @ W_gate)
-            matvec(&mut self.buf_gate, &layer.w_gate, &self.buf_xn, D_MODEL, D_FF);
+            super::simd::matvec(&mut self.buf_gate, &layer.w_gate, &self.buf_xn, D_MODEL, D_FF);
             // up = x @ W_up
-            matvec(&mut self.buf_up, &layer.w_up, &self.buf_xn, D_MODEL, D_FF);
+            super::simd::matvec(&mut self.buf_up, &layer.w_up, &self.buf_xn, D_MODEL, D_FF);
             // gate = SiLU(gate) * up
             for i in 0..D_FF {
                 let g = self.buf_gate[i];
                 let sig = 1.0 / (1.0 + (-g).exp_approx());
                 self.buf_gate[i] = g * sig * self.buf_up[i];
             }
-            // down = gate @ W_down
+            // down = gate @ W_down (SSE2 SIMD)
             let mut ffn_out = vec![0.0f32; D_MODEL];
-            matvec(&mut ffn_out, &layer.w_down, &self.buf_gate, D_FF, D_MODEL);
+            super::simd::matvec(&mut ffn_out, &layer.w_down, &self.buf_gate, D_FF, D_MODEL);
 
             // ── Residual ──
             for i in 0..D_MODEL {
@@ -237,11 +237,11 @@ impl InferenceEngine {
             }
         }
 
-        // ── Final RMSNorm ───────────────────────────────────────────────
-        rmsnorm(&mut self.buf_xn, &self.buf_x, &model.rms_final);
+        // ── Final RMSNorm (SSE2 SIMD) ──
+        super::simd::rmsnorm(&mut self.buf_xn, &self.buf_x, &model.rms_final);
 
-        // ── Output Logits ── (project to vocabulary)
-        matvec(&mut self.buf_logits, &model.w_output, &self.buf_xn, D_MODEL, VOCAB_SIZE);
+        // ── Output Logits (SSE2 SIMD) ──
+        super::simd::matvec(&mut self.buf_logits, &model.w_output, &self.buf_xn, D_MODEL, VOCAB_SIZE);
 
         self.kv_cache.len = pos + 1;
     }
@@ -304,6 +304,8 @@ impl InferenceEngine {
 
 /// Matrix-vector multiply: out = W × x
 /// W is [rows × cols] stored row-major, x is [cols], out is [rows]
+/// Scalar matvec (replaced by super::simd::matvec — kept as reference)
+#[allow(dead_code)]
 fn matvec(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
     for r in 0..rows {
         let mut sum = 0.0f32;
@@ -316,6 +318,8 @@ fn matvec(out: &mut [f32], w: &[f32], x: &[f32], cols: usize, rows: usize) {
 }
 
 /// RMSNorm: out = (x / RMS(x)) * weight
+/// Scalar rmsnorm (replaced by super::simd::rmsnorm — kept as reference)
+#[allow(dead_code)]
 fn rmsnorm(out: &mut [f32], x: &[f32], weight: &[f32]) {
     let n = x.len();
     let mut ss = 0.0f32;
