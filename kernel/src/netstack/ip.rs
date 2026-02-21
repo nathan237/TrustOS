@@ -68,7 +68,11 @@ pub fn handle_packet(data: &[u8]) {
     // Use total_length to get actual payload, ignoring Ethernet padding
     let payload = &data[header_len..total_length];
     
-    // (packet logging removed to keep serial clean)
+    // ── Firewall: INPUT chain ──
+    let (sport, dport) = extract_ports(protocol, payload);
+    if !crate::netstack::firewall::filter_input(protocol, source, dest, sport, dport, total_length) {
+        return; // Packet dropped by firewall
+    }
     
     match protocol {
         1 => crate::netstack::icmp::handle_packet(payload, ttl, source), // ICMP
@@ -85,6 +89,12 @@ pub fn send_packet_with_ttl(dest_ip: [u8; 4], protocol: u8, payload: &[u8], ttl:
     let (source_ip, subnet, gateway) = crate::network::get_ipv4_config()
         .map(|(ip, mask, gw)| (*ip.as_bytes(), *mask.as_bytes(), gw.map(|g| *g.as_bytes())))
         .unwrap_or(([192, 168, 56, 100], [255, 255, 255, 0], None));
+
+    // ── Firewall: OUTPUT chain ──
+    let (sport, dport) = extract_ports(protocol, payload);
+    if !crate::netstack::firewall::filter_output(protocol, source_ip, dest_ip, sport, dport, 20 + payload.len()) {
+        return Err("Blocked by firewall");
+    }
 
     let on_same_subnet = |ip: [u8; 4]| {
         (ip[0] & subnet[0]) == (source_ip[0] & subnet[0]) &&
@@ -151,6 +161,12 @@ pub fn send_packet(dest_ip: [u8; 4], protocol: u8, payload: &[u8]) -> Result<(),
     let (source_ip, subnet, gateway) = crate::network::get_ipv4_config()
         .map(|(ip, mask, gw)| (*ip.as_bytes(), *mask.as_bytes(), gw.map(|g| *g.as_bytes())))
         .unwrap_or(([192, 168, 56, 100], [255, 255, 255, 0], None));
+
+    // ── Firewall: OUTPUT chain ──
+    let (sport, dport) = extract_ports(protocol, payload);
+    if !crate::netstack::firewall::filter_output(protocol, source_ip, dest_ip, sport, dport, 20 + payload.len()) {
+        return Err("Blocked by firewall");
+    }
 
     // Decide next hop (route via gateway if off-subnet)
     let on_same_subnet = |ip: [u8; 4]| {
@@ -233,4 +249,21 @@ pub fn send_packet(dest_ip: [u8; 4], protocol: u8, payload: &[u8]) -> Result<(),
     // (send logging removed to keep serial clean)
     
     Ok(())
+}
+
+/// Extract source and destination ports from TCP/UDP payload
+fn extract_ports(protocol: u8, payload: &[u8]) -> (u16, u16) {
+    match protocol {
+        6 | 17 => {
+            // TCP and UDP both have src_port at bytes 0-1, dst_port at bytes 2-3
+            if payload.len() >= 4 {
+                let sport = u16::from_be_bytes([payload[0], payload[1]]);
+                let dport = u16::from_be_bytes([payload[2], payload[3]]);
+                (sport, dport)
+            } else {
+                (0, 0)
+            }
+        }
+        _ => (0, 0),
+    }
 }

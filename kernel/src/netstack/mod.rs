@@ -15,6 +15,7 @@ pub mod https;
 pub mod socket;
 pub mod ipv6;
 pub mod icmpv6;
+pub mod firewall;
 
 use alloc::vec::Vec;
 use alloc::collections::VecDeque;

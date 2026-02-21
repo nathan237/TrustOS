@@ -333,3 +333,61 @@ pub fn reset(fadt: &FadtInfo) {
     
     crate::serial_println!("[ACPI] Reset register failed");
 }
+
+/// Suspend the system to S3 (sleep-to-RAM)
+///
+/// The SLP_TYP for S3 should come from \_S3 in the DSDT, but we try common
+/// values that work on QEMU, VirtualBox, and many real machines.
+/// Returns true if wakeup occurred (resumed from S3), false if S3 failed.
+pub fn suspend_s3(fadt: &FadtInfo) -> bool {
+    crate::serial_println!("[ACPI] Attempting S3 suspend (sleep-to-RAM)...");
+
+    // Common S3 SLP_TYP values (bits 12:10 of PM1x_CNT)
+    const SLP_TYP_S3_QEMU: u16 = 0x01 << 10;   // QEMU i440fx/q35
+    const SLP_TYP_S3_PIIX: u16 = 0x05 << 10;    // PIIX4 PM
+    const SLP_TYP_S3_ALT: u16 = 0x03 << 10;     // Some real hardware
+    const SLP_EN: u16 = 1 << 13;
+
+    // Enable wakeup events: timer (TMR_EN) and power-button (PWRBTN_EN)
+    if fadt.pm1a_evt_blk != 0 {
+        unsafe {
+            // PM1_EN register is at pm1a_evt_blk + pm1_evt_len/2 (typically +2)
+            let en_port = (fadt.pm1a_evt_blk + 2) as u16;
+            let en_val: u16 = (1 << 0)   // TMR_EN   — timer overflow wakeup
+                            | (1 << 8)   // PWRBTN_EN — power button wakeup
+                            | (1 << 5);  // GBL_EN   — global event
+            x86_64::instructions::port::Port::<u16>::new(en_port).write(en_val);
+        }
+    }
+
+    if fadt.pm1a_cnt_blk != 0 {
+        let port = fadt.pm1a_cnt_blk as u16;
+        let values = [SLP_TYP_S3_QEMU, SLP_TYP_S3_PIIX, SLP_TYP_S3_ALT];
+
+        for &slp_typ in &values {
+            unsafe {
+                let current = x86_64::instructions::port::Port::<u16>::new(port).read();
+                let preserved = current & 0x0203; // Preserve SCI_EN
+
+                crate::serial_println!("[ACPI] S3: writing 0x{:04X} to PM1a_CNT (port 0x{:03X})",
+                    preserved | slp_typ | SLP_EN, port);
+
+                // Flush caches before sleeping
+                core::arch::x86_64::_mm_mfence();
+
+                x86_64::instructions::port::Port::<u16>::new(port)
+                    .write(preserved | slp_typ | SLP_EN);
+
+                // If we reach here, the CPU woke up or S3 didn't take effect
+                // Wait a bit and see if we are alive
+                for _ in 0..5_000_000 { core::hint::spin_loop(); }
+            }
+        }
+
+        crate::serial_println!("[ACPI] S3 suspend did not take effect");
+        return false;
+    }
+
+    crate::serial_println!("[ACPI] No PM1a_CNT register — cannot suspend");
+    false
+}

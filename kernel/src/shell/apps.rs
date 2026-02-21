@@ -145,6 +145,8 @@ pub(super) fn cmd_gterm(args: &[&str]) {
             // Interactive loop
             let mut input_buffer = alloc::string::String::new();
             loop {
+                // Ctrl+C interrupt
+                if crate::shell::is_interrupted() { break; }
                 // Check for keyboard input
                 if let Some(key) = crate::keyboard::read_char() {
                     let c = key as char;
@@ -571,10 +573,14 @@ fn main() {
             crate::println!("  Available: print/println, math ops, if/else, for, while");
             crate::println!();
             loop {
+                if crate::shell::is_interrupted() { break; }
                 crate::print!("\x1b[36mtl>\x1b[0m ");
                 let line = crate::shell::read_line();
                 let trimmed = line.trim();
-                if trimmed.is_empty() { continue; }
+                if trimmed.is_empty() {
+                    if crate::shell::is_interrupted() { break; }
+                    continue;
+                }
                 if trimmed == "exit" || trimmed == "quit" { break; }
                 if trimmed == "help" {
                     crate::println!("  println(\"hello\")       — print with newline");

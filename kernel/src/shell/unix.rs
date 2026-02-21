@@ -248,11 +248,16 @@ pub(super) fn cmd_uniq(args: &[&str], piped: Option<&str>) {
 
 pub(super) fn cmd_yes(args: &[&str]) {
     let text = if args.is_empty() { "y" } else { args[0] };
-    // Print 10 times (would be infinite in real implementation)
-    for _ in 0..10 {
+    crate::shell::clear_interrupted();
+    loop {
+        if crate::shell::is_interrupted() { break; }
         crate::println!("{}", text);
+        // Check keyboard for Ctrl+C (byte 3)
+        if let Some(3) = crate::keyboard::read_char() {
+            crate::shell::set_interrupted();
+            break;
+        }
     }
-    crate::println!("... (press Ctrl+C to stop in real yes)");
 }
 
 pub(super) fn cmd_seq(args: &[&str]) {
@@ -1175,6 +1180,254 @@ pub(super) fn cmd_sysctl(_args: &[&str]) {
     crate::println!("kernel.ostype = TrustOS");
     crate::println!("kernel.osrelease = 0.1.0");
     crate::println!("kernel.version = #1 SMP TrustOS");
+}
+
+// ==================== FIREWALL COMMANDS ====================
+
+pub(super) fn cmd_firewall(args: &[&str]) {
+    use crate::netstack::firewall;
+    use crate::netstack::firewall::{Chain, Action, Protocol, IpMatch, PortMatch, Rule};
+
+    if args.is_empty() {
+        cmd_firewall_status();
+        return;
+    }
+
+    match args[0] {
+        "status" | "show" => cmd_firewall_status(),
+        "enable" | "on" => {
+            firewall::set_enabled(true);
+            crate::println_color!(COLOR_GREEN, "Firewall enabled");
+        }
+        "disable" | "off" => {
+            firewall::set_enabled(false);
+            crate::println_color!(COLOR_YELLOW, "Firewall disabled");
+        }
+        "policy" => {
+            // firewall policy INPUT DROP
+            if args.len() < 3 {
+                crate::println!("Usage: firewall policy <INPUT|OUTPUT|FORWARD> <ACCEPT|DROP>");
+                return;
+            }
+            let chain = match Chain::from_str(args[1]) {
+                Some(c) => c,
+                None => { crate::println_color!(COLOR_RED, "Invalid chain: {}", args[1]); return; }
+            };
+            let action = match Action::from_str(args[2]) {
+                Some(a) => a,
+                None => { crate::println_color!(COLOR_RED, "Invalid action: {}", args[2]); return; }
+            };
+            firewall::set_policy(chain, action);
+            crate::println_color!(COLOR_GREEN, "Policy {} set to {}", chain.name(), action.name());
+        }
+        "add" => {
+            // firewall add INPUT -p tcp --dport 80 -j DROP
+            if args.len() < 2 {
+                crate::println!("Usage: firewall add <chain> [-p proto] [-s src] [-d dst] [--sport port] [--dport port] -j <action>");
+                return;
+            }
+            let chain = match Chain::from_str(args[1]) {
+                Some(c) => c,
+                None => { crate::println_color!(COLOR_RED, "Invalid chain: {}", args[1]); return; }
+            };
+            let mut rule = Rule::new(chain, Action::Accept);
+            let mut i = 2;
+            while i < args.len() {
+                match args[i] {
+                    "-p" | "--proto" => {
+                        i += 1;
+                        if i < args.len() {
+                            rule.protocol = Protocol::from_str(args[i]).unwrap_or(Protocol::Any);
+                        }
+                    }
+                    "-s" | "--src" => {
+                        i += 1;
+                        if i < args.len() {
+                            rule.src_ip = IpMatch::parse(args[i]).unwrap_or(IpMatch::Any);
+                        }
+                    }
+                    "-d" | "--dst" => {
+                        i += 1;
+                        if i < args.len() {
+                            rule.dst_ip = IpMatch::parse(args[i]).unwrap_or(IpMatch::Any);
+                        }
+                    }
+                    "--sport" => {
+                        i += 1;
+                        if i < args.len() {
+                            rule.src_port = PortMatch::parse(args[i]).unwrap_or(PortMatch::Any);
+                        }
+                    }
+                    "--dport" => {
+                        i += 1;
+                        if i < args.len() {
+                            rule.dst_port = PortMatch::parse(args[i]).unwrap_or(PortMatch::Any);
+                        }
+                    }
+                    "-j" | "--jump" => {
+                        i += 1;
+                        if i < args.len() {
+                            rule.action = Action::from_str(args[i]).unwrap_or(Action::Accept);
+                        }
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            firewall::add_rule(rule);
+            crate::println_color!(COLOR_GREEN, "Rule added to {} chain", chain.name());
+        }
+        "del" | "delete" => {
+            // firewall del INPUT 0
+            if args.len() < 3 {
+                crate::println!("Usage: firewall del <chain> <index>");
+                return;
+            }
+            let chain = match Chain::from_str(args[1]) {
+                Some(c) => c,
+                None => { crate::println_color!(COLOR_RED, "Invalid chain: {}", args[1]); return; }
+            };
+            let idx: usize = match args[2].parse() {
+                Ok(n) => n,
+                Err(_) => { crate::println_color!(COLOR_RED, "Invalid index: {}", args[2]); return; }
+            };
+            if firewall::delete_rule(chain, idx) {
+                crate::println_color!(COLOR_GREEN, "Rule {} deleted from {}", idx, chain.name());
+            } else {
+                crate::println_color!(COLOR_RED, "Rule {} not found in {}", idx, chain.name());
+            }
+        }
+        "flush" => {
+            let chain = if args.len() > 1 { Chain::from_str(args[1]) } else { None };
+            firewall::flush(chain);
+            if let Some(c) = chain {
+                crate::println_color!(COLOR_GREEN, "Flushed {} chain", c.name());
+            } else {
+                crate::println_color!(COLOR_GREEN, "Flushed all chains");
+            }
+        }
+        "log" => {
+            let entries = firewall::get_log();
+            if entries.is_empty() {
+                crate::println!("(no log entries)");
+            } else {
+                crate::println_color!(COLOR_CYAN, "Firewall Log ({} entries):", entries.len());
+                for entry in &entries {
+                    crate::println!("  {}", entry);
+                }
+            }
+        }
+        "reset" => {
+            firewall::reset_stats();
+            firewall::clear_log();
+            crate::println_color!(COLOR_GREEN, "Stats and log cleared");
+        }
+        "help" | "--help" | "-h" => {
+            crate::println_color!(COLOR_CYAN, "TrustOS Firewall — iptables-like packet filter");
+            crate::println!();
+            crate::println!("  firewall status                  Show rules, policies, stats");
+            crate::println!("  firewall enable/disable          Toggle firewall on/off");
+            crate::println!("  firewall policy <chain> <action> Set default policy");
+            crate::println!("  firewall add <chain> [opts] -j <action>  Add rule");
+            crate::println!("    -p tcp/udp/icmp   Protocol");
+            crate::println!("    -s 10.0.0.0/24    Source IP/subnet");
+            crate::println!("    -d 192.168.1.1    Dest IP");
+            crate::println!("    --sport 1024:65535 Source port (or range)");
+            crate::println!("    --dport 80         Dest port");
+            crate::println!("  firewall del <chain> <n>         Delete rule by index");
+            crate::println!("  firewall flush [chain]           Remove all rules");
+            crate::println!("  firewall log                     Show firewall log");
+            crate::println!("  firewall reset                   Clear stats and log");
+        }
+        _ => {
+            crate::println_color!(COLOR_RED, "Unknown subcommand: {}", args[0]);
+            crate::println!("Try: firewall help");
+        }
+    }
+}
+
+fn cmd_firewall_status() {
+    use crate::netstack::firewall;
+    use crate::netstack::firewall::Chain;
+
+    let enabled = firewall::is_enabled();
+    let (allowed, dropped) = firewall::stats();
+
+    crate::println_color!(COLOR_CYAN, "TrustOS Firewall");
+    crate::print!("  Status: ");
+    if enabled {
+        crate::println_color!(COLOR_GREEN, "ENABLED");
+    } else {
+        crate::println_color!(COLOR_RED, "DISABLED");
+    }
+    crate::println!("  Packets allowed: {}  dropped: {}", allowed, dropped);
+    crate::println!();
+
+    for chain in &[Chain::Input, Chain::Output, Chain::Forward] {
+        let policy = firewall::get_policy(*chain);
+        let rules = firewall::list_rules(*chain);
+        crate::print_color!(COLOR_YELLOW, "Chain {} ", chain.name());
+        crate::println!("(policy {})", policy.name());
+        if rules.is_empty() {
+            crate::println!("  (no rules)");
+        } else {
+            crate::println!("  {:>3}  {:>5}  {:>15}  {:>15}  {:>11}  {:>11}  {:>6}  {:>8}  {:>8}",
+                "num", "proto", "source", "destination", "sport", "dport", "action", "pkts", "bytes");
+            for (i, rule) in rules.iter().enumerate() {
+                crate::println!("  {:>3}  {:>5}  {:>15}  {:>15}  {:>11}  {:>11}  {:>6}  {:>8}  {:>8}",
+                    i, rule.protocol.name(), rule.src_ip.display(), rule.dst_ip.display(),
+                    rule.src_port.display(), rule.dst_port.display(), rule.action.name(),
+                    rule.packets, rule.bytes);
+            }
+        }
+        crate::println!();
+    }
+}
+
+// ==================== DU COMMAND ====================
+
+pub(super) fn cmd_du(args: &[&str]) {
+    let path = if args.is_empty() { "/" } else { args[0] };
+    let total = du_recursive(path, 0);
+    if total >= 1024 * 1024 {
+        crate::println!("{:.1}M\t{}", total as f64 / (1024.0 * 1024.0), path);
+    } else if total >= 1024 {
+        crate::println!("{}K\t{}", total / 1024, path);
+    } else {
+        crate::println!("{}\t{}", total, path);
+    }
+}
+
+fn du_recursive(path: &str, depth: usize) -> usize {
+    let mut total: usize = 0;
+
+    if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(Some(path))) {
+        for (name, ftype, size) in &entries {
+            let child = if path == "/" {
+                alloc::format!("/{}", name)
+            } else {
+                alloc::format!("{}/{}", path, name)
+            };
+            match ftype {
+                crate::ramfs::FileType::File => {
+                    total += size;
+                }
+                crate::ramfs::FileType::Directory => {
+                    let sub = du_recursive(&child, depth + 1);
+                    total += sub;
+                    if depth < 1 {
+                        if sub >= 1024 {
+                            crate::println!("{}K\t{}", sub / 1024, child);
+                        } else {
+                            crate::println!("{}\t{}", sub, child);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    total
 }
 
 

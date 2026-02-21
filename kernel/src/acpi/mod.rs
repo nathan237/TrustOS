@@ -367,6 +367,17 @@ pub fn shutdown() -> ! {
     }
 }
 
+/// Suspend to S3 (sleep-to-RAM). Returns true if wake-up occurred.
+pub fn suspend() -> bool {
+    if let Some(info) = ACPI_INFO.get() {
+        if let Some(ref fadt) = info.fadt {
+            return fadt::suspend_s3(fadt);
+        }
+    }
+    crate::serial_println!("[ACPI] No FADT available for S3 suspend");
+    false
+}
+
 /// Reboot the system
 pub fn reboot() -> ! {
     // Try keyboard controller reset first (works on most systems)

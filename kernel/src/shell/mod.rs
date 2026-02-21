@@ -8,10 +8,28 @@ use alloc::vec::Vec;
 use alloc::vec;
 use alloc::boxed::Box;
 use alloc::format;
-use core::sync::atomic::AtomicBool;
+use core::sync::atomic::{AtomicBool, Ordering};
 use spin::Mutex as SpinMutex;
 use crate::framebuffer::{COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN, COLOR_YELLOW, COLOR_RED, COLOR_CYAN, COLOR_WHITE, COLOR_BLUE, COLOR_MAGENTA, COLOR_GRAY};
 use crate::ramfs::FileType;
+
+/// Ctrl+C interrupt flag — set by shell when user presses Ctrl+C
+static INTERRUPTED: AtomicBool = AtomicBool::new(false);
+
+/// Check if Ctrl+C was pressed (non-destructive read)
+pub fn is_interrupted() -> bool {
+    INTERRUPTED.load(Ordering::SeqCst)
+}
+
+/// Clear the interrupt flag (call before starting a long-running command)
+pub fn clear_interrupted() {
+    INTERRUPTED.store(false, Ordering::SeqCst);
+}
+
+/// Set the interrupt flag (called from keyboard handler or shell)
+pub fn set_interrupted() {
+    INTERRUPTED.store(true, Ordering::SeqCst);
+}
 
 /// Capture mode: when true, print output goes to CAPTURE_BUF instead of screen
 pub(crate) static CAPTURE_MODE: AtomicBool = AtomicBool::new(false);
@@ -241,6 +259,7 @@ pub fn run() -> ! {
         
         // Parse and execute
         let cmd_str = core::str::from_utf8(&cmd_buffer[..len]).unwrap_or("");
+        clear_interrupted(); // Reset Ctrl+C flag before each command
         execute_command(cmd_str.trim());
     }
 }
@@ -511,6 +530,18 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                             crate::print_fb_only!("\x08");
                         }
                     }
+                }
+                3 => {
+                    // Ctrl+C — abort current input line
+                    if showing_suggestions {
+                        clear_suggestions_at_row(input_row, suggestions.len());
+                        showing_suggestions = false;
+                    }
+                    crate::print_color!(COLOR_RED, "^C");
+                    crate::println!();
+                    set_interrupted();
+                    pos = 0;
+                    break;
                 }
                 12 => {
                     // Ctrl+L - clear screen
@@ -902,6 +933,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "exit" | "logout" => commands::cmd_logout(),
         "reboot" => commands::cmd_reboot(),
         "shutdown" | "halt" | "poweroff" => commands::cmd_halt(),
+        "suspend" | "s3" => commands::cmd_sleep(),
         "neofetch" => commands::cmd_neofetch(),
         "matrix" => commands::cmd_matrix(),
         "cowsay" => commands::cmd_cowsay(args),
@@ -1096,6 +1128,8 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "lsmod" => unix::cmd_lsmod(),
 
         "sysctl" => unix::cmd_sysctl(args),
+        "firewall" | "iptables" | "fw" => unix::cmd_firewall(args),
+        "du" => unix::cmd_du(args),
 
         "dmesg" => unix::cmd_dmesg(args),
         "memdbg" | "heapdbg" => unix::cmd_memdbg(),

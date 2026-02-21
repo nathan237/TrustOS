@@ -553,56 +553,47 @@ impl NvmeController {
     
     // ─── Read / Write ────────────────────────────────────────────
     
-    /// Read LBAs from namespace 1.
-    /// `start_lba` = starting LBA
-    /// `count` = number of LBAs to read (1-based, max limited by MDTS)
-    /// `buf_phys` = physical address of destination buffer
-    fn read_lbas(&mut self, start_lba: u64, count: u16, buf_phys: u64) -> Result<(), &'static str> {
-        let total_bytes = count as u64 * self.ns1_lba_size as u64;
-        
-        // Build PRP2: if transfer > 4KB, we need a PRP list or second PRP
-        let prp2 = if total_bytes <= 4096 {
-            0
-        } else if total_bytes <= 8192 {
-            // Two pages: PRP1 = first page, PRP2 = second page
-            buf_phys + 4096
+    /// Build PRP2 from a list of page physical addresses.
+    /// pages[0] is used as PRP1 (not included in PRP2 list).
+    /// Returns (prp2_value, optional_prp_list_phys_to_free).
+    fn build_prp2_scatter(&self, pages: &[u64]) -> Result<(u64, Option<u64>), &'static str> {
+        if pages.len() <= 1 {
+            // Single page: no PRP2 needed
+            Ok((0, None))
+        } else if pages.len() == 2 {
+            // Two pages: PRP2 = physical address of second page
+            Ok((pages[1], None))
         } else {
-            // Need PRP list for > 8KB transfers
-            // For now, limit to 8KB (2 pages). Multi-page PRP list can be added later.
-            return Err("NVMe: transfer > 8KB not supported yet");
-        };
+            // 3+ pages: PRP2 = PRP list page containing addresses of pages[1..N]
+            let list_phys = crate::memory::frame::alloc_frame_zeroed()
+                .ok_or("NVMe: OOM for PRP list")?;
+            let list_virt = crate::memory::phys_to_virt(list_phys);
+            
+            let remaining = pages.len() - 1; // pages[1..N]
+            if remaining > 512 {
+                crate::memory::frame::free_frame(list_phys);
+                return Err("NVMe: transfer too large for single PRP list");
+            }
+            
+            unsafe {
+                let entries = list_virt as *mut u64;
+                for i in 0..remaining {
+                    core::ptr::write_volatile(entries.add(i), pages[i + 1]);
+                }
+            }
+            
+            Ok((list_phys, Some(list_phys)))
+        }
+    }
+    
+    /// Read LBAs from namespace 1 using scatter-gather DMA pages.
+    fn read_lbas_scatter(&mut self, start_lba: u64, count: u16, pages: &[u64]) -> Result<(), &'static str> {
+        let (prp2, prp_list_page) = self.build_prp2_scatter(pages)?;
         
         let cmd = SqEntry {
             cdw0: IO_READ as u32,
             nsid: 1,
-            prp1: buf_phys,
-            prp2,
-            cdw10: start_lba as u32,               // Starting LBA low
-            cdw11: (start_lba >> 32) as u32,        // Starting LBA high
-            cdw12: (count - 1) as u32,              // NLB (0-based)
-            ..Default::default()
-        };
-        
-        self.io_cmd(cmd)?;
-        Ok(())
-    }
-    
-    /// Write LBAs to namespace 1.
-    fn write_lbas(&mut self, start_lba: u64, count: u16, buf_phys: u64) -> Result<(), &'static str> {
-        let total_bytes = count as u64 * self.ns1_lba_size as u64;
-        
-        let prp2 = if total_bytes <= 4096 {
-            0
-        } else if total_bytes <= 8192 {
-            buf_phys + 4096
-        } else {
-            return Err("NVMe: transfer > 8KB not supported yet");
-        };
-        
-        let cmd = SqEntry {
-            cdw0: IO_WRITE as u32,
-            nsid: 1,
-            prp1: buf_phys,
+            prp1: pages[0],
             prp2,
             cdw10: start_lba as u32,
             cdw11: (start_lba >> 32) as u32,
@@ -610,7 +601,34 @@ impl NvmeController {
             ..Default::default()
         };
         
-        self.io_cmd(cmd)?;
+        let result = self.io_cmd(cmd);
+        if let Some(phys) = prp_list_page {
+            crate::memory::frame::free_frame(phys);
+        }
+        result?;
+        Ok(())
+    }
+    
+    /// Write LBAs to namespace 1 using scatter-gather DMA pages.
+    fn write_lbas_scatter(&mut self, start_lba: u64, count: u16, pages: &[u64]) -> Result<(), &'static str> {
+        let (prp2, prp_list_page) = self.build_prp2_scatter(pages)?;
+        
+        let cmd = SqEntry {
+            cdw0: IO_WRITE as u32,
+            nsid: 1,
+            prp1: pages[0],
+            prp2,
+            cdw10: start_lba as u32,
+            cdw11: (start_lba >> 32) as u32,
+            cdw12: (count - 1) as u32,
+            ..Default::default()
+        };
+        
+        let result = self.io_cmd(cmd);
+        if let Some(phys) = prp_list_page {
+            crate::memory::frame::free_frame(phys);
+        }
+        result?;
         Ok(())
     }
     
@@ -860,8 +878,12 @@ pub fn read_sectors(start_lba: u64, count: usize, buffer: &mut [u8]) -> Result<(
         return Err("NVMe: read past end of namespace");
     }
     
-    // Process in chunks that fit in 2 pages (8KB, PRP1+PRP2)
-    let max_lbas_per_chunk = (8192 / lba_sz).max(1);
+    // With PRP list support, we can transfer up to 512 pages (2MB) per command.
+    // Use up to 128 pages (512KB) per chunk for a good balance of speed vs memory.
+    let max_pages_per_chunk = 128usize;
+    let max_bytes_per_chunk = max_pages_per_chunk * 4096;
+    let max_lbas_per_chunk = (max_bytes_per_chunk / lba_sz).max(1);
+    
     let mut lba = start_lba;
     let mut offset = 0usize;
     let mut remaining = count;
@@ -869,53 +891,41 @@ pub fn read_sectors(start_lba: u64, count: usize, buffer: &mut [u8]) -> Result<(
     while remaining > 0 {
         let chunk = remaining.min(max_lbas_per_chunk);
         let chunk_bytes = chunk * lba_sz;
-        
-        // Allocate DMA buffer (use frame allocator for guaranteed physical pages)
         let pages_needed = (chunk_bytes + 4095) / 4096;
-        let dma_phys = crate::memory::frame::alloc_frame_zeroed()
-            .ok_or("NVMe: OOM for DMA read buffer")?;
-        let dma_phys2 = if pages_needed > 1 {
-            Some(crate::memory::frame::alloc_frame_zeroed()
-                .ok_or("NVMe: OOM for DMA read buffer page 2")?)
-        } else {
-            None
-        };
         
-        // For 2-page transfer, set phys of second page correctly
-        // NVMe PRP needs physically contiguous or PRP list
-        // We use individual frames: PRP1=page1, PRP2=page2
-        let actual_prp1 = dma_phys;
-        
-        ctrl.read_lbas(lba, chunk as u16, actual_prp1)?;
-        
-        // Copy first page
-        let first_page_bytes = chunk_bytes.min(4096);
-        let dma_virt = crate::memory::phys_to_virt(dma_phys);
-        unsafe {
-            core::ptr::copy_nonoverlapping(
-                dma_virt as *const u8,
-                buffer[offset..].as_mut_ptr(),
-                first_page_bytes,
-            );
-        }
-        
-        // Copy second page if needed
-        if let Some(phys2) = dma_phys2 {
-            let remaining_bytes = chunk_bytes - first_page_bytes;
-            if remaining_bytes > 0 {
-                let virt2 = crate::memory::phys_to_virt(phys2);
-                unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        virt2 as *const u8,
-                        buffer[offset + first_page_bytes..].as_mut_ptr(),
-                        remaining_bytes,
-                    );
+        // Allocate DMA pages
+        let mut dma_pages: Vec<u64> = Vec::with_capacity(pages_needed);
+        for _ in 0..pages_needed {
+            match crate::memory::frame::alloc_frame_zeroed() {
+                Some(phys) => dma_pages.push(phys),
+                None => {
+                    // Free already allocated pages
+                    for p in &dma_pages { crate::memory::frame::free_frame(*p); }
+                    return Err("NVMe: OOM for DMA read buffer");
                 }
             }
-            crate::memory::frame::free_frame(phys2);
         }
         
-        crate::memory::frame::free_frame(dma_phys);
+        // Issue scatter-gather read
+        ctrl.read_lbas_scatter(lba, chunk as u16, &dma_pages)?;
+        
+        // Copy data from DMA pages to user buffer
+        let mut bytes_left = chunk_bytes;
+        for (i, &page_phys) in dma_pages.iter().enumerate() {
+            let copy_sz = bytes_left.min(4096);
+            let virt = crate::memory::phys_to_virt(page_phys);
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    virt as *const u8,
+                    buffer[offset + i * 4096..].as_mut_ptr(),
+                    copy_sz,
+                );
+            }
+            bytes_left -= copy_sz;
+        }
+        
+        // Free DMA pages
+        for p in &dma_pages { crate::memory::frame::free_frame(*p); }
         
         lba += chunk as u64;
         offset += chunk_bytes;
@@ -941,7 +951,10 @@ pub fn write_sectors(start_lba: u64, count: usize, buffer: &[u8]) -> Result<(), 
         return Err("NVMe: write past end of namespace");
     }
     
-    let max_lbas_per_chunk = (8192 / lba_sz).max(1);
+    let max_pages_per_chunk = 128usize;
+    let max_bytes_per_chunk = max_pages_per_chunk * 4096;
+    let max_lbas_per_chunk = (max_bytes_per_chunk / lba_sz).max(1);
+    
     let mut lba = start_lba;
     let mut offset = 0usize;
     let mut remaining = count;
@@ -949,49 +962,40 @@ pub fn write_sectors(start_lba: u64, count: usize, buffer: &[u8]) -> Result<(), 
     while remaining > 0 {
         let chunk = remaining.min(max_lbas_per_chunk);
         let chunk_bytes = chunk * lba_sz;
-        
         let pages_needed = (chunk_bytes + 4095) / 4096;
-        let dma_phys = crate::memory::frame::alloc_frame_zeroed()
-            .ok_or("NVMe: OOM for DMA write buffer")?;
-        let dma_phys2 = if pages_needed > 1 {
-            Some(crate::memory::frame::alloc_frame_zeroed()
-                .ok_or("NVMe: OOM for DMA write buffer page 2")?)
-        } else {
-            None
-        };
         
-        // Copy data to DMA buffer (first page)
-        let first_page_bytes = chunk_bytes.min(4096);
-        let dma_virt = crate::memory::phys_to_virt(dma_phys);
-        unsafe {
-            core::ptr::copy_nonoverlapping(
-                buffer[offset..].as_ptr(),
-                dma_virt as *mut u8,
-                first_page_bytes,
-            );
-        }
-        
-        // Copy second page if needed
-        if let Some(phys2) = dma_phys2 {
-            let remaining_bytes = chunk_bytes - first_page_bytes;
-            if remaining_bytes > 0 {
-                let virt2 = crate::memory::phys_to_virt(phys2);
-                unsafe {
-                    core::ptr::copy_nonoverlapping(
-                        buffer[offset + first_page_bytes..].as_ptr(),
-                        virt2 as *mut u8,
-                        remaining_bytes,
-                    );
+        // Allocate DMA pages
+        let mut dma_pages: Vec<u64> = Vec::with_capacity(pages_needed);
+        for _ in 0..pages_needed {
+            match crate::memory::frame::alloc_frame_zeroed() {
+                Some(phys) => dma_pages.push(phys),
+                None => {
+                    for p in &dma_pages { crate::memory::frame::free_frame(*p); }
+                    return Err("NVMe: OOM for DMA write buffer");
                 }
             }
         }
         
-        ctrl.write_lbas(lba, chunk as u16, dma_phys)?;
-        
-        if let Some(phys2) = dma_phys2 {
-            crate::memory::frame::free_frame(phys2);
+        // Copy data from user buffer to DMA pages
+        let mut bytes_left = chunk_bytes;
+        for (i, &page_phys) in dma_pages.iter().enumerate() {
+            let copy_sz = bytes_left.min(4096);
+            let virt = crate::memory::phys_to_virt(page_phys);
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    buffer[offset + i * 4096..].as_ptr(),
+                    virt as *mut u8,
+                    copy_sz,
+                );
+            }
+            bytes_left -= copy_sz;
         }
-        crate::memory::frame::free_frame(dma_phys);
+        
+        // Issue scatter-gather write
+        ctrl.write_lbas_scatter(lba, chunk as u16, &dma_pages)?;
+        
+        // Free DMA pages
+        for p in &dma_pages { crate::memory::frame::free_frame(*p); }
         
         lba += chunk as u64;
         offset += chunk_bytes;

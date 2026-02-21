@@ -1298,8 +1298,35 @@ pub(super) fn cmd_free() {
 }
 
 pub(super) fn cmd_df() {
-    crate::println_color!(COLOR_CYAN, "Filesystem   Size  Used  Avail");
-    crate::println!("ramfs         64K    1K    63K");
+    crate::println_color!(COLOR_CYAN, "Filesystem      Type     Size    Used   Avail  Mount");
+    crate::println!("─────────────────────────────────────────────────────");
+
+    let mounts = crate::vfs::list_mounts();
+    let mem = crate::memory::stats();
+    let heap_total = mem.heap_used + mem.heap_free;
+
+    let fmt = |v: usize| -> alloc::string::String {
+        if v == 0 { alloc::format!("  -  ") }
+        else if v >= 1024 * 1024 { alloc::format!("{:>4}M", v / (1024 * 1024)) }
+        else if v >= 1024 { alloc::format!("{:>4}K", v / 1024) }
+        else { alloc::format!("{:>4}B", v) }
+    };
+
+    // Always show ramfs line first (the in-memory filesystem)
+    crate::println!("{:<15} {:<8} {:>5}  {:>5}  {:>5}  {}",
+        "ramfs", "ramfs", fmt(heap_total), fmt(mem.heap_used),
+        fmt(heap_total.saturating_sub(mem.heap_used)), "/");
+
+    for (path, fs_name) in &mounts {
+        if path == "/" { continue; } // Already shown as ramfs
+        let (size, used, avail) = match fs_name.as_str() {
+            "devfs" | "proc" => (0, 0, 0),
+            _ => (heap_total, mem.heap_used, heap_total.saturating_sub(mem.heap_used)),
+        };
+
+        crate::println!("{:<15} {:<8} {:>5}  {:>5}  {:>5}  {}",
+            fs_name, fs_name, fmt(size), fmt(used), fmt(avail), path);
+    }
 }
 
 // ==================== TEST & DEBUG ====================
@@ -1458,6 +1485,10 @@ pub(super) fn cmd_keytest() {
     let mut test_buffer = [0u8; 256];
     
     loop {
+        if crate::shell::is_interrupted() {
+            crate::println_color!(COLOR_GREEN, "Interrupted");
+            break;
+        }
         crate::print_color!(COLOR_CYAN, "test> ");
         let len = crate::keyboard::read_line(&mut test_buffer);
         let input = core::str::from_utf8(&test_buffer[..len]).unwrap_or("");
@@ -3421,17 +3452,23 @@ pub(super) fn cmd_panic() {
 
 pub(super) fn cmd_reboot() {
     crate::println_color!(COLOR_YELLOW, "Rebooting...");
-    unsafe {
-        x86_64::instructions::port::Port::<u8>::new(0x64).write(0xFE);
-    }
-    loop { x86_64::instructions::hlt(); }
+    crate::acpi::reboot();
 }
 
 pub(super) fn cmd_halt() {
-    crate::println_color!(COLOR_YELLOW, "System halted.");
-    loop {
-        x86_64::instructions::interrupts::disable();
-        x86_64::instructions::hlt();
+    crate::println_color!(COLOR_YELLOW, "System shutting down...");
+    crate::acpi::shutdown();
+}
+
+pub(super) fn cmd_sleep() {
+    crate::println_color!(COLOR_CYAN, "Suspending to S3 (sleep-to-RAM)...");
+    crate::println!("Press power button or send wakeup event to resume.");
+    // Allow serial output to flush
+    for _ in 0..500_000 { core::hint::spin_loop(); }
+    if crate::acpi::suspend() {
+        crate::println_color!(COLOR_GREEN, "Resumed from S3 sleep.");
+    } else {
+        crate::println_color!(COLOR_RED, "S3 suspend not supported or failed.");
     }
 }
 

@@ -866,6 +866,10 @@ pub(super) fn cmd_jarvis(args: &[&str]) {
     let mut input_buf = [0u8; 256];
     
     loop {
+        if crate::shell::is_interrupted() {
+            crate::println_color!(JARVIS_COLOR, "  [interrupted]");
+            break;
+        }
         // Prompt
         crate::print_color!(JARVIS_COLOR, "\n  jarvis");
         crate::print_color!(COLOR_WHITE, " > ");
