@@ -101,6 +101,43 @@ impl ModelGrads {
         }).sum::<usize>()
         + self.d_rms_final.len() + self.d_output.len()
     }
+
+    /// Compute total L2 norm of all gradients
+    pub fn grad_norm(&self) -> f32 {
+        let mut ss = 0.0f32;
+        let add_ss = |ss: &mut f32, s: &[f32]| { for &g in s { *ss += g * g; } };
+        add_ss(&mut ss, &self.d_token_embed);
+        add_ss(&mut ss, &self.d_pos_embed);
+        for l in &self.layers {
+            add_ss(&mut ss, &l.d_rms_attn);
+            add_ss(&mut ss, &l.d_wq); add_ss(&mut ss, &l.d_wk);
+            add_ss(&mut ss, &l.d_wv); add_ss(&mut ss, &l.d_wo);
+            add_ss(&mut ss, &l.d_rms_ffn);
+            add_ss(&mut ss, &l.d_wgate); add_ss(&mut ss, &l.d_wup);
+            add_ss(&mut ss, &l.d_wdown);
+        }
+        add_ss(&mut ss, &self.d_rms_final);
+        add_ss(&mut ss, &self.d_output);
+        approx_sqrt(ss)
+    }
+
+    /// Clip gradients by global L2 norm (if norm > max_norm, scale down)
+    pub fn clip_norm(&mut self, max_norm: f32) {
+        let norm = self.grad_norm();
+        if norm > max_norm && norm > 0.0 {
+            let s = max_norm / norm;
+            let sc = |v: &mut [f32], s: f32| { for g in v.iter_mut() { *g *= s; } };
+            sc(&mut self.d_token_embed, s);
+            sc(&mut self.d_pos_embed, s);
+            for l in &mut self.layers {
+                sc(&mut l.d_rms_attn, s); sc(&mut l.d_wq, s); sc(&mut l.d_wk, s);
+                sc(&mut l.d_wv, s); sc(&mut l.d_wo, s); sc(&mut l.d_rms_ffn, s);
+                sc(&mut l.d_wgate, s); sc(&mut l.d_wup, s); sc(&mut l.d_wdown, s);
+            }
+            sc(&mut self.d_rms_final, s);
+            sc(&mut self.d_output, s);
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -370,22 +407,23 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
         let scale = 1.0 / n_targets as f32;
         for v in d_logits.iter_mut() { *v *= scale; }
 
-        // ── dL/d_w_output: outer product of x_final_norm and d_logits ──
-        // w_output is [D_MODEL × VOCAB_SIZE], so d_w_output[d][v] += x_final[d] * d_logits[v]
-        for d in 0..D_MODEL {
-            for v in 0..VOCAB_SIZE {
-                grads.d_output[d * VOCAB_SIZE + v] += acts.x_final_norm[d] * d_logits[v];
+        // ── dL/d_w_output ──
+        // w_output is [VOCAB_SIZE rows × D_MODEL cols]: logits[r] = Σ_c w[r*D_MODEL+c]*x[c]
+        for r in 0..VOCAB_SIZE {
+            let base = r * D_MODEL;
+            for c in 0..D_MODEL {
+                grads.d_output[base + c] += d_logits[r] * acts.x_final_norm[c];
             }
         }
 
         // ── dL/d_x_final_norm = W_output^T @ d_logits ──
         let mut d_xfn = vec![0.0f32; D_MODEL];
-        for d in 0..D_MODEL {
+        for c in 0..D_MODEL {
             let mut s = 0.0f32;
-            for v in 0..VOCAB_SIZE {
-                s += model.w_output[d * VOCAB_SIZE + v] * d_logits[v];
+            for r in 0..VOCAB_SIZE {
+                s += model.w_output[r * D_MODEL + c] * d_logits[r];
             }
-            d_xfn[d] = s;
+            d_xfn[c] = s;
         }
 
         // ── Backward through final RMSNorm ──
@@ -401,16 +439,21 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
             let d_ffn_out = d_x.clone(); // gradient flows to both branches
             // d_x_mid gets same d_x (residual connection)
 
-            // ── Backward through W_down: ffn_out = W_down @ gated ──
+            // ── Backward through W_down ──
+            // ffn_out[r] = Σ_c w_down[r*D_FF+c] * gated[c], r=0..D_MODEL
             let mut d_gated = vec![0.0f32; D_FF];
-            // d_wdown[f][d] += gated[f] * d_ffn_out[d]
-            for f in 0..D_FF {
-                let mut s = 0.0f32;
-                for d in 0..D_MODEL {
-                    lg.d_wdown[f * D_MODEL + d] += la.gated[f] * d_ffn_out[d];
-                    s += layer.w_down[f * D_MODEL + d] * d_ffn_out[d];
+            for r in 0..D_MODEL {
+                let base = r * D_FF;
+                for c in 0..D_FF {
+                    lg.d_wdown[base + c] += d_ffn_out[r] * la.gated[c];
                 }
-                d_gated[f] = s;
+            }
+            for c in 0..D_FF {
+                let mut s = 0.0f32;
+                for r in 0..D_MODEL {
+                    s += layer.w_down[r * D_FF + c] * d_ffn_out[r];
+                }
+                d_gated[c] = s;
             }
 
             // ── Backward through SwiGLU: gated = silu(gate_pre) * up ──
@@ -426,17 +469,16 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
             }
 
             // ── Backward through W_gate and W_up ──
+            // gate_pre[r] = Σ_c w_gate[r*D_MODEL+c] * x[c], r=0..D_FF (same for w_up)
             let mut d_xnf = vec![0.0f32; D_MODEL];
-            for d in 0..D_MODEL {
-                let mut sg = 0.0f32;
-                let mut su = 0.0f32;
-                for f in 0..D_FF {
-                    lg.d_wgate[d * D_FF + f] += la.x_norm_ffn[d] * d_gate_pre[f];
-                    lg.d_wup[d * D_FF + f] += la.x_norm_ffn[d] * d_up[f];
-                    sg += layer.w_gate[d * D_FF + f] * d_gate_pre[f];
-                    su += layer.w_up[d * D_FF + f] * d_up[f];
+            for r in 0..D_FF {
+                let base = r * D_MODEL;
+                for c in 0..D_MODEL {
+                    lg.d_wgate[base + c] += d_gate_pre[r] * la.x_norm_ffn[c];
+                    lg.d_wup[base + c] += d_up[r] * la.x_norm_ffn[c];
+                    d_xnf[c] += layer.w_gate[base + c] * d_gate_pre[r];
+                    d_xnf[c] += layer.w_up[base + c] * d_up[r];
                 }
-                d_xnf[d] = sg + su;
             }
 
             // ── Backward through FFN RMSNorm ──
@@ -448,21 +490,14 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
                 d_x_pre_ffn[i] = d_x[i] + d_x_mid[i]; // residual: both paths
             }
 
-            // ── Backward through attention output projection ──
-            // proj = W_o @ attn_out
-            let mut d_attn_out = vec![0.0f32; D_MODEL];
+            // ── Backward through W_o: proj[r] = Σ_c W_o[r*D+c] * attn_out[c] ──
             for r in 0..D_MODEL {
-                let mut s = 0.0f32;
+                let base = r * D_MODEL;
                 for c in 0..D_MODEL {
-                    lg.d_wo[r * D_MODEL + c] += la.attn_out[c] * d_x_pre_ffn[r];
-                    s += layer.w_o[r * D_MODEL + c] * d_x_pre_ffn[r];
+                    lg.d_wo[base + c] += d_x_pre_ffn[r] * la.attn_out[c];
                 }
-                d_attn_out[r] = s; // This is wrong, let me fix
             }
-            // Actually: d_attn_out[c] = sum_r W_o[r][c] * d_proj[r]
-            // Since proj[r] = sum_c W_o[r*D+c] * attn_out[c]
-            // d_attn_out = W_o^T @ d_proj
-            d_attn_out = vec![0.0f32; D_MODEL];
+            let mut d_attn_out = vec![0.0f32; D_MODEL];
             for c in 0..D_MODEL {
                 let mut s = 0.0f32;
                 for r in 0..D_MODEL {
@@ -471,57 +506,56 @@ pub fn forward_backward(model: &TransformerWeights, tokens: &[u8]) -> (f32, Mode
                 d_attn_out[c] = s;
             }
 
-            // ── Backward through multi-head attention ──
+            // ── Backward through multi-head attention (Q + self-position K,V) ──
             let d_k_sqrt = approx_sqrt(D_K as f32);
             let n_pos = t + 1;
             let mut d_q = vec![0.0f32; D_MODEL];
-            // We accumulate dK and dV for all positions — but for efficiency
-            // we only update the current position's Q gradient and W_q/W_k/W_v grads
+            let mut d_k_self = vec![0.0f32; D_MODEL];
+            let mut d_v_self = vec![0.0f32; D_MODEL];
             for h in 0..N_HEADS {
                 let ho = h * D_K;
-                let wts = &la.attn_weights[h]; // [n_pos]
+                let wts = &la.attn_weights[h];
 
-                // d_attn_out_h flows back through weighted sum
-                // attn_out[ho+d] = sum_p wts[p] * V[p][ho+d]
-                // d_wts[p] = sum_d d_attn_out[ho+d] * V[p][ho+d]
                 let mut d_wts = vec![0.0f32; n_pos];
                 for p in 0..n_pos {
                     let mut s = 0.0f32;
                     for d in 0..D_K {
                         s += d_attn_out[ho + d] * all_v[l][p][ho + d];
+                        if p == t { d_v_self[ho + d] += wts[p] * d_attn_out[ho + d]; }
                     }
                     d_wts[p] = s;
                 }
 
-                // Backward through softmax: d_scores = softmax_backward(d_wts, wts)
-                let mut d_scores = vec![0.0f32; n_pos];
                 let dot: f32 = (0..n_pos).map(|p| d_wts[p] * wts[p]).sum();
+                let mut d_scores = vec![0.0f32; n_pos];
                 for p in 0..n_pos {
                     d_scores[p] = wts[p] * (d_wts[p] - dot);
                 }
 
-                // d_scores[p] = (Q · K[p]) / sqrt(d_k) derivative
-                // d_q[ho+d] += sum_p d_scores[p] * K[p][ho+d] / sqrt(d_k)
                 for p in 0..n_pos {
                     let ds = d_scores[p] / d_k_sqrt;
                     for d in 0..D_K {
                         d_q[ho + d] += ds * all_k[l][p][ho + d];
+                        if p == t { d_k_self[ho + d] += ds * la.q[ho + d]; }
                     }
                 }
             }
 
-            // ── Backward through Q = W_q @ x_norm_attn ──
+            // ── Backward through Q, K, V projections ──
             let mut d_xna = vec![0.0f32; D_MODEL];
             for c in 0..D_MODEL {
                 let mut s = 0.0f32;
                 for r in 0..D_MODEL {
-                    lg.d_wq[r * D_MODEL + c] += d_q[r] * la.x_norm_attn[c];
-                    s += layer.w_q[r * D_MODEL + c] * d_q[r];
+                    let idx = r * D_MODEL + c;
+                    lg.d_wq[idx] += d_q[r] * la.x_norm_attn[c];
+                    s += layer.w_q[idx] * d_q[r];
+                    lg.d_wk[idx] += d_k_self[r] * la.x_norm_attn[c];
+                    s += layer.w_k[idx] * d_k_self[r];
+                    lg.d_wv[idx] += d_v_self[r] * la.x_norm_attn[c];
+                    s += layer.w_v[idx] * d_v_self[r];
                 }
                 d_xna[c] = s;
             }
-            // Note: We skip K,V gradients for non-current positions for simplicity.
-            // This is an approximation but works well for short sequences.
 
             // ── Backward through attention RMSNorm ──
             let d_x_in = backward_rmsnorm(&d_xna, &la.x_in, &layer.rms_attn, &mut lg.d_rms_attn);

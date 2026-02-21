@@ -1030,6 +1030,10 @@ fn cmd_brain(args: &[&str]) {
 
         "generate" | "gen" | "g" => {
             if !ensure_brain() { return; }
+            if crate::jarvis::is_private() {
+                crate::println_color!(COLOR_YELLOW, "  [Private mode] Generation disabled");
+                return;
+            }
             let prompt = if args.len() > 1 { args[1..].join(" ") } else { String::from("Hello") };
             crate::print_color!(JARVIS_BRAIN, "  Prompt: ");
             crate::println_color!(COLOR_WHITE, "{}", prompt);
@@ -1263,6 +1267,10 @@ fn cmd_brain(args: &[&str]) {
 
         "chat" => {
             if !ensure_brain() { return; }
+            if crate::jarvis::is_private() {
+                crate::println_color!(COLOR_YELLOW, "  [Private mode] Chat disabled");
+                return;
+            }
             if args.len() < 2 {
                 crate::println!("  Usage: jarvis brain chat <text>");
                 return;

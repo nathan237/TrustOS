@@ -103,13 +103,9 @@ impl AdamState {
             let j = *idx + i;
             if j >= self.m.len() { break; }
 
-            let mut g = grads[i];
+            let g = grads[i];
 
-            // Gradient clipping
-            if g > self.grad_clip { g = self.grad_clip; }
-            if g < -self.grad_clip { g = -self.grad_clip; }
-
-            // Update moments
+            // Update moments (global norm clipping done before optimizer step)
             self.m[j] = self.beta1 * self.m[j] + (1.0 - self.beta1) * g;
             self.v[j] = self.beta2 * self.v[j] + (1.0 - self.beta2) * g * g;
 

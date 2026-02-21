@@ -65,7 +65,7 @@ pub mod optimizer;
 use alloc::string::String;
 use alloc::format;
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use spin::Mutex;
 
 use model::TransformerWeights;
@@ -88,6 +88,12 @@ static ENGINE: Mutex<Option<InferenceEngine>> = Mutex::new(None);
 
 /// Global Adam optimizer state
 static OPTIMIZER: Mutex<Option<AdamState>> = Mutex::new(None);
+
+/// Jarvis maturity level: 0=infant, 1=child, 2=teen, 3=adult
+static MATURITY: AtomicU8 = AtomicU8::new(0);
+
+/// Private mode: when true, refuse to reveal internal state
+static PRIVATE_MODE: AtomicBool = AtomicBool::new(false);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Initialization
@@ -126,6 +132,26 @@ pub fn init() {
 /// Check if Jarvis brain is initialized
 pub fn is_ready() -> bool {
     INITIALIZED.load(Ordering::Acquire)
+}
+
+/// Current maturity level (0..3)
+pub fn maturity() -> u8 {
+    MATURITY.load(Ordering::Relaxed)
+}
+
+/// Whether private mode is on
+pub fn is_private() -> bool {
+    PRIVATE_MODE.load(Ordering::Relaxed)
+}
+
+/// Update maturity based on training loss
+fn update_maturity() {
+    let loss = eval_corpus();
+    let level = if loss < 2.0 { 3 }
+        else if loss < 3.5 { 2 }
+        else if loss < 5.0 { 1 }
+        else { 0 };
+    MATURITY.store(level, Ordering::Relaxed);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -204,7 +230,8 @@ pub fn train_on_text(text: &str, learning_rate: f32) -> f32 {
         };
 
         adam.lr = learning_rate;
-        let (loss, grads) = backprop::forward_backward(model, &tokens);
+        let (loss, mut grads) = backprop::forward_backward(model, &tokens);
+        grads.clip_norm(1.0);
         adam.step(model, &grads);
         TRAINING_STEPS.fetch_add(1, Ordering::Relaxed);
         return loss;
@@ -513,7 +540,9 @@ pub fn eval_corpus() -> f32 {
         }
     }
 
-    if count > 0 { total_loss / count as f32 } else { f32::MAX }
+    let avg = if count > 0 { total_loss / count as f32 } else { f32::MAX };
+    update_maturity();
+    avg
 }
 
 /// Get training steps count
