@@ -1315,44 +1315,102 @@ pub(super) fn cmd_persistence(args: &[&str]) {
 // ==================== DISK COMMANDS ====================
 
 pub(super) fn cmd_disk() {
-    crate::println_color!(COLOR_CYAN, "=== Disk Information ===");
+    crate::println_color!(COLOR_CYAN, "=== Storage Devices ===");
     
+    let mut device_count = 0u32;
+    
+    // ── NVMe ──
+    if crate::nvme::is_initialized() {
+        if let Some((model, serial, ns_size, lba_size)) = crate::nvme::get_info() {
+            let size_mb = (ns_size * lba_size as u64) / (1024 * 1024);
+            crate::println!();
+            crate::println_color!(COLOR_GREEN, "[NVMe] {}", model);
+            crate::println!("  Serial:    {}", serial);
+            crate::println!("  Capacity:  {} MB ({} sectors x {} bytes)", size_mb, ns_size, lba_size);
+            crate::println!("  Interface: NVMe over PCIe");
+            device_count += 1;
+        }
+    }
+    
+    // ── AHCI/SATA ──
+    if crate::drivers::ahci::is_initialized() {
+        for dev in crate::drivers::ahci::list_devices() {
+            let size_mb = (dev.sector_count * 512) / (1024 * 1024);
+            crate::println!();
+            crate::print_color!(COLOR_GREEN, "[AHCI Port {}] ", dev.port_num);
+            crate::println!("{}", dev.model);
+            crate::println!("  Serial:    {}", dev.serial);
+            crate::println!("  Capacity:  {} MB ({} sectors)", size_mb, dev.sector_count);
+            crate::println!("  Type:      {:?}", dev.device_type);
+            crate::println!("  Interface: SATA (AHCI)");
+            device_count += 1;
+        }
+    }
+    
+    // ── IDE/ATA ──
+    for drv in crate::drivers::ata::list_drives() {
+        if drv.present {
+            let size_mb = (drv.sector_count * 512) / (1024 * 1024);
+            let ch = match drv.channel {
+                crate::drivers::ata::IdeChannel::Primary => "Primary",
+                crate::drivers::ata::IdeChannel::Secondary => "Secondary",
+            };
+            let pos = match drv.position {
+                crate::drivers::ata::DrivePosition::Master => "Master",
+                crate::drivers::ata::DrivePosition::Slave => "Slave",
+            };
+            crate::println!();
+            crate::print_color!(COLOR_GREEN, "[IDE {} {}] ", ch, pos);
+            crate::println!("{}", drv.model);
+            crate::println!("  Serial:    {}", drv.serial);
+            crate::println!("  Capacity:  {} MB ({} sectors)", size_mb, drv.sector_count);
+            crate::println!("  LBA48:     {}", if drv.lba48 { "Yes" } else { "No (28-bit)" });
+            crate::println!("  ATAPI:     {}", if drv.atapi { "Yes" } else { "No" });
+            crate::println!("  Interface: IDE/ATA (PIO)");
+            device_count += 1;
+        }
+    }
+    
+    // ── VirtIO ──
+    if crate::virtio_blk::is_initialized() {
+        let cap = crate::virtio_blk::capacity();
+        let size_mb = (cap * 512) / (1024 * 1024);
+        let ro = crate::virtio_blk::is_read_only();
+        crate::println!();
+        crate::println_color!(COLOR_GREEN, "[VirtIO Block Device]");
+        crate::println!("  Capacity:  {} MB ({} sectors)", size_mb, cap);
+        crate::println!("  Read-Only: {}", if ro { "Yes" } else { "No" });
+        crate::println!("  Interface: VirtIO (paravirtual)");
+        device_count += 1;
+    }
+    
+    // ── USB Storage ──
+    for (i, (name, blocks, bsize)) in crate::drivers::usb_storage::list_devices().iter().enumerate() {
+        let size_mb = (*blocks * *bsize as u64) / (1024 * 1024);
+        crate::println!();
+        crate::print_color!(COLOR_GREEN, "[USB Storage #{}] ", i);
+        crate::println!("{}", name);
+        crate::println!("  Capacity:  {} MB ({} blocks x {} bytes)", size_mb, blocks, bsize);
+        crate::println!("  Interface: USB Mass Storage (BBB/SCSI)");
+        device_count += 1;
+    }
+    
+    // ── RAM Disk ──
+    crate::println!();
     if let Some(info) = crate::disk::get_info() {
-        crate::print_color!(COLOR_GREEN, "Model:   ");
-        crate::println!("{}", info.model);
-        crate::print_color!(COLOR_GREEN, "Serial:  ");
-        crate::println!("{}", info.serial);
-        crate::print_color!(COLOR_GREEN, "Size:    ");
-        crate::println!("{} MB ({} sectors)", info.size_mb, info.sectors);
+        crate::println_color!(COLOR_DARK_GREEN, "[RAM Disk]");
+        crate::println!("  Size:      {} KB ({} sectors)", info.sectors / 2, info.sectors);
         
         let (reads, writes, bytes_r, bytes_w) = crate::disk::get_stats();
-        crate::println!();
-        crate::println_color!(COLOR_CYAN, "Statistics:");
-        crate::println!("  Reads:  {} ops ({} bytes)", reads, bytes_r);
-        crate::println!("  Writes: {} ops ({} bytes)", writes, bytes_w);
-        
-        // List files
-        crate::println!();
-        crate::println_color!(COLOR_CYAN, "Files on disk:");
-        match crate::disk::list_files() {
-            Ok(files) => {
-                if files.is_empty() {
-                    crate::println!("  (no files)");
-                } else {
-                    for f in files {
-                        if f.is_directory {
-                            crate::print_color!(COLOR_CYAN, "  [DIR]  ");
-                        } else {
-                            crate::print!("  [FILE] ");
-                        }
-                        crate::println!("{} ({} bytes)", f.name, f.size);
-                    }
-                }
-            }
-            Err(e) => crate::println_color!(COLOR_RED, "  Error: {}", e),
-        }
+        crate::println!("  Stats:     {} reads ({} B), {} writes ({} B)", reads, bytes_r, writes, bytes_w);
+    }
+    
+    // ── Summary ──
+    crate::println!();
+    if device_count == 0 {
+        crate::println_color!(COLOR_YELLOW, "No hardware storage detected (RAM disk only)");
     } else {
-        crate::println_color!(COLOR_YELLOW, "No disk detected");
+        crate::println_color!(COLOR_CYAN, "Total: {} hardware storage device(s) + RAM disk", device_count);
     }
 }
 

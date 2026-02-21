@@ -385,19 +385,41 @@ pub fn scan() -> Vec<PciDevice> {
     }
     
     // Scan buses 0-255 (scan even if detection failed - some VMs need this)
+    // We must scan all buses to find devices behind PCI-to-PCI bridges
+    // on real hardware with complex topologies.
+    let mut max_bus: u8 = 0;
+    
     for bus in 0..=255u8 {
+        let mut found_on_bus = false;
         for device in 0..32 {
+            let before = devices.len();
             scan_device(bus, device, &mut devices);
+            if devices.len() > before {
+                found_on_bus = true;
+                // Check if any new device is a PCI bridge — if so, extend scan range
+                for dev in &devices[before..] {
+                    if dev.class_code == class::BRIDGE && dev.subclass == 0x04 {
+                        // PCI-to-PCI bridge: read secondary bus number (offset 0x19)
+                        let sec_bus = (crate::pci::config_read(dev.bus, dev.device, dev.function, 0x18) >> 8) as u8;
+                        let sub_bus = (crate::pci::config_read(dev.bus, dev.device, dev.function, 0x18) >> 16) as u8;
+                        if sub_bus > max_bus {
+                            max_bus = sub_bus;
+                        }
+                        if sec_bus > max_bus {
+                            max_bus = sec_bus;
+                        }
+                    }
+                }
+            }
         }
         
-        // Optimization: if bus 0 has no bridges, skip other buses
-        if bus == 0 && !devices.iter().any(|d| d.class_code == class::BRIDGE) {
-            break;
-        }
-        
-        // QEMU typically only uses first few buses
-        if bus > 10 && devices.iter().filter(|d| d.bus > 0).count() == 0 {
-            break;
+        // Adaptive stop: only scan beyond bus 0 if bridges were found
+        // or if we have discovered devices on higher buses
+        if bus >= max_bus && bus > 0 && !found_on_bus {
+            // Allow scanning a few buses past the last known bridge
+            if bus > max_bus + 2 {
+                break;
+            }
         }
     }
     

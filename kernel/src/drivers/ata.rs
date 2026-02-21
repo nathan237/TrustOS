@@ -27,8 +27,11 @@ mod cmd {
     pub const IDENTIFY: u8 = 0xEC;
     pub const IDENTIFY_PACKET: u8 = 0xA1;
     pub const READ_SECTORS: u8 = 0x20;
+    pub const READ_SECTORS_EXT: u8 = 0x24;
     pub const WRITE_SECTORS: u8 = 0x30;
+    pub const WRITE_SECTORS_EXT: u8 = 0x34;
     pub const CACHE_FLUSH: u8 = 0xE7;
+    pub const CACHE_FLUSH_EXT: u8 = 0xEA;
 }
 
 /// Status register bits
@@ -286,7 +289,16 @@ pub fn init_ide() -> bool {
     has_drives
 }
 
-/// Read sectors using PIO
+/// Check if a drive supports LBA48 (returns false if drive not found)
+fn drive_supports_lba48(channel: IdeChannel, slave: bool) -> bool {
+    let pos = if slave { DrivePosition::Slave } else { DrivePosition::Master };
+    CONTROLLER.lock().as_ref()
+        .and_then(|c| c.drives.iter().find(|d| d.channel == channel && d.position == pos))
+        .map(|d| d.lba48)
+        .unwrap_or(false)
+}
+
+/// Read sectors using PIO — uses LBA48 when drive supports it, else LBA28
 pub fn read_sectors(channel: IdeChannel, slave: bool, lba: u64, count: u8, buffer: &mut [u8]) -> Result<(), &'static str> {
     let base = match channel {
         IdeChannel::Primary => PRIMARY_DATA,
@@ -297,16 +309,38 @@ pub fn read_sectors(channel: IdeChannel, slave: bool, lba: u64, count: u8, buffe
         return Err("Buffer too small");
     }
     
+    // Check if drive supports LBA48
+    let use_lba48 = drive_supports_lba48(channel, slave);
+    
     select_drive(base, slave);
     wait_ready(base)?;
     
-    unsafe {
-        Port::<u8>::new(base + 2).write(count);
-        Port::<u8>::new(base + 3).write(lba as u8);
-        Port::<u8>::new(base + 4).write((lba >> 8) as u8);
-        Port::<u8>::new(base + 5).write((lba >> 16) as u8);
-        Port::<u8>::new(base + 6).write(0xE0 | (if slave { 0x10 } else { 0 }) | ((lba >> 24) as u8 & 0x0F));
-        Port::<u8>::new(base + 7).write(cmd::READ_SECTORS);
+    if use_lba48 {
+        // LBA48: write high bytes first (HOB), then low bytes
+        unsafe {
+            // HOB registers (previous values)
+            Port::<u8>::new(base + 2).write(0); // sector count high
+            Port::<u8>::new(base + 3).write((lba >> 24) as u8); // LBA4
+            Port::<u8>::new(base + 4).write((lba >> 32) as u8); // LBA5
+            Port::<u8>::new(base + 5).write((lba >> 40) as u8); // LBA6
+            // Current registers
+            Port::<u8>::new(base + 2).write(count); // sector count low
+            Port::<u8>::new(base + 3).write(lba as u8); // LBA1
+            Port::<u8>::new(base + 4).write((lba >> 8) as u8); // LBA2
+            Port::<u8>::new(base + 5).write((lba >> 16) as u8); // LBA3
+            Port::<u8>::new(base + 6).write(0x40 | (if slave { 0x10 } else { 0 })); // LBA mode
+            Port::<u8>::new(base + 7).write(cmd::READ_SECTORS_EXT);
+        }
+    } else {
+        // LBA28: original path
+        unsafe {
+            Port::<u8>::new(base + 2).write(count);
+            Port::<u8>::new(base + 3).write(lba as u8);
+            Port::<u8>::new(base + 4).write((lba >> 8) as u8);
+            Port::<u8>::new(base + 5).write((lba >> 16) as u8);
+            Port::<u8>::new(base + 6).write(0xE0 | (if slave { 0x10 } else { 0 }) | ((lba >> 24) as u8 & 0x0F));
+            Port::<u8>::new(base + 7).write(cmd::READ_SECTORS);
+        }
     }
     
     let mut data_port = Port::<u16>::new(base);
@@ -326,7 +360,7 @@ pub fn read_sectors(channel: IdeChannel, slave: bool, lba: u64, count: u8, buffe
     Ok(())
 }
 
-/// Write sectors using PIO
+/// Write sectors using PIO — uses LBA48 when drive supports it, else LBA28
 pub fn write_sectors(channel: IdeChannel, slave: bool, lba: u64, count: u8, buffer: &[u8]) -> Result<(), &'static str> {
     let base = match channel {
         IdeChannel::Primary => PRIMARY_DATA,
@@ -337,16 +371,35 @@ pub fn write_sectors(channel: IdeChannel, slave: bool, lba: u64, count: u8, buff
         return Err("Buffer too small");
     }
     
+    let use_lba48 = drive_supports_lba48(channel, slave);
+    
     select_drive(base, slave);
     wait_ready(base)?;
     
-    unsafe {
-        Port::<u8>::new(base + 2).write(count);
-        Port::<u8>::new(base + 3).write(lba as u8);
-        Port::<u8>::new(base + 4).write((lba >> 8) as u8);
-        Port::<u8>::new(base + 5).write((lba >> 16) as u8);
-        Port::<u8>::new(base + 6).write(0xE0 | (if slave { 0x10 } else { 0 }) | ((lba >> 24) as u8 & 0x0F));
-        Port::<u8>::new(base + 7).write(cmd::WRITE_SECTORS);
+    if use_lba48 {
+        unsafe {
+            // HOB registers first
+            Port::<u8>::new(base + 2).write(0); // sector count high
+            Port::<u8>::new(base + 3).write((lba >> 24) as u8);
+            Port::<u8>::new(base + 4).write((lba >> 32) as u8);
+            Port::<u8>::new(base + 5).write((lba >> 40) as u8);
+            // Current registers
+            Port::<u8>::new(base + 2).write(count);
+            Port::<u8>::new(base + 3).write(lba as u8);
+            Port::<u8>::new(base + 4).write((lba >> 8) as u8);
+            Port::<u8>::new(base + 5).write((lba >> 16) as u8);
+            Port::<u8>::new(base + 6).write(0x40 | (if slave { 0x10 } else { 0 }));
+            Port::<u8>::new(base + 7).write(cmd::WRITE_SECTORS_EXT);
+        }
+    } else {
+        unsafe {
+            Port::<u8>::new(base + 2).write(count);
+            Port::<u8>::new(base + 3).write(lba as u8);
+            Port::<u8>::new(base + 4).write((lba >> 8) as u8);
+            Port::<u8>::new(base + 5).write((lba >> 16) as u8);
+            Port::<u8>::new(base + 6).write(0xE0 | (if slave { 0x10 } else { 0 }) | ((lba >> 24) as u8 & 0x0F));
+            Port::<u8>::new(base + 7).write(cmd::WRITE_SECTORS);
+        }
     }
     
     let mut data_port = Port::<u16>::new(base);
@@ -364,7 +417,8 @@ pub fn write_sectors(channel: IdeChannel, slave: bool, lba: u64, count: u8, buff
     
     // Flush cache
     unsafe {
-        Port::<u8>::new(base + 7).write(cmd::CACHE_FLUSH);
+        let flush_cmd = if use_lba48 { cmd::CACHE_FLUSH_EXT } else { cmd::CACHE_FLUSH };
+        Port::<u8>::new(base + 7).write(flush_cmd);
     }
     wait_ready(base)?;
     

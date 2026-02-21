@@ -1,0 +1,60 @@
+﻿CONNECTED to port 5557
+BOOT: 5.8s
+
+===== JARVIS BRAIN INIT =====
+jarvis brain init
+  Initializing neural brain...
+[JARVIS] Initializing neural brain...
+[JARVIS] Model: 4 layers, d_model=64, d_ff=256, 4 heads
+[JARVIS] Parameters: 311872 (1218 KB FP32)
+[JARVIS] Optimizer: Adam (lr=0.001, 2436 KB state)
+[JARVIS] Neural brain ready. Awaiting input or mentoring.
+  Neural brain ready.
+[22:09:16] trustos:/$ 
+
+===== EVAL BEFORE TRAINING =====
+jarvis brain eval
+  Evaluating on embedded corpus...
+
+
+===== PRETRAIN 1 EPOCH (backprop+Adam) =====
+
+  Phase 0 (Byte Patterns) 21 sequences
+  Phase 1 (Simple Sentences) 18 sequences
+  Phase 2 (Shell Commands) 22 sequences
+  Phase 3 (Q&A Pairs) 15 sequences
+  Phase 4 (Self-Knowledge) 16 sequences
+
+  Average loss: 5.792 (random/untrained)
+  (Random baseline: ~5.5, Good: <3.0, Memorized: <1.0)
+[22:12:18] trustos:/$ jarvis brain pretrain 1
+  Pre-training on embedded corpus (1 epoch(s))...
+
+  Loss before: 5.792
+
+  Phase 0 (Byte Patterns) [21 seqs] [JARVIS] Training phase 0 (Byte Patterns) ??? 21 sequences, 1 epoch(s)
+loss=5.530 (322490ms, 21 steps)
+  Phase 1 (Simple Sentences) [18 seqs] [JARVIS] Training phase 1 (Simple Sentences) ??? 18 sequences, 1 epoch(s)
+
+Wall-clock: 600.4s
+
+===== EVAL AFTER TRAINING =====
+
+
+===== CHAT: Hello =====
+
+
+===== CHAT: who are you =====
+
+
+===== CHAT: help =====
+
+
+===== CHAT: TrustOS =====
+
+
+===== SAVE WEIGHTS =====
+
+
+===== DONE =====
+

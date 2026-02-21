@@ -1,0 +1,19 @@
+﻿CONNECTED
+BOOT: 35.1s
+
+=== INIT ===
+
+=== EVAL BEFORE ===
+
+=== PRETRAIN 1 EPOCH ===
+
+=== EVAL AFTER ===
+
+=== CHAT: Hello ===
+
+=== CHAT: who are you ===
+
+=== SAVE ===
+
+=== DONE ===
+

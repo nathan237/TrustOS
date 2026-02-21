@@ -1,0 +1,4 @@
+﻿jarvis brain pretrain
+  Pre-training on embedded corpus (1 epoch(s))...
+
+

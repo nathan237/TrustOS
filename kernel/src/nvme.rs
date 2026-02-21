@@ -11,6 +11,7 @@
 //! Reference: NVM Express Base Specification 1.4
 
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
 use spin::Mutex;
 
@@ -220,6 +221,17 @@ impl QueuePair {
     }
 }
 
+/// A single NVMe namespace
+#[derive(Clone)]
+pub struct NvmeNamespace {
+    /// Namespace ID
+    pub nsid: u32,
+    /// Size in LBAs
+    pub size_lbas: u64,
+    /// LBA data size in bytes (typically 512 or 4096)
+    pub lba_size: u32,
+}
+
 /// NVMe Controller
 struct NvmeController {
     /// MMIO base virtual address
@@ -234,10 +246,12 @@ struct NvmeController {
     serial: String,
     /// Controller model
     model: String,
-    /// Namespace 1 size in LBAs
+    /// Namespace 1 size in LBAs (kept for backwards compat)
     ns1_size: u64,
     /// Namespace 1 LBA data size (bytes, typically 512)
     ns1_lba_size: u32,
+    /// All discovered namespaces
+    namespaces: Vec<NvmeNamespace>,
     /// Maximum transfer size (in pages)
     max_transfer_pages: u32,
 }
@@ -381,15 +395,15 @@ impl NvmeController {
         Ok(())
     }
     
-    /// Identify Namespace (CNS=0, NSID=1). Reads size and LBA format.
-    fn identify_namespace(&mut self) -> Result<(), &'static str> {
+    /// Identify Namespace (CNS=0) for a given NSID. Returns (size_lbas, lba_size).
+    fn identify_namespace_by_id(&mut self, nsid: u32) -> Result<(u64, u32), &'static str> {
         let buf_phys = crate::memory::frame::alloc_frame_zeroed()
             .ok_or("NVMe: OOM for identify namespace buffer")?;
         let buf_virt = crate::memory::phys_to_virt(buf_phys);
         
         let cmd = SqEntry {
             cdw0: ADMIN_IDENTIFY as u32,
-            nsid: 1,
+            nsid,
             prp1: buf_phys,
             cdw10: IDENTIFY_NAMESPACE,
             ..Default::default()
@@ -397,11 +411,11 @@ impl NvmeController {
         
         self.admin_cmd(cmd)?;
         
-        unsafe {
+        let (nsze, lba_size) = unsafe {
             let data = buf_virt as *const u8;
             
             // NSZE (Namespace Size): bytes 0-7, in LBAs
-            self.ns1_size = core::ptr::read_unaligned(data as *const u64);
+            let nsze = core::ptr::read_unaligned(data as *const u64);
             
             // FLBAS (Formatted LBA Size): byte 26, bits [3:0] = LBA format index
             let flbas = *data.add(26) & 0x0F;
@@ -411,10 +425,95 @@ impl NvmeController {
             let lbaf_offset = 128 + (flbas as usize) * 4;
             let lbaf = core::ptr::read_unaligned(data.add(lbaf_offset) as *const u32);
             let lbads = (lbaf >> 16) & 0xFF;
-            self.ns1_lba_size = 1u32 << lbads;
+            let lba_sz = 1u32 << lbads;
+            
+            (nsze, lba_sz)
+        };
+        
+        crate::memory::frame::free_frame(buf_phys);
+        Ok((nsze, lba_size))
+    }
+    
+    /// Legacy wrapper: Identify Namespace 1 and store in ns1_size/ns1_lba_size.
+    fn identify_namespace(&mut self) -> Result<(), &'static str> {
+        let (nsze, lba_size) = self.identify_namespace_by_id(1)?;
+        self.ns1_size = nsze;
+        self.ns1_lba_size = lba_size;
+        Ok(())
+    }
+    
+    /// Enumerate all active namespaces using Identify Active Namespace ID List (CNS=0x02).
+    /// Falls back to NS1-only if the command fails (e.g. older controllers).
+    fn enumerate_namespaces(&mut self) -> Result<(), &'static str> {
+        let buf_phys = crate::memory::frame::alloc_frame_zeroed()
+            .ok_or("NVMe: OOM for NS list buffer")?;
+        let buf_virt = crate::memory::phys_to_virt(buf_phys);
+        
+        let cmd = SqEntry {
+            cdw0: ADMIN_IDENTIFY as u32,
+            nsid: 0, // start from NSID 0 to get all
+            prp1: buf_phys,
+            cdw10: IDENTIFY_ACTIVE_NSID_LIST,
+            ..Default::default()
+        };
+        
+        let ns_ids: Vec<u32>;
+        
+        match self.admin_cmd(cmd) {
+            Ok(_) => {
+                // The returned buffer is a list of up to 1024 active NSIDs (u32 each),
+                // terminated by 0.
+                let mut ids = Vec::new();
+                unsafe {
+                    let list = buf_virt as *const u32;
+                    for i in 0..1024 {
+                        let nsid = core::ptr::read_volatile(list.add(i));
+                        if nsid == 0 { break; }
+                        ids.push(nsid);
+                    }
+                }
+                ns_ids = ids;
+            }
+            Err(_) => {
+                // CNS=0x02 not supported — fall back to NS1 only
+                crate::serial_println!("[NVMe] Active NSID list not supported, using NS1 only");
+                ns_ids = alloc::vec![1];
+            }
         }
         
         crate::memory::frame::free_frame(buf_phys);
+        
+        self.namespaces.clear();
+        
+        for &nsid in &ns_ids {
+            match self.identify_namespace_by_id(nsid) {
+                Ok((nsze, lba_size)) => {
+                    if nsze > 0 {
+                        let size_mb = (nsze * lba_size as u64) / (1024 * 1024);
+                        crate::serial_println!("[NVMe] NS{}: {} LBAs x {} B = {} MB",
+                            nsid, nsze, lba_size, size_mb);
+                        self.namespaces.push(NvmeNamespace {
+                            nsid,
+                            size_lbas: nsze,
+                            lba_size,
+                        });
+                        // Keep ns1_* fields for backwards compatibility
+                        if nsid == 1 {
+                            self.ns1_size = nsze;
+                            self.ns1_lba_size = lba_size;
+                        }
+                    }
+                }
+                Err(e) => {
+                    crate::serial_println!("[NVMe] Failed to identify NS{}: {}", nsid, e);
+                }
+            }
+        }
+        
+        if self.namespaces.is_empty() {
+            return Err("NVMe: no usable namespaces found");
+        }
+        
         Ok(())
     }
     
@@ -556,6 +655,11 @@ pub fn get_info() -> Option<(String, String, u64, u32)> {
     Some((c.model.clone(), c.serial.clone(), c.ns1_size, c.ns1_lba_size))
 }
 
+/// List all active NVMe namespaces.
+pub fn list_namespaces() -> Vec<NvmeNamespace> {
+    NVME.lock().as_ref().map(|c| c.namespaces.clone()).unwrap_or_default()
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // Initialization
 // ═══════════════════════════════════════════════════════════════════════
@@ -695,6 +799,7 @@ pub fn init(pci_dev: &crate::pci::PciDevice) -> Result<(), &'static str> {
         model: String::new(),
         ns1_size: 0,
         ns1_lba_size: 512,
+        namespaces: Vec::new(),
         max_transfer_pages: 256,
     };
     
@@ -702,11 +807,12 @@ pub fn init(pci_dev: &crate::pci::PciDevice) -> Result<(), &'static str> {
     ctrl.identify_controller()?;
     crate::serial_println!("[NVMe] Model: '{}', Serial: '{}'", ctrl.model, ctrl.serial);
     
-    // ── Step 9: Identify Namespace 1 ──
-    ctrl.identify_namespace()?;
-    let size_mb = (ctrl.ns1_size * ctrl.ns1_lba_size as u64) / (1024 * 1024);
-    crate::serial_println!("[NVMe] NS1: {} LBAs × {} bytes = {} MB",
-        ctrl.ns1_size, ctrl.ns1_lba_size, size_mb);
+    // ── Step 9: Enumerate all active namespaces ──
+    ctrl.enumerate_namespaces()?;
+    let total_mb: u64 = ctrl.namespaces.iter()
+        .map(|ns| (ns.size_lbas * ns.lba_size as u64) / (1024 * 1024))
+        .sum();
+    crate::serial_println!("[NVMe] {} namespace(s), total {} MB", ctrl.namespaces.len(), total_mb);
     
     // ── Step 10: Create I/O Queue Pair (QID=1) ──
     let io_depth = queue_depth;
@@ -720,10 +826,12 @@ pub fn init(pci_dev: &crate::pci::PciDevice) -> Result<(), &'static str> {
     crate::serial_println!("[NVMe] I/O queue pair created (depth={})", io_depth);
     
     // ── Done! ──
+    let ns_count = ctrl.namespaces.len();
     *NVME.lock() = Some(ctrl);
     INITIALIZED.store(true, Ordering::Release);
     
-    crate::serial_println!("[NVMe] ✓ Driver initialized — {} MB NVMe storage available", size_mb);
+    crate::serial_println!("[NVMe] ✓ Driver initialized — {} namespace(s), {} MB NVMe storage available",
+        ns_count, total_mb);
     
     Ok(())
 }

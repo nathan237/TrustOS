@@ -630,16 +630,158 @@ pub(super) fn cmd_sync() {
 
 pub(super) fn cmd_lsblk() {
     crate::println_color!(COLOR_BRIGHT_GREEN, "Block Devices:");
-    crate::println!("NAME    SIZE    TYPE    MOUNTPOINT");
-    crate::println!("------------------------------------");
-    crate::println!("ram0    256K    disk    /");
+    crate::println!("NAME          SIZE        TYPE    DRIVER        MODEL");
+    crate::println!("----------------------------------------------------------------------");
     
-    // Check for AHCI disks (simplified - no get_disk_info yet)
-    crate::println!("(AHCI disk info not available)");
+    let mut idx = 0u32;
+    
+    // NVMe namespaces
+    if crate::nvme::is_initialized() {
+        if let Some((model, _serial, ns_size, lba_size)) = crate::nvme::get_info() {
+            let size_bytes = ns_size * lba_size as u64;
+            let size_str = format_size(size_bytes);
+            crate::println!("nvme0n1       {:<11} disk    NVMe          {}", size_str, model);
+            idx += 1;
+        }
+    }
+    
+    // AHCI/SATA disks
+    if crate::drivers::ahci::is_initialized() {
+        for dev in crate::drivers::ahci::list_devices() {
+            let size_bytes = dev.sector_count * 512;
+            let size_str = format_size(size_bytes);
+            let type_str = match dev.device_type {
+                crate::drivers::ahci::AhciDeviceType::Sata => "disk",
+                crate::drivers::ahci::AhciDeviceType::Satapi => "cdrom",
+                _ => "disk",
+            };
+            crate::println!("sda{}          {:<11} {:<7} AHCI/p{}       {}", 
+                idx, size_str, type_str, dev.port_num, dev.model);
+            idx += 1;
+        }
+    }
+    
+    // IDE/ATA drives
+    for drv in crate::drivers::ata::list_drives() {
+        if drv.present {
+            let size_bytes = drv.sector_count * 512;
+            let size_str = format_size(size_bytes);
+            let ch = match drv.channel {
+                crate::drivers::ata::IdeChannel::Primary => "P",
+                crate::drivers::ata::IdeChannel::Secondary => "S",
+            };
+            let pos = match drv.position {
+                crate::drivers::ata::DrivePosition::Master => "M",
+                crate::drivers::ata::DrivePosition::Slave => "S",
+            };
+            let type_str = if drv.atapi { "cdrom" } else { "disk" };
+            let lba_str = if drv.lba48 { "LBA48" } else { "LBA28" };
+            crate::println!("hd{}           {:<11} {:<7} IDE/{}{} {}  {}", 
+                idx, size_str, type_str, ch, pos, lba_str, drv.model);
+            idx += 1;
+        }
+    }
+    
+    // VirtIO block devices
+    if crate::virtio_blk::is_initialized() {
+        let cap = crate::virtio_blk::capacity();
+        let size_str = format_size(cap * 512);
+        let ro = if crate::virtio_blk::is_read_only() { " (ro)" } else { "" };
+        crate::println!("vda{}          {:<11} disk    VirtIO-blk{}", idx, size_str, ro);
+        idx += 1;
+    }
+    
+    // USB mass storage
+    for (i, (name, blocks, bsize)) in crate::drivers::usb_storage::list_devices().iter().enumerate() {
+        let size_str = format_size(*blocks * *bsize as u64);
+        crate::println!("usb{}          {:<11} disk    USB-Storage   {}", 
+            idx + i as u32, size_str, name);
+    }
+    if idx == 0 && crate::drivers::usb_storage::device_count() == 0 {
+        idx += 1; // for ram0 display below
+    }
+    
+    // RAM disk (always present as fallback)
+    crate::println!("ram0          256K        ramdisk RAM           TrustFS");
+    
+    if idx == 0 {
+        crate::println!();
+        crate::println_color!(COLOR_YELLOW, "No hardware storage detected (using RAM disk)");
+    }
+}
+
+/// Format byte size to human-readable string
+fn format_size(bytes: u64) -> alloc::string::String {
+    if bytes == 0 {
+        return alloc::string::String::from("0B");
+    }
+    if bytes >= 1024 * 1024 * 1024 * 1024 {
+        alloc::format!("{:.1}T", bytes as f64 / (1024.0 * 1024.0 * 1024.0 * 1024.0))
+    } else if bytes >= 1024 * 1024 * 1024 {
+        alloc::format!("{:.1}G", bytes as f64 / (1024.0 * 1024.0 * 1024.0))
+    } else if bytes >= 1024 * 1024 {
+        alloc::format!("{:.1}M", bytes as f64 / (1024.0 * 1024.0))
+    } else if bytes >= 1024 {
+        alloc::format!("{}K", bytes / 1024)
+    } else {
+        alloc::format!("{}B", bytes)
+    }
 }
 
 pub(super) fn cmd_blkid() {
-    crate::println!("/dev/ram0: TYPE=\"ramfs\"");
+    let mut found = false;
+    
+    // NVMe
+    if crate::nvme::is_initialized() {
+        if let Some((model, serial, ns_size, lba_size)) = crate::nvme::get_info() {
+            let size_bytes = ns_size * lba_size as u64;
+            crate::println!("/dev/nvme0n1: MODEL=\"{}\" SERIAL=\"{}\" SIZE={} TYPE=\"nvme\"",
+                model, serial, format_size(size_bytes));
+            found = true;
+        }
+    }
+    
+    // AHCI
+    if crate::drivers::ahci::is_initialized() {
+        for (i, dev) in crate::drivers::ahci::list_devices().iter().enumerate() {
+            let size_bytes = dev.sector_count * 512;
+            crate::println!("/dev/sda{}: MODEL=\"{}\" SERIAL=\"{}\" SIZE={} TYPE=\"ahci\" PORT={}",
+                i, dev.model, dev.serial, format_size(size_bytes), dev.port_num);
+            found = true;
+        }
+    }
+    
+    // IDE
+    for (i, drv) in crate::drivers::ata::list_drives().iter().enumerate() {
+        if drv.present {
+            let size_bytes = drv.sector_count * 512;
+            let fstype = if drv.atapi { "atapi" } else { "ide" };
+            crate::println!("/dev/hd{}: MODEL=\"{}\" SERIAL=\"{}\" SIZE={} TYPE=\"{}\"",
+                i, drv.model, drv.serial, format_size(size_bytes), fstype);
+            found = true;
+        }
+    }
+    
+    // VirtIO
+    if crate::virtio_blk::is_initialized() {
+        let cap = crate::virtio_blk::capacity();
+        crate::println!("/dev/vda: SIZE={} TYPE=\"virtio-blk\"", format_size(cap * 512));
+        found = true;
+    }
+    
+    // USB
+    for (i, (name, blocks, bsize)) in crate::drivers::usb_storage::list_devices().iter().enumerate() {
+        crate::println!("/dev/usb{}: MODEL=\"{}\" SIZE={} TYPE=\"usb-storage\"",
+            i, name, format_size(*blocks * *bsize as u64));
+        found = true;
+    }
+    
+    // RAM disk always
+    crate::println!("/dev/ram0: SIZE=256K TYPE=\"ramfs\"");
+    
+    if !found {
+        crate::println_color!(COLOR_YELLOW, "No hardware block devices detected");
+    }
 }
 
 pub(super) fn cmd_export(args: &[&str]) {

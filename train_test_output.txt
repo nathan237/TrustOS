@@ -1,0 +1,348 @@
+﻿T-RustOs Kernel v0.2.0
+Limine protocol supported
+Framebuffer: 1920x1080 @ 0xffff8000fd000000
+Initializing memory management...
+HHDM offset: 0xffff800000000000
+Memory map entries: 12
+  0x0000001000 - 0x0000054000 (      339968 bytes) BOOTLOADER
+  0x0000054000 - 0x000009f000 (      307200 bytes) USABLE
+  0x000009fc00 - 0x00000a0000 (        1024 bytes) RESERVED
+  0x00000f0000 - 0x0000100000 (       65536 bytes) RESERVED
+  0x0000100000 - 0x001eef8000 (   517963776 bytes) USABLE
+  0x001eef8000 - 0x001eefc000 (       16384 bytes) BOOTLOADER
+  0x001eefc000 - 0x001f6b1000 (     8081408 bytes) KERNEL
+  0x001f6b1000 - 0x001ffe0000 (     9629696 bytes) BOOTLOADER
+  0x001ffe0000 - 0x0020000000 (      131072 bytes) RESERVED
+  0x00fd000000 - 0x00fd7e9000 (     8294400 bytes) FRAMEBUFFER
+  0x00fffc0000 - 0x0100000000 (      262144 bytes) RESERVED
+  0xfd00000000 - 0x10000000000 ( 12884901888 bytes) RESERVED
+[MEM] Total physical memory: 503 MB
+[HEAP] Dynamic size: 125 MB (25% of 503 MB RAM)
+[HEAP] Using mmap region at phys 0x100000, size 125 MB
+[         0][CPU0][INFO ] Heap initialized: 125 MB at virt 0xffff800000100000 (phys 0x100000)
+[HEAP] Initialized: free=128968 KB
+[FRAME] Allocator ready: 126628 total frames, 94214 free (368 MB), 32414 used
+[FB] Initializing scrollback buffer...
+[FB] Scrollback buffer initialized (1000 lines max)
+[INTEGRITY] .text   : 4811461 bytes, SHA-256: ceb6fa827f99f4e4...45209d31
+[INTEGRITY] .rodata : 2852648 bytes, SHA-256: f75cd64864684dde...d2e56148
+[INTEGRITY] kernel digest: ea8de94803652e98...5da8cb5d
+[ED25519] Public key: e6ff743d65a7dbc3...1a5b023cd338a820
+[ED25519] Kernel digest signed
+????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+???                      T R U S T - O S                         ???
+???                 FAST ??? SECURE ??? RELIABLE                     ???
+????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+
+[OK] Memory management initialized
+Initializing GDT with Ring 0/3 support...
+[         0][CPU0][DEBUG] GDT initialized with Ring 0/3 support
+[OK] GDT initialized (Ring 0/3)
+Initializing early interrupts...
+[         0][CPU0][INFO ] SYSCALL handler ready (entry point set by userland::init)
+[         0][CPU0][DEBUG] IDT loaded, PIC initialized, SYSCALL ready, interrupts enabled
+[OK] Interrupts (early)
+Detecting CPU capabilities...
+[CPU] QEMU Virtual CPU version 2.5+
+[CPU] Vendor: Amd, Family: 15, Model: 107
+[CPU] TSC: true (invariant: false, freq: 3800 MHz)
+[CPU] SIMD: SSE=true SSE2=true SSE4.2=false AVX=false AVX2=false
+[CPU] Crypto: AES-NI=false PCLMULQDQ=false SHA=false RDRAND=false
+[CPU] Security: SMEP=false SMAP=false NX=true
+[CPU] Virt: VMX=false SVM=true
+[SIMD] SSE/SSE2 enabled
+[TSC] Initialized: 3800974700 Hz (3 GHz)
+[OK] CPU capabilities detected
+Parsing ACPI tables...
+[DEBUG] RSDP pointer from Limine: 0xf52e0
+[ACPI] RSDP phys=0xf52e0, mapping...
+[MMIO] Mapping 0xf52e0 -> 0xffff8000000f52e0 (2 pages)
+[ACPI] RSDP mapped at virt=0xffff8000000f52e0
+[ACPI] About to read RSDP...
+[ACPI] First byte: 0x52
+[ACPI] Sig OK: true
+[ACPI] Revision: 0, OEM: BOCHS
+[ACPI] Using RSDT at 0x1ffe2390
+[MMIO] Mapping 0x1ffe2390 -> 0xffff80001ffe2390 (2 pages)
+[ACPI] Found 4 tables
+[MMIO] Mapping 0x1ffe223c -> 0xffff80001ffe223c (2 pages)
+[ACPI] Table: FACP at 0x1ffe223c, len=116
+[ACPI] FADT: PM1a=0x600, century=50
+[MMIO] Mapping 0x1ffe22b0 -> 0xffff80001ffe22b0 (2 pages)
+[ACPI] Table: APIC at 0x1ffe22b0, len=128
+[ACPI] MADT: 2 CPUs, 1 I/O APICs
+[MMIO] Mapping 0x1ffe2330 -> 0xffff80001ffe2330 (2 pages)
+[ACPI] Table: HPET at 0x1ffe2330, len=56
+[MMIO] Mapping 0xfed00000 -> 0xffff8000fed00000 (1 pages)
+[MMIO] Creating PT for PD[502]
+[ACPI] HPET: base=0xfed00000, min_tick=0
+[MMIO] Mapping 0x1ffe2368 -> 0xffff80001ffe2368 (2 pages)
+[ACPI] Table: WAET at 0x1ffe2368, len=40
+[OK] ACPI: 2 CPUs, 1 I/O APICs
+Initializing APIC...
+[MMIO] Mapping 0xfee00000 -> 0xffff8000fee00000 (1 pages)
+[MMIO] Creating PT for PD[503]
+[APIC] LAPIC at phys=0xfee00000, virt=0xffff8000fee00000
+[APIC] Legacy PIC disabled (all IRQs masked)
+[APIC] LAPIC enabled: id=0, version=0x14
+[APIC] Timer calibrated: 63532 ticks/ms (635325 ticks in 10ms)
+[MMIO] Mapping 0xfec00000 -> 0xffff8000fec00000 (1 pages)
+[APIC] I/O APIC id=0, addr=0xfec00000, GSI base=0, max_entries=23
+[APIC] Routed keyboard: IRQ 1 ??? vector 50
+[APIC] Routed mouse: IRQ 12 ??? vector 61
+[APIC] Timer started: 10ms interval, count=635320
+[APIC] ??? APIC fully initialized ??? preemptive scheduling enabled
+[OK] APIC initialized (LAPIC + IOAPIC)
+Initializing SMP...
+[SMP] BSP initialized (APIC ID: 0)
+[SMP] Found 2 CPUs via Limine
+[SMP] Starting AP 1 (LAPIC ID: 1)
+[GDT] AP 1 GDT/TSS initialized
+[THREAD] AP 1 idle thread created (TID=0x8000000000000001)
+[APIC] Timer started: 10ms interval, count=635320
+[APIC] AP LAPIC enabled: id=1
+[SMP] AP 1 fully online (LAPIC ID: 1)
+[SMP] 2 of 2 CPUs online
+[OK] SMP: 2 cores active
+Initializing paging subsystem...
+[         0][CPU0][DEBUG] Paging initialized, kernel CR3: 0x1ff5b000, NX enabled
+[OK] Paging initialized (NX enabled)
+[PAT] Write-Combining enabled: PAT[1]=WC (was 0x04, now 0x01)
+Initializing userland support...
+[         0][CPU0][DEBUG] [USERLAND] Syscall stack at 0xffffffff807925c8
+[         0][CPU0][INFO ] [USERLAND] SYSCALL/SYSRET configured (STAR, LSTAR, SFMASK)
+[OK] Userland support ready
+Initializing thread subsystem...
+[         0][CPU0][INFO ] [THREAD] Thread subsystem initialized
+[OK] Thread subsystem ready
+Initializing security subsystem...
+[OK] Security (basic)
+Keyboard driver ready
+[OK] Keyboard ready
+[RTC] init start
+[RTC] Initialized: 2026-02-21 00:56:11
+[OK] RTC initialized
+[RTC] init done
+[RNG] RDRAND=false RDSEED=false
+[OK] RNG (CSPRNG)
+[KB-IRQ] scancode=0x41
+[MOUSE] IntelliMouse scroll wheel enabled (ID=3)
+[MOUSE] PS/2 mouse initialized (ID=3)
+[OK] Mouse initialized
+[PHASE] PCI init start
+[..] PCI bus scanning...
+[         0][CPU0][INFO ] [PCI] Found 6 devices:
+[         0][CPU0][INFO ] [PCI]   00:00.0 8086:1237 Bridge - Host Bridge (Intel)
+[         0][CPU0][INFO ] [PCI]   00:01.0 8086:7000 Bridge - ISA Bridge (Intel)
+[         0][CPU0][INFO ] [PCI]   00:01.1 8086:7010 Mass Storage - IDE Controller (Intel)
+[         0][CPU0][INFO ] [PCI]   00:01.3 8086:7113 Bridge (Intel)
+[         0][CPU0][INFO ] [PCI]   00:02.0 1234:1111 Display Controller - VGA Compatible (QEMU)
+[         0][CPU0][INFO ] [PCI]   00:03.0 8086:100E Network Controller - Ethernet (Intel)
+[OK] PCI bus scanned
+[PHASE] PCI init done
+[PHASE] Task scheduler init start
+[TASK] Cooperative scheduler initialized
+[         0][CPU0][INFO ] Scheduler ready
+[OK] Task scheduler ready
+[PHASE] Task scheduler init done
+[PHASE] Disk init start
+[..] Disk subsystem...
+[         0][CPU0][INFO ] [DISK] RAMDisk initialized: 0 MB (256 sectors)
+[         0][CPU0][INFO ] [DISK] Filesystem initialized (TRUSTFS v1)
+[OK] Disk driver ready
+[PHASE] Disk init done
+[PHASE] Driver framework init start
+[         0][CPU0][INFO ] [DRIVERS] Initializing driver framework...
+[         0][CPU0][DEBUG] [DRIVERS] Registered: virtio-net v1.0.0
+[         0][CPU0][DEBUG] [DRIVERS] Registered: e1000 v1.0.0
+[         0][CPU0][DEBUG] [DRIVERS] Registered: rtl8139 v0.1.0
+[         0][CPU0][DEBUG] [DRIVERS] Registered: rtl8169 v1.0.0
+[INPUT] Keyboard: Some(PS2Keyboard), Mouse: Some(PS2Mouse)
+[         0][CPU0][INFO ] [DRIVERS] 4 drivers registered
+[DRIVERS] Probing storage controllers...
+[IDE] Probing IDE channels...
+[IDE] Secondary Master: QEMUDVD-ROM (0 sectors)
+[IDE] Found 1 drives
+[DRIVERS] IDE controller initialized
+[DRIVERS] Storage: IDE with 1 drives
+[OK] Driver framework initialized
+[OK] Persistent storage detected
+[PHASE] Driver framework init done
+[PHASE] VirtIO GPU init start
+[..] VirtIO GPU...
+[VIRTIO-GPU] No VirtIO GPU found
+[--] VirtIO GPU: not found (fallback framebuffer)
+[PHASE] VirtIO GPU init done
+[PHASE] AMD GPU init start
+[..] AMD GPU...
+[         0][CPU0][INFO ] [AMDGPU] ?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+[         0][CPU0][INFO ] [AMDGPU] AMD GPU Driver ??? Phase 1: PCIe Discovery & MMIO
+[         0][CPU0][INFO ] [AMDGPU] ?????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????????
+[         0][CPU0][INFO ] [AMDGPU] No AMD GPU detected on PCI bus
+[         0][CPU0][INFO ] [AMDGPU] (This is normal in VMs without GPU passthrough)
+[         0][CPU0][INFO ] [AMDGPU] Display: 1234:1111 QEMU at 00:02.0
+[--] AMD GPU: not found (VM or non-AMD)
+[PHASE] AMD GPU init done
+[PAT] Remapped 489 pages as Write-Combining @ 0xffff8000fd000000 (1956 KB)
+[PHASE] Network init start
+[..] Network subsystem...
+[NET] Hypervisor CPUID: 'TCGTCGTCGTCG'
+[         0][CPU0][INFO ] [NET] Platform detected: QEMU (TCG)
+[NET] Default DNS: 10.0.2.3
+[         0][CPU0][INFO ] [NET] NIC: 8086:100E e1000 [Intel] BAR0=0xFEBC0000 IRQ=11
+[         0][CPU0][DEBUG] [PCI] Bus mastering enabled for 00:03.0
+[         0][CPU0][INFO ] [NET] Interface up: MAC=52:54:00:00:00:00 (awaiting DHCP)
+[..] Platform: QEMU (TCG)
+[         0][CPU0][INFO ] [E1000] Probing 8086:100E
+[E1000] BAR0=0xfebc0000, calling map_mmio...
+[MMIO] Mapping 0xfebc0000 -> 0xffff8000febc0000 (32 pages)
+[MMIO] Creating PT for PD[501]
+[E1000] map_mmio returned 0xffff8000febc0000
+[         0][CPU0][DEBUG] [E1000] MMIO: phys=0xfebc0000 virt=0xffff8000febc0000
+[         0][CPU0][DEBUG] [E1000] Resetting device...
+[         0][CPU0][DEBUG] [E1000] Reset complete
+[         0][CPU0][DEBUG] [E1000] Initializing RX ring (32 descriptors)
+[         0][CPU0][DEBUG] [E1000] Initializing TX ring (8 descriptors)
+[         0][CPU0][INFO ] [E1000] Link up at 1000 Mbps (after 1 iterations)
+[         0][CPU0][INFO ] [E1000] MAC: 52:54:00:12:34:56
+[         0][CPU0][INFO ] [NET] MAC updated: 52:54:00:12:34:56
+[OK] Network driver: e1000
+[OK] Network ready
+[         0][CPU0][INFO ] [DHCP] Client started
+[DHCP] Sending DISCOVER
+[         0][CPU0][INFO ] [IPv6] Link-local: fe80:0000:0000:0000:5054:00ff:fe12:3456
+[NDP] Sending Router Solicitation
+[TCP] ISN secret initialized (RFC 6528)
+[PHASE] Network init done
+[PHASE] VFS init start
+[         0][CPU0][INFO ] [VFS] Initializing Virtual File System...
+[         0][CPU0][DEBUG] [VFS] Mounted devfs at /dev
+[         0][CPU0][DEBUG] [VFS] Mounted procfs at /proc
+[         0][CPU0][DEBUG] [VFS] No block device, root will be ramfs
+[         0][CPU0][DEBUG] [VFS] Looking for FAT32 partitions...
+[         0][CPU0][DEBUG] [FAT32] Checking 0 AHCI devices
+[         0][CPU0][DEBUG] [VFS] No FAT32 partition found
+[         0][CPU0][INFO ] [OK] VFS initialized
+[OK] Virtual filesystem ready
+[PHASE] VFS init done
+[PHASE] Linux Subsystem init start
+[TSL] No boot modules available
+[--] Linux Subsystem (no modules)
+[PHASE] Linux Subsystem init done
+[FILE_ASSOC] File associations initialized
+[OK] File associations ready
+[PHASE] Process manager init start
+[         0][CPU0][INFO ] [PROC] Initializing process manager...
+[         0][CPU0][DEBUG] [PROC] Kernel process created (PID 0)
+[         0][CPU0][INFO ] [OK] Process manager ready
+[OK] Process manager ready
+[PHASE] Process manager init done
+[PHASE] Auth system init
+[         0][CPU0][DEBUG] [AUTH] Authentication system initialized
+[OK] Authentication ready
+[PHASE] TTY/PTY init
+[         0][CPU0][INFO ] [TTY] TTY subsystem initialized (tty0 = console)
+[         0][CPU0][INFO ] [PTY] Pseudo-terminal subsystem initialized
+[OK] TTY/PTY subsystem ready
+[PHASE] Init process start
+[         0][CPU0][INFO ] [INIT] Starting init process (PID 1)...
+[         0][CPU0][INFO ] [INIT] Init process ready
+[         0][CPU0][INFO ] [OK] System initialization complete
+
+========================================
+  TrustOS System Ready
+========================================
+
+Mounted filesystems:
+  /proc -> proc
+  /dev -> devfs
+
+Processes: 1
+Heap used: 3565 KB
+
+[OK] Init process started (PID 1)
+[PHASE] Init process done
+[PHASE] RAM filesystem init
+[OK] RAM filesystem ready
+[PHASE] Persistence init
+[PERSIST] Initializing persistence system...
+[PERSIST] No AHCI disk found, persistence disabled
+[OK] Persistence system ready
+[PHASE] Web Sandbox init
+[         0][CPU0][DEBUG] Registered dynamic capability type: WebSandbox (id=1)
+[         0][CPU0][DEBUG] Created capability CapabilityId(1) for task 0
+[sandbox] Web Sandbox subsystem initialized
+[sandbox] Capability type registered: WebSandbox (danger=3)
+[OK] Web Sandbox ready
+[PHASE] Container daemon boot
+[         0][CPU0][DEBUG] Created capability CapabilityId(2) for task 1
+[container:1] Started (sandbox #1, Moderate, SoftwareOnly)
+[daemon] Default web container #1 started
+[daemon] Container daemon booted at 0ms
+[OK] Container daemon ready
+
+
+  System ready - TRust-OS v0.2.0
+  Type 'desktop' to launch the desktop, or use shell commands.
+
+[BOOT] Running crypto self-tests...
+[CRYPTO] Running self-tests...
+[CRYPTO] AES-128: PASS
+[CRYPTO] SHA-256: PASS
+[CRYPTO] FE round-trip: PASS
+[CRYPTO] FE mul identity: PASS
+[CRYPTO] FE sq: OK (no crash)
+[CRYPTO] FE add identity: PASS
+[CRYPTO] FE sub identity: PASS
+[CRYPTO] FE mul vs sq: PASS
+[CRYPTO] FE 2*2=4: PASS
+[CRYPTO] FE sq(2)=4: PASS
+[CRYPTO] FE 2*2^-1: PASS
+[CRYPTO] FE invert: PASS
+[CRYPTO] X25519: PASS
+[CRYPTO] AES-GCM: PASS
+[CRYPTO] Self-tests complete
+[BOOT] Crypto self-tests complete
+Starting shell...
+
+ _____ ____            _    ___      
+|_   _|  _ \ _   _ ___| |_ / _ \ ___ 
+  | | | |_) | | | / __| __| | | / __|
+  | | |  _ <| |_| \__ \ |_| |_| \__ \
+  |_| |_| \_\\__,_|___/\__\\___/|___/
+
+  T-RustOs v0.2.0 - Type 'help' for commands
+
+[00:56:12] trustos:/$ [DHCP] OFFER: 10.0.2.15
+[DHCP] Sending REQUEST
+[NDP] Router Advertisement from fe80:0000:0000:0000:0000:0000:0000:0002: hop_limit=64 lifetime=1800s
+[NDP]   Router MAC: 52:56:00:00:00:02
+[NDP]   Prefix: fec0:0000::/64 flags=0xc0
+[       186][CPU0][INFO ] [DHCP] ACK: 10.0.2.15 (lease=86400s)
+[       186][CPU0][INFO ] [NET] DNS server: 10.0.2.3
+[       186][CPU0][INFO ] [DHCP] Configured: IP=10.0.2.15 GW=10.0.2.2 DNS=10.0.2.3
+
+--- INIT ---
+jarvis brain init
+  Initializing neural brain...
+[JARVIS] Initializing neural brain...
+[JARVIS] Model: 4 layers, d_model=64, d_ff=256, 4 heads
+[JARVIS] Parameters: 311872 (1218 KB FP32)
+[JARVIS] Optimizer: Adam (lr=0.001, 2436 KB state)
+[JARVIS] Neural brain ready. Awaiting input or mentoring.
+  Neural brain ready.
+[00:56:15] trustos:/$ 
+
+--- TRAIN ---
+jarvis brain train Hello
+  Training on: "Hello"
+  Loss: 5.6950
+[00:56:21] trustos:/$ 
+
+--- QEMU ALIVE: True ---
+
+--- EVAL ---
+jarvis brain eval
+  Evaluating on embedded corpus...
+
+
