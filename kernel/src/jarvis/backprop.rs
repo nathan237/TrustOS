@@ -5,7 +5,7 @@
 //! This is a ~3000x speedup for the same training quality.
 //!
 //! Architecture matches model.rs / inference.rs:
-//!   4 layers, d_model=128, n_heads=4, d_ff=512, vocab=256, max_seq=256
+//!   4 layers, d_model=256, n_heads=4, d_ff=1024, vocab=256, max_seq=256
 //!
 //! Gradient flow (reverse order):
 //!   loss → logits → final_rmsnorm → [layer N..0: FFN → attn → rmsnorm] → embeddings

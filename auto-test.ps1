@@ -347,7 +347,7 @@ Write-Host "[1/4] Starting QEMU..." -ForegroundColor White
 $serialArg = "tcp:127.0.0.1:${SerialPort},server,nowait"
 $qemuArgs = @(
     "-cdrom", "`"$IsoPath`"",
-    "-m", "256M",
+    "-m", "512M",
     "-machine", "q35",
     "-cpu", "max",
     "-smp", "2",
@@ -529,7 +529,7 @@ $reportLines += "===============================================================
 $reportLines += "  TrustOS Automated Test Report (QEMU)"
 $reportLines += ("  Generated: {0}" -f $timestamp)
 $reportLines += ("  Boot time: {0}s  |  Test duration: {1}s" -f $bootTime, $testDuration)
-$reportLines += "  QEMU: q35, 256M RAM, 2 CPUs, virtio-net, serial TCP"
+$reportLines += "  QEMU: q35, 512M RAM, 2 CPUs, virtio-net, serial TCP"
 $reportLines += "=================================================================="
 $reportLines += ""
 $reportLines += "SUMMARY"

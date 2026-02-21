@@ -11,7 +11,7 @@
 //! │                    JARVIS NEURAL BRAIN                       │
 //! │                                                              │
 //! │  tokenizer.rs    Byte-level tokenizer (vocab=256)            │
-//! │  model.rs        Transformer weights (4L, d=128, 1.15M params)│
+//! │  model.rs        Transformer weights (4L, d=256, 4.4M params) │
 //! │  inference.rs    Forward pass (CPU or GPU GEMM)              │
 //! │  agent.rs        Self-aware agent: introspect, execute, learn│
 //! │  mentor.rs       Serial mentoring protocol (QEMU link)       │
@@ -22,12 +22,12 @@
 //! # Model Specs
 //!
 //! - **Vocab**: 256 (byte-level — no dictionary, works on any text)
-//! - **d_model**: 128
-//! - **n_heads**: 4 (d_k = 32)
+//! - **d_model**: 256
+//! - **n_heads**: 4 (d_k = 64)
 //! - **n_layers**: 4
-//! - **d_ff**: 512 (4×d_model)
+//! - **d_ff**: 1024 (4×d_model)
 //! - **max_seq**: 256 tokens
-//! - **Params**: ~1.15M → ~4.5 MB (FP32) or ~1.15 MB (INT8)
+//! - **Params**: ~4.4M → ~17.6 MB (FP32) or ~4.4 MB (INT8)
 //!
 //! # Self-Awareness
 //!
@@ -62,6 +62,7 @@ pub mod corpus;
 pub mod backprop;
 pub mod optimizer;
 pub mod simd;
+pub mod compute;
 
 use alloc::string::String;
 use alloc::format;
@@ -114,12 +115,28 @@ pub fn init() {
     crate::serial_println!("[JARVIS] Parameters: {} ({} KB FP32)",
         param_count, memory_bytes / 1024);
 
+    // Detect compute backend (GPU vs CPU SIMD)
+    let backend = compute::detect_backend();
+    match backend {
+        compute::Backend::AmdGpu => {
+            crate::serial_println!("[JARVIS] Compute: AMD GPU detected — GEMM acceleration available");
+            // Try to upload weights to VRAM for GPU inference
+            match compute::upload_weights_to_vram(&weights) {
+                Ok(bytes) => crate::serial_println!("[JARVIS] Weights uploaded to VRAM: {} KB", bytes / 1024),
+                Err(e) => crate::serial_println!("[JARVIS] GPU fallback to CPU SIMD: {}", e),
+            }
+        }
+        compute::Backend::CpuSimd => {
+            crate::serial_println!("[JARVIS] Compute: CPU SSE2 SIMD (no GPU detected)");
+        }
+    }
+
     // Create inference engine
     let engine = InferenceEngine::new();
 
     // Create Adam optimizer (2× model memory for m/v buffers)
     let adam = AdamState::with_lr(param_count, 0.001);
-    crate::serial_println!("[JARVIS] Optimizer: Adam (lr=0.001, {} KB state)",
+    crate::serial_println!("[JARVIS] Optimizer: AdamW (lr=0.001, {} KB state)",
         adam.memory_bytes() / 1024);
 
     *MODEL.lock() = Some(weights);
@@ -127,7 +144,8 @@ pub fn init() {
     *OPTIMIZER.lock() = Some(adam);
 
     INITIALIZED.store(true, Ordering::Release);
-    crate::serial_println!("[JARVIS] Neural brain ready. Awaiting input or mentoring.");
+    crate::serial_println!("[JARVIS] Neural brain ready ({} backend). Awaiting input.",
+        if compute::gpu_available() { "GPU" } else { "CPU" });
 }
 
 /// Check if Jarvis brain is initialized
@@ -286,7 +304,12 @@ pub fn info_lines() -> Vec<String> {
     lines.push(String::from("║   Self-introspection (read own code/weights)       ║"));
     lines.push(String::from("║   Serial mentoring (learn from external AI)        ║"));
     lines.push(String::from("║   Shell command execution (agent mode)             ║"));
-    lines.push(String::from("║   GPU dispatch ready (GEMM INT8/FP32 kernels)     ║"));
+    let compute_str = if compute::gpu_available() {
+        "║   Compute: GPU (AMD RDNA GEMM INT8/FP32)         ║"
+    } else {
+        "║   Compute: CPU (SSE2 SIMD, GPU ready)             ║"
+    };
+    lines.push(String::from(compute_str));
     lines.push(String::from("╚═══════════════════════════════════════════════════╝"));
 
     lines

@@ -1006,7 +1006,7 @@ fn cmd_brain(args: &[&str]) {
         crate::println!("    eval          Evaluate loss across entire corpus");
         crate::println!("    chat <text>   Chat with neural brain directly");
         crate::println!();
-        crate::println!("  The neural brain is a 4-layer transformer (1.15M params)");
+        crate::println!("  The neural brain is a 4-layer transformer (4.4M params)");
         crate::println!("  that learns from text, generates responses, and self-improves.");
         return;
     }
@@ -1187,7 +1187,9 @@ fn cmd_brain(args: &[&str]) {
                 args[1].parse().unwrap_or(3)
             } else { 3 }; // 3 epochs default for good convergence
             crate::println_color!(JARVIS_BRAIN, "  Pre-training on embedded corpus ({} epoch(s))...", epochs);
-            crate::println_color!(COLOR_GRAY, "  Using cosine LR schedule + gradient accumulation");
+            crate::println_color!(COLOR_GRAY, "  Using cosine LR + gradient accumulation (batch=4)");
+            crate::println_color!(COLOR_GRAY, "  {} phases, {} sequences total",
+                crate::jarvis::corpus::num_phases(), crate::jarvis::corpus::total_sequences());
             crate::println!();
 
             // Show loss before
@@ -1195,23 +1197,15 @@ fn cmd_brain(args: &[&str]) {
             crate::println_color!(COLOR_GRAY, "  Loss before: {:.3}", loss_before);
             crate::println!();
 
-            // Train each phase with progress
-            for phase in 0..crate::jarvis::corpus::num_phases() {
-                let name = crate::jarvis::corpus::phase_name(phase);
-                let seqs = crate::jarvis::corpus::CORPUS[phase].len();
-                crate::print_color!(JARVIS_BRAIN, "  Phase {} ", phase);
-                crate::print_color!(COLOR_WHITE, "({}) ", name);
-                crate::print_color!(COLOR_GRAY, "[{} seqs] ", seqs);
+            // Run bulk pretrain with proper gradient accumulation + cosine LR
+            let (steps, avg_loss, elapsed) = crate::jarvis::pretrain(epochs, 0.001);
 
-                let (steps, avg_loss, elapsed) =
-                    crate::jarvis::pretrain_phase(phase, epochs, 0.001);
-
-                crate::print_color!(COLOR_GREEN, "loss={:.3} ", avg_loss);
-                crate::println_color!(COLOR_GRAY, "({}ms, {} steps)", elapsed, steps);
-            }
+            crate::println_color!(JARVIS_BRAIN, "  Training complete!");
+            crate::println_color!(COLOR_GRAY, "  {} steps, avg loss={:.3}, {}ms ({:.1}s)",
+                steps, avg_loss, elapsed, elapsed as f64 / 1000.0);
+            crate::println!();
 
             // Show loss after
-            crate::println!();
             let loss_after = crate::jarvis::eval_corpus();
             crate::print_color!(COLOR_GRAY, "  Loss after:  {:.3}", loss_after);
             if loss_after < loss_before {
@@ -1220,8 +1214,7 @@ fn cmd_brain(args: &[&str]) {
                 crate::println_color!(COLOR_YELLOW, " (no improvement)");
             }
             crate::println!();
-            crate::println_color!(COLOR_GRAY, "  Total steps: {} | Training steps global: {}",
-                crate::jarvis::corpus::total_sequences() * epochs,
+            crate::println_color!(COLOR_GRAY, "  Training steps global: {}",
                 crate::jarvis::training_steps());
         }
 

@@ -11,13 +11,13 @@
 //!
 //! Memory layout:
 //! ```text
-//! token_embed:  [VOCAB_SIZE × D_MODEL]     = [256 × 128] = 128 KB
-//! pos_embed:    [MAX_SEQ × D_MODEL]         = [256 × 128] = 128 KB
-//! layers[0..3]: each ~1 MB (see LayerWeights)              = 4 MB
-//! rms_final:    [D_MODEL]                    = [128]       = 512 B
-//! w_output:     [D_MODEL × VOCAB_SIZE]       = [128 × 256] = 128 KB
+//! token_embed:  [VOCAB_SIZE × D_MODEL]     = [256 × 256] = 256 KB
+//! pos_embed:    [MAX_SEQ × D_MODEL]         = [256 × 256] = 256 KB
+//! layers[0..3]: each ~4 MB (see LayerWeights)              = 16 MB
+//! rms_final:    [D_MODEL]                    = [256]       = 1 KB
+//! w_output:     [D_MODEL × VOCAB_SIZE]       = [256 × 256] = 256 KB
 //! ─────────────────────────────────────────────────────────────────
-//! Total: ~1.15M params → ~4.5 MB at FP32
+//! Total: ~4.4M params → ~17.6 MB at FP32
 //! ```
 
 use alloc::vec::Vec;
@@ -31,16 +31,16 @@ use alloc::vec;
 pub const VOCAB_SIZE: usize = 256;
 
 /// Model embedding dimension
-pub const D_MODEL: usize = 128;
+pub const D_MODEL: usize = 256;
 
 /// Number of attention heads
 pub const N_HEADS: usize = 4;
 
 /// Key/Query dimension per head
-pub const D_K: usize = D_MODEL / N_HEADS; // = 32
+pub const D_K: usize = D_MODEL / N_HEADS; // = 64
 
 /// Feed-forward inner dimension (4× d_model for SwiGLU)
-pub const D_FF: usize = 512;
+pub const D_FF: usize = 1024;
 
 /// Number of transformer layers
 pub const N_LAYERS: usize = 4;

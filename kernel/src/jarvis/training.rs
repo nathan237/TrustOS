@@ -2,7 +2,7 @@
 //!
 //! Implements simple gradient descent for the tiny transformer.
 //! Uses numerical gradient estimation (finite differences) which is
-//! simple but functional for our 1.15M parameter model.
+//! simple but functional for our 4.4M parameter model.
 //!
 //! Training modes:
 //! - **Teacher forcing**: Given a text sequence, train to predict next token
@@ -19,7 +19,7 @@
 //! ```
 //!
 //! This is O(params) forward passes per step, which is expensive but:
-//! - Our model is compact (1.15M params vs. billions)
+//! - Our model is compact (4.4M params vs. billions)
 //! - We train on short sequences (< 128 tokens typically)
 //! - No need for backprop infrastructure (simpler code)
 //! - Can be parallelized across GPU CUs in the future
