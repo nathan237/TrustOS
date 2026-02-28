@@ -91,6 +91,17 @@ pub fn init() {
     crate::log!("Heap initialized (fallback): {} MB at {:#x}", size / 1024 / 1024, heap_addr);
 }
 
+/// Initialize memory for Android boot (no HHDM — flat physical addressing)
+/// Called from android_main when booting without Limine.
+pub fn init_android_heap(phys_base: u64, heap_bytes: usize) {
+    // No HHDM offset — physical address IS the virtual address (MMU off)
+    HHDM_OFFSET.store(0, Ordering::SeqCst);
+    HEAP_SIZE_ACTUAL.store(heap_bytes, Ordering::SeqCst);
+    HEAP_START.store(phys_base as usize, Ordering::SeqCst);
+    
+    heap::init_at(phys_base as usize, heap_bytes);
+}
+
 /// Get memory statistics
 pub fn stats() -> MemoryStats {
     let (frames_total, frames_used) = frame::stats();

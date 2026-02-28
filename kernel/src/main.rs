@@ -23,6 +23,8 @@ mod shell;
 mod ramfs;
 mod rtc;
 mod mouse;
+mod touch;
+mod gesture;
 mod task;
 mod desktop;
 mod disk;
@@ -148,6 +150,12 @@ mod trustlang;
 
 // TrustVideo — custom video codec & player (delta+RLE, no external APIs)
 mod video;
+
+// Android boot support (boot.img, DTB, PSCI) — aarch64 only
+#[cfg(target_arch = "aarch64")]
+mod android_boot;
+#[cfg(target_arch = "aarch64")]
+mod android_main;
 
 // Subsystems
 mod memory;
@@ -655,6 +663,11 @@ pub unsafe extern "C" fn kmain() -> ! {
     let (fb_width, fb_height) = framebuffer::get_dimensions();
     mouse::set_screen_size(fb_width, fb_height);
     framebuffer::print_boot_status("Mouse initialized", BootStatus::Ok);
+    
+    // Phase 7.1: Touch input driver
+    touch::init();
+    touch::set_screen_size(fb_width, fb_height);
+    framebuffer::print_boot_status("Touch input ready", BootStatus::Ok);
     
     // Phase 8-12: Subsystem toggles (enable for full functionality)
     const ENABLE_PCI: bool = true;

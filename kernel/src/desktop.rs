@@ -916,6 +916,14 @@ pub struct Desktop {
     pub sys_battery: u32,
     /// System tray: simulated wifi connected
     pub sys_wifi_connected: bool,
+    
+    // ══════ TOUCH INPUT ══════
+    /// Gesture recognizer state machine
+    gesture_recognizer: crate::gesture::GestureRecognizer,
+    /// Per-frame gesture output buffer
+    gesture_buffer: crate::gesture::GestureBuffer,
+    /// Touch-based cursor mode (true when last input was touch)
+    pub touch_mode: bool,
 }
 
 /// Calculator state for interactive calculator windows
@@ -1488,6 +1496,10 @@ impl Desktop {
             sys_volume: 75,
             sys_battery: 85,
             sys_wifi_connected: true,
+            // Touch input
+            gesture_recognizer: crate::gesture::GestureRecognizer::new(1280, 800),
+            gesture_buffer: crate::gesture::GestureBuffer::new(),
+            touch_mode: false,
         }
     }
     
@@ -1554,6 +1566,12 @@ impl Desktop {
         crate::graphics::scaling::init(width, height);
         self.scale_factor = crate::graphics::scaling::get_scale_factor();
         crate::serial_println!("[Desktop] UI scale factor: {}x", self.scale_factor);
+        
+        // Initialize touch input subsystem
+        crate::touch::init();
+        crate::touch::set_screen_size(width, height);
+        self.gesture_recognizer.set_screen_size(width as i32, height as i32);
+        crate::serial_println!("[Desktop] Touch input initialized");
         
         // Initialize double buffering
         crate::serial_println!("[Desktop] init_double_buffer...");
@@ -4831,6 +4849,179 @@ struct AppConfig {
                 },
                 _ => {}
             }
+        }
+    }
+    
+    /// Process touch input events and gestures.
+    /// Called each frame from the run() loop, after mouse input.
+    pub fn process_touch_input(&mut self) {
+        // Process all pending touch events through the gesture recognizer
+        self.gesture_buffer.clear();
+        self.gesture_recognizer.process_all(&mut self.gesture_buffer);
+        
+        // Handle each recognized gesture
+        if !self.gesture_buffer.is_empty() {
+            self.touch_mode = true; // Switch to touch mode
+        }
+        
+        // Collect gestures into a temp array to avoid borrow issues
+        let mut gesture_list: [(u8, i32, i32, i32, i32, i32); 8] = [(0, 0, 0, 0, 0, 0); 8];
+        let mut gesture_count = 0usize;
+        
+        for gesture in self.gesture_buffer.iter() {
+            if gesture_count >= 8 { break; }
+            // Pack gesture type and key data into the array
+            match gesture {
+                crate::gesture::GestureEvent::Tap { x, y } => {
+                    gesture_list[gesture_count] = (1, *x, *y, 0, 0, 0);
+                }
+                crate::gesture::GestureEvent::DoubleTap { x, y } => {
+                    gesture_list[gesture_count] = (2, *x, *y, 0, 0, 0);
+                }
+                crate::gesture::GestureEvent::LongPress { x, y } => {
+                    gesture_list[gesture_count] = (3, *x, *y, 0, 0, 0);
+                }
+                crate::gesture::GestureEvent::Swipe { direction, start_x, start_y, end_x, end_y, .. } => {
+                    let dir_code = match direction {
+                        crate::gesture::SwipeDirection::Left => 0,
+                        crate::gesture::SwipeDirection::Right => 1,
+                        crate::gesture::SwipeDirection::Up => 2,
+                        crate::gesture::SwipeDirection::Down => 3,
+                    };
+                    gesture_list[gesture_count] = (4, *start_x, *start_y, *end_x, *end_y, dir_code);
+                }
+                crate::gesture::GestureEvent::EdgeSwipe { origin, progress } => {
+                    let origin_code = match origin {
+                        crate::gesture::EdgeOrigin::Bottom => 0,
+                        crate::gesture::EdgeOrigin::Top => 1,
+                        crate::gesture::EdgeOrigin::Left => 2,
+                        crate::gesture::EdgeOrigin::Right => 3,
+                    };
+                    gesture_list[gesture_count] = (5, origin_code, *progress, 0, 0, 0);
+                }
+                crate::gesture::GestureEvent::Pinch { center_x, center_y, scale } => {
+                    gesture_list[gesture_count] = (6, *center_x, *center_y, *scale, 0, 0);
+                }
+                crate::gesture::GestureEvent::Scroll { delta_x, delta_y } => {
+                    gesture_list[gesture_count] = (7, *delta_x, *delta_y, 0, 0, 0);
+                }
+                crate::gesture::GestureEvent::ThreeFingerSwipe { direction } => {
+                    let dir_code = match direction {
+                        crate::gesture::SwipeDirection::Left => 0,
+                        crate::gesture::SwipeDirection::Right => 1,
+                        crate::gesture::SwipeDirection::Up => 2,
+                        crate::gesture::SwipeDirection::Down => 3,
+                    };
+                    gesture_list[gesture_count] = (8, dir_code, 0, 0, 0, 0);
+                }
+                crate::gesture::GestureEvent::TouchDown { x, y } => {
+                    gesture_list[gesture_count] = (9, *x, *y, 0, 0, 0);
+                }
+                crate::gesture::GestureEvent::TouchMove { x, y } => {
+                    gesture_list[gesture_count] = (10, *x, *y, 0, 0, 0);
+                }
+                crate::gesture::GestureEvent::TouchUp { x, y } => {
+                    gesture_list[gesture_count] = (11, *x, *y, 0, 0, 0);
+                }
+                crate::gesture::GestureEvent::Drag { x, y, start_x, start_y } => {
+                    gesture_list[gesture_count] = (12, *x, *y, *start_x, *start_y, 0);
+                }
+            }
+            gesture_count += 1;
+        }
+        
+        // Now dispatch each gesture (no longer borrowing gesture_buffer)
+        for i in 0..gesture_count {
+            let (gtype, a, b, c, d, e) = gesture_list[i];
+            match gtype {
+                1 => { // Tap → left click
+                    self.update_cursor(a, b);
+                    self.handle_click(a, b, true);
+                    self.handle_click(a, b, false);
+                }
+                2 => { // DoubleTap → double click
+                    self.update_cursor(a, b);
+                    self.handle_click(a, b, true);
+                    self.handle_click(a, b, false);
+                    self.handle_click(a, b, true);
+                    self.handle_click(a, b, false);
+                }
+                3 => { // LongPress → right click (context menu)
+                    self.update_cursor(a, b);
+                    self.handle_right_click(a, b, true);
+                    self.handle_right_click(a, b, false);
+                }
+                4 => { // Swipe
+                    match e {
+                        0 => { /* Swipe Left — could map to browser back */ }
+                        1 => { /* Swipe Right — could map to browser forward */ }
+                        2 => { /* Swipe Up */ }
+                        3 => { /* Swipe Down */ }
+                        _ => {}
+                    }
+                }
+                5 => { // EdgeSwipe
+                    match a {
+                        0 => { // Bottom edge → open start menu (launcher)
+                            if !self.start_menu_open {
+                                self.start_menu_open = true;
+                            }
+                        }
+                        1 => { // Top edge → (notification panel placeholder)
+                        }
+                        _ => {}
+                    }
+                }
+                6 => { // Pinch → zoom (scale factor)
+                    // c = scale (100 = no change)
+                    // Could be used by image viewer, maps, etc. in future
+                }
+                7 => { // Two-finger scroll
+                    let scroll_delta = if b > 0 { -1i8 } else if b < 0 { 1i8 } else { 0i8 };
+                    if scroll_delta != 0 {
+                        self.handle_scroll(scroll_delta);
+                    }
+                }
+                8 => { // Three-finger swipe → app switch (Alt+Tab equiv)
+                    // a = direction code (0=left, 1=right)
+                    self.cycle_windows();
+                }
+                9 => { // TouchDown — move cursor to touch position
+                    self.update_cursor(a, b);
+                }
+                10 => { // TouchMove — track finger as cursor
+                    self.update_cursor(a, b);
+                }
+                11 => { // TouchUp
+                    // Nothing extra needed
+                }
+                12 => { // Drag — move cursor  
+                    self.update_cursor(a, b);
+                }
+                _ => {}
+            }
+        }
+    }
+    
+    /// Update cursor position (used by both mouse and touch)
+    fn update_cursor(&mut self, x: i32, y: i32) {
+        self.cursor_x = x.clamp(0, self.width as i32 - 1);
+        self.cursor_y = y.clamp(0, self.height as i32 - 1);
+    }
+    
+    /// Cycle to next window (used by 3-finger swipe / Alt+Tab)
+    fn cycle_windows(&mut self) {
+        if self.windows.len() < 2 {
+            return;
+        }
+        // Find currently focused window and move focus to next
+        let focused_idx = self.windows.iter().position(|w| w.focused);
+        if let Some(idx) = focused_idx {
+            let next = (idx + 1) % self.windows.len();
+            for w in self.windows.iter_mut() {
+                w.focused = false;
+            }
+            self.windows[next].focused = true;
         }
     }
     
@@ -10077,6 +10268,15 @@ pub fn run() {
         let scroll = crate::mouse::get_scroll_delta();
         if scroll != 0 {
             handle_scroll(scroll);
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // Touch Input Processing
+        // ═══════════════════════════════════════════════════════════════
+        {
+            let mut d = DESKTOP.lock();
+            d.process_touch_input();
+            drop(d);
         }
         
         // ═══════════════════════════════════════════════════════════════
