@@ -192,6 +192,9 @@ mod devtools;
 // TrustSynth — polyphonic audio synthesizer engine
 mod audio;
 
+// TrustDAW — bare-metal Digital Audio Workstation
+mod trustdaw;
+
 // Web Sandbox — capability-gated isolated web execution environment
 mod sandbox;
 
@@ -221,7 +224,7 @@ use core::alloc::Layout;
 use limine::request::{
     FramebufferRequest, MemoryMapRequest, HhdmRequest,
     RequestsStartMarker, RequestsEndMarker, ModuleRequest,
-    RsdpRequest, SmpRequest
+    RsdpRequest, SmpRequest, KernelAddressRequest
 };
 use limine::BaseRevision;
 
@@ -269,6 +272,11 @@ static RSDP_REQUEST: RsdpRequest = RsdpRequest::new();
 #[unsafe(link_section = ".requests")]
 static SMP_REQUEST: SmpRequest = SmpRequest::new();
 
+/// Request kernel address info (needed for virt→phys translation on aarch64)
+#[used]
+#[unsafe(link_section = ".requests")]
+static KERNEL_ADDRESS_REQUEST: KernelAddressRequest = KernelAddressRequest::new();
+
 /// Limine requests end marker
 #[used]
 #[unsafe(link_section = ".requests_end_marker")]
@@ -297,6 +305,20 @@ pub unsafe extern "C" fn kmain() -> ! {
     // Ensure Limine protocol version is supported
     if !BASE_REVISION.is_supported() {
         halt_loop();
+    }
+
+    // Phase 0.5: Set up MMIO identity mapping (aarch64 needs Device-nGnRnE attributes)
+    // Limine clears TTBR0 and HHDM maps MMIO as Normal Cacheable.
+    // We need identity-mapped Device memory for PL011 UART access.
+    #[cfg(target_arch = "aarch64")]
+    {
+        if let Some(ka_resp) = KERNEL_ADDRESS_REQUEST.get_response() {
+            crate::arch::platform::boot::setup_mmio_identity_map(
+                ka_resp.virtual_base(),
+                ka_resp.physical_base(),
+            );
+        }
+        // UART_BASE stays at 0x09000000 (identity-mapped with Device attributes)
     }
 
     // Phase 1: Early init - serial port for debug output

@@ -153,6 +153,8 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    audio               Audio driver status / control");
     crate::println!("    synth <cmd>         TrustSynth polyphonic synthesizer");
     crate::println!("                         note/freq/wave/adsr/preset/demo/status");
+    crate::println!("    daw <cmd>           TrustDAW digital audio workstation");
+    crate::println!("                         demo/track/note/play/record/mixer/export/gui");
     crate::println!();
     
     // DISK & STORAGE

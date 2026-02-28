@@ -3183,6 +3183,409 @@ pub(super) fn cmd_synth_pattern(args: &[&str]) {
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// TrustDAW — Digital Audio Workstation
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub(super) fn cmd_daw(args: &[&str]) {
+    match args.first().copied() {
+        Some("init") | None => {
+            match crate::trustdaw::init() {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "TrustDAW initialized");
+                    crate::println!("{}", crate::trustdaw::status());
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "DAW init failed: {}", e),
+            }
+        }
+        Some("status") | Some("info") => {
+            crate::println!("{}", crate::trustdaw::status());
+        }
+        Some("new") => {
+            // daw new <name> [bpm]
+            let name = match args.get(1) {
+                Some(n) => *n,
+                None => {
+                    crate::println_color!(COLOR_YELLOW, "Usage: daw new <project_name> [bpm]");
+                    return;
+                }
+            };
+            let bpm = args.get(2).and_then(|s| s.parse::<u32>().ok()).unwrap_or(120);
+            match crate::trustdaw::new_project(name, bpm) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "New project: \"{}\" at {} BPM", name, bpm),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("demo") => {
+            match crate::trustdaw::load_demo() {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "Demo project loaded!");
+                    crate::println!("{}", crate::trustdaw::status());
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("track") => cmd_daw_track(&args[1..]),
+        Some("note") => cmd_daw_note(&args[1..]),
+        Some("play") => {
+            crate::println!("Playing...");
+            match crate::trustdaw::play() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Playback complete"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("stop") => {
+            crate::trustdaw::stop();
+            crate::println_color!(COLOR_GREEN, "Stopped");
+        }
+        Some("rewind") | Some("rw") => {
+            crate::trustdaw::rewind();
+            crate::println_color!(COLOR_GREEN, "Rewound to beginning");
+        }
+        Some("bpm") => {
+            match args.get(1).and_then(|s| s.parse::<u32>().ok()) {
+                Some(bpm) => {
+                    crate::trustdaw::set_bpm(bpm);
+                    crate::println_color!(COLOR_GREEN, "BPM set to {}", crate::trustdaw::BPM.load(core::sync::atomic::Ordering::Relaxed));
+                }
+                None => crate::println_color!(COLOR_YELLOW, "Usage: daw bpm <30-300>"),
+            }
+        }
+        Some("record") | Some("rec") => {
+            let track_idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            match crate::trustdaw::recorder::record_interactive(track_idx) {
+                Ok(n) => crate::println_color!(COLOR_GREEN, "Recorded {} notes", n),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("piano") | Some("keyboard") => {
+            crate::println!("{}", crate::trustdaw::keyboard_midi::display_layout());
+        }
+        Some("pianoroll") | Some("roll") => {
+            // Text-mode piano roll display
+            let track_idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            let bars = args.get(2).and_then(|s| s.parse::<u32>().ok()).unwrap_or(4);
+            match crate::trustdaw::ensure_init().and_then(|_| {
+                let project = crate::trustdaw::PROJECT.lock();
+                let project = project.as_ref().ok_or("No project")?;
+                let track = project.tracks.get(track_idx).ok_or("Invalid track index")?;
+                Ok(crate::trustdaw::piano_roll::text_piano_roll(track, bars))
+            }) {
+                Ok(s) => crate::println!("{}", s),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("gui") => {
+            match crate::trustdaw::ui::launch_gui() {
+                Ok(()) => crate::println!("DAW GUI closed"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("export") | Some("wav") => {
+            let path = args.get(1).copied().unwrap_or("/home/output.wav");
+            crate::println!("Exporting to {}...", path);
+            match crate::trustdaw::export_wav(path) {
+                Ok(size) => {
+                    let (secs, ms) = crate::trustdaw::wav_export::duration_info(
+                        size / 2, crate::trustdaw::SAMPLE_RATE, 2
+                    );
+                    crate::println_color!(COLOR_GREEN, "Exported: {} ({} bytes, {}:{:02}.{:03})",
+                        path, size, secs / 60, secs % 60, ms);
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("mixer") => cmd_daw_mixer(&args[1..]),
+        Some("help") => {
+            crate::println_color!(COLOR_CYAN, "╔══════════════════════════════════════════════╗");
+            crate::println_color!(COLOR_CYAN, "║      TrustDAW — Digital Audio Workstation    ║");
+            crate::println_color!(COLOR_CYAN, "╚══════════════════════════════════════════════╝");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  Project:");
+            crate::println!("  daw init                        Initialize TrustDAW");
+            crate::println!("  daw new <name> [bpm]            New project");
+            crate::println!("  daw demo                        Load demo project");
+            crate::println!("  daw status                      Show project info");
+            crate::println!("  daw bpm <30-300>                Set tempo");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  Transport:");
+            crate::println!("  daw play                        Play from current position");
+            crate::println!("  daw stop                        Stop playback/recording");
+            crate::println!("  daw rewind                      Rewind to start");
+            crate::println!("  daw record [track#]             Record from keyboard");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  Tracks:");
+            crate::println!("  daw track add <name>            Add a new track");
+            crate::println!("  daw track rm <#>                Remove a track");
+            crate::println!("  daw track list                  List all tracks");
+            crate::println!("  daw track wave <#> <waveform>   Set track waveform");
+            crate::println!("  daw track notes <#>             List notes in track");
+            crate::println!("  daw track clear <#>             Clear track notes");
+            crate::println!("  daw track transpose <#> <semi>  Transpose notes");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  Notes:");
+            crate::println!("  daw note add <track#> <note> [vel] [start] [dur]");
+            crate::println!("                                  Add a note (e.g. daw note add 0 C4 100 0 480)");
+            crate::println!("  daw note rm <track#> <idx>      Remove a note by index");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  Mixer:");
+            crate::println!("  daw mixer                       Show mixer status");
+            crate::println!("  daw mixer vol <#> <0-255>       Set track volume");
+            crate::println!("  daw mixer pan <#> <-100..100>   Set track pan");
+            crate::println!("  daw mixer mute <#>              Toggle mute");
+            crate::println!("  daw mixer solo <#>              Toggle solo");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  Display:");
+            crate::println!("  daw pianoroll [track#] [bars]   Text piano roll view");
+            crate::println!("  daw piano                       Show keyboard layout");
+            crate::println!("  daw gui                         Launch graphical DAW UI");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  Export:");
+            crate::println!("  daw export [path]               Export WAV (default: /home/output.wav)");
+        }
+        Some(other) => {
+            crate::println_color!(COLOR_RED, "Unknown DAW command: {}", other);
+            crate::println!("Use 'daw help' for commands");
+        }
+    }
+}
+
+fn cmd_daw_track(args: &[&str]) {
+    match args.first().copied() {
+        Some("add") | Some("new") => {
+            let name = match args.get(1) {
+                Some(n) => *n,
+                None => {
+                    crate::println_color!(COLOR_YELLOW, "Usage: daw track add <name>");
+                    return;
+                }
+            };
+            match crate::trustdaw::add_track(name) {
+                Ok(idx) => crate::println_color!(COLOR_GREEN, "Track {} \"{}\" added", idx, name),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("rm") | Some("remove") | Some("del") => {
+            match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
+                Some(idx) => {
+                    match crate::trustdaw::remove_track(idx) {
+                        Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} removed", idx),
+                        Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+                    }
+                }
+                None => crate::println_color!(COLOR_YELLOW, "Usage: daw track rm <index>"),
+            }
+        }
+        Some("list") | Some("ls") | None => {
+            crate::println!("{}", crate::trustdaw::status());
+        }
+        Some("wave") | Some("waveform") => {
+            if args.len() < 3 {
+                crate::println_color!(COLOR_YELLOW, "Usage: daw track wave <#> <sine|square|saw|triangle|noise>");
+                return;
+            }
+            let idx = match args[1].parse::<usize>() {
+                Ok(i) => i,
+                Err(_) => { crate::println_color!(COLOR_RED, "Invalid track index"); return; }
+            };
+            match crate::trustdaw::set_track_waveform(idx, args[2]) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} waveform set to {}", idx, args[2]),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("notes") => {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            match crate::trustdaw::list_notes(idx) {
+                Ok(s) => crate::println!("{}", s),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("clear") => {
+            let idx = match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
+                Some(i) => i,
+                None => { crate::println_color!(COLOR_YELLOW, "Usage: daw track clear <#>"); return; }
+            };
+            let cleared = {
+                let mut project = crate::trustdaw::PROJECT.lock();
+                if let Some(proj) = project.as_mut() {
+                    if let Some(track) = proj.tracks.get_mut(idx) {
+                        let count = track.notes.len();
+                        track.clear();
+                        Ok(count)
+                    } else { Err("Invalid track index") }
+                } else { Err("No project") }
+            };
+            match cleared {
+                Ok(n) => crate::println_color!(COLOR_GREEN, "Cleared {} notes from track {}", n, idx),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("transpose") => {
+            if args.len() < 3 {
+                crate::println_color!(COLOR_YELLOW, "Usage: daw track transpose <#> <semitones>");
+                return;
+            }
+            let idx = match args[1].parse::<usize>() {
+                Ok(i) => i,
+                Err(_) => { crate::println_color!(COLOR_RED, "Invalid track index"); return; }
+            };
+            let semi = match args[2].parse::<i8>() {
+                Ok(s) => s,
+                Err(_) => { crate::println_color!(COLOR_RED, "Invalid semitone value"); return; }
+            };
+            let result = {
+                let mut project = crate::trustdaw::PROJECT.lock();
+                if let Some(proj) = project.as_mut() {
+                    if let Some(track) = proj.tracks.get_mut(idx) {
+                        track.transpose(semi);
+                        Ok(())
+                    } else { Err("Invalid track index") }
+                } else { Err("No project") }
+            };
+            match result {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} transposed by {} semitones", idx, semi),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some(other) => {
+            crate::println_color!(COLOR_RED, "Unknown track command: {}", other);
+            crate::println!("Use: add, rm, list, wave, notes, clear, transpose");
+        }
+    }
+}
+
+fn cmd_daw_note(args: &[&str]) {
+    match args.first().copied() {
+        Some("add") => {
+            // daw note add <track#> <note_name> [velocity] [start_tick] [duration_ticks]
+            if args.len() < 3 {
+                crate::println_color!(COLOR_YELLOW, "Usage: daw note add <track#> <note> [vel] [start_tick] [dur_ticks]");
+                crate::println!("  Example: daw note add 0 C4 100 0 480");
+                crate::println!("  Default: vel=100, start=0, dur=480 (quarter note)");
+                return;
+            }
+            let track_idx = match args[1].parse::<usize>() {
+                Ok(i) => i,
+                Err(_) => { crate::println_color!(COLOR_RED, "Invalid track index"); return; }
+            };
+            let note_name = args[2];
+            let midi_note = match crate::audio::tables::note_name_to_midi(note_name) {
+                Some(n) => n,
+                None => { crate::println_color!(COLOR_RED, "Invalid note: {} (use e.g. C4, A#3, Bb5)", note_name); return; }
+            };
+            let velocity = args.get(3).and_then(|s| s.parse::<u8>().ok()).unwrap_or(100);
+            let start_tick = args.get(4).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+            let duration = args.get(5).and_then(|s| s.parse::<u32>().ok()).unwrap_or(480);
+
+            match crate::trustdaw::add_note(track_idx, midi_note, velocity, start_tick, duration) {
+                Ok(()) => {
+                    let name = crate::audio::tables::midi_to_note_name(midi_note);
+                    let oct = crate::audio::tables::midi_octave(midi_note);
+                    crate::println_color!(COLOR_GREEN, "Added {}{} vel={} at tick {} dur={}",
+                        name, oct, velocity, start_tick, duration);
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("rm") | Some("remove") | Some("del") => {
+            if args.len() < 3 {
+                crate::println_color!(COLOR_YELLOW, "Usage: daw note rm <track#> <note_index>");
+                return;
+            }
+            let track_idx = match args[1].parse::<usize>() {
+                Ok(i) => i,
+                Err(_) => { crate::println_color!(COLOR_RED, "Invalid track index"); return; }
+            };
+            let note_idx = match args[2].parse::<usize>() {
+                Ok(i) => i,
+                Err(_) => { crate::println_color!(COLOR_RED, "Invalid note index"); return; }
+            };
+            let result = {
+                let mut project = crate::trustdaw::PROJECT.lock();
+                if let Some(proj) = project.as_mut() {
+                    if let Some(track) = proj.tracks.get_mut(track_idx) {
+                        match track.remove_note(note_idx) {
+                            Some(note) => Ok(note),
+                            None => Err("Note index out of range"),
+                        }
+                    } else { Err("Invalid track index") }
+                } else { Err("No project") }
+            };
+            match result {
+                Ok(note) => {
+                    let name = crate::audio::tables::midi_to_note_name(note.pitch);
+                    let oct = crate::audio::tables::midi_octave(note.pitch);
+                    crate::println_color!(COLOR_GREEN, "Removed {}{} from track {}", name, oct, track_idx);
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        _ => {
+            crate::println_color!(COLOR_YELLOW, "Usage: daw note <add|rm> ...");
+            crate::println!("  daw note add <track#> <note> [vel] [start] [dur]");
+            crate::println!("  daw note rm <track#> <note_index>");
+        }
+    }
+}
+
+fn cmd_daw_mixer(args: &[&str]) {
+    match args.first().copied() {
+        Some("vol") | Some("volume") => {
+            if args.len() < 3 {
+                crate::println_color!(COLOR_YELLOW, "Usage: daw mixer vol <track#> <0-255>");
+                return;
+            }
+            let idx = match args[1].parse::<usize>() { Ok(i) => i, Err(_) => { crate::println_color!(COLOR_RED, "Invalid track"); return; } };
+            let vol = match args[2].parse::<u8>() { Ok(v) => v, Err(_) => { crate::println_color!(COLOR_RED, "Invalid volume (0-255)"); return; } };
+            match crate::trustdaw::set_track_volume(idx, vol) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Track {} volume: {}", idx, vol),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("pan") => {
+            if args.len() < 3 {
+                crate::println_color!(COLOR_YELLOW, "Usage: daw mixer pan <track#> <-100..+100>");
+                return;
+            }
+            let idx = match args[1].parse::<usize>() { Ok(i) => i, Err(_) => { crate::println_color!(COLOR_RED, "Invalid track"); return; } };
+            let pan = match args[2].parse::<i8>() { Ok(p) => p, Err(_) => { crate::println_color!(COLOR_RED, "Invalid pan (-100 to +100)"); return; } };
+            match crate::trustdaw::set_track_pan(idx, pan) {
+                Ok(()) => {
+                    let desc = if pan == 0 { "Center".into() } else if pan > 0 { alloc::format!("Right {}", pan) } else { alloc::format!("Left {}", -pan) };
+                    crate::println_color!(COLOR_GREEN, "Track {} pan: {}", idx, desc);
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("mute") => {
+            let idx = match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
+                Some(i) => i,
+                None => { crate::println_color!(COLOR_YELLOW, "Usage: daw mixer mute <track#>"); return; }
+            };
+            match crate::trustdaw::toggle_mute(idx) {
+                Ok(muted) => crate::println_color!(if muted { COLOR_YELLOW } else { COLOR_GREEN },
+                    "Track {} {}", idx, if muted { "MUTED" } else { "unmuted" }),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("solo") => {
+            let idx = match args.get(1).and_then(|s| s.parse::<usize>().ok()) {
+                Some(i) => i,
+                None => { crate::println_color!(COLOR_YELLOW, "Usage: daw mixer solo <track#>"); return; }
+            };
+            match crate::trustdaw::toggle_solo(idx) {
+                Ok(solo) => crate::println_color!(if solo { COLOR_YELLOW } else { COLOR_GREEN },
+                    "Track {} {}", idx, if solo { "SOLO" } else { "un-solo'd" }),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        _ => {
+            // Show mixer status
+            crate::println!("{}", crate::trustdaw::status());
+        }
+    }
+}
+
 pub(super) fn cmd_lspci(args: &[&str]) {
     let devices = crate::pci::get_devices();
     

@@ -1054,6 +1054,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "beep" => vm::cmd_beep(args),
         "audio" => vm::cmd_audio(args),
         "synth" => vm::cmd_synth(args),
+        "daw" | "trustdaw" => vm::cmd_daw(args),
         "ifconfig" | "ip" => vm::cmd_ifconfig(),
         "ipconfig" => vm::cmd_ipconfig(args),
         "ping" => vm::cmd_ping(args),

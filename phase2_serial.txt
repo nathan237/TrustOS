@@ -1,0 +1,193 @@
+UEFI firmware (version edk2-stable202408-prebuilt.qemu.org built at 16:28:50 on Sep 12 2024)
+ArmTrngLib could not be correctly initialized.
+Error: Image at 0007FDB6000 start failed: 00000001
+Error: Image at 0007FD6D000 start failed: Not Found
+Error: Image at 0007FCBA000 start failed: Unsupported
+Error: Image at 0007FC3F000 start failed: Not Found
+Error: Image at 0007FB65000 start failed: Aborted
+Tpm2SubmitCommand - Tcg2 - Not Found
+Tpm2GetCapabilityPcrs fail!
+Tpm2SubmitCommand - Tcg2 - Not Found
+Image type X64 can't be loaded on AARCH64 UEFI system.
+[2J[01;01H[=3h[2J[01;01H[2J[01;01H[=3h[2J[01;01HBdsDxe: loading Boot0001 "UEFI Misc Device" from PciRoot(0x0)/Pci(0x2,0x0)
+BdsDxe: starting Boot0001 "UEFI Misc Device" from PciRoot(0x0)/Pci(0x2,0x0)
+ConvertPages: Incompatible memory types, the pages to allocate have been allocated
+ConvertPages: Incompatible memory types, the pages to allocate have been allocated
+[2J[01;01H[01;01H[2J[01;01H[01;01H[2J[01;01H[01;01H[2J[01;01H[01;01H[01;01H[02;01H[02;27H[0m[36m[40mL[02;28Hi[02;29Hm[02;30Hi[02;31Hn[02;32He[02;33H [02;34H8[02;35H.[02;36H7[02;37H.[02;38H0[02;39H [02;40H([02;41Ha[02;42Ha[02;43Hr[02;44Hc[02;45Hh[02;46H6[02;47H4[02;48H,[02;49H [02;50HU[02;51HE[02;52HF[02;53HI[02;54H)[02;55H[0m[37m[40m[03;01H[04;01H[05;01H[06;01H[13;01H [13;02H [13;03H [13;04H [13;05H [13;06H [13;07H [13;08H [13;09H [13;10H [13;11H [13;12H [13;13H [13;14H [13;15H [13;16H [13;17H [13;18H [13;19H [13;20H [13;21H [13;22H [13;23H [13;24H [13;25H [13;26H [13;27H [13;28H [13;29H [13;30H [13;31H [13;32H [13;33H [13;34H [13;35H [13;36H[0m[30m[47m [13;37HT[13;38Hr[13;39Hu[13;40Hs[13;41Ht[13;42HO[13;43HS[13;44H [13;45H[0m[37m[40m[14;01H[04;01H [04;02H [04;03H [04;04H [04;05H[0m[32m[40mA[04;06HR[04;07HR[04;08HO[04;09HW[04;10HS[04;11H[0m[37m[40m [04;12HS[04;13He[04;14Hl[04;15He[04;16Hc[04;17Ht[04;18H [04;19H [04;20H [04;21H [04;22H[0m[32m[40mE[04;23HN[04;24HT[04;25HE[04;26HR[04;27H[0m[37m[40m [04;28HB[04;29Ho[04;30Ho[04;31Ht[04;32H [04;33H [04;34H [04;35H [04;36H[0m[32m[40mE[04;37H[0m[37m[40m [04;38HE[04;39Hd[04;40Hi[04;41Ht[04;42H[04;44H[0m[32m[40mS[04;45H[0m[37m[40m [04;46HF[04;47Hi[04;48Hr[04;49Hm[04;50Hw[04;51Ha[04;52Hr[04;53He[04;54H [04;55HS[04;56He[04;57Ht[04;58Hu[04;59Hp[04;60H[04;64H[0m[32m[40mB[04;65H[0m[37m[40m [04;66HB[04;67Hl[04;68Ha[04;69Hn[04;70Hk[04;71H [04;72HE[04;73Hn[04;74Ht[04;75Hr[04;76Hy[04;77H[14;01H[15;01H[16;01H[24;01H[24;01H [24;02H [24;03H [24;04H [24;05H [24;06H [24;07H [24;08H [24;09H [24;10H [24;11H [24;12H [24;13H [24;14H [24;15H [24;16H [24;17H [24;18H [24;19H [24;20H [24;21H [24;22H [24;23H [24;24H [24;25H [24;26H [24;27H [24;28H [24;29H [24;30H [24;31H [24;32H [24;33H [24;34H [24;35H [24;36H [24;37H [24;38H [24;39H [24;40H [24;41H [24;42H [24;43H [24;44H [24;45H [24;46H [24;47H [24;48H [24;49H [24;50H [24;51H [24;52H [24;53H [24;54H [24;55H [24;56H [24;57H [24;58H [24;59H [24;60H [24;61H [24;62H [24;63H [24;64H [24;65H [24;66H [24;67H [24;68H [24;69H [24;70H [24;71H [24;72H [24;73H [24;74H [24;75H [24;76H [24;77H [24;78H [24;79H [24;80H[24;01H[0m[32m[40mB[24;02Ho[24;03Ho[24;04Ht[24;05Hi[24;06Hn[24;07Hg[24;08H [24;09Ha[24;10Hu[24;11Ht[24;12Ho[24;13Hm[24;14Ha[24;15Ht[24;16Hi[24;17Hc[24;18Ha[24;19Hl[24;20Hl[24;21Hy[24;22H [24;23Hi[24;24Hn[24;25H [24;26H[1m[32m[40m3[24;27H[0m[32m[40m,[24;28H [24;29Hp[24;30Hr[24;31He[24;32Hs[24;33Hs[24;34H [24;35Ha[24;36Hn[24;37Hy[24;38H [24;39Hk[24;40He[24;41Hy[24;42H [24;43Ht[24;44Ho[24;45H [24;46Hs[24;47Ht[24;48Ho[24;49Hp[24;50H [24;51Ht[24;52Hh[24;53He[24;54H [24;55Hc[24;56Ho[24;57Hu[24;58Hn[24;59Ht[24;60Hd[24;61Ho[24;62Hw[24;63Hn[24;64H.[24;65H.[24;66H.[24;67H[0m[37m[40m[24;01H[24;01H [24;02H [24;03H [24;04H [24;05H [24;06H [24;07H [24;08H [24;09H [24;10H [24;11H [24;12H [24;13H [24;14H [24;15H [24;16H [24;17H [24;18H [24;19H [24;20H [24;21H [24;22H [24;23H [24;24H [24;25H [24;26H [24;27H [24;28H [24;29H [24;30H [24;31H [24;32H [24;33H [24;34H [24;35H [24;36H [24;37H [24;38H [24;39H [24;40H [24;41H [24;42H [24;43H [24;44H [24;45H [24;46H [24;47H [24;48H [24;49H [24;50H [24;51H [24;52H [24;53H [24;54H [24;55H [24;56H [24;57H [24;58H [24;59H [24;60H [24;61H [24;62H [24;63H [24;64H [24;65H [24;66H [24;67H [24;68H [24;69H [24;70H [24;71H [24;72H [24;73H [24;74H [24;75H [24;76H [24;77H [24;78H [24;79H [24;80H[24;01H[0m[32m[40mB[24;02Ho[24;03Ho[24;04Ht[24;05Hi[24;06Hn[24;07Hg[24;08H [24;09Ha[24;10Hu[24;11Ht[24;12Ho[24;13Hm[24;14Ha[24;15Ht[24;16Hi[24;17Hc[24;18Ha[24;19Hl[24;20Hl[24;21Hy[24;22H [24;23Hi[24;24Hn[24;25H [24;26H[1m[32m[40m2[24;27H[0m[32m[40m,[24;28H [24;29Hp[24;30Hr[24;31He[24;32Hs[24;33Hs[24;34H [24;35Ha[24;36Hn[24;37Hy[24;38H [24;39Hk[24;40He[24;41Hy[24;42H [24;43Ht[24;44Ho[24;45H [24;46Hs[24;47Ht[24;48Ho[24;49Hp[24;50H [24;51Ht[24;52Hh[24;53He[24;54H [24;55Hc[24;56Ho[24;57Hu[24;58Hn[24;59Ht[24;60Hd[24;61Ho[24;62Hw[24;63Hn[24;64H.[24;65H.[24;66H.[24;67H[0m[37m[40m[24;01H[24;01H [24;02H [24;03H [24;04H [24;05H [24;06H [24;07H [24;08H [24;09H [24;10H [24;11H [24;12H [24;13H [24;14H [24;15H [24;16H [24;17H [24;18H [24;19H [24;20H [24;21H [24;22H [24;23H [24;24H [24;25H [24;26H [24;27H [24;28H [24;29H [24;30H [24;31H [24;32H [24;33H [24;34H [24;35H [24;36H [24;37H [24;38H [24;39H [24;40H [24;41H [24;42H [24;43H [24;44H [24;45H [24;46H [24;47H [24;48H [24;49H [24;50H [24;51H [24;52H [24;53H [24;54H [24;55H [24;56H [24;57H [24;58H [24;59H [24;60H [24;61H [24;62H [24;63H [24;64H [24;65H [24;66H [24;67H [24;68H [24;69H [24;70H [24;71H [24;72H [24;73H [24;74H [24;75H [24;76H [24;77H [24;78H [24;79H [24;80H[24;01H[0m[32m[40mB[24;02Ho[24;03Ho[24;04Ht[24;05Hi[24;06Hn[24;07Hg[24;08H [24;09Ha[24;10Hu[24;11Ht[24;12Ho[24;13Hm[24;14Ha[24;15Ht[24;16Hi[24;17Hc[24;18Ha[24;19Hl[24;20Hl[24;21Hy[24;22H [24;23Hi[24;24Hn[24;25H [24;26H[1m[32m[40m1[24;27H[0m[32m[40m,[24;28H [24;29Hp[24;30Hr[24;31He[24;32Hs[24;33Hs[24;34H [24;35Ha[24;36Hn[24;37Hy[24;38H [24;39Hk[24;40He[24;41Hy[24;42H [24;43Ht[24;44Ho[24;45H [24;46Hs[24;47Ht[24;48Ho[24;49Hp[24;50H [24;51Ht[24;52Hh[24;53He[24;54H [24;55Hc[24;56Ho[24;57Hu[24;58Hn[24;59Ht[24;60Hd[24;61Ho[24;62Hw[24;63Hn[24;64H.[24;65H.[24;66H.[24;67H[0m[37m[40m[2J[01;01H[01;01Hl[01;02Hi[01;03Hm[01;04Hi[01;05Hn[01;06He[01;07H:[01;08H [01;09HL[01;10Ho[01;11Ha[01;12Hd[01;13Hi[01;14Hn[01;15Hg[01;16H [01;17He[01;18Hx[01;19He[01;20Hc[01;21Hu[01;22Ht[01;23Ha[01;24Hb[01;25Hl[01;26He[01;27H [01;28H`[01;29Hb[01;30Ho[01;31Ho[01;32Ht[01;33H([01;34H)[01;35H:[01;36H/[01;37Hb[01;38Ho[01;39Ho[01;40Ht[01;41H/[01;42Ht[01;43Hr[01;44Hu[01;45Hs[01;46Ht[01;47Ho[01;48Hs[01;49H_[01;50Hk[01;51He[01;52Hr[01;53Hn[01;54He[01;55Hl[01;56H`[01;57H.[01;58H.[01;59H.[01;60H[02;01HT-RustOs Kernel v0.2.0
+Limine protocol supported
+Initializing memory management...
+HHDM offset: 0xffff000000000000
+Memory map entries: 44
+  0x0004000000 - 0x0008000000 (    67108864 bytes) RESERVED
+  0x0009010000 - 0x0009011000 (        4096 bytes) RESERVED
+  0x0040000000 - 0x00796d0000 (   963444736 bytes) USABLE
+  0x00796d0000 - 0x0079dfc000 (     7520256 bytes) KERNEL
+  0x0079dfc000 - 0x007a62f000 (     8597504 bytes) BOOTLOADER
+  0x007a62f000 - 0x007c72c000 (    34590720 bytes) USABLE
+  0x007c72c000 - 0x007c72f000 (       12288 bytes) RESERVED
+  0x007c72f000 - 0x007c739000 (       40960 bytes) RESERVED
+  0x007c739000 - 0x007c770000 (      225280 bytes) BOOTLOADER
+  0x007c770000 - 0x007c7f0000 (      524288 bytes) RESERVED
+  0x007c7f0000 - 0x007c960000 (     1507328 bytes) RESERVED
+  0x007c960000 - 0x007c9b0000 (      327680 bytes) RESERVED
+  0x007c9b0000 - 0x007ca50000 (      655360 bytes) RESERVED
+  0x007ca50000 - 0x007cb40000 (      983040 bytes) RESERVED
+  0x007cb40000 - 0x007cb41000 (        4096 bytes) USABLE
+  0x007cb41000 - 0x007cb44000 (       12288 bytes) ACPI_RECLAIM
+  0x007cb44000 - 0x007cc06000 (      794624 bytes) USABLE
+  0x007cc06000 - 0x007cc3f000 (      233472 bytes) BOOTLOADER
+  0x007cc3f000 - 0x007fa38000 (    48205824 bytes) USABLE
+  0x007fa38000 - 0x007fa94000 (      376832 bytes) BOOTLOADER
+  0x007fa94000 - 0x007fe20000 (     3719168 bytes) USABLE
+  0x007fe20000 - 0x007feb0000 (      589824 bytes) RESERVED
+  0x007feb0000 - 0x007feb1000 (        4096 bytes) RESERVED
+  0x007feb1000 - 0x007feb2000 (        4096 bytes) RESERVED
+  0x007feb2000 - 0x007feb3000 (        4096 bytes) RESERVED
+  0x007feb3000 - 0x007feb4000 (        4096 bytes) RESERVED
+  0x007feb4000 - 0x007feb5000 (        4096 bytes) RESERVED
+  0x007feb5000 - 0x007feb6000 (        4096 bytes) RESERVED
+  0x007feb6000 - 0x007fec0000 (       40960 bytes) BOOTLOADER
+  0x007fec0000 - 0x007ffe0000 (     1179648 bytes) RESERVED
+  0x007ffe0000 - 0x007ffe1000 (        4096 bytes) RESERVED
+  0x007ffe1000 - 0x007ffe2000 (        4096 bytes) RESERVED
+  0x007ffe2000 - 0x007ffe3000 (        4096 bytes) RESERVED
+  0x007ffe3000 - 0x007ffe4000 (        4096 bytes) RESERVED
+  0x007ffe4000 - 0x007ffe5000 (        4096 bytes) RESERVED
+  0x007ffe5000 - 0x007ffe6000 (        4096 bytes) RESERVED
+  0x007ffe6000 - 0x007ffe7000 (        4096 bytes) RESERVED
+  0x007ffe7000 - 0x007ffe8000 (        4096 bytes) RESERVED
+  0x007ffe8000 - 0x007ffe9000 (        4096 bytes) RESERVED
+  0x007ffe9000 - 0x007ffea000 (        4096 bytes) RESERVED
+  0x007ffea000 - 0x007ffeb000 (        4096 bytes) RESERVED
+  0x007ffeb000 - 0x007ffec000 (        4096 bytes) RESERVED
+  0x007ffec000 - 0x007ffff000 (       77824 bytes) BOOTLOADER
+  0x007ffff000 - 0x0080000000 (        4096 bytes) USABLE
+[MEM] Total physical memory: 1011 MB
+[HEAP] Dynamic size: 252 MB (25% of 1011 MB RAM)
+[HEAP] Using mmap region at phys 0x40000000, size 252 MB
+[         0][CPU0][INFO ] Heap initialized: 252 MB at virt 0xffff000040000000 (phys 0x40000000)
+[HEAP] Initialized: free=258868 KB
+[FRAME] Allocator ready: 262144 total frames, 191817 free (749 MB), 70327 used
+[FB] Initializing scrollback buffer...
+[FB] Scrollback buffer initialized (1000 lines max)
+[INTEGRITY] .text   : 4288084 bytes, SHA-256: c736e8e2548eb935...c67bdb96
+[INTEGRITY] .rodata : 2762416 bytes, SHA-256: 9658fac704d06b78...c09ce6f9
+[INTEGRITY] kernel digest: f0a516ba0b33f911...6ab9cda6
+[ED25519] Public key: e6ff743d65a7dbc3...1a5b023cd338a820
+[ED25519] Kernel digest signed
+╔══════════════════════════════════════════════════════════════╗
+║                      T R U S T - O S                         ║
+║                 FAST • SECURE • RELIABLE                     ║
+╚══════════════════════════════════════════════════════════════╝
+
+[OK] Memory management initialized
+Initializing early interrupts...
+[         0][CPU0][DEBUG] Interrupts initialized and enabled
+[OK] Interrupts (early)
+Initializing paging subsystem...
+[         0][CPU0][DEBUG] Paging initialized, kernel CR3: 0x0, NX enabled
+[OK] Paging initialized (NX enabled)
+Initializing thread subsystem...
+[         0][CPU0][INFO ] [THREAD] Thread subsystem initialized
+[OK] Thread subsystem ready
+Initializing security subsystem...
+[OK] Security (basic)
+[i8042] Initializing PS/2 keyboard controller...
+[i8042] Config byte: 0xff
+[i8042] Self-test returned 0xff (expected 0x55) — continuing anyway
+[i8042] Keyboard reset: response 0xff (no ACK)
+[i8042] PS/2 keyboard controller ready
+Keyboard driver ready
+[OK] Keyboard ready
+[RTC] init start
+[RTC] Initialized: 2000-00-00 00:00:00
+[OK] RTC initialized
+[RTC] init done
+[RNG] RDRAND=false RDSEED=false
+[OK] RNG (CSPRNG)
+[MOUSE] PS/2 mouse initialized (ID=0)
+[OK] Mouse initialized
+[TOUCH] Touch subsystem initialized (max 10 points)
+[OK] Touch input ready
+[PHASE] PCI init start
+[..] PCI bus scanning...
+[         0][CPU0][WARN ] [PCI] No PCI bus detected - scanning anyway...
+[         0][CPU0][INFO ] [PCI] Found 0 devices:
+[OK] PCI bus scanned
+[PHASE] PCI init done
+[PHASE] Task scheduler init start
+[TASK] Cooperative scheduler initialized
+[         0][CPU0][INFO ] Scheduler ready
+[OK] Task scheduler ready
+[PHASE] Task scheduler init done
+[PHASE] Disk init start
+[..] Disk subsystem...
+[         0][CPU0][INFO ] [DISK] RAMDisk initialized: 0 MB (256 sectors)
+[         0][CPU0][INFO ] [DISK] Filesystem initialized (TRUSTFS v1)
+[OK] Disk driver ready
+[PHASE] Disk init done
+[PHASE] Driver framework init start
+[         0][CPU0][INFO ] [DRIVERS] Initializing driver framework...
+[         0][CPU0][DEBUG] [DRIVERS] Registered: virtio-net v1.0.0
+[         0][CPU0][DEBUG] [DRIVERS] Registered: e1000 v1.0.0
+[         0][CPU0][DEBUG] [DRIVERS] Registered: rtl8139 v0.1.0
+[         0][CPU0][DEBUG] [DRIVERS] Registered: rtl8169 v1.0.0
+[INPUT] Keyboard: Some(PS2Keyboard), Mouse: Some(PS2Mouse)
+[         0][CPU0][INFO ] [DRIVERS] 4 drivers registered
+[DRIVERS] Probing storage controllers...
+[DRIVERS] Trying legacy IDE ports...
+[IDE] Probing IDE channels...
+[IDE] Found 0 drives
+[DRIVERS] Storage: No persistent storage (using RAM disk)
+[OK] Driver framework initialized
+[PHASE] Driver framework init done
+[PHASE] VirtIO GPU init start
+[..] VirtIO GPU...
+[         0][CPU0][WARN ] [PCI] No PCI bus detected - scanning anyway...
+[VIRTIO-GPU] No VirtIO GPU found
+[--] VirtIO GPU: not found (fallback framebuffer)
+[PHASE] VirtIO GPU init done
+[PHASE] AMD GPU init start
+[..] AMD GPU...
+[         0][CPU0][INFO ] [AMDGPU] ═══════════════════════════════════════════════════
+[         0][CPU0][INFO ] [AMDGPU] AMD GPU Driver — Phase 1: PCIe Discovery & MMIO
+[         0][CPU0][INFO ] [AMDGPU] ═══════════════════════════════════════════════════
+[         0][CPU0][INFO ] [AMDGPU] No AMD GPU detected on PCI bus
+[         0][CPU0][INFO ] [AMDGPU] (This is normal in VMs without GPU passthrough)
+[         0][CPU0][INFO ] [AMDGPU] No display controllers found at all
+[--] AMD GPU: not found (VM or non-AMD)
+[PHASE] AMD GPU init done
+[PHASE] Network init start
+[..] Network subsystem...
+[         0][CPU0][INFO ] [NET] Platform detected: Bare Metal
+[NET] Default DNS: 8.8.8.8
+[         0][CPU0][WARN ] [NET] No network controller found
+[PHASE] Network init done
+[PHASE] VFS init start
+[         0][CPU0][INFO ] [VFS] Initializing Virtual File System...
+[         0][CPU0][DEBUG] [VFS] Mounted devfs at /dev
+[         0][CPU0][DEBUG] [VFS] Mounted procfs at /proc
+[         0][CPU0][DEBUG] [VFS] No block device, root will be ramfs
+[         0][CPU0][DEBUG] [VFS] Looking for FAT32 partitions...
+[         0][CPU0][DEBUG] [FAT32] Checking 0 AHCI devices
+[         0][CPU0][DEBUG] [VFS] No FAT32 partition found
+[         0][CPU0][INFO ] [OK] VFS initialized
+[OK] Virtual filesystem ready
+[PHASE] VFS init done
+[FILE_ASSOC] File associations initialized
+[OK] File associations ready
+[PHASE] Process manager init start
+[         0][CPU0][INFO ] [PROC] Initializing process manager...
+[         0][CPU0][DEBUG] [PROC] Kernel process created (PID 0)
+[         0][CPU0][INFO ] [OK] Process manager ready
+[OK] Process manager ready
+[PHASE] Process manager init done
+[PHASE] Auth system init
+[         0][CPU0][DEBUG] [AUTH] Authentication system initialized
+[OK] Authentication ready
+[PHASE] TTY/PTY init
+[         0][CPU0][INFO ] [TTY] TTY subsystem initialized (tty0 = console)
+[         0][CPU0][INFO ] [PTY] Pseudo-terminal subsystem initialized
+[OK] TTY/PTY subsystem ready
+[PHASE] Init process start
+[         0][CPU0][INFO ] [INIT] Starting init process (PID 1)...

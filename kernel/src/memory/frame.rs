@@ -167,11 +167,14 @@ pub fn init(usable_regions: &[PhysRegion], heap_phys: u64, heap_size: u64) {
     }
     
     // Also mark the first 1 MB as used (legacy BIOS area, etc.)
-    let low_end = (0x10_0000u64.min(top_phys) - base_phys) / FRAME_SIZE;
-    for frame in 0..low_end as usize {
-        let word = frame / 64;
-        let bit = frame % 64;
-        bitmap[word] |= 1u64 << bit;
+    // Only applies when physical RAM starts below 1MB (x86, not ARM/RISC-V)
+    if base_phys < 0x10_0000 {
+        let low_end = (0x10_0000u64.min(top_phys) - base_phys) / FRAME_SIZE;
+        for frame in 0..low_end as usize {
+            let word = frame / 64;
+            let bit = frame % 64;
+            bitmap[word] |= 1u64 << bit;
+        }
     }
     
     // Count free frames
