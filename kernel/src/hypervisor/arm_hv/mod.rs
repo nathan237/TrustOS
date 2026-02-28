@@ -27,6 +27,7 @@ pub mod trap_handler;
 pub mod mmio_spy;
 pub mod vgic;
 pub mod el2_entry;
+pub mod guest_loader;
 
 use alloc::string::String;
 use alloc::vec::Vec;

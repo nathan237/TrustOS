@@ -4677,6 +4677,83 @@ pub(super) fn cmd_hypervisor(args: &[&str]) {
         "report" => {
             crate::println!("{}", crate::hypervisor::arm_hv::generate_spy_report());
         }
+        #[cfg(target_arch = "aarch64")]
+        "boot" | "launch" => {
+            use crate::hypervisor::arm_hv::guest_loader;
+            crate::println_color!(COLOR_CYAN, "=== TrustOS EL2 Hypervisor — Guest Boot ===");
+            crate::println!();
+
+            if !crate::hypervisor::arm_hv::is_el2() {
+                crate::println_color!(COLOR_RED, "ERROR: Not running at EL2!");
+                crate::println!("  Boot TrustOS with: qemu-system-aarch64 -machine virt,virtualization=on");
+                return;
+            }
+
+            // For demo: self-test with tiny WFI guest
+            if args.len() <= 1 || args[1] == "test" {
+                crate::println!("Launching self-test guest (WFI loop)...");
+                crate::println!("  This tests the full EL2 hypervisor pipeline:");
+                crate::println!("  Stage-2 tables -> HCR_EL2 -> VBAR_EL2 -> vGIC -> ERET -> trap -> log");
+                crate::println!();
+
+                let ram_base = 0x4000_0000u64;
+                let ram_size = 512 * 1024 * 1024u64;
+
+                match guest_loader::self_test_guest(ram_base, ram_size) {
+                    Ok(result) => {
+                        crate::println!("{}", guest_loader::format_load_result(&result));
+                        crate::println_color!(COLOR_GREEN, "Guest loaded successfully!");
+                        crate::println!("  To actually enter the guest: hv enter");
+                        crate::println!("  (This will transfer control to EL1 — TrustOS shell will");
+                        crate::println!("   continue to run at EL2, intercepting all hardware access)");
+                    }
+                    Err(e) => {
+                        crate::println_color!(COLOR_RED, "Failed to load guest: {}", e);
+                    }
+                }
+            } else {
+                crate::println!("Usage:");
+                crate::println!("  hv boot test     - Load self-test WFI guest");
+                crate::println!("  hv boot android  - Load Android kernel (requires Image in guest RAM)");
+                crate::println!();
+                crate::println!("For QEMU Android demo:");
+                crate::println!("  1. Download AOSP emulator kernel: ci.android.com -> aosp-main -> aosp_cf_arm64_phone");
+                crate::println!("  2. Extract Image and initrd from the build artifacts");
+                crate::println!("  3. Run: .\\run-android-el2.ps1 -Kernel path\\to\\Image -Initrd path\\to\\ramdisk.img");
+            }
+        }
+        #[cfg(target_arch = "aarch64")]
+        "load" => {
+            use crate::hypervisor::arm_hv::guest_loader;
+            crate::println_color!(COLOR_CYAN, "=== Guest Loader — ARM64 Image Validator ===");
+            crate::println!();
+
+            // Show the memory layout that would be used
+            let config = guest_loader::GuestLoadConfig::default();
+            crate::println!("Memory layout for guest:");
+            crate::println!("  RAM:     0x{:08X} - 0x{:08X} ({} MB)",
+                config.ram_base,
+                config.ram_base + config.ram_size,
+                config.ram_size / (1024*1024));
+            crate::println!("  Kernel:  0x{:08X} (RAM + {}MB)",
+                config.ram_base + guest_loader::KERNEL_OFFSET,
+                guest_loader::KERNEL_OFFSET / (1024*1024));
+            crate::println!("  DTB:     0x{:08X} (RAM + {}MB)",
+                config.ram_base + guest_loader::DTB_OFFSET,
+                guest_loader::DTB_OFFSET / (1024*1024));
+            crate::println!("  initrd:  0x{:08X} (RAM + {}MB)",
+                config.ram_base + guest_loader::INITRD_OFFSET,
+                guest_loader::INITRD_OFFSET / (1024*1024));
+            crate::println!();
+            crate::println!("MMIO traps ({} regions):", config.trap_mmio.len());
+            for (base, size) in &config.trap_mmio {
+                crate::println!("  0x{:08X} - 0x{:08X} ({})",
+                    base, base + size,
+                    crate::hypervisor::arm_hv::mmio_spy::identify_device(*base));
+            }
+            crate::println!();
+            crate::println!("Kernel cmdline: {}", config.cmdline);
+        }
         "test" | "selftest" => {
             crate::println_color!(COLOR_CYAN, "╔══════════════════════════════════════════════════════╗");
             crate::println_color!(COLOR_CYAN, "║         TrustVM Hypervisor Self-Test Suite           ║");
@@ -4744,6 +4821,8 @@ fn print_hv_help() {
         crate::println!("  hv smc [n]    - Show SMC call log");
         crate::println!("  hv devices    - Show per-device MMIO statistics");
         crate::println!("  hv report     - Full hypervisor spy report");
+        crate::println!("  hv boot [test]- Boot a guest under EL2 surveillance");
+        crate::println!("  hv load       - Show guest memory layout + MMIO trap config");
     }
     crate::println!();
     crate::println!("VM Management:");
