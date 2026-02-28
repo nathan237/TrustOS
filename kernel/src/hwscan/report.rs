@@ -37,6 +37,42 @@ pub fn auto_scan_all() -> String {
     output.push_str(&format!("Architecture: {}\n", arch));
     output.push_str(&format!("TrustProbe version: 1.0.0\n\n"));
     
+    // Phase 0: DTB Discovery (aarch64/riscv64)
+    #[cfg(target_arch = "aarch64")]
+    {
+        let dtb_addr = crate::android_main::dtb_address();
+        if dtb_addr != 0 {
+            output.push_str("\x01Y[0/8] Device Tree Blob (DTB) Analysis...\x01W\n");
+            output.push_str(&format!("{}\n", "=".repeat(60)));
+            unsafe {
+                if let Some(parsed) = super::dtb_parser::parse_dtb(dtb_addr as *const u8) {
+                    output.push_str(&super::dtb_parser::format_dtb_report(&parsed));
+                    
+                    // Cross-reference: DTB devices vs what we can actually access
+                    output.push_str("\n\x01C--- DTB vs Reality Cross-Reference ---\x01W\n");
+                    let mut undocumented = 0u32;
+                    for dev in &parsed.devices {
+                        if dev.reg_base == 0 { continue; }
+                        let ptr = dev.reg_base as *const u32;
+                        let readable = core::ptr::read_volatile(ptr);
+                        // If DTB says "disabled" but we can read it → interesting
+                        if dev.status == "disabled" && readable != 0 && readable != 0xFFFFFFFF {
+                            output.push_str(&format!("  \x01R[!] {} (0x{:X}): DTB says disabled, but RESPONDS (0x{:08X})\x01W\n",
+                                dev.compatible, dev.reg_base, readable));
+                            undocumented += 1;
+                        }
+                    }
+                    if undocumented == 0 {
+                        output.push_str("  All DTB entries consistent with MMIO probing.\n");
+                    } else {
+                        output.push_str(&format!("  \x01R{} devices respond despite being marked disabled!\x01W\n", undocumented));
+                    }
+                }
+            }
+            output.push_str("\n");
+        }
+    }
+    
     // Phase 1: MMIO Discovery
     output.push_str("\x01Y[1/7] MMIO Peripheral Discovery...\x01W\n");
     output.push_str(&format!("{}\n", "=".repeat(60)));
