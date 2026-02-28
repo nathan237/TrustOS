@@ -4605,6 +4605,78 @@ pub(super) fn cmd_hypervisor(args: &[&str]) {
         "logo" => {
             crate::println!("{}", crate::hypervisor::logo());
         }
+        // ═══════════════════════════════════════════════════
+        // ARM EL2 Hypervisor — MMIO Spy Commands
+        // ═══════════════════════════════════════════════════
+        #[cfg(target_arch = "aarch64")]
+        "spy" | "mmio" => {
+            crate::println_color!(COLOR_CYAN, "=== TrustOS EL2 MMIO Spy ===");
+            crate::println!();
+            if !crate::hypervisor::arm_hv::is_el2() {
+                crate::println_color!(COLOR_RED, "Not running at EL2 - hypervisor mode unavailable");
+                crate::println!("Boot TrustOS at EL2 (QEMU: -machine virt,virtualization=on)");
+                return;
+            }
+            if !crate::hypervisor::arm_hv::is_active() {
+                crate::println_color!(COLOR_YELLOW, "EL2 detected but no guest running yet");
+                crate::println!("Use 'hv launch' to start a guest under surveillance");
+                return;
+            }
+            let report = crate::hypervisor::arm_hv::el2_entry::get_spy_summary();
+            crate::println!("{}", report);
+        }
+        #[cfg(target_arch = "aarch64")]
+        "smc" | "smc-log" => {
+            crate::println_color!(COLOR_CYAN, "=== SMC (Secure Monitor Call) Log ===");
+            let count = if args.len() > 1 { args[1].parse().unwrap_or(20) } else { 20 };
+            let events = crate::hypervisor::arm_hv::mmio_spy::recent_smc_events(count);
+            if events.is_empty() {
+                crate::println!("No SMC calls intercepted.");
+            } else {
+                for ev in &events {
+                    crate::println!("  {}", crate::hypervisor::arm_hv::mmio_spy::format_smc_event(ev));
+                }
+                crate::println!("\nTotal SMC events: {}",
+                    crate::hypervisor::arm_hv::mmio_spy::total_smc_events());
+            }
+        }
+        #[cfg(target_arch = "aarch64")]
+        "devices" => {
+            crate::println_color!(COLOR_CYAN, "=== Device Activity (per MMIO range) ===");
+            let stats = crate::hypervisor::arm_hv::mmio_spy::device_stats();
+            if stats.is_empty() {
+                crate::println!("No device activity recorded.");
+            } else {
+                crate::println!("  {:<22} {:<8} {}", "Device", "Reads", "Writes");
+                crate::println!("  {}", "-".repeat(42));
+                for (name, reads, writes) in &stats {
+                    crate::println!("  {:<22} {:<8} {}", name, reads, writes);
+                }
+            }
+        }
+        #[cfg(target_arch = "aarch64")]
+        "el2" => {
+            crate::println_color!(COLOR_CYAN, "=== ARM EL2 Hypervisor Status ===");
+            if crate::hypervisor::arm_hv::is_el2() {
+                crate::println_color!(COLOR_GREEN, "  Running at EL2: Yes");
+                crate::println!("  Hypervisor active: {}", 
+                    if crate::hypervisor::arm_hv::is_active() { "Yes (guest running)" } else { "No (idle)" });
+                crate::println!("  MMIO traps: {}", crate::hypervisor::arm_hv::mmio_trap_count());
+                crate::println!("  SMC intercepts: {}", crate::hypervisor::arm_hv::smc_trap_count());
+                crate::println!("  MMIO events logged: {}", 
+                    crate::hypervisor::arm_hv::mmio_spy::total_mmio_events());
+                crate::println!("  SMC events logged: {}", 
+                    crate::hypervisor::arm_hv::mmio_spy::total_smc_events());
+            } else {
+                crate::println_color!(COLOR_RED, "  Running at EL2: No");
+                crate::println!("  Current EL does not support hypervisor operations.");
+                crate::println!("  Boot with: qemu-system-aarch64 -machine virt,virtualization=on");
+            }
+        }
+        #[cfg(target_arch = "aarch64")]
+        "report" => {
+            crate::println!("{}", crate::hypervisor::arm_hv::generate_spy_report());
+        }
         "test" | "selftest" => {
             crate::println_color!(COLOR_CYAN, "╔══════════════════════════════════════════════════════╗");
             crate::println_color!(COLOR_CYAN, "║         TrustVM Hypervisor Self-Test Suite           ║");
@@ -4638,7 +4710,12 @@ fn print_hv_help() {
     let backend = match vendor {
         CpuVendor::Intel => "Intel VT-x (VMX)",
         CpuVendor::Amd => "AMD-V (SVM)",
-        CpuVendor::Unknown => "Unknown",
+        CpuVendor::Unknown => {
+            #[cfg(target_arch = "aarch64")]
+            { "ARM EL2 (Stage-2 MMIO Spy)" }
+            #[cfg(not(target_arch = "aarch64"))]
+            { "Unknown" }
+        },
     };
     
     crate::println!("TrustVM Hypervisor Commands (Backend: {})", backend);
@@ -4658,6 +4735,16 @@ fn print_hv_help() {
     crate::println!("  hv version    - Show TrustVM version");
     crate::println!("  hv logo       - Display TrustVM logo");
     crate::println!("  hv test       - Run hypervisor self-tests");
+    #[cfg(target_arch = "aarch64")]
+    {
+        crate::println!();
+        crate::println!("ARM EL2 Hypervisor:");
+        crate::println!("  hv el2        - Show ARM EL2 status");
+        crate::println!("  hv spy        - Show MMIO spy activity (real-time)");
+        crate::println!("  hv smc [n]    - Show SMC call log");
+        crate::println!("  hv devices    - Show per-device MMIO statistics");
+        crate::println!("  hv report     - Full hypervisor spy report");
+    }
     crate::println!();
     crate::println!("VM Management:");
     crate::println!("  vm create <name> <mem_mb>  - Create a new VM");

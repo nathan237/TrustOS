@@ -1,6 +1,7 @@
 //! Hypervisor stub for non-x86_64 architectures
 //!
 //! Hardware virtualization (VMX/SVM) is x86_64-specific.
+//! On AArch64, we have our own ARM EL2 hypervisor for MMIO spying.
 //! This stub provides the same public API so consumer code compiles.
 
 use alloc::string::String;
@@ -15,6 +16,11 @@ pub mod svm;
 pub mod svm_vm;
 pub mod vmi;
 pub mod tests;
+
+// On AArch64: include the real ARM EL2 Hypervisor module
+#[cfg(target_arch = "aarch64")]
+#[path = "../hypervisor/arm_hv/mod.rs"]
+pub mod arm_hv;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpuVendor {
@@ -56,13 +62,34 @@ pub struct EptViolation {
 }
 
 pub fn init() -> Result<(), String> {
+    #[cfg(target_arch = "aarch64")]
+    {
+        if arm_hv::is_el2() {
+            return Ok(());
+        }
+        return Err(String::from("ARM EL2 not available (not booted at EL2)"));
+    }
+    #[cfg(not(target_arch = "aarch64"))]
     Err(String::from("Hypervisor not available (non-x86_64)"))
 }
 pub fn shutdown() -> Result<(), String> {
-    Err(String::from("Hypervisor not available (non-x86_64)"))
+    Err(String::from("Hypervisor not available"))
 }
-pub fn is_enabled() -> bool { false }
-pub fn backend_info() -> String { String::from("Hypervisor not available (non-x86_64)") }
+pub fn is_enabled() -> bool {
+    #[cfg(target_arch = "aarch64")]
+    { arm_hv::is_el2() }
+    #[cfg(not(target_arch = "aarch64"))]
+    { false }
+}
+pub fn backend_info() -> String {
+    #[cfg(target_arch = "aarch64")]
+    {
+        if arm_hv::is_el2() {
+            return String::from("ARM EL2 Hypervisor (Stage-2 MMIO Spy)");
+        }
+    }
+    String::from("Hypervisor not available")
+}
 pub fn vm_count() -> usize { 0 }
 pub fn render_capabilities() -> String { String::new() }
 pub fn render_security_status() -> String { String::new() }
