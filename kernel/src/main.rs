@@ -133,6 +133,9 @@ mod binary_analysis;
 // TrustScan — network security scanning toolkit (port scanner, sniffer, vuln scanner)
 mod netscan;
 
+// TrustProbe — bare-metal hardware security research toolkit (MMIO, TrustZone, DMA, GPIO)
+mod hwscan;
+
 // HTTP Server — embedded web server
 mod httpd;
 

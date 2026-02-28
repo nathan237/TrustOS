@@ -3965,3 +3965,9 @@ pub(super) fn cmd_lab(args: &[&str]) {
         }
     }
 }
+
+/// TrustProbe — Hardware Security Research Toolkit
+pub(super) fn cmd_hwscan(args: &[&str]) {
+    let output = crate::hwscan::handle_hwscan_command(args);
+    crate::print!("{}", output);
+}

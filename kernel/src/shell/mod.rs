@@ -219,6 +219,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "trustview", "tv",
     // TrustLab
     "lab", "trustlab",
+    // TrustProbe
+    "hwscan", "trustprobe", "probe",
     // Fun
     "neofetch", "matrix", "cowsay",
     // Showcase
@@ -1198,6 +1200,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "transpile" | "disasm" | "analyze" => apps::cmd_transpile(args),
         "trustview" | "tv" => apps::cmd_trustview(args),
         "lab" | "trustlab" => apps::cmd_lab(args),
+        "hwscan" | "trustprobe" | "probe" => apps::cmd_hwscan(args),
         "trustlang" | "tl" => apps::cmd_trustlang(args),
         "trustlang_showcase" | "tl_showcase" => apps::cmd_trustlang_showcase(),
         "film" | "trustos_film" => apps::cmd_trustos_film(),
