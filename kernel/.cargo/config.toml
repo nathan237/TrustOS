@@ -1,15 +1,12 @@
 # Kernel-specific cargo configuration for Limine
+# Default target: x86_64 (override with --target for cross-compilation)
+#
+# Target-specific settings (linker scripts, flags) are in the workspace root
+# .cargo/config.toml to avoid duplicate/conflicting flags.
+
 [build]
 target = "x86_64-unknown-none"
 
 [unstable]
 build-std = ["core", "compiler_builtins", "alloc"]
 build-std-features = ["compiler-builtins-mem"]
-
-[target.x86_64-unknown-none]
-linker = "rust-lld"
-rustflags = [
-    "-C", "link-arg=--entry=kmain",
-    "-C", "relocation-model=static",
-    "-C", "code-model=kernel"
-]

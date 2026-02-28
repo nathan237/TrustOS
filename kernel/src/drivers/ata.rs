@@ -6,7 +6,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use spin::Mutex;
-use x86_64::instructions::port::Port;
+use crate::arch::Port;
 
 /// IDE Channels
 #[derive(Clone, Copy, Debug, PartialEq)]

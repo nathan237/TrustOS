@@ -9,7 +9,7 @@ use alloc::boxed::Box;
 use alloc::collections::VecDeque;
 use core::sync::atomic::{AtomicBool, Ordering};
 use spin::Mutex;
-use x86_64::instructions::port::Port;
+use crate::arch::Port;
 
 use crate::virtio::{self, VirtioDevice, Virtqueue, VirtqDesc, desc_flags, status, legacy_reg};
 use crate::pci::PciDevice;

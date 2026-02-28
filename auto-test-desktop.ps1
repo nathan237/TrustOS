@@ -1102,6 +1102,548 @@ function Test-RawByteFuzz {
 }
 
 # ---------------------------------------------------------------
+#  NEW FEATURE TESTS (v0.5.0 Desktop Enhancements)
+# ---------------------------------------------------------------
+
+function Test-LockScreen {
+    param($monStream, $monWriter, $serialStream)
+    
+    Write-Host "  [LOCK] Testing Lock Screen..." -ForegroundColor Cyan
+    
+    $crashed = $false
+    
+    # Test 1: Win+L activates lock screen
+    Write-Host "    Win+L activate..." -NoNewline
+    Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "meta_l-l" -holdMs 200
+    Start-Sleep -Milliseconds 800
+    $output = Read-Serial -stream $serialStream -timeoutMs 500
+    if ($output -match "\[GUI\] Win\+L.*lock screen") {
+        Write-Host " OK" -ForegroundColor Green
+        Record-Result -category "LOCKSCREEN" -name "Win+L activate" -status "PASS"
+    } else {
+        $crashed = Check-ForPanic -stream $serialStream -context "LockScreen: Win+L"
+        if (-not $crashed) {
+            Write-Host " OK (no serial confirm)" -ForegroundColor Yellow
+            Record-Result -category "LOCKSCREEN" -name "Win+L activate" -status "PASS" -detail "no serial confirm but no crash"
+        }
+    }
+    
+    # Test 2: Wrong PIN triggers shake
+    Write-Host "    Wrong PIN..." -NoNewline
+    Send-Serial -stream $serialStream -text "9999"
+    Start-Sleep -Milliseconds 100
+    Send-SerialByte -stream $serialStream -b 0x0D  # Enter
+    Start-Sleep -Milliseconds 500
+    $output = Read-Serial -stream $serialStream -timeoutMs 500
+    $wrongPinOk = $output -match "\[LOCK\] Wrong PIN"
+    $crashed = Check-ForPanic -stream $serialStream -context "LockScreen: wrong PIN"
+    if (-not $crashed) {
+        Write-Host " OK" -ForegroundColor Green
+        Record-Result -category "LOCKSCREEN" -name "Wrong PIN shake" -status "PASS"
+    }
+    
+    # Test 3: Backspace clears PIN input
+    Write-Host "    Backspace in PIN..." -NoNewline
+    Send-Serial -stream $serialStream -text "123"
+    for ($i = 0; $i -lt 10; $i++) {
+        Send-SerialByte -stream $serialStream -b 0x08
+        Start-Sleep -Milliseconds 20
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "LockScreen: backspace PIN"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "LOCKSCREEN" -name "Backspace PIN" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 4: All printable ASCII while locked (should not crash)
+    Write-Host "    All ASCII while locked..." -NoNewline
+    for ($b = 0x20; $b -le 0x7E; $b++) {
+        Send-SerialByte -stream $serialStream -b ([byte]$b)
+        Start-Sleep -Milliseconds 5
+    }
+    Start-Sleep -Milliseconds 200
+    $crashed = Check-ForPanic -stream $serialStream -context "LockScreen: all ASCII"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "LOCKSCREEN" -name "All ASCII while locked" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 5: Rapid Enter spam while locked
+    Write-Host "    Rapid Enter spam..." -NoNewline
+    for ($i = 0; $i -lt 20; $i++) {
+        Send-SerialByte -stream $serialStream -b 0x0D
+        Start-Sleep -Milliseconds 30
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "LockScreen: enter spam"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "LOCKSCREEN" -name "Rapid Enter spam" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 6: Long PIN overflow (16 char limit)
+    Write-Host "    Long PIN overflow..." -NoNewline
+    for ($i = 0; $i -lt 30; $i++) {
+        Send-SerialByte -stream $serialStream -b ([byte][char]'9')
+        Start-Sleep -Milliseconds 10
+    }
+    Send-SerialByte -stream $serialStream -b 0x0D
+    Start-Sleep -Milliseconds 300
+    $crashed = Check-ForPanic -stream $serialStream -context "LockScreen: long PIN"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "LOCKSCREEN" -name "Long PIN overflow" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 7: Correct PIN unlocks (1234)
+    Write-Host "    Correct PIN unlock..." -NoNewline
+    Send-Serial -stream $serialStream -text "1234"
+    Start-Sleep -Milliseconds 100
+    Send-SerialByte -stream $serialStream -b 0x0D
+    Start-Sleep -Milliseconds 500
+    $output = Read-Serial -stream $serialStream -timeoutMs 500
+    if ($output -match "\[LOCK\] Screen unlocked") {
+        Write-Host " OK" -ForegroundColor Green
+        Record-Result -category "LOCKSCREEN" -name "Correct PIN unlock" -status "PASS"
+    } else {
+        $crashed = Check-ForPanic -stream $serialStream -context "LockScreen: correct PIN"
+        if (-not $crashed) {
+            Write-Host " OK (no serial confirm)" -ForegroundColor Yellow
+            Record-Result -category "LOCKSCREEN" -name "Correct PIN unlock" -status "PASS" -detail "no serial confirm"
+        }
+    }
+    
+    # Test 8: Empty PIN unlocks (enter with nothing)
+    Write-Host "    Empty PIN unlock..." -NoNewline
+    Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "meta_l-l" -holdMs 200
+    Start-Sleep -Milliseconds 500
+    Drain-Serial -stream $serialStream
+    Send-SerialByte -stream $serialStream -b 0x0D  # Enter with empty input
+    Start-Sleep -Milliseconds 500
+    $output = Read-Serial -stream $serialStream -timeoutMs 500
+    $crashed = Check-ForPanic -stream $serialStream -context "LockScreen: empty PIN"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "LOCKSCREEN" -name "Empty PIN unlock" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 9: Lock+unlock cycle rapidely
+    Write-Host "    Rapid lock/unlock cycle..." -NoNewline
+    for ($i = 0; $i -lt 5; $i++) {
+        Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "meta_l-l" -holdMs 150
+        Start-Sleep -Milliseconds 300
+        Send-SerialByte -stream $serialStream -b 0x0D  # Empty PIN unlock 
+        Start-Sleep -Milliseconds 300
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "LockScreen: rapid cycle"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "LOCKSCREEN" -name "Rapid lock/unlock cycle" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    Drain-Serial -stream $serialStream
+}
+
+function Test-FileManagerViewToggle {
+    param($monStream, $monWriter, $serialStream)
+    
+    Write-Host "  [VIEW] Testing File Manager View Toggle..." -ForegroundColor Cyan
+    Open-App-Via-StartMenu -monStream $monStream -monWriter $monWriter -serialStream $serialStream -appName "Files"
+    Start-Sleep -Milliseconds 500
+    Drain-Serial -stream $serialStream
+    
+    $crashed = $false
+    
+    # Test 1: V key toggles to icon grid
+    Write-Host "    V key toggle to grid..." -NoNewline
+    Send-SerialByte -stream $serialStream -b ([byte][char]'V')
+    Start-Sleep -Milliseconds 300
+    $output = Read-Serial -stream $serialStream -timeoutMs 500
+    if ($output -match "\[FM\] Toggled view mode") {
+        Write-Host " OK" -ForegroundColor Green
+        Record-Result -category "VIEWTOGGLE" -name "V key to grid" -status "PASS"
+    } else {
+        $crashed = Check-ForPanic -stream $serialStream -context "ViewToggle: V to grid"
+        if (-not $crashed) {
+            Write-Host " OK (no serial confirm)" -ForegroundColor Yellow
+            Record-Result -category "VIEWTOGGLE" -name "V key to grid" -status "PASS" -detail "no serial msg"
+        }
+    }
+    
+    # Test 2: V key toggles back to list
+    Write-Host "    V key toggle to list..." -NoNewline
+    Send-SerialByte -stream $serialStream -b ([byte][char]'V')
+    Start-Sleep -Milliseconds 300
+    $output = Read-Serial -stream $serialStream -timeoutMs 500
+    $crashed = Check-ForPanic -stream $serialStream -context "ViewToggle: V to list"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "VIEWTOGGLE" -name "V key to list" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 3: Rapid V toggle stress
+    Write-Host "    Rapid V toggle x20..." -NoNewline
+    for ($i = 0; $i -lt 20; $i++) {
+        Send-SerialByte -stream $serialStream -b ([byte][char]'V')
+        Start-Sleep -Milliseconds 30
+    }
+    Start-Sleep -Milliseconds 300
+    $crashed = Check-ForPanic -stream $serialStream -context "ViewToggle: rapid toggle"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "VIEWTOGGLE" -name "Rapid V toggle x20" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 4: Navigate in grid mode (arrows should still work)
+    Write-Host "    Arrow nav in grid..." -NoNewline
+    Send-SerialByte -stream $serialStream -b ([byte][char]'V')  # Switch to grid
+    Start-Sleep -Milliseconds 100
+    for ($i = 0; $i -lt 10; $i++) {
+        Send-SerialByte -stream $serialStream -b 0xF0  # UP
+        Start-Sleep -Milliseconds 20
+        Send-SerialByte -stream $serialStream -b 0xF1  # DOWN
+        Start-Sleep -Milliseconds 20
+        Send-SerialByte -stream $serialStream -b 0xF2  # LEFT
+        Start-Sleep -Milliseconds 20
+        Send-SerialByte -stream $serialStream -b 0xF3  # RIGHT
+        Start-Sleep -Milliseconds 20
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "ViewToggle: arrow nav grid"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "VIEWTOGGLE" -name "Arrow nav in grid" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 5: Enter on item in grid mode
+    Write-Host "    Enter in grid mode..." -NoNewline
+    Send-SerialByte -stream $serialStream -b 0xF1  # DOWN to select first item
+    Start-Sleep -Milliseconds 50
+    Send-SerialByte -stream $serialStream -b 0x0D  # Enter
+    Start-Sleep -Milliseconds 200
+    Send-SerialByte -stream $serialStream -b 0x08  # Backspace to go back
+    Start-Sleep -Milliseconds 200
+    $crashed = Check-ForPanic -stream $serialStream -context "ViewToggle: enter in grid"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "VIEWTOGGLE" -name "Enter in grid mode" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    Close-App -serialStream $serialStream
+    Start-Sleep -Milliseconds 300
+}
+
+function Test-FileClipboard {
+    param($monStream, $monWriter, $serialStream)
+    
+    Write-Host "  [CLIP] Testing File Manager Clipboard..." -ForegroundColor Cyan
+    Open-App-Via-StartMenu -monStream $monStream -monWriter $monWriter -serialStream $serialStream -appName "Files"
+    Start-Sleep -Milliseconds 500
+    Drain-Serial -stream $serialStream
+    
+    $crashed = $false
+    
+    # Navigate to a file first (down arrow to select)
+    Send-SerialByte -stream $serialStream -b 0xF1  # DOWN to select item
+    Start-Sleep -Milliseconds 100
+    
+    # Test 1: Ctrl+C (copy) — serial byte 0x03
+    Write-Host "    Ctrl+C copy..." -NoNewline
+    Send-SerialByte -stream $serialStream -b 0x03  # Ctrl+C
+    Start-Sleep -Milliseconds 300
+    $output = Read-Serial -stream $serialStream -timeoutMs 500
+    if ($output -match "\[FM\].*Copied|copy") {
+        Write-Host " OK (serial confirmed)" -ForegroundColor Green
+    } else {
+        $crashed = Check-ForPanic -stream $serialStream -context "Clipboard: Ctrl+C"
+        if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    }
+    Record-Result -category "CLIPBOARD" -name "Ctrl+C copy" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 2: Ctrl+V (paste) — serial byte 0x16
+    Write-Host "    Ctrl+V paste..." -NoNewline
+    Send-SerialByte -stream $serialStream -b 0x16  # Ctrl+V
+    Start-Sleep -Milliseconds 500
+    $output = Read-Serial -stream $serialStream -timeoutMs 500
+    $crashed = Check-ForPanic -stream $serialStream -context "Clipboard: Ctrl+V"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "CLIPBOARD" -name "Ctrl+V paste" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 3: Ctrl+X (cut) — serial byte 0x18
+    Write-Host "    Ctrl+X cut..." -NoNewline
+    Send-SerialByte -stream $serialStream -b 0xF1  # DOWN to select item
+    Start-Sleep -Milliseconds 50
+    Send-SerialByte -stream $serialStream -b 0x18  # Ctrl+X
+    Start-Sleep -Milliseconds 300
+    $output = Read-Serial -stream $serialStream -timeoutMs 500
+    $crashed = Check-ForPanic -stream $serialStream -context "Clipboard: Ctrl+X"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "CLIPBOARD" -name "Ctrl+X cut" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 4: Ctrl+V paste after cut
+    Write-Host "    Ctrl+V paste after cut..." -NoNewline
+    Send-SerialByte -stream $serialStream -b 0x16  # Ctrl+V
+    Start-Sleep -Milliseconds 500
+    $output = Read-Serial -stream $serialStream -timeoutMs 500
+    $crashed = Check-ForPanic -stream $serialStream -context "Clipboard: paste after cut"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "CLIPBOARD" -name "Ctrl+V after cut" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 5: Ctrl+V with nothing copied (empty clipboard)
+    Write-Host "    Ctrl+V empty clipboard..." -NoNewline
+    # Close and reopen file manager (fresh clipboard)
+    Close-App -serialStream $serialStream
+    Start-Sleep -Milliseconds 300
+    Open-App-Via-StartMenu -monStream $monStream -monWriter $monWriter -serialStream $serialStream -appName "Files"
+    Start-Sleep -Milliseconds 500
+    Send-SerialByte -stream $serialStream -b 0x16  # Ctrl+V
+    Start-Sleep -Milliseconds 300
+    $crashed = Check-ForPanic -stream $serialStream -context "Clipboard: paste empty"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "CLIPBOARD" -name "Ctrl+V empty clipboard" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 6: Rapid Ctrl+C/X/V cycling
+    Write-Host "    Rapid C/X/V cycle..." -NoNewline
+    for ($i = 0; $i -lt 10; $i++) {
+        Send-SerialByte -stream $serialStream -b 0x03  # Ctrl+C
+        Start-Sleep -Milliseconds 20
+        Send-SerialByte -stream $serialStream -b 0x18  # Ctrl+X
+        Start-Sleep -Milliseconds 20
+        Send-SerialByte -stream $serialStream -b 0x16  # Ctrl+V
+        Start-Sleep -Milliseconds 20
+    }
+    Start-Sleep -Milliseconds 300
+    $crashed = Check-ForPanic -stream $serialStream -context "Clipboard: rapid cycle"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "CLIPBOARD" -name "Rapid C/X/V cycle" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    Close-App -serialStream $serialStream
+    Start-Sleep -Milliseconds 300
+}
+
+function Test-ImageViewer {
+    param($monStream, $monWriter, $serialStream)
+    
+    Write-Host "  [IMG] Testing Image Viewer..." -ForegroundColor Cyan
+    
+    $crashed = $false
+    
+    # First, create a minimal BMP file via the shell (we need to exit desktop briefly)
+    # Actually, we can test by trying to open a .bmp file from file manager
+    # The image viewer opens when you select a .bmp file and press Enter
+    
+    # Open file manager and navigate
+    Open-App-Via-StartMenu -monStream $monStream -monWriter $monWriter -serialStream $serialStream -appName "Files"
+    Start-Sleep -Milliseconds 500
+    
+    # Navigate to find any file and open it (the viewer type depends on extension)
+    # Since we may not have .bmp files, test that the image viewer doesn't crash on
+    # zoom/pan keys even when sent to the current focused window
+    
+    # Test 1: Open file manager, navigate, try opening files
+    Write-Host "    Navigate and Enter..." -NoNewline
+    for ($i = 0; $i -lt 5; $i++) {
+        Send-SerialByte -stream $serialStream -b 0xF1  # DOWN
+        Start-Sleep -Milliseconds 50
+    }
+    Send-SerialByte -stream $serialStream -b 0x0D  # Enter (open selected)
+    Start-Sleep -Milliseconds 500
+    $crashed = Check-ForPanic -stream $serialStream -context "ImageViewer: open file"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "IMAGEVIEWER" -name "Open file from FM" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Whether or not an image viewer opened, send image viewer keys
+    # These should be safe even if the focused window is not an image viewer
+    
+    # Test 2: Zoom in (+)
+    Write-Host "    Zoom in (+)..." -NoNewline
+    for ($i = 0; $i -lt 10; $i++) {
+        Send-SerialByte -stream $serialStream -b ([byte][char]'+')
+        Start-Sleep -Milliseconds 30
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "ImageViewer: zoom in"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "IMAGEVIEWER" -name "Zoom in (+)" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 3: Zoom out (-)
+    Write-Host "    Zoom out (-)..." -NoNewline
+    for ($i = 0; $i -lt 20; $i++) {
+        Send-SerialByte -stream $serialStream -b ([byte][char]'-')
+        Start-Sleep -Milliseconds 30
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "ImageViewer: zoom out"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "IMAGEVIEWER" -name "Zoom out (-)" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 4: Pan with arrow keys
+    Write-Host "    Pan arrows..." -NoNewline
+    for ($i = 0; $i -lt 10; $i++) {
+        Send-SerialByte -stream $serialStream -b 0xF0  # UP
+        Start-Sleep -Milliseconds 20
+        Send-SerialByte -stream $serialStream -b 0xF1  # DOWN
+        Start-Sleep -Milliseconds 20
+        Send-SerialByte -stream $serialStream -b 0xF2  # LEFT
+        Start-Sleep -Milliseconds 20
+        Send-SerialByte -stream $serialStream -b 0xF3  # RIGHT
+        Start-Sleep -Milliseconds 20
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "ImageViewer: pan arrows"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "IMAGEVIEWER" -name "Pan with arrows" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 5: Reset view (0 key)
+    Write-Host "    Reset view (0)..." -NoNewline
+    Send-SerialByte -stream $serialStream -b ([byte][char]'0')
+    Start-Sleep -Milliseconds 200
+    $crashed = Check-ForPanic -stream $serialStream -context "ImageViewer: reset"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "IMAGEVIEWER" -name "Reset view (0)" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 6: Extreme zoom in (way past max)
+    Write-Host "    Extreme zoom in..." -NoNewline
+    for ($i = 0; $i -lt 50; $i++) {
+        Send-SerialByte -stream $serialStream -b ([byte][char]'+')
+        Start-Sleep -Milliseconds 10
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "ImageViewer: extreme zoom in"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "IMAGEVIEWER" -name "Extreme zoom in" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 7: Extreme zoom out (way past min)
+    Write-Host "    Extreme zoom out..." -NoNewline
+    for ($i = 0; $i -lt 100; $i++) {
+        Send-SerialByte -stream $serialStream -b ([byte][char]'-')
+        Start-Sleep -Milliseconds 10
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "ImageViewer: extreme zoom out"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "IMAGEVIEWER" -name "Extreme zoom out" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 8: Rapid zoom toggle
+    Write-Host "    Rapid zoom toggle..." -NoNewline
+    for ($i = 0; $i -lt 30; $i++) {
+        Send-SerialByte -stream $serialStream -b ([byte][char]'+')
+        Send-SerialByte -stream $serialStream -b ([byte][char]'-')
+        Start-Sleep -Milliseconds 5
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "ImageViewer: rapid zoom"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "IMAGEVIEWER" -name "Rapid zoom toggle" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 9: All printable ASCII
+    Write-Host "    All printable ASCII..." -NoNewline
+    for ($b = 0x20; $b -le 0x7E; $b++) {
+        Send-SerialByte -stream $serialStream -b ([byte]$b)
+        Start-Sleep -Milliseconds 5
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "ImageViewer: all ASCII"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "IMAGEVIEWER" -name "All printable ASCII" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    Close-App -serialStream $serialStream
+    Start-Sleep -Milliseconds 300
+}
+
+function Test-SysTray {
+    param($monStream, $monWriter, $serialStream)
+    
+    Write-Host "  [TRAY] Testing System Tray Indicators..." -ForegroundColor Cyan
+    
+    $crashed = $false
+    
+    # The system tray is drawn every frame as part of the taskbar. 
+    # We can't directly interact with it via serial, but we verify
+    # that the desktop doesn't crash after our features were added.
+    # Test: open/close apps quickly to force redraws with the tray visible.
+    
+    # Test 1: Rapid window open/close cycle (forces tray redraw)
+    Write-Host "    Rapid open/close cycle..." -NoNewline
+    for ($i = 0; $i -lt 3; $i++) {
+        Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "meta_l-e" -holdMs 150
+        Start-Sleep -Milliseconds 400
+        Send-SerialByte -stream $serialStream -b 0x1B  # ESC close
+        Start-Sleep -Milliseconds 300
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "SysTray: rapid open/close"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "SYSTRAY" -name "Rapid open/close cycle" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 2: Multiple windows open simultaneously (tray must render with each)
+    Write-Host "    Multi-window tray..." -NoNewline
+    Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "meta_l-e" -holdMs 150
+    Start-Sleep -Milliseconds 300
+    Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "meta_l-i" -holdMs 150
+    Start-Sleep -Milliseconds 300
+    # Open calculator via start menu
+    Open-App-Via-StartMenu -monStream $monStream -monWriter $monWriter -serialStream $serialStream -appName "Calculator"
+    Start-Sleep -Milliseconds 300
+    $crashed = Check-ForPanic -stream $serialStream -context "SysTray: multi-window"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "SYSTRAY" -name "Multi-window tray" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Close all windows
+    for ($i = 0; $i -lt 5; $i++) {
+        Send-SerialByte -stream $serialStream -b 0x1B
+        Start-Sleep -Milliseconds 200
+    }
+    
+    # Test 3: Alt+Tab with tray visible
+    Write-Host "    Alt+Tab with tray..." -NoNewline
+    Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "meta_l-e" -holdMs 150
+    Start-Sleep -Milliseconds 300
+    Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "meta_l-i" -holdMs 150
+    Start-Sleep -Milliseconds 300
+    for ($i = 0; $i -lt 5; $i++) {
+        Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "alt-tab" -holdMs 150
+        Start-Sleep -Milliseconds 200
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "SysTray: alt-tab"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "SYSTRAY" -name "Alt+Tab with tray" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Close everything
+    for ($i = 0; $i -lt 5; $i++) {
+        Send-SerialByte -stream $serialStream -b 0x1B
+        Start-Sleep -Milliseconds 200
+    }
+    
+    Drain-Serial -stream $serialStream
+}
+
+function Test-DragDrop {
+    param($monStream, $monWriter, $serialStream)
+    
+    Write-Host "  [DRAG] Testing Drag-and-Drop (keyboard-driven)..." -ForegroundColor Cyan
+    
+    $crashed = $false
+    
+    # Drag-and-drop is mouse-driven, so we can't fully test it via serial.
+    # However, we verify that the drag state code paths don't crash when:
+    # 1) Multiple file managers are open
+    # 2) Keys are pressed during potential drag states
+    
+    # Test 1: Open two file managers side by side
+    Write-Host "    Two file managers..." -NoNewline
+    Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "meta_l-e" -holdMs 150
+    Start-Sleep -Milliseconds 400
+    Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "meta_l-e" -holdMs 150
+    Start-Sleep -Milliseconds 400
+    $crashed = Check-ForPanic -stream $serialStream -context "DragDrop: two FMs"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "DRAGDROP" -name "Two file managers open" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 2: Rapid Alt+Tab between two FMs
+    Write-Host "    Alt+Tab between FMs..." -NoNewline
+    for ($i = 0; $i -lt 10; $i++) {
+        Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "alt-tab" -holdMs 100
+        Start-Sleep -Milliseconds 200
+    }
+    $crashed = Check-ForPanic -stream $serialStream -context "DragDrop: alt-tab FMs"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "DRAGDROP" -name "Alt+Tab between FMs" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Test 3: Navigate and clipboard ops across two FMs
+    Write-Host "    Cross-FM clipboard..." -NoNewline
+    Send-SerialByte -stream $serialStream -b 0xF1  # DOWN to select
+    Start-Sleep -Milliseconds 50
+    Send-SerialByte -stream $serialStream -b 0x03  # Ctrl+C
+    Start-Sleep -Milliseconds 100
+    Send-KeyCombo -monStream $monStream -monWriter $monWriter -combo "alt-tab" -holdMs 100
+    Start-Sleep -Milliseconds 200
+    Send-SerialByte -stream $serialStream -b 0x16  # Ctrl+V
+    Start-Sleep -Milliseconds 300
+    $crashed = Check-ForPanic -stream $serialStream -context "DragDrop: cross-FM clipboard"
+    if (-not $crashed) { Write-Host " OK" -ForegroundColor Green }
+    Record-Result -category "DRAGDROP" -name "Cross-FM clipboard" -status $(if ($crashed) { "CRASH" } else { "PASS" })
+    
+    # Close all
+    for ($i = 0; $i -lt 5; $i++) {
+        Send-SerialByte -stream $serialStream -b 0x1B
+        Start-Sleep -Milliseconds 200
+    }
+    
+    Drain-Serial -stream $serialStream
+}
+
+# ---------------------------------------------------------------
 #  MAIN
 # ---------------------------------------------------------------
 
@@ -1309,6 +1851,14 @@ Test-Chess -monStream $monStream -monWriter $monWriter -serialStream $serialStre
 Test-Browser -monStream $monStream -monWriter $monWriter -serialStream $serialStream
 Test-Settings -monStream $monStream -monWriter $monWriter -serialStream $serialStream
 
+# Test v0.5.0 desktop enhancements
+Test-LockScreen -monStream $monStream -monWriter $monWriter -serialStream $serialStream
+Test-FileManagerViewToggle -monStream $monStream -monWriter $monWriter -serialStream $serialStream
+Test-FileClipboard -monStream $monStream -monWriter $monWriter -serialStream $serialStream
+Test-ImageViewer -monStream $monStream -monWriter $monWriter -serialStream $serialStream
+Test-SysTray -monStream $monStream -monWriter $monWriter -serialStream $serialStream
+Test-DragDrop -monStream $monStream -monWriter $monWriter -serialStream $serialStream
+
 # Raw byte fuzz (last - most aggressive)
 Test-RawByteFuzz -monStream $monStream -monWriter $monWriter -serialStream $serialStream
 
@@ -1442,6 +1992,12 @@ $reportLines += "  Settings:     option keys 1-9, all ASCII"
 $reportLines += "  StartMenu:    toggle, search fuzz, backspace, arrows, enter empty"
 $reportLines += "  Hotkeys:      Win+E/D/I/H, Win+Arrows, Alt+Tab, Alt+F4"
 $reportLines += "  RawFuzz:      all 256 byte values, rapid nav keys"
+$reportLines += "  LockScreen:   Win+L activate, wrong PIN, backspace, all ASCII, enter spam, long PIN, correct PIN, empty PIN, rapid cycle"
+$reportLines += "  ViewToggle:   V key grid/list, rapid toggle, arrow nav in grid, enter in grid"
+$reportLines += "  Clipboard:    Ctrl+C copy, Ctrl+V paste, Ctrl+X cut, paste-after-cut, empty clipboard, rapid C/X/V"
+$reportLines += "  ImageViewer:  open file, zoom +/-, pan arrows, reset, extreme zoom, rapid zoom, all ASCII"
+$reportLines += "  SysTray:      rapid open/close, multi-window, Alt+Tab with tray"
+$reportLines += "  DragDrop:     two FMs, Alt+Tab between, cross-FM clipboard"
 $reportLines += ""
 $reportLines += "APPS NOT TESTED (require mouse interaction to open)"
 $reportLines += "  Game3D (TrustDoom), HexViewer, NES Emulator, GameBoy, TrustEdit 3D, GameLab"

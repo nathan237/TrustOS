@@ -380,7 +380,10 @@ pub fn sys_mmap(addr: u64, length: u64, prot: u64, flags: u64, fd: i64, _offset:
     
     // Record the VMA for demand paging
     let cr3: u64;
+    #[cfg(target_arch = "x86_64")]
     unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
+    #[cfg(not(target_arch = "x86_64"))]
+    { cr3 = 0; }
     
     let vma_prot = (prot & 0x7) as u32; // PROT_READ | PROT_WRITE | PROT_EXEC
     
@@ -408,7 +411,10 @@ pub fn sys_munmap(addr: u64, length: u64) -> i64 {
     
     // Remove VMA tracking
     let cr3: u64;
+    #[cfg(target_arch = "x86_64")]
     unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
+    #[cfg(not(target_arch = "x86_64"))]
+    { cr3 = 0; }
     crate::memory::vma::remove_vma_range(cr3, start, start + aligned_length);
     
     // Free any faulted-in physical frames
@@ -472,6 +478,7 @@ pub fn sys_mprotect(addr: u64, length: u64, prot: u64) -> i64 {
             
             let phys = pt.entries[pt_idx].phys_addr();
             pt.entries[pt_idx].set(phys, new_flags);
+            #[cfg(target_arch = "x86_64")]
             unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags)); }
         }
     });
@@ -764,6 +771,7 @@ pub fn sys_arch_prctl(code: u64, addr: u64) -> i64 {
             TLS_BASE.store(addr, Ordering::SeqCst);
             
             // Actually set the FS base using MSR
+            #[cfg(target_arch = "x86_64")]
             unsafe {
                 // MSR_FS_BASE = 0xC0000100
                 core::arch::asm!(
@@ -778,6 +786,7 @@ pub fn sys_arch_prctl(code: u64, addr: u64) -> i64 {
         }
         ARCH_SET_GS => {
             // Set GS base register
+            #[cfg(target_arch = "x86_64")]
             unsafe {
                 // MSR_GS_BASE = 0xC0000101
                 core::arch::asm!(
@@ -802,6 +811,7 @@ pub fn sys_arch_prctl(code: u64, addr: u64) -> i64 {
                 return errno::EFAULT;
             }
             let val: u64;
+            #[cfg(target_arch = "x86_64")]
             unsafe {
                 core::arch::asm!(
                     "rdmsr",
@@ -812,6 +822,8 @@ pub fn sys_arch_prctl(code: u64, addr: u64) -> i64 {
                 // Simplified - in reality we'd combine eax/edx
                 val = 0;
             }
+            #[cfg(not(target_arch = "x86_64"))]
+            { val = 0; }
             unsafe { *(addr as *mut u64) = val; }
             0
         }

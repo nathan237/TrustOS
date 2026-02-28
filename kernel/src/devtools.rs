@@ -383,6 +383,7 @@ pub fn cpu_registers() -> Vec<String> {
     let cr3: u64;
     let cr4: u64;
     
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         core::arch::asm!("mov {}, rsp", out(reg) rsp);
         core::arch::asm!("mov {}, rbp", out(reg) rbp);
@@ -391,6 +392,8 @@ pub fn cpu_registers() -> Vec<String> {
         core::arch::asm!("mov {}, cr3", out(reg) cr3);
         core::arch::asm!("mov {}, cr4", out(reg) cr4);
     }
+    #[cfg(not(target_arch = "x86_64"))]
+    { rsp = 0; rbp = 0; rflags = 0; cr0 = 0; cr3 = 0; cr4 = 0; }
     
     regs.push(String::from("  CPU Register Snapshot"));
     regs.push(String::from("  ─────────────────────────────────────"));
@@ -426,6 +429,7 @@ pub fn cpu_registers() -> Vec<String> {
     regs.push(format!("           [{}]", cr4_flags.join(" | ")));
     
     // EFER MSR
+    #[cfg(target_arch = "x86_64")]
     let efer: u64 = unsafe {
         let lo: u32;
         let hi: u32;
@@ -437,6 +441,8 @@ pub fn cpu_registers() -> Vec<String> {
         );
         (hi as u64) << 32 | lo as u64
     };
+    #[cfg(not(target_arch = "x86_64"))]
+    let efer: u64 = 0;
     regs.push(format!("  EFER   = 0x{:016x}", efer));
     let mut efer_flags = Vec::new();
     if efer & 1 != 0 { efer_flags.push("SCE"); }

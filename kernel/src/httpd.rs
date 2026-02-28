@@ -111,7 +111,7 @@ pub fn start(port: u16, max_requests: u32) {
         }
 
         // Small yield
-        x86_64::instructions::hlt();
+        crate::arch::halt();
     }
 
     // Shutdown

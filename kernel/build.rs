@@ -1,9 +1,17 @@
 use std::path::PathBuf;
 
 fn main() {
-    // ── Linker script (portable: uses CARGO_MANIFEST_DIR, no hardcoded paths) ──
+    // ── Linker script (architecture-aware) ──
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let linker_script = PathBuf::from(&manifest_dir).join("linker.ld");
+    let target = std::env::var("TARGET").unwrap_or_default();
+    let ld_name = if target.starts_with("aarch64") {
+        "linker-aarch64.ld"
+    } else if target.starts_with("riscv64") {
+        "linker-riscv64.ld"
+    } else {
+        "linker.ld"
+    };
+    let linker_script = PathBuf::from(&manifest_dir).join(ld_name);
     println!("cargo:rustc-link-arg=-T{}", linker_script.display());
     println!("cargo:rerun-if-changed={}", linker_script.display());
 

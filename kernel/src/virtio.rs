@@ -7,7 +7,7 @@
 use core::sync::atomic::Ordering;
 use alloc::vec::Vec;
 use alloc::boxed::Box;
-use x86_64::instructions::port::Port;
+use crate::arch::Port;
 
 /// VirtIO device status bits
 pub mod status {

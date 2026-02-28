@@ -1067,7 +1067,7 @@ impl HdaController {
         // Simple busy-wait delay using port 0x80 (POST code, ~1µs per access)
         for _ in 0..us {
             unsafe {
-                let mut port: x86_64::instructions::port::Port<u8> = x86_64::instructions::port::Port::new(0x80);
+                let mut port: crate::arch::Port<u8> = crate::arch::Port::new(0x80);
                 port.write(0);
             }
         }

@@ -135,9 +135,9 @@ pub fn reboot() {
     // Simple reboot via keyboard controller
     unsafe {
         // Wait for keyboard controller to be ready
-        while (x86_64::instructions::port::Port::<u8>::new(0x64).read() & 0x02) != 0 {}
+        while (crate::arch::Port::<u8>::new(0x64).read() & 0x02) != 0 {}
         // Send reset command
-        x86_64::instructions::port::Port::<u8>::new(0x64).write(0xFE);
+        crate::arch::Port::<u8>::new(0x64).write(0xFE);
     }
 }
 

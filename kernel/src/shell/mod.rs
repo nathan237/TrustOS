@@ -231,6 +231,13 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "hv", "hypervisor",
     // Trailer
     "trailer", "trustos_trailer",
+    // Text editor
+    "nano", "edit", "vi",
+    // Aliases and utilities
+    "alias", "unalias", "bc", "diff", "md5sum", "sha256sum", "base64",
+    "cut", "tr", "tee", "xargs", "chmod", "chown", "ln", "readlink",
+    "watch", "timeout", "tar", "gzip", "zip", "unzip",
+    "service", "systemctl", "crontab", "at", "read",
 ];
 
 /// Run the kernel shell
@@ -248,6 +255,9 @@ pub fn run() -> ! {
     crate::interrupts::set_bootstrap_ready(true);
 
     print_banner();
+
+    // Run startup script (.trustrc)
+    unix::run_trustrc();
     
     let mut cmd_buffer = [0u8; 512];
     
@@ -877,6 +887,18 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         return;
     }
     
+    // Check for alias expansion
+    let command = parts[0];
+    if let Some(alias_value) = unix::get_alias(command) {
+        // Re-execute with expanded alias
+        let new_cmd = if parts.len() > 1 {
+            alloc::format!("{} {}", alias_value, parts[1..].join(" "))
+        } else {
+            alias_value
+        };
+        execute_command(&new_cmd);
+        return;
+    }
     let command = parts[0];
     let args = &parts[1..];
     
@@ -1065,9 +1087,6 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         // -- Package Manager --
         "trustpkg" | "pkg" => commands::cmd_trustpkg(args),
 
-        // -- Shell Scripting --
-        "unset" => commands::cmd_unset(args),
-
         // -- network module: Browser, Sandbox, Container --
         "browse" | "www" | "web" => network::cmd_browse(args),
         "sandbox" | "websandbox" => network::cmd_sandbox(args),
@@ -1082,6 +1101,38 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "realpath" => unix::cmd_realpath(args),
         "sort" => unix::cmd_sort(args, piped_input.as_deref()),
         "uniq" => unix::cmd_uniq(args, piped_input.as_deref()),
+
+        // -- Text Editor --
+        "nano" | "vi" | "edit" => editor::cmd_nano(args),
+
+        // -- Newly implemented commands (formerly stubs) --
+        "alias" => unix::cmd_alias(args),
+        "unalias" => unix::cmd_unalias(args),
+        "bc" => unix::cmd_bc(args),
+        "diff" => unix::cmd_diff(args),
+        "md5sum" => unix::cmd_md5sum(args),
+        "sha256sum" => unix::cmd_sha256sum(args),
+        "base64" => unix::cmd_base64(args, piped_input.as_deref()),
+        "cut" => unix::cmd_cut(args, piped_input.as_deref()),
+        "tr" => unix::cmd_tr(args, piped_input.as_deref()),
+        "tee" => unix::cmd_tee(args, piped_input.as_deref()),
+        "xargs" => unix::cmd_xargs(args, piped_input.as_deref()),
+        "chmod" => unix::cmd_chmod(args),
+        "chown" => unix::cmd_chown(args),
+        "ln" => unix::cmd_ln(args),
+        "readlink" => unix::cmd_readlink(args),
+        "watch" => unix::cmd_watch(args),
+        "timeout" => unix::cmd_timeout(args),
+        "tar" => unix::cmd_tar(args),
+        "gzip" => unix::cmd_gzip(args),
+        "zip" => unix::cmd_zip(args),
+        "unzip" => unix::cmd_unzip(args),
+        "service" => unix::cmd_service(args),
+        "systemctl" => unix::cmd_systemctl(args),
+        "crontab" => unix::cmd_crontab(args),
+        "at" => unix::cmd_at(args),
+        "unset" => unix::cmd_unset(args),
+        "read" => unix::cmd_read(args),
 
         "yes" => unix::cmd_yes(args),
         "seq" => unix::cmd_seq(args),
@@ -1179,8 +1230,9 @@ mod commands;       // Help, FS, System, Auth, Debug, Exit, Easter eggs  (~1530 
 pub(crate) mod desktop;    // COSMIC UI, Showcase, Benchmark, Signature         (~6870 lines)
 mod vm;             // VM, Linux, Distro, Alpine, Hypervisor, Disk       (~4220 lines)
 mod network;        // Browser, Sandbox, Container, HTML rendering       (~830 lines)
-mod unix;           // Unix utility stubs and POSIX commands             (~1160 lines)
+mod unix;           // Unix utility stubs and POSIX commands             (~2400 lines)
 mod apps;           // TrustLang, Film, Transpile, Video, Lab, Gterm    (~3930 lines)
 mod trailer;        // TrustOS Trailer -- 2-min cinematic showcase         (~900 lines)
 mod jarvis;         // Jarvis AI assistant — NLU + planner + executor     (~600 lines)
 pub(crate) mod scripting;  // Shell scripting engine — variables, if/for/while    (~640 lines)
+mod editor;         // TrustEdit — nano-like terminal text editor          (~520 lines)

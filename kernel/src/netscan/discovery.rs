@@ -63,7 +63,7 @@ pub fn arp_sweep(subnet_start: [u8; 4], subnet_end: [u8; 4], timeout_ms: u32) ->
         }
         spins = spins.wrapping_add(1);
         if spins > 1_000_000 { break; }
-        x86_64::instructions::hlt();
+        crate::arch::halt();
     }
 
     // Phase 3: Read ARP cache for discovered hosts

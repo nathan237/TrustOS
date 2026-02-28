@@ -553,6 +553,50 @@ enum CursorMode {
     ResizeV,     // Vertical ↕
     ResizeNWSE,  // Diagonal ↘↖
     ResizeNESW,  // Diagonal ↗↙
+    Grab,        // Grabbing/dragging
+}
+
+/// File manager view mode
+#[derive(Clone, Copy, PartialEq)]
+pub enum FileManagerViewMode {
+    List,
+    IconGrid,
+}
+
+/// Image viewer state — holds decoded pixel data for BMP display
+pub struct ImageViewerState {
+    pub pixels: Vec<u32>,
+    pub img_width: u32,
+    pub img_height: u32,
+    pub zoom: u32,     // percentage: 100 = 1:1
+    pub pan_x: i32,
+    pub pan_y: i32,
+}
+
+impl ImageViewerState {
+    pub fn new() -> Self {
+        Self { pixels: Vec::new(), img_width: 0, img_height: 0, zoom: 100, pan_x: 0, pan_y: 0 }
+    }
+}
+
+/// File clipboard entry for copy/paste in file manager
+pub struct FileClipboardEntry {
+    pub path: String,
+    pub name: String,
+    pub is_cut: bool,
+}
+
+/// Drag-and-drop state
+pub struct DragState {
+    pub source_path: String,
+    pub filename: String,
+    pub is_dir: bool,
+    pub start_x: i32,
+    pub start_y: i32,
+    pub current_x: i32,
+    pub current_y: i32,
+    pub source_window_id: u32,
+    pub active: bool,
 }
 
 impl Window {
@@ -850,6 +894,28 @@ pub struct Desktop {
     pub start_menu_selected: i32,
     /// Desktop clipboard: (icon_index, is_cut)
     clipboard_icon: Option<(usize, bool)>,
+    
+    // ══════ NEW FEATURES ══════
+    /// File manager view mode per window (window_id -> mode)
+    pub fm_view_modes: BTreeMap<u32, FileManagerViewMode>,
+    /// Image viewer states per window (window_id -> state with pixel data)
+    pub image_viewer_states: BTreeMap<u32, ImageViewerState>,
+    /// File clipboard for copy/paste in file manager
+    pub file_clipboard: Option<FileClipboardEntry>,
+    /// Drag-and-drop state
+    pub drag_state: Option<DragState>,
+    /// Lock screen active
+    pub lock_screen_active: bool,
+    /// Lock screen PIN input buffer
+    pub lock_screen_input: String,
+    /// Lock screen wrong PIN shake animation
+    pub lock_screen_shake: u32,
+    /// System tray: simulated volume level (0-100)
+    pub sys_volume: u32,
+    /// System tray: simulated battery level (0-100)
+    pub sys_battery: u32,
+    /// System tray: simulated wifi connected
+    pub sys_wifi_connected: bool,
 }
 
 /// Calculator state for interactive calculator windows
@@ -1411,6 +1477,17 @@ impl Desktop {
             start_menu_search: String::new(),
             start_menu_selected: -1,
             clipboard_icon: None,
+            // New features
+            fm_view_modes: BTreeMap::new(),
+            image_viewer_states: BTreeMap::new(),
+            file_clipboard: None,
+            drag_state: None,
+            lock_screen_active: false,
+            lock_screen_input: String::new(),
+            lock_screen_shake: 0,
+            sys_volume: 75,
+            sys_battery: 85,
+            sys_wifi_connected: true,
         }
     }
     
@@ -2104,6 +2181,18 @@ struct AppConfig {
 
     /// Handle mouse click
     pub fn handle_click(&mut self, x: i32, y: i32, pressed: bool) {
+        // Lock screen blocks all mouse interaction
+        if self.lock_screen_active { return; }
+        
+        // Update drag position if dragging a file
+        if !pressed && self.drag_state.is_some() {
+            self.finish_drag(x, y);
+            return;
+        }
+        if pressed && self.drag_state.is_some() {
+            self.update_drag(x, y);
+        }
+        
         if pressed {
             // Close context menu on any left click
             if self.context_menu.visible {
@@ -2196,6 +2285,12 @@ struct AppConfig {
                     // Handle browser content clicks
                     if self.windows[i].window_type == WindowType::Browser {
                         self.handle_browser_click(x, y, &self.windows[i].clone());
+                    }
+                    
+                    // Handle file manager content clicks (mouse navigation + double-click open)
+                    if self.windows[i].window_type == WindowType::FileManager {
+                        let fm_id = self.windows[i].id;
+                        self.handle_file_manager_click(x, y, fm_id);
                     }
                     
                     // Handle model editor clicks
@@ -2479,6 +2574,12 @@ struct AppConfig {
                 w.dragging = false;
                 w.resizing = ResizeEdge::None;
             }
+            
+            // Handle file drag-and-drop release
+            if self.drag_state.is_some() {
+                self.finish_drag(x, y);
+            }
+            
             // Notify model editors about mouse release
             let model_ids: Vec<u32> = self.windows.iter()
                 .filter(|w| w.window_type == WindowType::ModelEditor && w.focused)
@@ -3068,16 +3169,16 @@ struct AppConfig {
             15 => { // Shutdown
                 crate::println!("\n\n=== SYSTEM SHUTDOWN ===");
                 crate::println!("Goodbye!");
-                loop { x86_64::instructions::hlt(); }
+                loop { crate::arch::halt(); }
             },
             16 => { // Reboot
                 crate::serial_println!("[SYSTEM] Reboot requested");
                 // Triple fault reboot
                 unsafe {
-                    let mut port = x86_64::instructions::port::Port::<u8>::new(0x64);
+                    let mut port = crate::arch::Port::<u8>::new(0x64);
                     port.write(0xFE);
                 }
-                loop { x86_64::instructions::hlt(); }
+                loop { crate::arch::halt(); }
             },
             _ => {}
         }
@@ -3086,6 +3187,12 @@ struct AppConfig {
     /// Handle keyboard input for the focused window
     pub fn handle_keyboard_input(&mut self, key: u8) {
         use crate::keyboard::{KEY_UP, KEY_DOWN};
+        
+        // If lock screen is active, route all keys there
+        if self.lock_screen_active {
+            self.handle_lock_screen_key(key);
+            return;
+        }
         
         // If start menu is open, route keyboard to search bar + navigation
         if self.start_menu_open {
@@ -3166,7 +3273,35 @@ struct AppConfig {
                     self.handle_terminal_key(key);
                 },
                 WindowType::FileManager => {
+                    // Ctrl+C/X/V for file clipboard
+                    let ctrl = crate::keyboard::is_key_pressed(0x1D);
+                    if ctrl && (key == 3 || key == b'c' || key == b'C') {
+                        self.file_clipboard_copy(false);
+                        return;
+                    }
+                    if ctrl && (key == 24 || key == b'x' || key == b'X') {
+                        self.file_clipboard_copy(true);
+                        return;
+                    }
+                    if ctrl && (key == 22 || key == b'v' || key == b'V') {
+                        self.file_clipboard_paste();
+                        return;
+                    }
+                    // V to toggle view mode
+                    if key == b'v' || key == b'V' {
+                        let current = self.fm_view_modes.get(&win_id).copied().unwrap_or(FileManagerViewMode::List);
+                        let new_mode = match current {
+                            FileManagerViewMode::List => FileManagerViewMode::IconGrid,
+                            FileManagerViewMode::IconGrid => FileManagerViewMode::List,
+                        };
+                        self.fm_view_modes.insert(win_id, new_mode);
+                        crate::serial_println!("[FM] Toggled view mode for window {}", win_id);
+                        return;
+                    }
                     self.handle_filemanager_key(key);
+                },
+                WindowType::ImageViewer => {
+                    self.handle_image_viewer_key(key);
                 },
                 WindowType::FileAssociations => {
                     self.handle_fileassoc_key(key);
@@ -3756,29 +3891,41 @@ struct AppConfig {
                 crate::serial_println!("[TrustCode] Opened: {}", filename);
             },
             Program::ImageViewer => {
-                let id = self.create_window(&format!("View: {}", filename), 180 + offset, 100 + offset, 400, 320, WindowType::ImageViewer);
+                let id = self.create_window(&format!("View: {}", filename), 180 + offset, 100 + offset, 500, 420, WindowType::ImageViewer);
                 if let Some(window) = self.windows.iter_mut().find(|w| w.id == id) {
                     window.file_path = Some(String::from(filename));
                     window.content.clear();
-                    window.content.push(format!("=== Image: {} ===", filename));
-                    window.content.push(String::new());
-                    // For now, just show file info
+                    
+                    // Try to load BMP image data
                     let file_path = format!("/{}", filename);
-                    if let Ok(content) = crate::ramfs::with_fs(|fs| fs.read_file(&file_path).map(|d| d.to_vec())) {
-                        window.content.push(format!("Size: {} bytes", content.len()));
-                        window.content.push(String::from("Format: Detected from header"));
-                        // Check PNG signature
-                        if content.len() >= 8 && &content[0..8] == b"\x89PNG\r\n\x1a\n" {
-                            window.content.push(String::from("Type: PNG Image"));
-                        } else if content.len() >= 2 && &content[0..2] == b"\xFF\xD8" {
-                            window.content.push(String::from("Type: JPEG Image"));
-                        } else if content.len() >= 2 && &content[0..2] == b"BM" {
-                            window.content.push(String::from("Type: BMP Image"));
+                    if let Ok(raw_data) = crate::ramfs::with_fs(|fs| fs.read_file(&file_path).map(|d| d.to_vec())) {
+                        // Try BMP parser
+                        if let Some(img) = crate::theme::bmp::load_bmp_from_bytes(&raw_data) {
+                            let mut state = ImageViewerState::new();
+                            state.img_width = img.width;
+                            state.img_height = img.height;
+                            state.pixels = img.pixels;
+                            // Auto-zoom to fit window (500x420 content area ~480x360)
+                            let fit_w = (480 * 100) / img.width.max(1);
+                            let fit_h = (360 * 100) / img.height.max(1);
+                            state.zoom = fit_w.min(fit_h).min(200);
+                            self.image_viewer_states.insert(id, state);
+                            crate::serial_println!("[ImageViewer] Loaded BMP: {}x{}", img.width, img.height);
+                            window.content.push(format!("Image: {} ({}x{} BMP)", filename, img.width, img.height));
                         } else {
-                            window.content.push(String::from("Type: Unknown"));
+                            // Not a BMP or parse failed — show file info
+                            window.content.push(format!("=== Image: {} ===", filename));
+                            window.content.push(format!("Size: {} bytes", raw_data.len()));
+                            if raw_data.len() >= 2 && &raw_data[0..2] == b"BM" {
+                                window.content.push(String::from("BMP detected but failed to parse"));
+                            } else {
+                                window.content.push(String::from("Format not supported (BMP only)"));
+                            }
+                            self.image_viewer_states.insert(id, ImageViewerState::new());
                         }
-                        window.content.push(String::new());
-                        window.content.push(String::from("(Image preview not implemented)"));
+                    } else {
+                        window.content.push(String::from("Failed to read file"));
+                        self.image_viewer_states.insert(id, ImageViewerState::new());
                     }
                 }
             },
@@ -4539,6 +4686,11 @@ struct AppConfig {
         self.cursor_x = x.clamp(0, self.width as i32 - 1);
         self.cursor_y = y.clamp(0, self.height as i32 - 1);
         
+        // Update drag-and-drop position
+        if self.drag_state.is_some() {
+            self.update_drag(x, y);
+        }
+        
         for w in &mut self.windows {
             // Handle window dragging
             if w.dragging && !w.maximized {
@@ -4956,6 +5108,14 @@ struct AppConfig {
         // Draw context menu if visible
         if self.context_menu.visible {
             self.draw_context_menu();
+        }
+        
+        // Draw drag-and-drop ghost
+        self.draw_drag_ghost();
+        
+        // Draw lock screen if active (covers everything)
+        if self.lock_screen_active {
+            self.draw_lock_screen();
         }
         
         // Draw cursor last
@@ -5999,6 +6159,9 @@ struct AppConfig {
             let a11y_x = (self.width - 210) as i32;
             self.draw_text_smooth(a11y_x, (y + 14) as i32, &a11y_str, hc(ACCENT_AMBER, 0xFFFFFF00));
         }
+        
+        // ── System tray indicators (WiFi, Volume, Battery) ──
+        self.draw_sys_tray_indicators(self.width - 290, y + 6);
 
         // System indicators (CPU + MEM mini-bars)
         let ind_x = self.width - 50;
@@ -6545,6 +6708,14 @@ struct AppConfig {
         // ═══════════════════════════════════════════════════════════════
         if window.window_type == WindowType::FileManager {
             self.draw_file_manager_gui(window);
+            return;
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // IMAGE VIEWER — Render actual BMP image pixels
+        // ═══════════════════════════════════════════════════════════════
+        if window.window_type == WindowType::ImageViewer {
+            self.draw_image_viewer(window);
             return;
         }
         
@@ -7683,8 +7854,797 @@ struct AppConfig {
         id
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // IMAGE VIEWER — Renders actual BMP pixel data in-window
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    fn draw_image_viewer(&self, window: &Window) {
+        let wx = window.x;
+        let wy = window.y;
+        let ww = window.width;
+        let wh = window.height;
+        if ww < 60 || wh < 80 { return; }
+        
+        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT + 28); // 28px for status bar
+        let safe_x = if wx < 0 { 0u32 } else { wx as u32 };
+        let safe_y = content_y as u32;
+        
+        // Dark background
+        framebuffer::fill_rect(safe_x + 2, safe_y, ww.saturating_sub(4), content_h, 0xFF080808);
+        
+        if let Some(state) = self.image_viewer_states.get(&window.id) {
+            if state.img_width > 0 && state.img_height > 0 && !state.pixels.is_empty() {
+                // Calculate display size with zoom
+                let zoom_f = state.zoom as u32;
+                let disp_w = (state.img_width * zoom_f) / 100;
+                let disp_h = (state.img_height * zoom_f) / 100;
+                
+                // Center image in window
+                let offset_x = (ww as i32 - disp_w as i32) / 2 + state.pan_x;
+                let offset_y = (content_h as i32 - disp_h as i32) / 2 + state.pan_y;
+                
+                // Draw pixel-by-pixel (nearest-neighbor scaling)
+                let screen_w = framebuffer::width();
+                let screen_h = framebuffer::height();
+                
+                for dy in 0..disp_h {
+                    let screen_y = content_y + offset_y + dy as i32;
+                    if screen_y < content_y || screen_y >= content_y + content_h as i32 { continue; }
+                    if screen_y < 0 || screen_y >= screen_h as i32 { continue; }
+                    
+                    // Source row
+                    let src_y = (dy * state.img_height) / disp_h.max(1);
+                    if src_y >= state.img_height { continue; }
+                    
+                    for dx in 0..disp_w {
+                        let screen_x = wx + offset_x + dx as i32;
+                        if screen_x < wx + 2 || screen_x >= wx + ww as i32 - 2 { continue; }
+                        if screen_x < 0 || screen_x >= screen_w as i32 { continue; }
+                        
+                        let src_x = (dx * state.img_width) / disp_w.max(1);
+                        if src_x >= state.img_width { continue; }
+                        
+                        let pixel = state.pixels[(src_y * state.img_width + src_x) as usize];
+                        // Skip fully transparent pixels
+                        if (pixel >> 24) == 0 { continue; }
+                        framebuffer::put_pixel(screen_x as u32, screen_y as u32, pixel | 0xFF000000);
+                    }
+                }
+                
+                // ── Status bar ──
+                let status_y = (content_y + content_h as i32) as u32;
+                framebuffer::fill_rect(safe_x + 2, status_y, ww.saturating_sub(4), 24, 0xFF0A1A12);
+                framebuffer::draw_hline(safe_x + 2, status_y, ww.saturating_sub(4), 0xFF1A2A1A);
+                
+                let info = alloc::format!("{}x{} | Zoom: {}% | +/- to zoom | Arrows to pan", 
+                    state.img_width, state.img_height, state.zoom);
+                self.draw_text_smooth(wx + 10, status_y as i32 + 5, &info, GREEN_SUBTLE);
+            } else {
+                // No image data — show placeholder
+                self.draw_text_smooth(wx + ww as i32 / 2 - 60, content_y + content_h as i32 / 2, "No image loaded", GREEN_GHOST);
+                self.draw_text_smooth(wx + ww as i32 / 2 - 80, content_y + content_h as i32 / 2 + 20, "Open a .bmp file to view it", GREEN_GHOST);
+            }
+        } else {
+            self.draw_text_smooth(wx + 20, content_y + 30, "Image Viewer — open a file", GREEN_GHOST);
+        }
+    }
+    
+    fn handle_image_viewer_key(&mut self, key: u8) {
+        let win_id = match self.windows.iter().find(|w| w.focused && w.window_type == WindowType::ImageViewer) {
+            Some(w) => w.id,
+            None => return,
+        };
+        if let Some(state) = self.image_viewer_states.get_mut(&win_id) {
+            match key {
+                b'+' | b'=' => { state.zoom = (state.zoom + 10).min(500); }
+                b'-' => { state.zoom = state.zoom.saturating_sub(10).max(10); }
+                b'0' => { state.zoom = 100; state.pan_x = 0; state.pan_y = 0; } // Reset
+                _ => {
+                    if key == crate::keyboard::KEY_UP { state.pan_y += 20; }
+                    else if key == crate::keyboard::KEY_DOWN { state.pan_y -= 20; }
+                    else if key == crate::keyboard::KEY_LEFT { state.pan_x += 20; }
+                    else if key == crate::keyboard::KEY_RIGHT { state.pan_x -= 20; }
+                }
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FILE MANAGER ICON/GRID VIEW
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    fn draw_file_manager_icon_grid(&self, window: &Window) {
+        let wx = window.x;
+        let wy = window.y;
+        let ww = window.width;
+        let wh = window.height;
+        if ww < 80 || wh < 100 { return; }
+        
+        let content_y_start = wy + TITLE_BAR_HEIGHT as i32;
+        let safe_x = if wx < 0 { 0u32 } else { wx as u32 };
+        
+        // Colors
+        let bg_dark = 0xFF0C1410u32;
+        let bg_toolbar = 0xFF0A1A12u32;
+        let bg_selected = 0xFF0A3A1Au32;
+        let text_file = 0xFF80CC90u32;
+        let icon_folder = 0xFFDDAA30u32;
+        let icon_file = 0xFF60AA80u32;
+        let separator = 0xFF1A2A1Au32;
+        
+        // ── Toolbar (same as list view) ──
+        let toolbar_h = 32u32;
+        framebuffer::fill_rect_alpha(safe_x + 2, content_y_start as u32, ww.saturating_sub(4), toolbar_h, 0x0A1A12, 230);
+        
+        let btn_y = content_y_start + 6;
+        let btn_size = 20u32;
+        if btn_y > 0 {
+            draw_rounded_rect(wx + 8, btn_y, btn_size, btn_size, 3, 0xFF1A2A1A);
+            draw_rounded_rect_border(wx + 8, btn_y, btn_size, btn_size, 3, GREEN_GHOST);
+            self.draw_text(wx + 13, btn_y + 3, "<", GREEN_SUBTLE);
+            draw_rounded_rect(wx + 32, btn_y, btn_size, btn_size, 3, 0xFF1A2A1A);
+            draw_rounded_rect_border(wx + 32, btn_y, btn_size, btn_size, 3, GREEN_GHOST);
+            self.draw_text(wx + 37, btn_y + 3, "^", GREEN_SUBTLE);
+            
+            // View mode toggle button [Grid] → highlight active
+            let view_btn_x = wx + ww as i32 - 60;
+            draw_rounded_rect(view_btn_x, btn_y, 50, btn_size, 3, 0xFF1A3A1A);
+            draw_rounded_rect_border(view_btn_x, btn_y, 50, btn_size, 3, GREEN_PRIMARY);
+            self.draw_text(view_btn_x + 6, btn_y + 3, "List", GREEN_PRIMARY);
+        }
+        
+        // Path bar
+        let path_x = wx + 58;
+        let path_w = (ww as i32).saturating_sub(126);
+        if path_w > 10 && btn_y > 0 {
+            draw_rounded_rect(path_x, btn_y, path_w as u32, btn_size, 4, 0xFF081208);
+            draw_rounded_rect_border(path_x, btn_y, path_w as u32, btn_size, 4, GREEN_GHOST);
+            let current_path = window.file_path.as_deref().unwrap_or("/");
+            self.draw_text_smooth(path_x + 8, btn_y + 4, current_path, GREEN_PRIMARY);
+        }
+        
+        // Toolbar separator
+        let grid_start_y = content_y_start as u32 + toolbar_h + 1;
+        framebuffer::draw_hline(safe_x + 2, grid_start_y.saturating_sub(1), ww.saturating_sub(4), separator);
+        
+        // ── Grid area ──
+        let grid_area_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h + 30);
+        if grid_area_h < 8 { return; }
+        framebuffer::fill_rect(safe_x + 2, grid_start_y, ww.saturating_sub(4), grid_area_h, bg_dark);
+        
+        // Grid parameters
+        let icon_cell_w = 90u32;
+        let icon_cell_h = 80u32;
+        let cols = ((ww.saturating_sub(20)) / icon_cell_w).max(1);
+        let padding_x = (ww.saturating_sub(cols * icon_cell_w)) / 2;
+        
+        // Parse file entries
+        let file_start_idx = 5usize.min(window.content.len());
+        let file_end_idx = if window.content.len() > file_start_idx + 2 { window.content.len() - 2 } else { window.content.len() };
+        let file_entries: Vec<&str> = if file_end_idx > file_start_idx {
+            window.content[file_start_idx..file_end_idx].iter().map(|s| s.as_str()).collect()
+        } else { Vec::new() };
+        
+        if file_entries.is_empty() {
+            self.draw_text_smooth(wx + 40, grid_start_y as i32 + 30, "(empty)", GREEN_GHOST);
+        }
+        
+        let max_visible_rows = (grid_area_h / icon_cell_h).max(1) as usize;
+        let scroll_row = window.scroll_offset / cols as usize;
+        
+        for (idx, entry) in file_entries.iter().enumerate() {
+            let row = idx / cols as usize;
+            let col = idx % cols as usize;
+            
+            // Scroll check
+            if row < scroll_row { continue; }
+            let display_row = row - scroll_row;
+            if display_row >= max_visible_rows { break; }
+            
+            let cell_x = safe_x + padding_x + col as u32 * icon_cell_w;
+            let cell_y = grid_start_y + display_row as u32 * icon_cell_h;
+            if cell_y + icon_cell_h > grid_start_y + grid_area_h { break; }
+            
+            let is_selected = idx == window.selected_index;
+            let is_dir = entry.contains("[D]");
+            
+            // Selection background
+            if is_selected {
+                draw_rounded_rect(cell_x as i32 + 4, cell_y as i32 + 2, icon_cell_w - 8, icon_cell_h - 4, 6, bg_selected);
+                draw_rounded_rect_border(cell_x as i32 + 4, cell_y as i32 + 2, icon_cell_w - 8, icon_cell_h - 4, 6, 0xFF1A5A2A);
+            }
+            
+            // Draw icon (larger in grid view)
+            let icon_x = cell_x + (icon_cell_w - 32) / 2;
+            let icon_y = cell_y + 6;
+            if is_dir {
+                // Large folder icon
+                let fc = if is_selected { 0xFFEEBB40 } else { icon_folder };
+                framebuffer::fill_rect(icon_x, icon_y, 16, 6, fc);
+                framebuffer::fill_rect(icon_x, icon_y + 6, 32, 20, fc);
+                framebuffer::fill_rect(icon_x + 2, icon_y + 10, 28, 14, 0xFF0A0A04);
+                framebuffer::fill_rect(icon_x + 6, icon_y + 14, 16, 2, 0xFF302A10);
+                framebuffer::fill_rect(icon_x + 6, icon_y + 18, 12, 2, 0xFF302A10);
+            } else {
+                // Large file icon
+                let fc = if is_selected { 0xFF80DD99 } else { icon_file };
+                framebuffer::fill_rect(icon_x, icon_y, 28, 28, fc);
+                framebuffer::fill_rect(icon_x + 18, icon_y, 10, 10, 0xFF0A140A);
+                framebuffer::fill_rect(icon_x + 18, icon_y, 2, 10, fc);
+                framebuffer::fill_rect(icon_x + 18, icon_y + 8, 10, 2, fc);
+                framebuffer::fill_rect(icon_x + 3, icon_y + 12, 22, 14, 0xFF040A04);
+                // File type hint
+                let ext = Self::extract_name_from_entry(entry);
+                let ext_label = if ext.ends_with(".rs") { "RS" }
+                    else if ext.ends_with(".txt") { "TXT" }
+                    else if ext.ends_with(".bmp") { "BMP" }
+                    else if ext.ends_with(".sh") { "SH" }
+                    else if ext.ends_with(".toml") { "TML" }
+                    else { "" };
+                if !ext_label.is_empty() {
+                    self.draw_text((icon_x + 5) as i32, (icon_y + 15) as i32, ext_label, 0xFF203020);
+                }
+            }
+            
+            // Filename (centered, truncated)
+            let name = Self::extract_name_from_entry(entry);
+            let max_chars = (icon_cell_w / 8).min(10) as usize;
+            let display_name: String = if name.len() > max_chars {
+                let mut s: String = name.chars().take(max_chars - 2).collect();
+                s.push_str("..");
+                s
+            } else {
+                String::from(name)
+            };
+            let name_x = cell_x as i32 + (icon_cell_w as i32 - display_name.len() as i32 * 8) / 2;
+            let name_y = (cell_y + icon_cell_h - 20) as i32;
+            let name_color = if is_selected { GREEN_PRIMARY } else { text_file };
+            self.draw_text_smooth(name_x, name_y, &display_name, name_color);
+        }
+        
+        // ── Status bar ──
+        let status_y = (wy + wh as i32).saturating_sub(24) as u32;
+        framebuffer::fill_rect(safe_x + 2, status_y, ww.saturating_sub(4), 20, bg_toolbar);
+        framebuffer::draw_hline(safe_x + 2, status_y, ww.saturating_sub(4), separator);
+        let item_count = file_entries.len();
+        let status_text = alloc::format!("{} items | V:toggle view | Ctrl+C/X/V:clipboard", item_count);
+        self.draw_text_smooth(wx + 10, status_y as i32 + 4, &status_text, GREEN_SUBTLE);
+    }
+    
+    fn extract_name_from_entry(entry: &str) -> &str {
+        let trimmed = entry.trim();
+        if let Some(bracket_end) = trimmed.find(']') {
+            let after_icon = if bracket_end + 1 < trimmed.len() { &trimmed[bracket_end + 1..] } else { "" };
+            let parts: Vec<&str> = after_icon.split_whitespace().collect();
+            if !parts.is_empty() { parts[0] } else { "???" }
+        } else {
+            trimmed
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FILE MANAGER MOUSE CLICK HANDLING
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    fn handle_file_manager_click(&mut self, x: i32, y: i32, window_id: u32) {
+        let (wtype, wx, wy, ww, wh, file_path_opt, content_len, selected_idx) = {
+            if let Some(w) = self.windows.iter().find(|w| w.id == window_id && w.window_type == WindowType::FileManager) {
+                (w.window_type, w.x, w.y, w.width, w.height, w.file_path.clone(), w.content.len(), w.selected_index)
+            } else { return; }
+        };
+        
+        let content_y_start = wy + TITLE_BAR_HEIGHT as i32;
+        let toolbar_h = 32i32;
+        
+        // Check toolbar buttons
+        let btn_y = content_y_start + 6;
+        let btn_size = 20i32;
+        
+        // Back button
+        if x >= wx + 8 && x < wx + 8 + btn_size && y >= btn_y && y < btn_y + btn_size {
+            self.navigate_file_manager("..");
+            return;
+        }
+        // Up button
+        if x >= wx + 32 && x < wx + 32 + btn_size && y >= btn_y && y < btn_y + btn_size {
+            self.navigate_file_manager("..");
+            return;
+        }
+        
+        // View mode toggle button (top-right)
+        let view_btn_x = wx + ww as i32 - 60;
+        if x >= view_btn_x && x < view_btn_x + 50 && y >= btn_y && y < btn_y + btn_size {
+            let current = self.fm_view_modes.get(&window_id).copied().unwrap_or(FileManagerViewMode::List);
+            let new_mode = match current {
+                FileManagerViewMode::List => FileManagerViewMode::IconGrid,
+                FileManagerViewMode::IconGrid => FileManagerViewMode::List,
+            };
+            self.fm_view_modes.insert(window_id, new_mode);
+            crate::serial_println!("[FM] Toggled view mode");
+            return;
+        }
+        
+        // Click on file in content area
+        let is_grid = self.fm_view_modes.get(&window_id).copied().unwrap_or(FileManagerViewMode::List) == FileManagerViewMode::IconGrid;
+        let file_start_idx = 5usize.min(content_len);
+        let file_end_idx = if content_len > file_start_idx + 2 { content_len - 2 } else { content_len };
+        let file_count = file_end_idx.saturating_sub(file_start_idx);
+        
+        if is_grid {
+            // Grid view click
+            let grid_start_y = content_y_start + toolbar_h + 1;
+            let icon_cell_w = 90i32;
+            let icon_cell_h = 80i32;
+            let cols = ((ww as i32 - 20) / icon_cell_w).max(1);
+            let padding_x = (ww as i32 - cols * icon_cell_w) / 2;
+            
+            let rel_x = x - wx - padding_x;
+            let rel_y = y - grid_start_y;
+            if rel_x >= 0 && rel_y >= 0 {
+                let col = rel_x / icon_cell_w;
+                let row = rel_y / icon_cell_h;
+                let idx = row * cols + col;
+                if idx >= 0 && (idx as usize) < file_count {
+                    let click_idx = idx as usize;
+                    // Double-click to open
+                    if click_idx == selected_idx && crate::mouse::is_double_click() {
+                        // Open the file/dir
+                        self.open_selected_file_at(window_id, click_idx);
+                        return;
+                    }
+                    // Single click — select
+                    if let Some(w) = self.windows.iter_mut().find(|w| w.id == window_id) {
+                        w.selected_index = click_idx;
+                    }
+                }
+            }
+        } else {
+            // List view click
+            let header_y = content_y_start + toolbar_h;
+            let col_header_h = 22i32;
+            let list_start_y = header_y + col_header_h + 1;
+            let row_h = 24i32;
+            
+            let rel_y = y - list_start_y;
+            if rel_y >= 0 {
+                let scroll_offset = self.windows.iter().find(|w| w.id == window_id).map(|w| w.scroll_offset).unwrap_or(0);
+                let click_idx = scroll_offset + (rel_y / row_h) as usize;
+                if click_idx < file_count {
+                    // Double-click to open
+                    if click_idx == selected_idx && crate::mouse::is_double_click() {
+                        self.open_selected_file_at(window_id, click_idx);
+                        return;
+                    }
+                    // Single click — select
+                    if let Some(w) = self.windows.iter_mut().find(|w| w.id == window_id) {
+                        w.selected_index = click_idx;
+                    }
+                }
+            }
+        }
+    }
+    
+    fn open_selected_file_at(&mut self, window_id: u32, entry_idx: usize) {
+        let (filename, is_dir) = {
+            if let Some(w) = self.windows.iter().find(|w| w.id == window_id) {
+                let file_start_idx = 5usize.min(w.content.len());
+                let actual_idx = file_start_idx + entry_idx;
+                if actual_idx < w.content.len().saturating_sub(2) {
+                    let line = &w.content[actual_idx];
+                    let is_dir = line.contains("[D]");
+                    let name = Self::extract_name_from_entry(line);
+                    (String::from(name), is_dir)
+                } else { return; }
+            } else { return; }
+        };
+        
+        if is_dir {
+            self.navigate_file_manager(&filename);
+        } else {
+            self.open_file(&filename);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DRAG AND DROP
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    fn start_file_drag(&mut self, window_id: u32) {
+        if let Some(w) = self.windows.iter().find(|w| w.id == window_id && w.window_type == WindowType::FileManager) {
+            let file_start_idx = 5usize.min(w.content.len());
+            let actual_idx = file_start_idx + w.selected_index;
+            if actual_idx < w.content.len().saturating_sub(2) {
+                let line = &w.content[actual_idx];
+                let is_dir = line.contains("[D]");
+                let name = Self::extract_name_from_entry(line);
+                if name == ".." { return; }
+                let current_path = w.file_path.clone().unwrap_or_else(|| String::from("/"));
+                let full_path = if current_path == "/" {
+                    alloc::format!("/{}", name)
+                } else {
+                    alloc::format!("{}/{}", current_path, name)
+                };
+                self.drag_state = Some(DragState {
+                    source_path: full_path,
+                    filename: String::from(name),
+                    is_dir,
+                    start_x: self.cursor_x,
+                    start_y: self.cursor_y,
+                    current_x: self.cursor_x,
+                    current_y: self.cursor_y,
+                    source_window_id: window_id,
+                    active: true,
+                });
+                crate::serial_println!("[DnD] Started drag: {}", name);
+            }
+        }
+    }
+    
+    fn update_drag(&mut self, x: i32, y: i32) {
+        if let Some(ref mut drag) = self.drag_state {
+            drag.current_x = x;
+            drag.current_y = y;
+        }
+    }
+    
+    fn finish_drag(&mut self, x: i32, y: i32) {
+        let drag_info = self.drag_state.take();
+        if let Some(drag) = drag_info {
+            // Check if dropped on another FileManager window
+            let target_window = self.windows.iter()
+                .filter(|w| w.window_type == WindowType::FileManager && w.id != drag.source_window_id)
+                .find(|w| x >= w.x && x < w.x + w.width as i32 && y >= w.y && y < w.y + w.height as i32);
+            
+            if let Some(target) = target_window {
+                let target_path = target.file_path.clone().unwrap_or_else(|| String::from("/"));
+                let dest_path = if target_path == "/" {
+                    alloc::format!("/{}", drag.filename)
+                } else {
+                    alloc::format!("{}/{}", target_path, drag.filename)
+                };
+                
+                // Copy file
+                if !drag.is_dir {
+                    if let Ok(data) = crate::ramfs::with_fs(|fs| fs.read_file(&drag.source_path).map(|d| d.to_vec())) {
+                        let _ = crate::ramfs::with_fs(|fs| fs.write_file(&dest_path, &data));
+                        crate::serial_println!("[DnD] Copied {} -> {}", drag.source_path, dest_path);
+                    }
+                } else {
+                    let _ = crate::ramfs::with_fs(|fs| fs.mkdir(&dest_path));
+                    crate::serial_println!("[DnD] Created dir: {}", dest_path);
+                }
+                
+                // Refresh target file manager
+                self.refresh_file_manager_by_id(target.id, &target_path);
+            } else if y >= (self.height - TASKBAR_HEIGHT) as i32 {
+                // Dropped on taskbar — ignore
+                crate::serial_println!("[DnD] Dropped on taskbar, ignoring");
+            } else {
+                // Dropped on desktop — create desktop shortcut path
+                crate::serial_println!("[DnD] Dropped on desktop: {}", drag.filename);
+            }
+        }
+    }
+    
+    fn draw_drag_ghost(&self) {
+        if let Some(ref drag) = self.drag_state {
+            if !drag.active { return; }
+            let gx = drag.current_x;
+            let gy = drag.current_y;
+            
+            // Semi-transparent ghost icon
+            framebuffer::fill_rect_alpha(gx as u32, gy as u32, 70, 22, 0x0C1410, 180);
+            draw_rounded_rect_border(gx, gy, 70, 22, 4, GREEN_PRIMARY);
+            
+            // Icon
+            if drag.is_dir {
+                framebuffer::fill_rect((gx + 4) as u32, (gy + 4) as u32, 14, 14, 0xFFDDAA30);
+            } else {
+                framebuffer::fill_rect((gx + 4) as u32, (gy + 4) as u32, 12, 14, 0xFF60AA80);
+            }
+            
+            // Filename
+            let max_chars = 6;
+            let name: String = drag.filename.chars().take(max_chars).collect();
+            self.draw_text(gx + 22, gy + 5, &name, GREEN_PRIMARY);
+        }
+    }
+    
+    fn refresh_file_manager_by_id(&mut self, wid: u32, path: &str) {
+        // Temporarily focus this window to use refresh_file_manager
+        let was_focused: Vec<u32> = self.windows.iter().filter(|w| w.focused).map(|w| w.id).collect();
+        for w in &mut self.windows {
+            w.focused = w.id == wid;
+        }
+        self.refresh_file_manager(path);
+        // Restore focus
+        for w in &mut self.windows {
+            w.focused = was_focused.contains(&w.id);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FILE CLIPBOARD (Ctrl+C/X/V in file manager)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    fn file_clipboard_copy(&mut self, cut: bool) {
+        if let Some(w) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+            let file_start_idx = 5usize.min(w.content.len());
+            let actual_idx = file_start_idx + w.selected_index;
+            if actual_idx < w.content.len().saturating_sub(2) {
+                let line = &w.content[actual_idx];
+                let name = Self::extract_name_from_entry(line);
+                if name == ".." { return; }
+                let current_path = w.file_path.clone().unwrap_or_else(|| String::from("/"));
+                let full_path = if current_path == "/" {
+                    alloc::format!("/{}", name)
+                } else {
+                    alloc::format!("{}/{}", current_path, name)
+                };
+                let op = if cut { "Cut" } else { "Copied" };
+                crate::serial_println!("[FM] {} file: {}", op, full_path);
+                self.file_clipboard = Some(FileClipboardEntry {
+                    path: full_path,
+                    name: String::from(name),
+                    is_cut: cut,
+                });
+                // Also set text clipboard
+                crate::keyboard::clipboard_set(name);
+            }
+        }
+    }
+    
+    fn file_clipboard_paste(&mut self) {
+        let clipboard = self.file_clipboard.take();
+        if let Some(entry) = clipboard {
+            let current_path = self.windows.iter()
+                .find(|w| w.focused && w.window_type == WindowType::FileManager)
+                .and_then(|w| w.file_path.clone())
+                .unwrap_or_else(|| String::from("/"));
+            
+            let dest = if current_path == "/" {
+                alloc::format!("/{}", entry.name)
+            } else {
+                alloc::format!("{}/{}", current_path, entry.name)
+            };
+            
+            if entry.is_cut {
+                // Move: rename
+                let _ = crate::ramfs::with_fs(|fs| fs.mv(&entry.path, &dest));
+                crate::serial_println!("[FM] Moved {} -> {}", entry.path, dest);
+            } else {
+                // Copy: read + write
+                if let Ok(data) = crate::ramfs::with_fs(|fs| fs.read_file(&entry.path).map(|d| d.to_vec())) {
+                    let _ = crate::ramfs::with_fs(|fs| fs.write_file(&dest, &data));
+                    crate::serial_println!("[FM] Pasted {} -> {}", entry.path, dest);
+                }
+                // Put back in clipboard for repeated paste
+                self.file_clipboard = Some(entry);
+            }
+            
+            self.refresh_file_manager(&current_path);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // LOCK SCREEN
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    fn draw_lock_screen(&self) {
+        let sw = self.width;
+        let sh = self.height;
+        
+        // Full-screen dark overlay
+        framebuffer::fill_rect(0, 0, sw, sh, 0xFF040808);
+        
+        // Matrix-style rain effect (subtle, using frame_count)
+        let cols = sw / 10;
+        for c in 0..cols {
+            let seed = c.wrapping_mul(7919).wrapping_add(self.frame_count as u32);
+            let col_h = (seed % 20) + 3;
+            let col_x = c * 10;
+            let col_y_start = (seed.wrapping_mul(13) % sh) as i32;
+            for r in 0..col_h {
+                let ry = col_y_start + r as i32 * 14;
+                if ry >= 0 && ry < sh as i32 - 14 {
+                    let brightness = (255 - r * 12).max(20);
+                    let color = (brightness << 8) | 0xFF000000;
+                    let ch_val = ((seed.wrapping_add(r)) % 26 + 65) as u8 as char;
+                    let mut buf = [0u8; 4];
+                    let ch_str = ch_val.encode_utf8(&mut buf);
+                    framebuffer::draw_text(ch_str, col_x, ry as u32, color);
+                }
+            }
+        }
+        
+        // Center panel
+        let panel_w = 360u32;
+        let panel_h = 280u32;
+        let px = (sw - panel_w) / 2;
+        let py = (sh - panel_h) / 2;
+        let shake_off = if self.lock_screen_shake > 0 {
+            let amplitude = (self.lock_screen_shake as i32 * 3) % 13 - 6;
+            amplitude
+        } else { 0 };
+        let px = (px as i32 + shake_off) as u32;
+        
+        // Panel background (frosted glass)
+        framebuffer::fill_rect_alpha(px, py, panel_w, panel_h, 0x0C1A12, 200);
+        draw_rounded_rect(px as i32, py as i32, panel_w, panel_h, 12, 0xFF0A1A0F);
+        draw_rounded_rect_border(px as i32, py as i32, panel_w, panel_h, 12, GREEN_MUTED);
+        
+        // TrustOS logo text
+        let title_x = (px + panel_w / 2).saturating_sub(40) as i32;
+        self.draw_text_smooth(title_x, (py + 30) as i32, "TrustOS", GREEN_PRIMARY);
+        
+        // Lock icon (padlock shape)
+        let lock_x = px + panel_w / 2 - 12;
+        let lock_y = py + 70;
+        // Shackle (arc)
+        framebuffer::fill_rect(lock_x, lock_y, 24, 3, GREEN_SUBTLE);
+        framebuffer::fill_rect(lock_x, lock_y, 3, 16, GREEN_SUBTLE);
+        framebuffer::fill_rect(lock_x + 21, lock_y, 3, 16, GREEN_SUBTLE);
+        // Body
+        framebuffer::fill_rect(lock_x - 4, lock_y + 16, 32, 22, GREEN_MUTED);
+        framebuffer::fill_rect(lock_x + 8, lock_y + 22, 8, 10, 0xFF040A08);
+        
+        // "Locked" text
+        let lock_text_x = (px + panel_w / 2).saturating_sub(24) as i32;
+        self.draw_text_smooth(lock_text_x, (lock_y + 48) as i32, "Locked", GREEN_TERTIARY);
+        
+        // Clock (large)
+        let time = &self.cached_time_str;
+        if !time.is_empty() {
+            let time_x = (px + panel_w / 2).saturating_sub((time.len() as u32 * 8) / 2) as i32;
+            self.draw_text_smooth(time_x, (py + 150) as i32, time, GREEN_PRIMARY);
+        }
+        let date = &self.cached_date_str;
+        if !date.is_empty() {
+            let date_x = (px + panel_w / 2).saturating_sub((date.len() as u32 * 8) / 2) as i32;
+            self.draw_text_smooth(date_x, (py + 170) as i32, date, GREEN_TERTIARY);
+        }
+        
+        // PIN input field
+        let input_y = py + 200;
+        let input_w = 200u32;
+        let input_x = px + (panel_w - input_w) / 2;
+        draw_rounded_rect(input_x as i32, input_y as i32, input_w, 30, 6, 0xFF081208);
+        draw_rounded_rect_border(input_x as i32, input_y as i32, input_w, 30, 6, GREEN_GHOST);
+        
+        // Show dots for each character entered
+        let dots: String = self.lock_screen_input.chars().map(|_| '*').collect();
+        if dots.is_empty() {
+            self.draw_text_smooth((input_x + 8) as i32, (input_y + 8) as i32, "Enter PIN...", GREEN_GHOST);
+        } else {
+            self.draw_text_smooth((input_x + 8) as i32, (input_y + 8) as i32, &dots, GREEN_PRIMARY);
+        }
+        
+        // Cursor blink
+        if self.cursor_blink {
+            let cx = input_x + 8 + dots.len() as u32 * 8;
+            framebuffer::fill_rect(cx, input_y + 6, 2, 18, GREEN_PRIMARY);
+        }
+        
+        // Hint
+        self.draw_text_smooth((px + panel_w / 2 - 80) as i32, (input_y + 42) as i32, "Press Enter to unlock", GREEN_GHOST);
+        
+        // Wrong PIN message
+        if self.lock_screen_shake > 0 {
+            self.draw_text_smooth((px + panel_w / 2 - 50) as i32, (input_y + 60) as i32, "Wrong PIN!", 0xFFCC4444);
+        }
+    }
+    
+    fn handle_lock_screen_key(&mut self, key: u8) {
+        if self.lock_screen_shake > 0 {
+            self.lock_screen_shake = self.lock_screen_shake.saturating_sub(1);
+        }
+        
+        if key == 0x0D || key == 0x0A { // Enter
+            // PIN is "0000" or empty (for demo, any input unlocks)
+            if self.lock_screen_input.is_empty() || self.lock_screen_input == "0000" || self.lock_screen_input == "1234" {
+                self.lock_screen_active = false;
+                self.lock_screen_input.clear();
+                crate::serial_println!("[LOCK] Screen unlocked");
+            } else {
+                // Wrong PIN
+                self.lock_screen_shake = 15;
+                self.lock_screen_input.clear();
+                crate::serial_println!("[LOCK] Wrong PIN");
+            }
+        } else if key == 0x08 { // Backspace
+            self.lock_screen_input.pop();
+        } else if key >= 0x20 && key < 0x7F && self.lock_screen_input.len() < 16 {
+            self.lock_screen_input.push(key as char);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SYSTEM TRAY INDICATORS (volume, battery, wifi)
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    fn draw_sys_tray_indicators(&self, tray_x: u32, tray_y: u32) {
+        // ── WiFi indicator ──
+        let wifi_x = tray_x;
+        let wifi_y = tray_y + 2;
+        let wifi_color = if self.sys_wifi_connected { GREEN_PRIMARY } else { 0xFF553333 };
+        // Draw wifi arcs (3 arcs of increasing size)
+        for arc in 0..3u32 {
+            let r = 3 + arc * 3;
+            let cx = wifi_x + 8;
+            let cy = wifi_y + 12;
+            // Quarter arc (top-right quadrant pointing up)
+            for angle_step in 0..8u32 {
+                let dx = (angle_step * r) / 8;
+                let dy_sq = (r * r).saturating_sub(dx * dx);
+                // Integer sqrt approximation
+                let mut dy = 0u32;
+                while (dy + 1) * (dy + 1) <= dy_sq { dy += 1; }
+                let px = cx + dx;
+                let py = cy.saturating_sub(dy);
+                if px > 0 && py > 0 {
+                    framebuffer::put_pixel(px, py, wifi_color);
+                    // Mirror to left
+                    if cx >= dx {
+                        framebuffer::put_pixel(cx - dx, py, wifi_color);
+                    }
+                }
+            }
+        }
+        // Center dot
+        framebuffer::fill_rect(wifi_x + 7, wifi_y + 11, 3, 3, wifi_color);
+        
+        // ── Volume indicator ──
+        let vol_x = tray_x + 22;
+        let vol_y = tray_y + 3;
+        let vol_color = GREEN_SUBTLE;
+        // Speaker body
+        framebuffer::fill_rect(vol_x, vol_y + 4, 4, 6, vol_color);
+        framebuffer::fill_rect(vol_x + 4, vol_y + 2, 3, 10, vol_color);
+        // Sound waves proportional to volume
+        let waves = (self.sys_volume / 34).min(3); // 0-3 waves
+        for w in 0..waves {
+            let wx_off = vol_x + 9 + w * 3;
+            let wh_half = 2 + w * 2;
+            let wy_center = vol_y + 7;
+            framebuffer::fill_rect(wx_off, wy_center.saturating_sub(wh_half), 1, wh_half * 2, vol_color);
+        }
+        if self.sys_volume == 0 {
+            // Muted X
+            framebuffer::fill_rect(vol_x + 9, vol_y + 3, 1, 8, 0xFFCC4444);
+            framebuffer::fill_rect(vol_x + 12, vol_y + 3, 1, 8, 0xFFCC4444);
+        }
+        
+        // ── Battery indicator ──
+        let bat_x = tray_x + 44;
+        let bat_y = tray_y + 4;
+        let bat_w = 18u32;
+        let bat_h = 8u32;
+        // Battery outline
+        framebuffer::draw_rect(bat_x, bat_y, bat_w, bat_h, GREEN_GHOST);
+        // Battery tip
+        framebuffer::fill_rect(bat_x + bat_w, bat_y + 2, 2, 4, GREEN_GHOST);
+        // Fill level
+        let fill_w = ((self.sys_battery as u32 * (bat_w - 2)) / 100).max(1);
+        let bat_color = if self.sys_battery > 50 { GREEN_PRIMARY }
+            else if self.sys_battery > 20 { ACCENT_AMBER }
+            else { ACCENT_RED };
+        framebuffer::fill_rect(bat_x + 1, bat_y + 1, fill_w, bat_h - 2, bat_color);
+        
+        // Battery % text
+        let bat_str = alloc::format!("{}%", self.sys_battery);
+        self.draw_text((bat_x + bat_w + 5) as i32, bat_y as i32, &bat_str, GREEN_GHOST);
+    }
+
     /// Draw Windows Explorer-style file manager
     fn draw_file_manager_gui(&self, window: &Window) {
+        // Check view mode — dispatch to grid view if needed
+        let view_mode = self.fm_view_modes.get(&window.id).copied().unwrap_or(FileManagerViewMode::List);
+        if view_mode == FileManagerViewMode::IconGrid {
+            self.draw_file_manager_icon_grid(window);
+            return;
+        }
+        
         let wx = window.x;
         let wy = window.y;
         let ww = window.width;
@@ -7731,11 +8691,17 @@ struct AppConfig {
             draw_rounded_rect(wx + 32, btn_y, btn_size, btn_size, 3, 0xFF1A2A1A);
             draw_rounded_rect_border(wx + 32, btn_y, btn_size, btn_size, 3, GREEN_GHOST);
             self.draw_text(wx + 37, btn_y + 3, "^", GREEN_SUBTLE);
+            
+            // View mode toggle button [Grid]
+            let view_btn_x = wx + ww as i32 - 60;
+            draw_rounded_rect(view_btn_x, btn_y, 50, btn_size, 3, 0xFF1A2A1A);
+            draw_rounded_rect_border(view_btn_x, btn_y, 50, btn_size, 3, GREEN_GHOST);
+            self.draw_text(view_btn_x + 6, btn_y + 3, "Grid", GREEN_SUBTLE);
         }
         
         // Path bar (breadcrumb style)
         let path_x = wx + 58;
-        let path_w = (ww as i32).saturating_sub(66);
+        let path_w = (ww as i32).saturating_sub(126);
         if path_w > 10 && btn_y > 0 {
             draw_rounded_rect(path_x, btn_y, path_w as u32, btn_size, 4, 0xFF081208);
             draw_rounded_rect_border(path_x, btn_y, path_w as u32, btn_size, 4, GREEN_GHOST);
@@ -7953,7 +8919,7 @@ struct AppConfig {
         };
         self.draw_text_smooth(wx + 10, status_y as i32 + 4, &status_text, GREEN_SUBTLE);
         if ww > 280 {
-            self.draw_text_smooth(wx + ww as i32 - 220, status_y as i32 + 4, "Enter:Open  Bksp:Up  Arrows:Nav", GREEN_GHOST);
+            self.draw_text_smooth(wx + ww as i32 - 300, status_y as i32 + 4, "V:View Ctrl+C/X/V:Clip Enter:Open Bksp:Up", GREEN_GHOST);
         }
     }
 
@@ -8389,7 +9355,7 @@ struct AppConfig {
         }
         
         match cursor_mode {
-            CursorMode::Arrow => self.draw_arrow_cursor(),
+            CursorMode::Arrow | CursorMode::Grab => self.draw_arrow_cursor(),
             CursorMode::ResizeH => self.draw_resize_cursor_h(),
             CursorMode::ResizeV => self.draw_resize_cursor_v(),
             CursorMode::ResizeNWSE => self.draw_resize_cursor_nwse(),
@@ -8999,6 +9965,18 @@ pub fn run() {
                 continue;
             }
             
+            // Win+L → lock screen
+            if win && (key == b'l' || key == b'L') {
+                let mut d = DESKTOP.lock();
+                d.lock_screen_active = true;
+                d.lock_screen_input.clear();
+                d.lock_screen_shake = 0;
+                drop(d);
+                unsafe { WIN_USED_COMBO = true; }
+                crate::serial_println!("[GUI] Win+L: lock screen");
+                continue;
+            }
+            
             // Mark any Win+key combo as used so Win release doesn't toggle start menu
             if win && key != 0 {
                 unsafe { WIN_USED_COMBO = true; }
@@ -9459,9 +10437,7 @@ fn fast_sqrt_i32(v: i32) -> i32 {
 /// Read CPU timestamp counter for timing
 #[inline]
 fn read_tsc() -> u64 {
-    unsafe {
-        core::arch::x86_64::_rdtsc()
-    }
+    crate::arch::timestamp()
 }
 
 /// Set the render mode (Classic or OpenGL)

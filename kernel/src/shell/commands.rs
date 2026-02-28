@@ -1358,7 +1358,7 @@ pub(super) fn cmd_test() {
     else { crate::println_color!(COLOR_RED, "[FAIL]"); }
     
     crate::print!("  Interrupts... ");
-    if x86_64::instructions::interrupts::are_enabled() {
+    if crate::arch::are_interrupts_enabled() {
         crate::println_color!(COLOR_GREEN, "[OK]");
     } else {
         crate::println_color!(COLOR_RED, "[FAIL]");
@@ -1657,7 +1657,7 @@ pub(super) fn cmd_inttest() {
             ok = false;
         }
         crate::print!("  interrupts... ");
-        if x86_64::instructions::interrupts::are_enabled() {
+        if crate::arch::are_interrupts_enabled() {
             crate::println_color!(COLOR_GREEN, "[OK]");
             passed += 1;
         } else {
@@ -1746,7 +1746,7 @@ pub(super) fn cmd_inttest() {
     }
     // If we reach here, kernel survived â€” that's the real test!
     crate::print!("  kernel alive... ");
-    if x86_64::instructions::interrupts::are_enabled() {
+    if crate::arch::are_interrupts_enabled() {
         crate::println_color!(COLOR_GREEN, "[OK]");
         passed += 1;
     } else {

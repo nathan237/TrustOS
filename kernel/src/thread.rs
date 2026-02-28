@@ -244,6 +244,7 @@ impl Thread {
 
 /// Kernel thread entry wrapper
 /// Called with entry in R12, arg in R13
+#[cfg(target_arch = "x86_64")]
 #[unsafe(naked)]
 extern "C" fn thread_entry_wrapper() {
     core::arch::naked_asm!(
@@ -266,9 +267,15 @@ extern "C" fn thread_entry_wrapper() {
     );
 }
 
+#[cfg(not(target_arch = "x86_64"))]
+extern "C" fn thread_entry_wrapper() {
+    // Thread entry not implemented for this architecture yet
+}
+
 /// User thread entry point (jumps to Ring 3)
 /// After context_switch restores callee-saved registers:
 ///   R12 = user entry point, R13 = user stack, R14 = arg
+#[cfg(target_arch = "x86_64")]
 #[unsafe(naked)]
 extern "C" fn user_thread_entry() {
     core::arch::naked_asm!(
@@ -280,6 +287,11 @@ extern "C" fn user_thread_entry() {
         "jmp {jump}",
         jump = sym crate::userland::jump_to_ring3_with_args,
     );
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+extern "C" fn user_thread_entry() {
+    // User thread entry not implemented for this architecture yet
 }
 
 /// Thread exit handler
@@ -727,6 +739,7 @@ fn context_switch(from: Tid, to: Tid) {
 }
 
 /// Low-level context switch (saves/restores all callee-saved registers)
+#[cfg(target_arch = "x86_64")]
 #[unsafe(naked)]
 extern "C" fn switch_context(from: *mut ThreadContext, to: *const ThreadContext) {
     core::arch::naked_asm!(
@@ -769,6 +782,12 @@ extern "C" fn switch_context(from: *mut ThreadContext, to: *const ThreadContext)
         "2:",
         "ret",
     );
+}
+
+/// Context switch stub for non-x86_64 architectures (no-op)
+#[cfg(not(target_arch = "x86_64"))]
+extern "C" fn switch_context(_from: *mut ThreadContext, _to: *const ThreadContext) {
+    // Context switching not implemented for this architecture yet
 }
 
 // ============================================================================

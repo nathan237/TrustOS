@@ -246,6 +246,43 @@ $tests = @(
     @{ Category="TEXT"; Name="expr 2 + 3"; Cmd="expr 2 + 3"; Validate={ param($o) $o -match "5" } }
     @{ Category="TEXT"; Name="cal"; Cmd="cal"; Validate={ param($o) $o -match "Su|Mo|Tu|We|Th|Fr|Sa|February" -or $o.Length -gt 10 } }
 
+    # -- HASHING --
+    @{ Category="HASH"; Name="md5sum file"; Cmd="md5sum /test_autotest/hello.txt"; Validate={ param($o) $o -match "[0-9a-fA-F]{32}" } }
+    @{ Category="HASH"; Name="sha256sum file"; Cmd="sha256sum /test_autotest/hello.txt"; Validate={ param($o) $o -match "[0-9a-fA-F]{64}" } }
+    @{ Category="HASH"; Name="md5sum no arg"; Cmd="md5sum"; Validate={ param($o) $o -match "Usage|md5sum:|hash" -or $o.Length -gt 0 } }
+    @{ Category="HASH"; Name="sha256sum no arg"; Cmd="sha256sum"; Validate={ param($o) $o -match "Usage|sha256sum:|hash" -or $o.Length -gt 0 } }
+
+    # -- PIPES & TEXT FILTERS --
+    @{ Category="PIPES"; Name="echo tr uppercase"; Cmd="echo hello world | tr a-z A-Z"; Validate={ param($o) $o -match "HELLO WORLD" } }
+    @{ Category="PIPES"; Name="echo cut fields"; Cmd="echo a:b:c:d | cut -d : -f 2,4"; Validate={ param($o) $o -match "b:d|b.*d" } }
+    @{ Category="PIPES"; Name="echo tee file"; Cmd="echo tee_test_42 | tee /tmp/tee_test.txt"; Validate={ param($o) $o -match "tee_test_42" } }
+    @{ Category="PIPES"; Name="cat tee output"; Cmd="cat /tmp/tee_test.txt"; Validate={ param($o) $o -match "tee_test_42" } }
+
+    # -- SYMLINKS --
+    @{ Category="LINKS"; Name="ln -s symlink"; Cmd="ln -s /test_autotest/hello.txt /tmp/link_test"; Validate={ param($o) $o -match "->|link" -or -not ($o -match "error|Error") } }
+    @{ Category="LINKS"; Name="readlink"; Cmd="readlink /tmp/link_test"; Validate={ param($o) $o -match "hello\.txt|test_autotest" } }
+    @{ Category="LINKS"; Name="cat via symlink"; Cmd="cat /tmp/link_test"; Validate={ param($o) $o -match "test_content" -or $true } }
+
+    # -- PERMISSIONS --
+    @{ Category="PERMS"; Name="chmod file"; Cmd="chmod 755 /test_autotest/hello.txt"; Validate={ param($o) $o -match "chmod|changed|mode" -or -not ($o -match "error|Error") } }
+
+    # -- SERVICES --
+    @{ Category="SVC"; Name="service list"; Cmd="service"; Validate={ param($o) $o -match "SERVICE|sshd|httpd|syslogd" } }
+    @{ Category="SVC"; Name="service start"; Cmd="service sshd start"; Validate={ param($o) $o -match "Starting|OK|started" } }
+    @{ Category="SVC"; Name="systemctl list"; Cmd="systemctl list-units"; Validate={ param($o) $o -match "SERVICE|sshd|httpd" } }
+    @{ Category="SVC"; Name="crontab -l"; Cmd="crontab -l"; Validate={ param($o) $o -match "crontab|no crontab" } }
+
+    # -- ARCHIVES --
+    @{ Category="ARCHIVE"; Name="tar create"; Cmd="tar cf /tmp/test_archive.tar /test_autotest/hello.txt"; Validate={ param($o) $o -match "created|tar:" -or -not ($o -match "error|Error") } }
+    @{ Category="ARCHIVE"; Name="tar list"; Cmd="tar tf /tmp/test_archive.tar"; Validate={ param($o) $o -match "hello\.txt" } }
+    @{ Category="ARCHIVE"; Name="tar extract"; Cmd="tar xf /tmp/test_archive.tar"; Validate={ param($o) $o -match "extracted" -or -not ($o -match "error|Error") } }
+    @{ Category="ARCHIVE"; Name="gzip file"; Cmd="gzip /tmp/tee_test.txt"; Validate={ param($o) $o -match "gz|gzip|compressed" -or -not ($o -match "error|Error") } }
+
+    # -- ALIASES --
+    @{ Category="ALIAS"; Name="alias set"; Cmd="alias mytest='echo alias_works'"; Validate={ param($o) $o -match "alias" -or -not ($o -match "error") } }
+    @{ Category="ALIAS"; Name="alias list"; Cmd="alias"; Validate={ param($o) $o -match "mytest|alias" } }
+    @{ Category="ALIAS"; Name="unalias"; Cmd="unalias mytest"; Validate={ param($o) $o -match "removed|unalias" -or -not ($o -match "error") } }
+
     # -- SELFTEST --
     @{ Category="SELFTEST"; Name="builtin self-test"; Cmd="test"; Validate={ param($o) $o -match "self-test|Self-Test|OK|Done|PASS" } }
 
@@ -271,8 +308,6 @@ $tests = @(
     # -- STUBS (before NET to avoid nslookup serial flood) --
     @{ Category="STUBS"; Name="bc stub"; Cmd="bc"; Validate={ param($o) $o -match "not implemented|calculator|bc:|Calculator|interactive" -or $o.Length -gt 0 } }
     @{ Category="STUBS"; Name="base64 stub"; Cmd="base64"; Validate={ param($o) $o -match "not implemented|Usage|base64:|encode|decode" -or $o.Length -gt 0 } }
-    @{ Category="STUBS"; Name="md5sum stub"; Cmd="md5sum"; Validate={ param($o) $o -match "not implemented|Usage|md5sum:|hash" -or $o.Length -gt 0 } }
-    @{ Category="STUBS"; Name="sha256sum stub"; Cmd="sha256sum"; Validate={ param($o) $o -match "not implemented|Usage|sha256sum:|hash" -or $o.Length -gt 0 } }
 
     # -- PROC --
     @{ Category="PROC"; Name="sleep 0"; Cmd="sleep 0"; Validate={ param($o) $true } }

@@ -8,7 +8,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicBool, Ordering};
 use crate::serial;
-use x86_64::instructions::port::Port;
+use crate::arch::Port;
 
 // ---- i8042 PS/2 controller ports ----
 const PS2_DATA: u16 = 0x60;
@@ -1001,7 +1001,7 @@ pub fn read_line_with_history(buffer: &mut [u8]) -> usize {
             }
         } else {
             // Yield CPU while waiting
-            x86_64::instructions::hlt();
+            crate::arch::halt();
         }
     }
     

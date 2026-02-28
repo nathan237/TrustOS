@@ -3,7 +3,7 @@
 //! Handles mouse input for GUI interactions with scroll wheel support.
 //! OPTIMIZED: Fully lock-free interrupt handler using atomics only.
 
-use x86_64::instructions::port::Port;
+use crate::arch::Port;
 use spin::Mutex;
 use core::sync::atomic::{AtomicI32, AtomicBool, AtomicI8, AtomicU8, AtomicU64, Ordering};
 

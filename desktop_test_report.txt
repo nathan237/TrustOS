@@ -1,0 +1,85 @@
+﻿==================================================================
+  TrustOS Desktop Input Stress Test Report
+  Generated: 2026-02-27 18:37:50
+  Boot: 8.8s  |  Test: 215.4s
+==================================================================
+
+SUMMARY
+  Passed:  46
+  Failed:  0
+  Crashed: 0
+  Rate:    100%%
+
+DETAILED RESULTS
+  [HOTKEYS] Full hotkey fuzz: PASS 
+  [STARTMENU] Full input fuzz: PASS 
+  [CALCULATOR] Full input fuzz: PASS 
+  [TERMINAL] Full input fuzz: PASS 
+  [TRUSTCODE] Full input fuzz: PASS 
+  [SNAKE] Full input fuzz: PASS 
+  [FILEMANAGER] Full input fuzz: PASS 
+  [CHESS] Full input fuzz: PASS 
+  [BROWSER] Full input fuzz: PASS 
+  [SETTINGS] Full input fuzz: PASS 
+  [LOCKSCREEN] Win+L activate: PASS no serial confirm but no crash
+  [LOCKSCREEN] Wrong PIN shake: PASS 
+  [LOCKSCREEN] Backspace PIN: PASS 
+  [LOCKSCREEN] All ASCII while locked: PASS 
+  [LOCKSCREEN] Rapid Enter spam: PASS 
+  [LOCKSCREEN] Long PIN overflow: PASS 
+  [LOCKSCREEN] Correct PIN unlock: PASS no serial confirm
+  [LOCKSCREEN] Empty PIN unlock: PASS 
+  [LOCKSCREEN] Rapid lock/unlock cycle: PASS 
+  [VIEWTOGGLE] V key to grid: PASS no serial msg
+  [VIEWTOGGLE] V key to list: PASS 
+  [VIEWTOGGLE] Rapid V toggle x20: PASS 
+  [VIEWTOGGLE] Arrow nav in grid: PASS 
+  [VIEWTOGGLE] Enter in grid mode: PASS 
+  [CLIPBOARD] Ctrl+C copy: PASS 
+  [CLIPBOARD] Ctrl+V paste: PASS 
+  [CLIPBOARD] Ctrl+X cut: PASS 
+  [CLIPBOARD] Ctrl+V after cut: PASS 
+  [CLIPBOARD] Ctrl+V empty clipboard: PASS 
+  [CLIPBOARD] Rapid C/X/V cycle: PASS 
+  [IMAGEVIEWER] Open file from FM: PASS 
+  [IMAGEVIEWER] Zoom in (+): PASS 
+  [IMAGEVIEWER] Zoom out (-): PASS 
+  [IMAGEVIEWER] Pan with arrows: PASS 
+  [IMAGEVIEWER] Reset view (0): PASS 
+  [IMAGEVIEWER] Extreme zoom in: PASS 
+  [IMAGEVIEWER] Extreme zoom out: PASS 
+  [IMAGEVIEWER] Rapid zoom toggle: PASS 
+  [IMAGEVIEWER] All printable ASCII: PASS 
+  [SYSTRAY] Rapid open/close cycle: PASS 
+  [SYSTRAY] Multi-window tray: PASS 
+  [SYSTRAY] Alt+Tab with tray: PASS 
+  [DRAGDROP] Two file managers open: PASS 
+  [DRAGDROP] Alt+Tab between FMs: PASS 
+  [DRAGDROP] Cross-FM clipboard: PASS 
+  [RAWFUZZ] All byte values: PASS 
+
+==================================================================
+
+TEST COVERAGE
+  Calculator:   digits, operators, div/0, parens, overflow, backspace, scientific, all ASCII
+  Terminal:     empty enter, backspace, long input, arrows, ctrl chars, nav keys, scroll, all ASCII
+  TrustCode:    type, backspace, enter, arrows, nav keys, delete, tab, all ASCII, undo, redo
+  Snake:        WASD, reversals, pause, space, difficulty, all ASCII
+  FileManager:  arrows, enter, delete, boundary scroll, all ASCII, tab
+  Chess:        board nav, select/deselect, self-move, difficulty, new game, pawn+AI, all ASCII
+  Browser:      URL, backspace, empty enter, scroll, all ASCII
+  Settings:     option keys 1-9, all ASCII
+  StartMenu:    toggle, search fuzz, backspace, arrows, enter empty
+  Hotkeys:      Win+E/D/I/H, Win+Arrows, Alt+Tab, Alt+F4
+  RawFuzz:      all 256 byte values, rapid nav keys
+  LockScreen:   Win+L activate, wrong PIN, backspace, all ASCII, enter spam, long PIN, correct PIN, empty PIN, rapid cycle
+  ViewToggle:   V key grid/list, rapid toggle, arrow nav in grid, enter in grid
+  Clipboard:    Ctrl+C copy, Ctrl+V paste, Ctrl+X cut, paste-after-cut, empty clipboard, rapid C/X/V
+  ImageViewer:  open file, zoom +/-, pan arrows, reset, extreme zoom, rapid zoom, all ASCII
+  SysTray:      rapid open/close, multi-window, Alt+Tab with tray
+  DragDrop:     two FMs, Alt+Tab between, cross-FM clipboard
+
+APPS NOT TESTED (require mouse interaction to open)
+  Game3D (TrustDoom), HexViewer, NES Emulator, GameBoy, TrustEdit 3D, GameLab
+
+==================================================================

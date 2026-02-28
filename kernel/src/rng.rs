@@ -8,6 +8,7 @@ static HAS_RDSEED: AtomicBool = AtomicBool::new(false);
 
 /// Detect CPU support for RDRAND/RDSEED (call once at boot)
 pub fn init() {
+    #[cfg(target_arch = "x86_64")]
     let rdrand = unsafe {
         let ecx: u32;
         // cpuid leaf 1: RDRAND is bit 30 of ECX.  Save/restore rbx since LLVM reserves it.
@@ -22,6 +23,9 @@ pub fn init() {
         );
         (ecx >> 30) & 1 == 1
     };
+    #[cfg(not(target_arch = "x86_64"))]
+    let rdrand = false;
+    #[cfg(target_arch = "x86_64")]
     let rdseed = unsafe {
         let ebx_out: u32;
         // cpuid leaf 7, sub-leaf 0: RDSEED is bit 18 of EBX.
@@ -38,6 +42,8 @@ pub fn init() {
         );
         (ebx_out >> 18) & 1 == 1
     };
+    #[cfg(not(target_arch = "x86_64"))]
+    let rdseed = false;
     HAS_RDRAND.store(rdrand, Ordering::Relaxed);
     HAS_RDSEED.store(rdseed, Ordering::Relaxed);
     crate::serial_println!("[RNG] RDRAND={} RDSEED={}", rdrand, rdseed);
@@ -52,7 +58,7 @@ fn seed_from_system() -> u64 {
         ^ ((dt.hour as u64) << 24)
         ^ ((dt.minute as u64) << 16)
         ^ ((dt.second as u64) << 8);
-    let rdtsc = unsafe { core::arch::x86_64::_rdtsc() } as u64;
+    let rdtsc = crate::arch::timestamp();
     rdtsc ^ ticks ^ rtc_mix ^ 0x9E3779B97F4A7C15
 }
 
@@ -103,48 +109,60 @@ pub fn random_u32() -> u32 {
 /// Read a single 64-bit value from RDRAND (retries up to 10 times).
 /// Returns `None` if RDRAND not supported or all retries fail.
 fn rdrand64_raw() -> Option<u64> {
-    if !HAS_RDRAND.load(Ordering::Relaxed) {
-        return None;
-    }
-    for _ in 0..10 {
-        let val: u64;
-        let ok: u8;
-        unsafe {
-            core::arch::asm!(
-                "rdrand {v}",
-                "setc {ok}",
-                v = out(reg) val,
-                ok = out(reg_byte) ok,
-            );
+    #[cfg(not(target_arch = "x86_64"))]
+    return None;
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        if !HAS_RDRAND.load(Ordering::Relaxed) {
+            return None;
         }
-        if ok != 0 {
-            return Some(val);
+        for _ in 0..10 {
+            let val: u64;
+            let ok: u8;
+            unsafe {
+                core::arch::asm!(
+                    "rdrand {v}",
+                    "setc {ok}",
+                    v = out(reg) val,
+                    ok = out(reg_byte) ok,
+                );
+            }
+            if ok != 0 {
+                return Some(val);
+            }
         }
+        None
     }
-    None
 }
 
 /// Read a single 64-bit value from RDSEED (retries up to 10 times).
 fn rdseed64_raw() -> Option<u64> {
-    if !HAS_RDSEED.load(Ordering::Relaxed) {
-        return None;
-    }
-    for _ in 0..10 {
-        let val: u64;
-        let ok: u8;
-        unsafe {
-            core::arch::asm!(
-                "rdseed {v}",
-                "setc {ok}",
-                v = out(reg) val,
-                ok = out(reg_byte) ok,
-            );
+    #[cfg(not(target_arch = "x86_64"))]
+    return None;
+
+    #[cfg(target_arch = "x86_64")]
+    {
+        if !HAS_RDSEED.load(Ordering::Relaxed) {
+            return None;
         }
-        if ok != 0 {
-            return Some(val);
+        for _ in 0..10 {
+            let val: u64;
+            let ok: u8;
+            unsafe {
+                core::arch::asm!(
+                    "rdseed {v}",
+                    "setc {ok}",
+                    v = out(reg) val,
+                    ok = out(reg_byte) ok,
+                );
+            }
+            if ok != 0 {
+                return Some(val);
+            }
         }
+        None
     }
-    None
 }
 
 /// Cryptographically secure random u64 — prefers RDSEED, falls back to RDRAND,
@@ -157,7 +175,7 @@ pub fn secure_random_u64() -> u64 {
         return v;
     }
     // Fallback: mix PRNG with RDTSC for some entropy
-    let ts = unsafe { core::arch::x86_64::_rdtsc() } as u64;
+    let ts = crate::arch::timestamp();
     next_u64() ^ ts
 }
 

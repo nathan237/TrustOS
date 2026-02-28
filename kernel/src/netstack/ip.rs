@@ -147,7 +147,7 @@ pub fn send_packet_with_ttl(dest_ip: [u8; 4], protocol: u8, payload: &[u8], ttl:
                 }
                 spins = spins.wrapping_add(1);
                 if spins > 2_000_000 { return Err("ARP timeout"); }
-                x86_64::instructions::hlt();
+                crate::arch::halt();
             }
         }
     };
@@ -238,7 +238,7 @@ pub fn send_packet(dest_ip: [u8; 4], protocol: u8, payload: &[u8]) -> Result<(),
                 if spins > 2_000_000 {
                     return Err("ARP timeout");
                 }
-                x86_64::instructions::hlt();
+                crate::arch::halt();
             }
         }
     };

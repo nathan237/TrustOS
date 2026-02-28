@@ -2,12 +2,17 @@
 //! 
 //! Microkernel architecture with capability-based security.
 //! Boots via Limine bootloader on UEFI systems.
+//!
+//! Supported architectures: x86_64, aarch64 (ARM64), riscv64 (RISC-V)
 
 #![no_std]
 #![no_main]
-#![feature(abi_x86_interrupt)]
+#![cfg_attr(target_arch = "x86_64", feature(abi_x86_interrupt))]
 #![feature(alloc_error_handler)]
 extern crate alloc;
+
+// Architecture abstraction layer — provides unified interface across all CPUs
+pub mod arch;
 
 // Core modules
 mod serial;
@@ -58,10 +63,24 @@ mod gpu_emu;      // Virtual GPU - CPU cores emulating GPU parallelism
 // TLS 1.3 pure Rust implementation (no C dependencies)
 mod tls13;
 // CPU hardware exploitation (TSC, AES-NI, SIMD, SMP)
+#[cfg(target_arch = "x86_64")]
 mod cpu;
+#[cfg(not(target_arch = "x86_64"))]
+#[path = "stubs/cpu.rs"]
+mod cpu;
+
 // ACPI tables parsing (MADT, FADT, MCFG, HPET)
+#[cfg(target_arch = "x86_64")]
 mod acpi;
+#[cfg(not(target_arch = "x86_64"))]
+#[path = "stubs/acpi.rs"]
+mod acpi;
+
 // APIC driver (Local APIC + I/O APIC) — replaces legacy PIC for preemptive scheduling
+#[cfg(target_arch = "x86_64")]
+mod apic;
+#[cfg(not(target_arch = "x86_64"))]
+#[path = "stubs/apic.rs"]
 mod apic;
 
 // New OS infrastructure
@@ -71,7 +90,16 @@ mod elf;
 mod exec;
 mod init;
 mod pipe;
+#[cfg(target_arch = "x86_64")]
 mod gdt;
+#[cfg(not(target_arch = "x86_64"))]
+#[path = "stubs/gdt.rs"]
+mod gdt;
+
+#[cfg(target_arch = "x86_64")]
+mod userland;
+#[cfg(not(target_arch = "x86_64"))]
+#[path = "stubs/userland.rs"]
 mod userland;
 mod thread;
 mod auth;
@@ -133,6 +161,10 @@ mod gui;
 mod theme;
 mod image;
 mod perf;
+#[cfg(target_arch = "x86_64")]
+mod hypervisor;
+#[cfg(not(target_arch = "x86_64"))]
+#[path = "stubs/hypervisor.rs"]
 mod hypervisor;
 mod rasterizer;
 mod model_editor;
@@ -468,93 +500,91 @@ pub unsafe extern "C" fn kmain() -> ! {
     framebuffer::show_simple_boot_header();
     framebuffer::print_boot_status("Memory management initialized", BootStatus::Ok);
 
-    // Phase 3.5: GDT with Ring 0/3 support
-    serial_println!("Initializing GDT with Ring 0/3 support...");
-    gdt::init();
-    framebuffer::print_boot_status("GDT initialized (Ring 0/3)", BootStatus::Ok);
+    // Phase 3.5: GDT with Ring 0/3 support (x86_64 only)
+    #[cfg(target_arch = "x86_64")]
+    {
+        serial_println!("Initializing GDT with Ring 0/3 support...");
+        gdt::init();
+        framebuffer::print_boot_status("GDT initialized (Ring 0/3)", BootStatus::Ok);
+    }
     
     // Phase 3.51: Early interrupts (needed for page fault debugging)
     serial_println!("Initializing early interrupts...");
     interrupts::init();
     framebuffer::print_boot_status("Interrupts (early)", BootStatus::Ok);
     
-    // Phase 3.55: CPU hardware exploitation (TSC, AES-NI, SIMD, SMP)
-    serial_println!("Detecting CPU capabilities...");
-    cpu::init();
-    framebuffer::print_boot_status("CPU capabilities detected", BootStatus::Ok);
-    
-    // Phase 3.555: ACPI tables parsing
-    serial_println!("Parsing ACPI tables...");
-    if let Some(rsdp_response) = RSDP_REQUEST.get_response() {
-        // Limine gives us a pointer that's directly usable (already mapped)
-        let rsdp_ptr = rsdp_response.address();
-        serial_println!("[DEBUG] RSDP pointer from Limine: {:#x}", rsdp_ptr as usize);
-        // Use the pointer directly - Limine has already mapped it for us
-        if acpi::init_direct(rsdp_ptr as u64) {
-            if let Some(info) = acpi::get_info() {
-                framebuffer::print_boot_status(&alloc::format!(
-                    "ACPI: {} CPUs, {} I/O APICs", 
-                    info.cpu_count, info.io_apics.len()
-                ), BootStatus::Ok);
+    // Phase 3.55–3.56: x86_64-specific hardware init (CPU, ACPI, APIC, SMP)
+    #[cfg(target_arch = "x86_64")]
+    {
+        // CPU hardware exploitation (TSC, AES-NI, SIMD, SMP)
+        serial_println!("Detecting CPU capabilities...");
+        cpu::init();
+        framebuffer::print_boot_status("CPU capabilities detected", BootStatus::Ok);
+        
+        // ACPI tables parsing
+        serial_println!("Parsing ACPI tables...");
+        if let Some(rsdp_response) = RSDP_REQUEST.get_response() {
+            let rsdp_ptr = rsdp_response.address();
+            serial_println!("[DEBUG] RSDP pointer from Limine: {:#x}", rsdp_ptr as usize);
+            if acpi::init_direct(rsdp_ptr as u64) {
+                if let Some(info) = acpi::get_info() {
+                    framebuffer::print_boot_status(&alloc::format!(
+                        "ACPI: {} CPUs, {} I/O APICs", 
+                        info.cpu_count, info.io_apics.len()
+                    ), BootStatus::Ok);
+                }
+            } else {
+                framebuffer::print_boot_status("ACPI init failed", BootStatus::Skip);
             }
         } else {
-            framebuffer::print_boot_status("ACPI init failed", BootStatus::Skip);
+            framebuffer::print_boot_status("No RSDP from bootloader", BootStatus::Skip);
         }
-    } else {
-        framebuffer::print_boot_status("No RSDP from bootloader", BootStatus::Skip);
-    }
-    
-    // Phase 3.555b: APIC initialization — replaces legacy PIC
-    serial_println!("Initializing APIC...");
-    if apic::init() {
-        framebuffer::print_boot_status("APIC initialized (LAPIC + IOAPIC)", BootStatus::Ok);
-    } else {
-        serial_println!("[APIC] Not available, staying on legacy PIC");
-        framebuffer::print_boot_status("APIC not available (legacy PIC)", BootStatus::Skip);
-    }
+        
+        // APIC initialization — replaces legacy PIC
+        serial_println!("Initializing APIC...");
+        if apic::init() {
+            framebuffer::print_boot_status("APIC initialized (LAPIC + IOAPIC)", BootStatus::Ok);
+        } else {
+            serial_println!("[APIC] Not available, staying on legacy PIC");
+            framebuffer::print_boot_status("APIC not available (legacy PIC)", BootStatus::Skip);
+        }
 
-    // Phase 3.555c: HPET initialization — high-precision timer
-    if acpi::hpet::init() {
-        framebuffer::print_boot_status("HPET initialized", BootStatus::Ok);
-    } else {
-        framebuffer::print_boot_status("HPET not available", BootStatus::Skip);
-    }
+        // HPET initialization — high-precision timer
+        if acpi::hpet::init() {
+            framebuffer::print_boot_status("HPET initialized", BootStatus::Ok);
+        } else {
+            framebuffer::print_boot_status("HPET not available", BootStatus::Skip);
+        }
 
-    // Phase 3.56: SMP initialization - Start all CPU cores!
-    serial_println!("Initializing SMP...");
-    cpu::smp::init();
-    
-    // Boot Application Processors (APs)
-    if let Some(smp_response) = SMP_REQUEST.get_response() {
-        let cpu_count = smp_response.cpus().len();
-        serial_println!("[SMP] Found {} CPUs via Limine", cpu_count);
+        // SMP initialization - Start all CPU cores!
+        serial_println!("Initializing SMP...");
+        cpu::smp::init();
         
-        // Start each AP
-        for cpu in smp_response.cpus().iter() {
-            if cpu.id != 0 {  // Skip BSP (Bootstrap Processor)
-                serial_println!("[SMP] Starting AP {} (LAPIC ID: {})", cpu.id, cpu.lapic_id);
-                // Set the entry point for this AP
-                cpu.goto_address.write(cpu::smp::ap_entry);
+        if let Some(smp_response) = SMP_REQUEST.get_response() {
+            let cpu_count = smp_response.cpus().len();
+            serial_println!("[SMP] Found {} CPUs via Limine", cpu_count);
+            
+            for cpu in smp_response.cpus().iter() {
+                if cpu.id != 0 {
+                    serial_println!("[SMP] Starting AP {} (LAPIC ID: {})", cpu.id, cpu.lapic_id);
+                    cpu.goto_address.write(cpu::smp::ap_entry);
+                }
             }
-        }
-        
-        // Wait for APs to initialize (with timeout)
-        let mut ready_count = 1u32; // BSP is ready
-        for _ in 0..1000 {
-            ready_count = cpu::smp::ready_cpu_count();
-            if ready_count >= cpu_count as u32 {
-                break;
+            
+            let mut ready_count = 1u32;
+            for _ in 0..1000 {
+                ready_count = cpu::smp::ready_cpu_count();
+                if ready_count >= cpu_count as u32 { break; }
+                for _ in 0..10000 { core::hint::spin_loop(); }
             }
-            // Small delay
-            for _ in 0..10000 { core::hint::spin_loop(); }
+            
+            serial_println!("[SMP] {} of {} CPUs online", ready_count, cpu_count);
+            cpu::smp::set_cpu_count(cpu_count as u32);
+            framebuffer::print_boot_status(&alloc::format!("SMP: {} cores active", ready_count), BootStatus::Ok);
+        } else {
+            serial_println!("[SMP] No SMP response from bootloader");
+            framebuffer::print_boot_status("SMP: single core", BootStatus::Ok);
         }
-        
-        serial_println!("[SMP] {} of {} CPUs online", ready_count, cpu_count);
-        cpu::smp::set_cpu_count(cpu_count as u32);
-        framebuffer::print_boot_status(&alloc::format!("SMP: {} cores active", ready_count), BootStatus::Ok);
-    } else {
-        serial_println!("[SMP] No SMP response from bootloader");
-        framebuffer::print_boot_status("SMP: single core", BootStatus::Ok);
     }
     
     // Phase 3.6: Paging subsystem
@@ -563,24 +593,26 @@ pub unsafe extern "C" fn kmain() -> ! {
     framebuffer::print_boot_status("Paging initialized (NX enabled)", BootStatus::Ok);
     
     // PAT: Enable Write-Combining (WC) — standard GPU driver optimization
-    // All GPU drivers (Mesa, NVIDIA, AMD) use WC for VRAM writes:
-    // batches individual stores into 64-byte burst transfers (10-20x faster)
-    // Skip on VirtualBox: VMSVGA dirty-tracking breaks with WC memory type,
-    // causing the display to freeze (writes are buffered and VBox stops detecting them)
+    #[cfg(target_arch = "x86_64")]
     let is_vbox = acpi::get_info()
         .map(|info| info.oem_id.trim().eq_ignore_ascii_case("VBOX"))
         .unwrap_or(false);
+    #[cfg(not(target_arch = "x86_64"))]
+    let is_vbox = false;
     if is_vbox {
         serial_println!("[PAT] Skipping Write-Combining on VirtualBox (VMSVGA compat)");
     } else {
         memory::paging::setup_pat_write_combining();
     }
     
-    // Phase 3.7: Userland support (SYSCALL/SYSRET)
-    serial_println!("Initializing userland support...");
-    userland::init_syscall_stack();
-    userland::init();
-    framebuffer::print_boot_status("Userland support ready", BootStatus::Ok);
+    // Phase 3.7: Userland support (SYSCALL/SYSRET) — x86_64 only
+    #[cfg(target_arch = "x86_64")]
+    {
+        serial_println!("Initializing userland support...");
+        userland::init_syscall_stack();
+        userland::init();
+        framebuffer::print_boot_status("Userland support ready", BootStatus::Ok);
+    }
     
     // Phase 3.8: Thread subsystem
     serial_println!("Initializing thread subsystem...");
@@ -819,57 +851,50 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[PHASE] VFS init done");
     
     // ========================================================================
-    // Phase 12a: Linux Subsystem (TSL) - Load kernel and initramfs from modules
+    // Phase 12a: Linux Subsystem (TSL) - x86_64 only (uses hypervisor)
     // ========================================================================
-    serial_println!("[PHASE] Linux Subsystem init start");
-    if let Some(module_response) = MODULE_REQUEST.get_response() {
-        let modules = module_response.modules();
-        serial_println!("[TSL] Found {} boot modules", modules.len());
-        
-        let mut kernel_data: Option<&'static [u8]> = None;
-        let mut initramfs_data: Option<&'static [u8]> = None;
-        
-        for module in modules {
-            // Get cmdline and path - cmdline is &[u8], path is &CStr
-            let cmdline_bytes = module.cmdline();
-            let cmdline = core::str::from_utf8(cmdline_bytes).unwrap_or("unknown");
-            let path = module.path().to_str().unwrap_or("unknown");
-            let addr = module.addr();
-            let size = module.size() as usize;
+    #[cfg(target_arch = "x86_64")]
+    {
+        serial_println!("[PHASE] Linux Subsystem init start");
+        if let Some(module_response) = MODULE_REQUEST.get_response() {
+            let modules = module_response.modules();
+            serial_println!("[TSL] Found {} boot modules", modules.len());
             
-            serial_println!("[TSL] Module: {} ({}), {} bytes at {:p}", 
-                cmdline, path, size, addr);
+            let mut kernel_data: Option<&'static [u8]> = None;
+            let mut initramfs_data: Option<&'static [u8]> = None;
             
-            // Safety: Limine ensures modules are valid and accessible
-            let data = unsafe { core::slice::from_raw_parts(addr, size) };
-            
-            if cmdline.contains("linux-kernel") || path.contains("bzImage") {
-                kernel_data = Some(data);
-                serial_println!("[TSL] Linux kernel loaded: {} bytes", size);
-            } else if cmdline.contains("linux-initramfs") || path.contains("initramfs") {
-                initramfs_data = Some(data);
-                serial_println!("[TSL] Initramfs loaded: {} bytes", size);
+            for module in modules {
+                let cmdline_bytes = module.cmdline();
+                let cmdline = core::str::from_utf8(cmdline_bytes).unwrap_or("unknown");
+                let path = module.path().to_str().unwrap_or("unknown");
+                let addr = module.addr();
+                let size = module.size() as usize;
+                
+                serial_println!("[TSL] Module: {} ({}), {} bytes at {:p}", 
+                    cmdline, path, size, addr);
+                
+                let data = unsafe { core::slice::from_raw_parts(addr, size) };
+                
+                if cmdline.contains("linux-kernel") || path.contains("bzImage") {
+                    kernel_data = Some(data);
+                    serial_println!("[TSL] Linux kernel loaded: {} bytes", size);
+                } else if cmdline.contains("linux-initramfs") || path.contains("initramfs") {
+                    initramfs_data = Some(data);
+                    serial_println!("[TSL] Initramfs loaded: {} bytes", size);
+                }
             }
-        }
-        
-        // Set embedded images in the Linux subsystem
-        if let (Some(kernel), Some(initramfs)) = (kernel_data, initramfs_data) {
-            hypervisor::linux_subsystem::subsystem().set_embedded_images(kernel, initramfs);
-            framebuffer::print_boot_status("Linux Subsystem (TSL) ready", BootStatus::Ok);
+            
+            if let (Some(kernel), Some(initramfs)) = (kernel_data, initramfs_data) {
+                hypervisor::linux_subsystem::subsystem().set_embedded_images(kernel, initramfs);
+                framebuffer::print_boot_status("Linux Subsystem (TSL) ready", BootStatus::Ok);
+            } else {
+                framebuffer::print_boot_status("Linux Subsystem (partial)", BootStatus::Skip);
+            }
         } else {
-            if kernel_data.is_none() {
-                serial_println!("[TSL] Warning: Linux kernel not found in boot modules");
-            }
-            if initramfs_data.is_none() {
-                serial_println!("[TSL] Warning: Initramfs not found in boot modules");
-            }
-            framebuffer::print_boot_status("Linux Subsystem (partial)", BootStatus::Skip);
+            framebuffer::print_boot_status("Linux Subsystem (no modules)", BootStatus::Skip);
         }
-    } else {
-        serial_println!("[TSL] No boot modules available");
-        framebuffer::print_boot_status("Linux Subsystem (no modules)", BootStatus::Skip);
+        serial_println!("[PHASE] Linux Subsystem init done");
     }
-    serial_println!("[PHASE] Linux Subsystem init done");
     
     // ========================================================================
     // Phase 12b: File Associations
@@ -978,9 +1003,7 @@ pub unsafe extern "C" fn kmain() -> ! {
 /// Halt the CPU in an infinite loop
 /// Used when kernel cannot continue or has nothing to do
 fn halt_loop() -> ! {
-    loop {
-        x86_64::instructions::hlt();
-    }
+    arch::halt_loop()
 }
 
 #[alloc_error_handler]

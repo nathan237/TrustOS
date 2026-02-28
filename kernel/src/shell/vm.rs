@@ -3597,7 +3597,7 @@ fn do_http_get(host_input: &str, port: u16, path: &str, host_header: &str) {
         if crate::logger::get_ticks().saturating_sub(start) > 3000 {
             break;
         }
-        x86_64::instructions::hlt();
+        crate::arch::halt();
     }
     let _ = crate::netstack::tcp::send_fin(ip, port, src_port);
     crate::println!("\n--- end ({} bytes) ---", total_bytes);
@@ -3702,7 +3702,7 @@ pub(super) fn do_http_get_string(host: &str, ip: [u8; 4], port: u16, path: &str)
             break;
         }
         
-        x86_64::instructions::hlt();
+        crate::arch::halt();
     }
     
     let _ = crate::netstack::tcp::send_fin(ip, port, src_port);

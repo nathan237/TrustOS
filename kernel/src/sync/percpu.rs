@@ -81,6 +81,7 @@ impl PercpuBlock {
     /// Reading gs:[0] gives us the PercpuBlock address directly.
     #[inline]
     pub fn current() -> &'static Self {
+        #[cfg(target_arch = "x86_64")]
         unsafe {
             let self_ptr: u64;
             core::arch::asm!(
@@ -94,8 +95,10 @@ impl PercpuBlock {
                 return &PERCPU_BLOCKS[0];
             }
             
-            &*(self_ptr as *const Self)
+            return &*(self_ptr as *const Self);
         }
+        #[cfg(not(target_arch = "x86_64"))]
+        unsafe { &PERCPU_BLOCKS[0] }
     }
     
     /// Enter interrupt context
@@ -168,28 +171,31 @@ pub fn init_bsp() {
         // Set up GS base to point to our block
         let block_ptr = &PERCPU_BLOCKS[0] as *const _ as u64;
         
-        // Write to KERNEL_GS_BASE MSR
-        let msr = 0xC0000102u32; // IA32_KERNEL_GS_BASE
-        let low = block_ptr as u32;
-        let high = (block_ptr >> 32) as u32;
-        
-        core::arch::asm!(
-            "wrmsr",
-            in("ecx") msr,
-            in("eax") low,
-            in("edx") high,
-            options(nostack)
-        );
-        
-        // Also set GS_BASE for immediate use
-        let gs_msr = 0xC0000101u32; // IA32_GS_BASE  
-        core::arch::asm!(
-            "wrmsr",
-            in("ecx") gs_msr,
-            in("eax") low,
-            in("edx") high,
-            options(nostack)
-        );
+        #[cfg(target_arch = "x86_64")]
+        {
+            // Write to KERNEL_GS_BASE MSR
+            let msr = 0xC0000102u32; // IA32_KERNEL_GS_BASE
+            let low = block_ptr as u32;
+            let high = (block_ptr >> 32) as u32;
+            
+            core::arch::asm!(
+                "wrmsr",
+                in("ecx") msr,
+                in("eax") low,
+                in("edx") high,
+                options(nostack)
+            );
+            
+            // Also set GS_BASE for immediate use
+            let gs_msr = 0xC0000101u32; // IA32_GS_BASE  
+            core::arch::asm!(
+                "wrmsr",
+                in("ecx") gs_msr,
+                in("eax") low,
+                in("edx") high,
+                options(nostack)
+            );
+        }
         
         PERCPU_BLOCKS[0].gs_base = block_ptr;
     }
@@ -209,26 +215,29 @@ pub fn init_ap(cpu_id: u32) {
         // Set up GS base
         let block_ptr = &PERCPU_BLOCKS[cpu_id as usize] as *const _ as u64;
         
-        let msr = 0xC0000102u32;
-        let low = block_ptr as u32;
-        let high = (block_ptr >> 32) as u32;
-        
-        core::arch::asm!(
-            "wrmsr",
-            in("ecx") msr,
-            in("eax") low,
-            in("edx") high,
-            options(nostack)
-        );
-        
-        let gs_msr = 0xC0000101u32;
-        core::arch::asm!(
-            "wrmsr",
-            in("ecx") gs_msr,
-            in("eax") low,
-            in("edx") high,
-            options(nostack)
-        );
+        #[cfg(target_arch = "x86_64")]
+        {
+            let msr = 0xC0000102u32;
+            let low = block_ptr as u32;
+            let high = (block_ptr >> 32) as u32;
+            
+            core::arch::asm!(
+                "wrmsr",
+                in("ecx") msr,
+                in("eax") low,
+                in("edx") high,
+                options(nostack)
+            );
+            
+            let gs_msr = 0xC0000101u32;
+            core::arch::asm!(
+                "wrmsr",
+                in("ecx") gs_msr,
+                in("eax") low,
+                in("edx") high,
+                options(nostack)
+            );
+        }
         
         PERCPU_BLOCKS[cpu_id as usize].gs_base = block_ptr;
     }

@@ -2,15 +2,30 @@
 //! 
 //! Manages CPU interrupts, exceptions, and hardware IRQs.
 //! Routes interrupts to appropriate handlers.
+//!
+//! On x86_64: Uses IDT, PIC, APIC, and SYSCALL/SYSRET.
+//! On aarch64/riscv64: Stubs (interrupt controllers are arch-specific).
 
+#[cfg(target_arch = "x86_64")]
 mod idt;
+#[cfg(target_arch = "x86_64")]
 mod handlers;
+#[cfg(target_arch = "x86_64")]
 mod pic;
+#[cfg(target_arch = "x86_64")]
 pub mod syscall;
 
+#[cfg(not(target_arch = "x86_64"))]
+pub mod syscall {
+    pub fn init() {}
+}
+
+#[cfg(target_arch = "x86_64")]
 use x86_64::structures::idt::InterruptDescriptorTable;
+#[cfg(target_arch = "x86_64")]
 use lazy_static::lazy_static;
 
+#[cfg(target_arch = "x86_64")]
 lazy_static! {
     /// Interrupt Descriptor Table
     static ref IDT: InterruptDescriptorTable = {
@@ -56,26 +71,30 @@ lazy_static! {
 
 /// Initialize interrupt handling
 pub fn init() {
-    // Load IDT
-    IDT.load();
-    
-    // Initialize PIC
-    unsafe {
-        pic::PICS.lock().initialize();
+    #[cfg(target_arch = "x86_64")]
+    {
+        // Load IDT
+        IDT.load();
+        
+        // Initialize PIC
+        unsafe {
+            pic::PICS.lock().initialize();
+        }
+        
+        // Initialize SYSCALL/SYSRET for userland
+        syscall::init();
     }
     
-    // Initialize SYSCALL/SYSRET for userland
-    syscall::init();
+    // Enable interrupts (portable)
+    crate::arch::interrupts_enable();
     
-    // Enable interrupts
-    x86_64::instructions::interrupts::enable();
-    
-    crate::log_debug!("IDT loaded, PIC initialized, SYSCALL ready, interrupts enabled");
+    crate::log_debug!("Interrupts initialized and enabled");
 }
 
 /// Load IDT on an Application Processor (AP)
 /// Called from AP entry point so it can handle IPI vectors
 pub fn load_idt_on_ap() {
+    #[cfg(target_arch = "x86_64")]
     IDT.load();
 }
 
@@ -84,10 +103,13 @@ pub fn without_interrupts<F, R>(f: F) -> R
 where
     F: FnOnce() -> R,
 {
-    x86_64::instructions::interrupts::without_interrupts(f)
+    crate::arch::without_interrupts(f)
 }
 
 /// Allow timer handler to run once bootstrapping is ready
 pub fn set_bootstrap_ready(ready: bool) {
+    #[cfg(target_arch = "x86_64")]
     handlers::set_bootstrap_ready(ready);
+    #[cfg(not(target_arch = "x86_64"))]
+    let _ = ready;
 }

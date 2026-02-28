@@ -12,3 +12,18 @@ rustflags = [
     "-C", "relocation-model=static",
     "-C", "code-model=kernel"
 ]
+
+[target.aarch64-unknown-none]
+linker = "rust-lld"
+rustflags = [
+    "-C", "link-arg=-maarch64elf",
+    "-C", "link-arg=--entry=kmain",
+    "-C", "relocation-model=static"
+]
+
+[target.riscv64gc-unknown-none-elf]
+linker = "rust-lld"
+rustflags = [
+    "-C", "link-arg=--entry=kmain",
+    "-C", "relocation-model=static"
+]

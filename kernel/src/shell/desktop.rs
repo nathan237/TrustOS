@@ -5323,17 +5323,17 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
                         // Delay then halt
                         for _ in 0..10000000 { core::hint::spin_loop(); }
                         loop {
-                            x86_64::instructions::interrupts::disable();
-                            x86_64::instructions::hlt();
+                            crate::arch::interrupts_disable();
+                            crate::arch::halt();
                         }
                     },
                     MenuItem::Reboot => {
                         shell_output.push(String::from("> Rebooting..."));
                         for _ in 0..10000000 { core::hint::spin_loop(); }
                         unsafe {
-                            x86_64::instructions::port::Port::<u8>::new(0x64).write(0xFE);
+                            crate::arch::Port::<u8>::new(0x64).write(0xFE);
                         }
-                        loop { x86_64::instructions::hlt(); }
+                        loop { crate::arch::halt(); }
                     },
                 }
                 menu_open = false;
@@ -6854,10 +6854,16 @@ pub(super) fn cmd_cosmic_v2_with_app_timed(initial_app: Option<&str>, timeout_ms
         // interrupts for ~100Aus then continues, minimizing idle time.
         unsafe {
             // Enable interrupts so pending IRQs (keyboard, mouse, timer) fire
+            #[cfg(target_arch = "x86_64")]
             core::arch::asm!("sti");
+            #[cfg(not(target_arch = "x86_64"))]
+            crate::arch::interrupts_enable();
             // Brief spin: ~100 iterations A-- ~100 cycles Eoe 30-50Aus at 3GHz
             for _ in 0..100 {
+                #[cfg(target_arch = "x86_64")]
                 core::arch::asm!("pause");
+                #[cfg(not(target_arch = "x86_64"))]
+                core::hint::spin_loop();
             }
         }
     }

@@ -209,6 +209,7 @@ fn identify_driver(vendor_id: u16, device_id: u16) -> &'static str {
 pub fn detect_platform() -> Platform {
     // Method 1: CPUID leaf 0x40000000 (hypervisor brand string)
     // rbx is reserved by LLVM — save/restore via stack, capture via rsi
+    #[cfg(target_arch = "x86_64")]
     let (hv_max, sig_bytes) = unsafe {
         let a: u32;
         let b: u32;
@@ -233,6 +234,8 @@ pub fn detect_platform() -> Platform {
         sig[8..12].copy_from_slice(&d.to_le_bytes());
         (a, sig)
     };
+    #[cfg(not(target_arch = "x86_64"))]
+    let (hv_max, sig_bytes): (u32, [u8; 12]) = (0, [0u8; 12]);
     if hv_max >= 0x40000000 {
         
         if let Ok(s) = core::str::from_utf8(&sig_bytes) {

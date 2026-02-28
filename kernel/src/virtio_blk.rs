@@ -257,7 +257,7 @@ impl VirtioBlk {
         
         // Notify device directly
         unsafe {
-            let mut port = x86_64::instructions::port::Port::<u16>::new(iobase + 0x10);
+            let mut port = crate::arch::Port::<u16>::new(iobase + 0x10);
             port.write(0);
         }
         
@@ -389,7 +389,7 @@ impl VirtioBlk {
         
         // Notify device directly
         unsafe {
-            let mut port = x86_64::instructions::port::Port::<u16>::new(iobase + 0x10);
+            let mut port = crate::arch::Port::<u16>::new(iobase + 0x10);
             port.write(0);
         }
         
@@ -522,7 +522,7 @@ pub fn handle_interrupt() {
     
     // Read ISR status register (iobase+0x13) — this also acknowledges the interrupt
     let isr: u8 = unsafe {
-        let mut port = x86_64::instructions::port::Port::<u8>::new(iobase + 0x13);
+        let mut port = crate::arch::Port::<u8>::new(iobase + 0x13);
         port.read()
     };
     

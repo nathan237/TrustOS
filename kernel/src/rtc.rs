@@ -2,7 +2,7 @@
 //! 
 //! Reads date and time from the CMOS RTC chip.
 
-use x86_64::instructions::port::Port;
+use crate::arch::Port;
 use spin::Mutex;
 
 /// CMOS address port

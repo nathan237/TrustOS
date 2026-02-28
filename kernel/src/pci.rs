@@ -6,7 +6,7 @@
 use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::format;
-use x86_64::instructions::port::Port;
+use crate::arch::Port;
 use spin::Mutex;
 
 /// PCI configuration ports

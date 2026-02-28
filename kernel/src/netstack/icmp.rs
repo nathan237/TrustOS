@@ -203,7 +203,7 @@ pub fn wait_for_response(seq: u16, timeout_ms: u32) -> Option<PingResponse> {
         }
         
         // Yield CPU
-        x86_64::instructions::hlt();
+        crate::arch::halt();
     }
 }
 
@@ -230,7 +230,7 @@ pub fn wait_for_error(dest_ip: [u8; 4], timeout_ms: u32) -> Option<IcmpError> {
         }
         spins = spins.wrapping_add(1);
         if spins > 2_000_000 { return None; }
-        x86_64::instructions::hlt();
+        crate::arch::halt();
     }
 }
 
@@ -266,7 +266,7 @@ pub fn wait_for_response_or_error(seq: u16, dest_ip: [u8; 4], timeout_ms: u32) -
         }
         spins = spins.wrapping_add(1);
         if spins > 2_000_000 { return TracerouteResult::Timeout; }
-        x86_64::instructions::hlt();
+        crate::arch::halt();
     }
 }
 

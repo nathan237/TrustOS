@@ -7,16 +7,12 @@ license.workspace = true
 
 [dependencies]
 limine = "0.5"
-uart_16550 = "0.2"
 spin = "0.9"
 lazy_static = { version = "1.4", features = ["spin_no_std"] }
-x86_64 = "0.14"
 linked_list_allocator = "0.10"
 miniz_oxide = { version = "0.7", default-features = false, features = ["with-alloc"] }
-# mbedtls temporarily disabled until we fix the build
-# mbedtls = { version = "0.13", default-features = false, features = ["no_std_deps", "ssl", "x509"] }
 
-# Graphics libraries
+# Graphics libraries (architecture-independent)
 embedded-graphics = "0.8"
 embedded-graphics-core = "0.4"
 micromath = "2.1"
@@ -25,6 +21,11 @@ libm = "0.2"
 # COSMIC-style UI rendering (no_std compatible)
 tiny-skia = { version = "0.12", default-features = false, features = ["no-std-float", "simd"] }
 tiny-skia-path = { version = "0.12", default-features = false, features = ["no-std-float"] }
+
+# x86_64-specific dependencies (only compiled on x86_64)
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+x86_64 = "0.14"
+uart_16550 = "0.2"
 
 [[bin]]
 name = "trustos_kernel"

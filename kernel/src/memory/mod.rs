@@ -164,7 +164,10 @@ pub fn map_mmio(phys_addr: u64, size: usize) -> Result<u64, &'static str> {
     for i in 0..num_pages {
         let page_virt = phys_to_virt(start_page + (i as u64 * page_size));
         unsafe {
+            #[cfg(target_arch = "x86_64")]
             core::arch::asm!("invlpg [{}]", in(reg) page_virt, options(nostack, preserves_flags));
+            #[cfg(not(target_arch = "x86_64"))]
+            crate::arch::flush_tlb(page_virt);
         }
     }
     

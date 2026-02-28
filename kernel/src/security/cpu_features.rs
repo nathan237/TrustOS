@@ -20,16 +20,19 @@ impl CpuSecurityFeatures {
             nx: false,
         };
         
-        // Check CPUID leaf 7, subleaf 0 for SMEP/SMAP/UMIP
-        let cpuid_7 = unsafe { core::arch::x86_64::__cpuid_count(7, 0) };
-        
-        features.smep = (cpuid_7.ebx & (1 << 7)) != 0;
-        features.smap = (cpuid_7.ebx & (1 << 20)) != 0;
-        features.umip = (cpuid_7.ecx & (1 << 2)) != 0;
-        
-        // Check CPUID leaf 0x80000001 for NX support
-        let cpuid_ext = unsafe { core::arch::x86_64::__cpuid(0x80000001) };
-        features.nx = (cpuid_ext.edx & (1 << 20)) != 0;
+        #[cfg(target_arch = "x86_64")]
+        {
+            // Check CPUID leaf 7, subleaf 0 for SMEP/SMAP/UMIP
+            let cpuid_7 = unsafe { core::arch::x86_64::__cpuid_count(7, 0) };
+            
+            features.smep = (cpuid_7.ebx & (1 << 7)) != 0;
+            features.smap = (cpuid_7.ebx & (1 << 20)) != 0;
+            features.umip = (cpuid_7.ecx & (1 << 2)) != 0;
+            
+            // Check CPUID leaf 0x80000001 for NX support
+            let cpuid_ext = unsafe { core::arch::x86_64::__cpuid(0x80000001) };
+            features.nx = (cpuid_ext.edx & (1 << 20)) != 0;
+        }
         
         features
     }
@@ -52,11 +55,14 @@ pub fn enable_smep() -> bool {
         return false;
     }
     
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         let cr4: u64;
         core::arch::asm!("mov {}, cr4", out(reg) cr4);
         core::arch::asm!("mov cr4, {}", in(reg) cr4 | cr4::SMEP);
     }
+    #[cfg(not(target_arch = "x86_64"))]
+    return false;
     
     crate::log_debug!("[SECURITY] SMEP enabled");
     true
@@ -72,11 +78,14 @@ pub fn enable_smap() -> bool {
         return false;
     }
     
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         let cr4: u64;
         core::arch::asm!("mov {}, cr4", out(reg) cr4);
         core::arch::asm!("mov cr4, {}", in(reg) cr4 | cr4::SMAP);
     }
+    #[cfg(not(target_arch = "x86_64"))]
+    return false;
     
     crate::log_debug!("[SECURITY] SMAP enabled");
     true
@@ -92,11 +101,14 @@ pub fn enable_umip() -> bool {
         return false;
     }
     
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         let cr4: u64;
         core::arch::asm!("mov {}, cr4", out(reg) cr4);
         core::arch::asm!("mov cr4, {}", in(reg) cr4 | cr4::UMIP);
     }
+    #[cfg(not(target_arch = "x86_64"))]
+    return false;
     
     crate::log_debug!("[SECURITY] UMIP enabled");
     true
@@ -106,6 +118,7 @@ pub fn enable_umip() -> bool {
 /// Returns a guard that re-enables SMAP when dropped
 #[inline(always)]
 pub fn disable_smap_for_user_access() -> SmapGuard {
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         // STAC - Set AC flag (allows supervisor access to user pages)
         core::arch::asm!("stac", options(nomem, nostack));
@@ -119,6 +132,7 @@ pub struct SmapGuard;
 impl Drop for SmapGuard {
     #[inline(always)]
     fn drop(&mut self) {
+        #[cfg(target_arch = "x86_64")]
         unsafe {
             // CLAC - Clear AC flag (re-enables SMAP protection)
             core::arch::asm!("clac", options(nomem, nostack));

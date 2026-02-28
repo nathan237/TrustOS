@@ -193,9 +193,12 @@ impl AddressSpace {
     fn map_kernel_space(&mut self) -> Option<()> {
         // Read current CR3
         let current_cr3: u64;
+        #[cfg(target_arch = "x86_64")]
         unsafe {
             core::arch::asm!("mov {}, cr3", out(reg) current_cr3);
         }
+        #[cfg(not(target_arch = "x86_64"))]
+        { current_cr3 = 0; }
         
         // Get current PML4
         let current_pml4_virt = current_cr3 + self.hhdm_offset;
@@ -248,6 +251,7 @@ impl AddressSpace {
         unsafe { (*pt).entries[pt_idx].set(phys, flags); }
         
         // Invalidate TLB for this virtual address
+        #[cfg(target_arch = "x86_64")]
         unsafe {
             core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
         }
@@ -326,6 +330,7 @@ impl AddressSpace {
         pt.entries[pt_idx].clear();
         
         // Invalidate TLB for this page
+        #[cfg(target_arch = "x86_64")]
         unsafe {
             core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
         }
@@ -360,6 +365,7 @@ impl AddressSpace {
     
     /// Switch to this address space
     pub unsafe fn activate(&self) {
+        #[cfg(target_arch = "x86_64")]
         core::arch::asm!(
             "mov cr3, {}",
             in(reg) self.pml4_phys,
@@ -474,9 +480,12 @@ static KERNEL_CR3: AtomicU64 = AtomicU64::new(0);
 pub fn init() {
     // Save current CR3 for kernel space
     let cr3: u64;
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         core::arch::asm!("mov {}, cr3", out(reg) cr3);
     }
+    #[cfg(not(target_arch = "x86_64"))]
+    { cr3 = 0; }
     KERNEL_CR3.store(cr3, Ordering::SeqCst);
     
     // Enable NX bit so page table NX flags are enforced
@@ -487,32 +496,35 @@ pub fn init() {
 
 /// Enable NX (No-Execute) bit via EFER MSR
 fn enable_nx() {
-    const IA32_EFER: u32 = 0xC0000080;
-    const NXE_BIT: u64 = 1 << 11;
-    
-    unsafe {
-        // Read EFER - rdmsr puts result in EDX:EAX
-        let eax: u32;
-        let edx: u32;
-        core::arch::asm!(
-            "rdmsr",
-            in("ecx") IA32_EFER,
-            out("eax") eax,
-            out("edx") edx,
-        );
-        let efer = ((edx as u64) << 32) | (eax as u64);
+    #[cfg(target_arch = "x86_64")]
+    {
+        const IA32_EFER: u32 = 0xC0000080;
+        const NXE_BIT: u64 = 1 << 11;
         
-        // Set NXE bit
-        let new_efer = efer | NXE_BIT;
-        let low = new_efer as u32;
-        let high = (new_efer >> 32) as u32;
-        
-        core::arch::asm!(
-            "wrmsr",
-            in("ecx") IA32_EFER,
-            in("eax") low,
-            in("edx") high,
-        );
+        unsafe {
+            // Read EFER - rdmsr puts result in EDX:EAX
+            let eax: u32;
+            let edx: u32;
+            core::arch::asm!(
+                "rdmsr",
+                in("ecx") IA32_EFER,
+                out("eax") eax,
+                out("edx") edx,
+            );
+            let efer = ((edx as u64) << 32) | (eax as u64);
+            
+            // Set NXE bit
+            let new_efer = efer | NXE_BIT;
+            let low = new_efer as u32;
+            let high = (new_efer >> 32) as u32;
+            
+            core::arch::asm!(
+                "wrmsr",
+                in("ecx") IA32_EFER,
+                in("eax") low,
+                in("edx") high,
+            );
+        }
     }
 }
 
@@ -553,7 +565,10 @@ pub fn validate_user_ptr(ptr: u64, len: usize, write: bool) -> bool {
     // with the correct permissions (USER, and WRITABLE if write=true).
     let hhdm = crate::memory::hhdm_offset();
     let cr3: u64;
+    #[cfg(target_arch = "x86_64")]
     unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3, options(nostack, preserves_flags)); }
+    #[cfg(not(target_arch = "x86_64"))]
+    { cr3 = 0; }
     
     let required_flags = if write {
         PageFlags::new(PageFlags::PRESENT | PageFlags::USER | PageFlags::WRITABLE)
@@ -637,9 +652,12 @@ pub fn map_kernel_mmio_page(virt: u64, phys: u64) -> Result<(), &'static str> {
     
     // Read current CR3 to get kernel's PML4
     let cr3: u64;
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         core::arch::asm!("mov {}, cr3", out(reg) cr3);
     }
+    #[cfg(not(target_arch = "x86_64"))]
+    { cr3 = 0; }
     
     // Access PML4 via HHDM
     let pml4 = unsafe { &mut *((cr3 + hhdm) as *mut PageTable) };
@@ -757,6 +775,7 @@ const PAT_WC: u8 = 0x01;  // Write-Combining ← what we want for framebuffer
 /// Setup PAT with Write-Combining in entry 1
 /// Call once during early boot, before any WC mappings
 pub fn setup_pat_write_combining() {
+    #[cfg(target_arch = "x86_64")]
     unsafe {
         // Read current PAT MSR
         let pat_lo: u32;
@@ -811,7 +830,10 @@ pub fn remap_region_write_combining(virt_start: u64, size_bytes: usize) -> Resul
     let mut remapped = 0usize;
     
     let cr3: u64;
+    #[cfg(target_arch = "x86_64")]
     unsafe { core::arch::asm!("mov {}, cr3", out(reg) cr3); }
+    #[cfg(not(target_arch = "x86_64"))]
+    { cr3 = 0; }
     
     for page_idx in 0..num_pages {
         let virt = virt_start + (page_idx * PAGE_SIZE) as u64;
@@ -853,6 +875,7 @@ pub fn remap_region_write_combining(virt_start: u64, size_bytes: usize) -> Resul
         pt.entries[pt_idx].set(phys_addr, PageFlags::new(new_flags));
         
         // Invalidate this TLB entry
+        #[cfg(target_arch = "x86_64")]
         unsafe {
             core::arch::asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
         }

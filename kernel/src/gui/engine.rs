@@ -56,7 +56,7 @@ pub fn now_us() -> u64 {
 /// Read TSC
 #[inline]
 fn read_tsc() -> u64 {
-    unsafe { core::arch::x86_64::_rdtsc() }
+    crate::arch::timestamp()
 }
 
 /// Sleep until next frame (uses HLT to save CPU)
@@ -72,7 +72,10 @@ pub fn wait_for_next_frame(frame_start_us: u64) {
             // This drops CPU from 100% to ~1%
             unsafe {
                 // Enable interrupts and halt until interrupt
+                #[cfg(target_arch = "x86_64")]
                 core::arch::asm!("sti; hlt", options(nomem, nostack));
+                #[cfg(not(target_arch = "x86_64"))]
+                crate::arch::halt();
             }
         } else {
             // Short spin for precise timing
