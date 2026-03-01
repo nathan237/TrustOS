@@ -1834,7 +1834,7 @@ pub fn launch_matrix() -> Result<(), &'static str> {
             matrix.columns[idx].active = false;
         }
 
-        crate::cpu::tsc::pit_delay_ms(80); // 80ms per frame
+        crate::cpu::tsc::delay_millis(80); // 80ms per frame
     }
 
     // Final black screen with message
@@ -1855,7 +1855,7 @@ pub fn launch_matrix() -> Result<(), &'static str> {
         if let Some(sc) = crate::keyboard::try_read_key() {
             if sc & 0x80 == 0 { break; }
         }
-        crate::cpu::tsc::pit_delay_ms(20);
+        crate::cpu::tsc::delay_millis(20);
     }
 
     crate::serial_println!("[MATRIX] Showcase complete");
@@ -1955,7 +1955,7 @@ fn wait_ms_interruptible(total_ms: u64) -> bool {
     let mut remaining = total_ms;
     while remaining > 0 {
         let delay = remaining.min(chunk);
-        crate::cpu::tsc::pit_delay_ms(delay);
+        crate::cpu::tsc::delay_millis(delay);
         remaining -= delay;
         // Drain keyboard
         while let Some(sc) = crate::keyboard::try_read_key() {
@@ -1973,7 +1973,7 @@ fn wait_ms_skip(total_ms: u64) -> u8 {
     let mut remaining = total_ms;
     while remaining > 0 {
         let delay = remaining.min(chunk);
-        crate::cpu::tsc::pit_delay_ms(delay);
+        crate::cpu::tsc::delay_millis(delay);
         remaining -= delay;
         while let Some(sc) = crate::keyboard::try_read_key() {
             if sc & 0x80 != 0 { continue; }
@@ -2285,7 +2285,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             matrix.columns[idx].active = false;
         }
 
-        crate::cpu::tsc::pit_delay_ms(100); // 100ms per frame
+        crate::cpu::tsc::delay_millis(100); // 100ms per frame
     }
 
     // Final credits screen
@@ -2326,7 +2326,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         if let Some(sc) = crate::keyboard::try_read_key() {
             if sc & 0x80 == 0 { break; }
         }
-        crate::cpu::tsc::pit_delay_ms(20);
+        crate::cpu::tsc::delay_millis(20);
     }
 
     crate::serial_println!("[SHOWCASE] Narrated showcase complete");
