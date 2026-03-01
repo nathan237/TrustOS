@@ -25,6 +25,7 @@ pub mod keyboard_midi;
 pub mod recorder;
 pub mod wav_export;
 pub mod ui;
+pub mod beat_studio;
 
 use alloc::string::String;
 use alloc::format;

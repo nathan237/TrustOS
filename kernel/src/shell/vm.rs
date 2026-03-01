@@ -3281,6 +3281,13 @@ pub(super) fn cmd_daw(args: &[&str]) {
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
+        Some("studio") | Some("beat") | Some("beats") => {
+            crate::println_color!(COLOR_GREEN, "Launching Beat Studio...");
+            match crate::trustdaw::beat_studio::launch() {
+                Ok(()) => crate::println!("Beat Studio closed"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
         Some("export") | Some("wav") => {
             let path = args.get(1).copied().unwrap_or("/home/output.wav");
             crate::println!("Exporting to {}...", path);
@@ -3339,6 +3346,7 @@ pub(super) fn cmd_daw(args: &[&str]) {
             crate::println!("  daw pianoroll [track#] [bars]   Text piano roll view");
             crate::println!("  daw piano                       Show keyboard layout");
             crate::println!("  daw gui                         Launch graphical DAW UI");
+            crate::println!("  daw studio                      Beat Studio (YouTube showcase mode)");
             crate::println!();
             crate::println_color!(COLOR_YELLOW, "  Export:");
             crate::println!("  daw export [path]               Export WAV (default: /home/output.wav)");
