@@ -3288,6 +3288,21 @@ pub(super) fn cmd_daw(args: &[&str]) {
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
+        Some("funky") | Some("house") => {
+            crate::println_color!(COLOR_GREEN, "Loading Funky House beat...");
+            // Load funky house in beat studio mode
+            match crate::trustdaw::beat_studio::launch_funky() {
+                Ok(()) => crate::println!("Funky house session closed"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("matrix") | Some("showcase") => {
+            crate::println_color!(COLOR_GREEN, "Entering the Beat Matrix...");
+            match crate::trustdaw::beat_studio::launch_matrix() {
+                Ok(()) => crate::println!("Beat Matrix closed"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
         Some("export") | Some("wav") => {
             let path = args.get(1).copied().unwrap_or("/home/output.wav");
             crate::println!("Exporting to {}...", path);
@@ -3347,6 +3362,8 @@ pub(super) fn cmd_daw(args: &[&str]) {
             crate::println!("  daw piano                       Show keyboard layout");
             crate::println!("  daw gui                         Launch graphical DAW UI");
             crate::println!("  daw studio                      Beat Studio (YouTube showcase mode)");
+            crate::println!("  daw funky                       Funky House demo beat");
+            crate::println!("  daw matrix                      Matrix visualizer showcase");
             crate::println!();
             crate::println_color!(COLOR_YELLOW, "  Export:");
             crate::println!("  daw export [path]               Export WAV (default: /home/output.wav)");

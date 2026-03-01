@@ -361,6 +361,190 @@ impl BeatStudio {
         self.tracks[7].steps[13] = BeatStep::on(70);
     }
 
+    /// Load a funky house beat — 124 BPM, groovy, showcase-ready
+    /// 32 steps = 2 bars of variation for extra groove
+    pub fn load_funky_house(&mut self) {
+        // Configure for funky house
+        self.bpm = 124;
+        self.swing = 58; // slight shuffle feel
+
+        // Expand to 32 steps (2 bars) for variation
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
+            // Clear all steps first
+            for s in 0..MAX_STEPS {
+                t.steps[s] = BeatStep::off();
+            }
+        }
+
+        // ─── Rename & reconfigure tracks for house ───
+        self.tracks[0] = BeatTrack::new("Kick",    36, Waveform::Sine,     colors::TRACK_COLORS[0], true);
+        self.tracks[1] = BeatTrack::new("Clap",    39, Waveform::Noise,    colors::TRACK_COLORS[1], true);
+        self.tracks[2] = BeatTrack::new("HiHat",   42, Waveform::Noise,    colors::TRACK_COLORS[2], true);
+        self.tracks[3] = BeatTrack::new("Bass",    36, Waveform::Square,   colors::TRACK_COLORS[3], false);
+        self.tracks[4] = BeatTrack::new("Stab",    60, Waveform::Sawtooth, colors::TRACK_COLORS[4], false);
+        self.tracks[5] = BeatTrack::new("Chord",   60, Waveform::Triangle, colors::TRACK_COLORS[5], false);
+        self.tracks[6] = BeatTrack::new("Lead",    72, Waveform::Sawtooth, colors::TRACK_COLORS[6], false);
+        self.tracks[7] = BeatTrack::new("Perc",    56, Waveform::Noise,    colors::TRACK_COLORS[7], true);
+
+        // Expand to 32 steps for all tracks
+        for t in self.tracks.iter_mut() {
+            t.num_steps = 32;
+        }
+
+        // ─── House envelopes ───
+        self.tracks[0].envelope = Envelope::new(1, 120, 0, 60);    // Kick: deep thump
+        self.tracks[1].envelope = Envelope::new(1, 60, 0, 40);     // Clap: tight snap
+        self.tracks[2].envelope = Envelope::new(1, 15, 0, 10);     // HiHat: crispy short
+        self.tracks[3].envelope = Envelope::new(3, 100, 60, 80);   // Bass: funky pluck
+        self.tracks[4].envelope = Envelope::new(2, 50, 0, 40);     // Stab: quick punch
+        self.tracks[5].envelope = Envelope::pad();                   // Chord: lush pad
+        self.tracks[6].envelope = Envelope::new(5, 150, 50, 120);  // Lead: singing
+        self.tracks[7].envelope = Envelope::new(1, 25, 0, 15);     // Perc: snap
+
+        // ══════════════════════════════════════════════
+        // KICK — four-on-the-floor with ghost notes
+        // ══════════════════════════════════════════════
+        // Main kicks: every quarter note (steps 0, 4, 8, 12, 16, 20, 24, 28)
+        for i in (0..32).step_by(4) {
+            self.tracks[0].steps[i] = BeatStep::on(127);
+        }
+        // Ghost kick before beat 2 (bar 1) and beat 4 (bar 2)
+        self.tracks[0].steps[3]  = BeatStep::on(50);
+        self.tracks[0].steps[27] = BeatStep::on(45);
+
+        // ══════════════════════════════════════════════
+        // CLAP — beats 2 & 4, with funky pre-clap
+        // ══════════════════════════════════════════════
+        self.tracks[1].steps[4]  = BeatStep::on(120);   // Bar 1 beat 2
+        self.tracks[1].steps[12] = BeatStep::on(120);   // Bar 1 beat 4
+        self.tracks[1].steps[20] = BeatStep::on(120);   // Bar 2 beat 2
+        self.tracks[1].steps[28] = BeatStep::on(120);   // Bar 2 beat 4
+        // Funky flam/drag before beat 4 of bar 2
+        self.tracks[1].steps[27] = BeatStep::on(60);    // Ghost clap
+        self.tracks[1].steps[15] = BeatStep::on(50);    // Grace note
+
+        // ══════════════════════════════════════════════
+        // HIHAT — 16th note groove with velocity dynamics
+        // ══════════════════════════════════════════════
+        // Bar 1: driving 16th hats with off-beat accents
+        for i in 0..16 {
+            let vel = match i % 4 {
+                0 => 90,   // downbeat
+                2 => 100,  // off-beat accent (funky!)
+                1 => 40,   // ghost
+                3 => 55,   // ghost slightly louder
+                _ => 50,
+            };
+            self.tracks[2].steps[i] = BeatStep::on(vel);
+        }
+        // Bar 2: variation — skip some hats for breathing room
+        for i in 16..32 {
+            let vel = match i % 4 {
+                0 => 85,
+                2 => 105,  // accented off-beat
+                1 => 35,
+                3 => 50,
+                _ => 45,
+            };
+            self.tracks[2].steps[i] = BeatStep::on(vel);
+        }
+        // Open hat feel: remove some in bar 2 for variation
+        self.tracks[2].steps[23] = BeatStep::off();
+        self.tracks[2].steps[31] = BeatStep::off();
+
+        // ══════════════════════════════════════════════
+        // BASS — funky syncopated bassline in C minor
+        // C=0, D=2, Eb=3, F=5, G=7, Ab=8, Bb=10
+        // ══════════════════════════════════════════════
+        // Bar 1: C – rest – C – Eb – rest – G – F – rest
+        self.tracks[3].steps[0]  = BeatStep::on_note(120, 0);   // C
+        self.tracks[3].steps[3]  = BeatStep::on_note(110, 0);   // C (syncopation!)
+        self.tracks[3].steps[5]  = BeatStep::on_note(100, 3);   // Eb
+        self.tracks[3].steps[8]  = BeatStep::on_note(115, 7);   // G
+        self.tracks[3].steps[10] = BeatStep::on_note(105, 5);   // F
+        self.tracks[3].steps[13] = BeatStep::on_note(95, 3);    // Eb (pickup)
+
+        // Bar 2: Variation — Bb – rest – Ab – G – rest – F – Eb – C
+        self.tracks[3].steps[16] = BeatStep::on_note(120, 10);  // Bb
+        self.tracks[3].steps[19] = BeatStep::on_note(100, 8);   // Ab
+        self.tracks[3].steps[21] = BeatStep::on_note(110, 7);   // G
+        self.tracks[3].steps[24] = BeatStep::on_note(115, 5);   // F
+        self.tracks[3].steps[26] = BeatStep::on_note(105, 3);   // Eb
+        self.tracks[3].steps[29] = BeatStep::on_note(100, 0);   // C (resolve)
+
+        // ══════════════════════════════════════════════
+        // STAB — house chord stabs (off-beat hits)
+        // Cm7 = C+Eb+G+Bb
+        // ══════════════════════════════════════════════
+        // Classic house off-beat stab pattern
+        self.tracks[4].steps[2]  = BeatStep::on_note(100, 0);   // C stab
+        self.tracks[4].steps[6]  = BeatStep::on_note(110, 0);   // C stab (accented)
+        self.tracks[4].steps[10] = BeatStep::on_note(95, 3);    // Eb stab
+        self.tracks[4].steps[14] = BeatStep::on_note(100, 0);   // C stab
+        // Bar 2: more variation
+        self.tracks[4].steps[18] = BeatStep::on_note(105, 7);   // G stab
+        self.tracks[4].steps[22] = BeatStep::on_note(110, 5);   // F stab (tension!)
+        self.tracks[4].steps[26] = BeatStep::on_note(100, 3);   // Eb stab
+        self.tracks[4].steps[30] = BeatStep::on_note(95, 0);    // C resolve
+
+        // ══════════════════════════════════════════════
+        // CHORD — sustained house chord (Cm7 → Fm7)
+        // ══════════════════════════════════════════════
+        // Bar 1: Cm7 (C Eb G Bb) — long sustain
+        self.tracks[5].steps[0]  = BeatStep::on_note(75, 0);    // C
+        self.tracks[5].steps[8]  = BeatStep::on_note(70, 0);    // C re-trigger
+        // Bar 2: Fm7 (F Ab C Eb) — chord change!
+        self.tracks[5].steps[16] = BeatStep::on_note(75, 5);    // F
+        self.tracks[5].steps[24] = BeatStep::on_note(70, 5);    // F re-trigger
+
+        // ══════════════════════════════════════════════
+        // LEAD — funky disco-house riff
+        // ══════════════════════════════════════════════
+        // Bar 1: C5 – Eb5 – G5 – F5 descend (classic house lick)
+        self.tracks[6].steps[0]  = BeatStep::on_note(100, 0);   // C5
+        self.tracks[6].steps[2]  = BeatStep::on_note(95, 3);    // Eb5
+        self.tracks[6].steps[4]  = BeatStep::on_note(110, 7);   // G5 (peak!)
+        self.tracks[6].steps[6]  = BeatStep::on_note(95, 5);    // F5
+        self.tracks[6].steps[9]  = BeatStep::on_note(90, 3);    // Eb5
+        self.tracks[6].steps[11] = BeatStep::on_note(85, 0);    // C5
+        // Bar 2: call & response — higher phrase
+        self.tracks[6].steps[16] = BeatStep::on_note(110, 7);   // G5
+        self.tracks[6].steps[18] = BeatStep::on_note(100, 10);  // Bb5 (jazzy!)
+        self.tracks[6].steps[20] = BeatStep::on_note(115, 12);  // C6 (peak octave!)
+        self.tracks[6].steps[22] = BeatStep::on_note(100, 10);  // Bb5
+        self.tracks[6].steps[24] = BeatStep::on_note(95, 7);    // G5
+        self.tracks[6].steps[27] = BeatStep::on_note(90, 5);    // F5
+        self.tracks[6].steps[29] = BeatStep::on_note(85, 3);    // Eb5 (resolve down)
+
+        // ══════════════════════════════════════════════
+        // PERC — shakers, rides, fills
+        // ══════════════════════════════════════════════
+        // Shaker on off-beats (every other 16th)
+        for i in (1..32).step_by(2) {
+            self.tracks[7].steps[i] = BeatStep::on(60);
+        }
+        // Accent the "and" of each beat
+        for i in (2..32).step_by(4) {
+            self.tracks[7].steps[i] = BeatStep::on(90);
+        }
+        // Fill at end of bar 2 (steps 28-31)
+        self.tracks[7].steps[28] = BeatStep::on(100);
+        self.tracks[7].steps[29] = BeatStep::on(110);
+        self.tracks[7].steps[30] = BeatStep::on(120);
+        self.tracks[7].steps[31] = BeatStep::on(127); // crash into next bar!
+
+        // Set volumes for good mix balance
+        self.tracks[0].volume = 220; // Kick: dominant
+        self.tracks[1].volume = 190; // Clap: present
+        self.tracks[2].volume = 150; // HiHat: background groove
+        self.tracks[3].volume = 210; // Bass: fat
+        self.tracks[4].volume = 160; // Stab: cutting through
+        self.tracks[5].volume = 120; // Chord: bed
+        self.tracks[6].volume = 170; // Lead: melodic focus
+        self.tracks[7].volume = 130; // Perc: texture
+    }
+
     // ═════════════════════════════════════════════════════════════════════════
     // Layout Calculations
     // ═════════════════════════════════════════════════════════════════════════
@@ -1051,6 +1235,24 @@ pub fn launch() -> Result<(), &'static str> {
 
     crate::serial_println!("[BEAT_STUDIO] Launched — press Esc to exit");
 
+    launch_interactive(&mut studio)
+}
+
+/// Launch the Beat Studio pre-loaded with Funky House beat
+pub fn launch_funky() -> Result<(), &'static str> {
+    crate::audio::init().ok();
+
+    let mut studio = BeatStudio::new();
+    studio.load_funky_house();
+    studio.draw();
+
+    crate::serial_println!("[BEAT_STUDIO] Funky House loaded — press Esc to exit");
+
+    launch_interactive(&mut studio)
+}
+
+/// Internal: interactive loop shared by all launch modes
+fn launch_interactive(studio: &mut BeatStudio) -> Result<(), &'static str> {
     loop {
         if let Some(scancode) = crate::keyboard::try_read_key() {
             let is_release = scancode & 0x80 != 0;
@@ -1085,7 +1287,7 @@ pub fn launch() -> Result<(), &'static str> {
                         let dur_ms = studio.step_duration_ms() * studio.tracks[0].num_steps as u32;
                         let _ = crate::drivers::hda::write_samples_and_play(&audio, dur_ms);
                         // Animate playhead
-                        animate_playhead(&mut studio);
+                        animate_playhead(studio);
                     }
                 }
 
@@ -1279,4 +1481,426 @@ fn adjust_brightness(color: u32, brightness: u32) -> u32 {
     let g = ((color >> 8) & 0xFF) * brightness / 100;
     let b = (color & 0xFF) * brightness / 100;
     (r.min(255) << 16) | (g.min(255) << 8) | b.min(255)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MATRIX VISUALIZER — "Enter the Beat" showcase mode
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Fullscreen Matrix-style rain of characters, beat-reactive:
+//   - Green falling glyphs (katakana-styled from ASCII)
+//   - Beat hits cause bright flashes / column bursts
+//   - Track info displayed as "decoded" Matrix text
+//   - Step position shown as a glowing bar at bottom
+//   - BPM pulse makes the whole screen breathe
+
+/// Matrix rain column state
+struct MatrixColumn {
+    /// Current head Y position (pixels row index)
+    head_y: i32,
+    /// Speed (pixels per tick)
+    speed: u8,
+    /// Trail length (characters)
+    trail_len: u8,
+    /// Active (visible on screen)
+    active: bool,
+    /// Random character offset (for variety)
+    char_offset: u8,
+    /// Brightness multiplier (100 = normal, 200 = flash)
+    flash: u8,
+}
+
+/// Matrix visual state
+struct MatrixState {
+    columns: Vec<MatrixColumn>,
+    num_cols: usize,
+    num_rows: usize,
+    fb_w: u32,
+    fb_h: u32,
+    /// Frame counter for animation
+    frame: u32,
+    /// LFSR for pseudo-random
+    lfsr: u32,
+}
+
+impl MatrixState {
+    fn new() -> Self {
+        let fb_w = crate::framebuffer::FB_WIDTH.load(Ordering::Relaxed) as u32;
+        let fb_h = crate::framebuffer::FB_HEIGHT.load(Ordering::Relaxed) as u32;
+
+        let num_cols = (fb_w / 8) as usize;   // 8px font width
+        let num_rows = (fb_h / 16) as usize;  // 16px font height
+
+        let mut columns = Vec::with_capacity(num_cols);
+        let mut lfsr: u32 = 0xDEAD_BEEF;
+
+        for i in 0..num_cols {
+            lfsr = lfsr_next(lfsr);
+            let speed = (lfsr % 4) as u8 + 1;
+            lfsr = lfsr_next(lfsr);
+            let trail = (lfsr % 12) as u8 + 4;
+            lfsr = lfsr_next(lfsr);
+            let start_y = -((lfsr % (num_rows as u32 * 2)) as i32);
+            lfsr = lfsr_next(lfsr);
+            let char_off = (lfsr % 94) as u8;
+
+            columns.push(MatrixColumn {
+                head_y: start_y,
+                speed,
+                trail_len: trail,
+                active: i % 3 != 2, // ~66% active initially
+                char_offset: char_off,
+                flash: 100,
+            });
+        }
+
+        Self {
+            columns,
+            num_cols,
+            num_rows,
+            fb_w,
+            fb_h,
+            frame: 0,
+            lfsr,
+        }
+    }
+
+    /// Advance all columns one tick
+    fn tick(&mut self) {
+        self.frame += 1;
+
+        for col in self.columns.iter_mut() {
+            if !col.active {
+                // Randomly reactivate
+                if self.frame % 7 == 0 {
+                    self.lfsr = lfsr_next(self.lfsr);
+                    if self.lfsr % 5 == 0 {
+                        col.active = true;
+                        col.head_y = 0;
+                        self.lfsr = lfsr_next(self.lfsr);
+                        col.speed = (self.lfsr % 4) as u8 + 1;
+                        self.lfsr = lfsr_next(self.lfsr);
+                        col.trail_len = (self.lfsr % 12) as u8 + 4;
+                        self.lfsr = lfsr_next(self.lfsr);
+                        col.char_offset = (self.lfsr % 94) as u8;
+                    }
+                }
+                continue;
+            }
+
+            col.head_y += col.speed as i32;
+
+            // Deactivate when fully off screen
+            if col.head_y > (self.num_rows as i32 + col.trail_len as i32 + 4) {
+                col.active = false;
+            }
+
+            // Decay flash
+            if col.flash > 100 {
+                col.flash = col.flash.saturating_sub(15);
+                if col.flash < 100 { col.flash = 100; }
+            }
+        }
+    }
+
+    /// Flash columns near a "beat hit"
+    fn flash_beat(&mut self, intensity: u8) {
+        // Flash random subset of columns
+        let count = (self.num_cols * intensity as usize / 255).max(3);
+        for _ in 0..count {
+            self.lfsr = lfsr_next(self.lfsr);
+            let col_idx = (self.lfsr as usize) % self.num_cols;
+            self.columns[col_idx].flash = 255;
+            self.columns[col_idx].active = true;
+            self.columns[col_idx].head_y = 0;
+            self.lfsr = lfsr_next(self.lfsr);
+            self.columns[col_idx].speed = (self.lfsr % 3) as u8 + 3; // Fast!
+        }
+    }
+
+    /// Draw the Matrix rain
+    fn draw(&self, step: usize, total_steps: usize, track_info: &str, bpm: u16, bar_beat: &str) {
+        // Black background
+        crate::framebuffer::fill_rect(0, 0, self.fb_w, self.fb_h, 0x000000);
+
+        // Matrix glyph set — ASCII printable range simulating katakana
+        const GLYPHS: &[u8] = b"@#$%&*0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!?<>{}[]|/\\~^";
+
+        // Draw each column
+        for (col_idx, col) in self.columns.iter().enumerate() {
+            if !col.active { continue; }
+
+            let x = col_idx as u32 * 8;
+
+            for row_offset in 0..(col.trail_len as i32 + 1) {
+                let row = col.head_y - row_offset;
+                if row < 0 || row >= self.num_rows as i32 { continue; }
+
+                let y = row as u32 * 16;
+
+                // Choose character — changes per frame for head, stable for trail
+                let char_idx = if row_offset == 0 {
+                    // Head: changes rapidly
+                    ((col.char_offset as u32 + self.frame * 3 + col_idx as u32) % GLYPHS.len() as u32) as usize
+                } else {
+                    // Trail: stable per position
+                    ((col.char_offset as u32 + row as u32 * 7 + col_idx as u32 * 13) % GLYPHS.len() as u32) as usize
+                };
+                let ch = GLYPHS[char_idx] as char;
+
+                // Color gradient: head is bright white-green, trail fades to dark green
+                let brightness = if row_offset == 0 {
+                    // Head: bright white/green
+                    255u32
+                } else {
+                    // Fade along trail
+                    let fade = 255u32.saturating_sub(row_offset as u32 * 255 / col.trail_len as u32);
+                    fade.max(20)
+                };
+
+                // Apply flash multiplier
+                let flash_mult = col.flash as u32;
+                let effective_b = (brightness * flash_mult / 100).min(255);
+
+                // Green Matrix color with slight blue tint
+                let r = if row_offset == 0 { effective_b * 80 / 100 } else { effective_b * 10 / 100 };
+                let g = effective_b;
+                let b = if row_offset == 0 { effective_b * 60 / 100 } else { effective_b * 20 / 100 };
+                let color = ((r.min(255)) << 16) | ((g.min(255)) << 8) | b.min(255);
+
+                crate::framebuffer::draw_char_at(x, y, ch, color);
+            }
+        }
+
+        // ── Overlay: Step Progress Bar at bottom ──
+        let bar_y = self.fb_h - 32;
+        let bar_h = 8;
+        let bar_w = self.fb_w - 40;
+        let bar_x = 20;
+
+        // Dark bar background
+        crate::framebuffer::fill_rect(bar_x, bar_y, bar_w, bar_h, 0x002200);
+        // Border
+        crate::framebuffer::draw_rect(bar_x, bar_y, bar_w, bar_h, 0x00AA00);
+
+        // Fill based on step position
+        if total_steps > 0 {
+            let filled = bar_w * step as u32 / total_steps as u32;
+            crate::framebuffer::fill_rect(bar_x + 1, bar_y + 1, filled, bar_h - 2, 0x00FF44);
+
+            // Step markers (beat divisions)
+            for i in 1..total_steps {
+                if i % 4 == 0 {
+                    let mx = bar_x + bar_w * i as u32 / total_steps as u32;
+                    crate::framebuffer::draw_vline(mx, bar_y, bar_h, 0x00CC00);
+                }
+            }
+        }
+
+        // ── Overlay: Title text (Matrix-green on black box) ──
+        let title = "TRUSTDAW // BEAT MATRIX";
+        let title_w = title.len() as u32 * 8 + 16;
+        let title_x = (self.fb_w - title_w) / 2;
+        crate::framebuffer::fill_rect(title_x, 8, title_w, 24, 0x001100);
+        crate::framebuffer::draw_rect(title_x, 8, title_w, 24, 0x00CC00);
+        crate::framebuffer::draw_text(title, title_x + 8, 12, 0x00FF66);
+
+        // ── Overlay: Track info ──
+        let info_y = 40;
+        let info_w = track_info.len() as u32 * 8 + 16;
+        crate::framebuffer::fill_rect(8, info_y, info_w.min(self.fb_w - 16), 20, 0x000800);
+        crate::framebuffer::draw_text(track_info, 16, info_y + 2, 0x00AA44);
+
+        // ── Overlay: BPM & position ──
+        let bpm_str = format!("{} BPM  {}", bpm, bar_beat);
+        let bpm_w = bpm_str.len() as u32 * 8 + 16;
+        let bpm_x = self.fb_w - bpm_w - 8;
+        crate::framebuffer::fill_rect(bpm_x, info_y, bpm_w, 20, 0x000800);
+        crate::framebuffer::draw_text(&bpm_str, bpm_x + 8, info_y + 2, 0x00CC66);
+
+        // ── Overlay: Step counter (big text) ──
+        let step_str = format!("{:02}/{:02}", step + 1, total_steps);
+        let step_w = step_str.len() as u32 * 8 + 12;
+        let step_x = (self.fb_w - step_w) / 2;
+        let step_y = bar_y - 24;
+        crate::framebuffer::fill_rect(step_x, step_y, step_w, 20, 0x001100);
+        crate::framebuffer::draw_text(&step_str, step_x + 6, step_y + 2, 0x44FF88);
+
+        // ── Overlay: Active track indicators (left side) ──
+        let ind_y = 70;
+        let track_names = ["Ki", "Cl", "HH", "Ba", "St", "Ch", "Ld", "Pc"];
+        for (i, name) in track_names.iter().enumerate() {
+            let ty = ind_y + i as u32 * 20;
+            let color = if i < 8 { colors::TRACK_COLORS[i] } else { 0x00FF00 };
+            crate::framebuffer::draw_text(name, 8, ty, color);
+        }
+    }
+}
+
+/// Launch the Matrix visualizer with the funky house beat
+pub fn launch_matrix() -> Result<(), &'static str> {
+    crate::audio::init().ok();
+
+    let mut studio = BeatStudio::new();
+    studio.load_funky_house();
+
+    let mut matrix = MatrixState::new();
+
+    // Initial draw
+    matrix.draw(0, studio.tracks[0].num_steps, "> INITIALIZING BEAT MATRIX...", studio.bpm, "1:1.1");
+
+    // Render the audio
+    let audio = studio.render_loop();
+    studio.update_scope(&audio);
+
+    let total_steps = studio.tracks[0].num_steps;
+    let step_ms = studio.step_duration_ms();
+    let total_dur_ms = step_ms * total_steps as u32;
+
+    crate::serial_println!("[MATRIX] Funky House: {} BPM, {} steps, {}ms per step", studio.bpm, total_steps, step_ms);
+
+    // Brief intro animation (Matrix rain settling)
+    for f in 0..30 {
+        matrix.tick();
+        let intro_msg = match f {
+            0..=5   => "> LOADING BEAT DATA...",
+            6..=12  => "> DECODING FREQUENCY MATRIX...",
+            13..=20 => "> SYNTH ENGINES ONLINE...",
+            _       => "> READY. ENTERING THE BEAT.",
+        };
+        matrix.draw(0, total_steps, intro_msg, studio.bpm, "---");
+
+        for _ in 0..50_000u64 {
+            if let Some(sc) = crate::keyboard::try_read_key() {
+                if sc == 0x01 { return Ok(()); } // Esc during intro
+            }
+            core::hint::spin_loop();
+        }
+    }
+
+    // MAIN LOOP — play + animate with looping
+    let mut loop_count = 0u32;
+    let max_loops = 4; // Play 4 loops total for the showcase
+
+    'outer: loop {
+        if loop_count >= max_loops { break; }
+        loop_count += 1;
+
+        // Submit audio for this loop
+        let _ = crate::drivers::hda::write_samples_and_play(&audio, total_dur_ms);
+
+        // Animate through each step
+        for s in 0..total_steps {
+            studio.current_step = s;
+
+            // Check which tracks are active at this step → flash
+            for t in 0..8 {
+                if studio.tracks[t].steps[s].active && !studio.tracks[t].muted {
+                    let vel = studio.tracks[t].steps[s].velocity;
+                    matrix.flash_beat(vel);
+                }
+            }
+
+            // Build track activity string
+            let mut active_str = String::from("> ");
+            for t in 0..8 {
+                if studio.tracks[t].steps[s].active && !studio.tracks[t].muted {
+                    active_str.push_str(studio.tracks[t].name_str());
+                    active_str.push(' ');
+                }
+            }
+            if active_str.len() <= 2 {
+                active_str.push_str("...");
+            }
+
+            // Position string
+            let bar = s / 16 + 1;
+            let beat = (s % 16) / 4 + 1;
+            let sub = s % 4 + 1;
+            let pos_str = format!("{}:{}.{}", bar, beat, sub);
+
+            // Tick the matrix rain multiple times per step for smooth animation
+            let ticks_per_step = 3u32;
+            let spin_per_tick = step_ms as u64 * 5000 / ticks_per_step as u64;
+
+            for tick in 0..ticks_per_step {
+                matrix.tick();
+
+                // Only redraw on first and last tick to save framebuffer time
+                if tick == 0 || tick == ticks_per_step - 1 {
+                    matrix.draw(s, total_steps, &active_str, studio.bpm, &pos_str);
+                }
+
+                // Timing + input check
+                for _ in 0..spin_per_tick {
+                    if let Some(sc) = crate::keyboard::try_read_key() {
+                        if sc & 0x80 != 0 { continue; }
+                        match sc {
+                            0x01 | 0x39 => { break 'outer; } // Esc or Space = stop
+                            _ => {}
+                        }
+                    }
+                    core::hint::spin_loop();
+                }
+            }
+        }
+    }
+
+    // Outro animation
+    let _ = crate::audio::stop();
+
+    for f in 0..40 {
+        matrix.tick();
+        let outro_msg = match f {
+            0..=10  => "> DISCONNECTING...",
+            11..=25 => "> SIGNAL LOST",
+            _       => "> TRUSTDAW // SYSTEM OFFLINE",
+        };
+        matrix.draw(0, total_steps, outro_msg, studio.bpm, "---");
+
+        // Gradually darken: deactivate columns
+        let deactivate = matrix.num_cols / 40;
+        for c in 0..deactivate {
+            let idx = (f as usize * deactivate + c) % matrix.num_cols;
+            matrix.columns[idx].active = false;
+        }
+
+        for _ in 0..40_000u64 {
+            core::hint::spin_loop();
+        }
+    }
+
+    // Final black screen with message
+    crate::framebuffer::fill_rect(0, 0, matrix.fb_w, matrix.fb_h, 0x000000);
+    let final_msg = "TRUSTDAW BEAT MATRIX // BUILT ON TRUSTOS";
+    let fw = final_msg.len() as u32 * 8;
+    let fx = (matrix.fb_w - fw) / 2;
+    let fy = matrix.fb_h / 2 - 8;
+    crate::framebuffer::draw_text(final_msg, fx, fy, 0x00FF44);
+
+    let sub_msg = "Bare-metal. No OS. Pure Rust.";
+    let sw = sub_msg.len() as u32 * 8;
+    let sx = (matrix.fb_w - sw) / 2;
+    crate::framebuffer::draw_text(sub_msg, sx, fy + 24, 0x008822);
+
+    // Wait for key
+    loop {
+        if let Some(sc) = crate::keyboard::try_read_key() {
+            if sc & 0x80 == 0 { break; }
+        }
+        for _ in 0..5000 { core::hint::spin_loop(); }
+    }
+
+    crate::serial_println!("[MATRIX] Showcase complete");
+    Ok(())
+}
+
+/// Simple LFSR pseudo-random number generator (xorshift32)
+fn lfsr_next(state: u32) -> u32 {
+    let mut s = state;
+    if s == 0 { s = 0xDEAD_BEEF; }
+    s ^= s << 13;
+    s ^= s >> 17;
+    s ^= s << 5;
+    s
 }
