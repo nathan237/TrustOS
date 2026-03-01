@@ -1441,26 +1441,15 @@ fn animate_playhead(studio: &mut BeatStudio) {
         studio.update_spectrum();
         studio.draw();
 
-        // Check for stop (Escape or Space)
-        let mut stop = false;
-        // Simple timing: spin for step_ms
-        let spin_iters = step_ms as u64 * 5000; // Rough approximation
-        for _ in 0..spin_iters {
-            if let Some(sc) = crate::keyboard::try_read_key() {
-                if sc & 0x80 != 0 { continue; } // Ignore releases
-                if sc == 0x01 || sc == 0x39 { // Esc or Space
-                    stop = true;
-                    break;
-                }
+        // Wait exactly one step using PIT timer, check for stop
+        match wait_ms_skip(step_ms as u64) {
+            1 | 2 => {  // Esc or Space
+                studio.playing = false;
+                studio.current_step = 0;
+                let _ = crate::audio::stop();
+                return;
             }
-            core::hint::spin_loop();
-        }
-
-        if stop {
-            studio.playing = false;
-            studio.current_step = 0;
-            let _ = crate::audio::stop();
-            break;
+            _ => {}
         }
     }
 
@@ -1770,12 +1759,7 @@ pub fn launch_matrix() -> Result<(), &'static str> {
         };
         matrix.draw(0, total_steps, intro_msg, studio.bpm, "---");
 
-        for _ in 0..50_000u64 {
-            if let Some(sc) = crate::keyboard::try_read_key() {
-                if sc == 0x01 { return Ok(()); } // Esc during intro
-            }
-            core::hint::spin_loop();
-        }
+        if wait_ms_interruptible(100) { return Ok(()); } // 100ms per frame
     }
 
     // MAIN LOOP — play + animate with looping
@@ -1819,29 +1803,14 @@ pub fn launch_matrix() -> Result<(), &'static str> {
             let sub = s % 4 + 1;
             let pos_str = format!("{}:{}.{}", bar, beat, sub);
 
-            // Tick the matrix rain multiple times per step for smooth animation
-            let ticks_per_step = 3u32;
-            let spin_per_tick = step_ms as u64 * 5000 / ticks_per_step as u64;
+            // Tick the matrix rain and draw
+            matrix.tick();
+            matrix.draw(s, total_steps, &active_str, studio.bpm, &pos_str);
 
-            for tick in 0..ticks_per_step {
-                matrix.tick();
-
-                // Only redraw on first and last tick to save framebuffer time
-                if tick == 0 || tick == ticks_per_step - 1 {
-                    matrix.draw(s, total_steps, &active_str, studio.bpm, &pos_str);
-                }
-
-                // Timing + input check
-                for _ in 0..spin_per_tick {
-                    if let Some(sc) = crate::keyboard::try_read_key() {
-                        if sc & 0x80 != 0 { continue; }
-                        match sc {
-                            0x01 | 0x39 => { break 'outer; } // Esc or Space = stop
-                            _ => {}
-                        }
-                    }
-                    core::hint::spin_loop();
-                }
+            // Wait exactly one step duration (PIT-timed)
+            match wait_ms_skip(step_ms as u64) {
+                1 | 2 => { break 'outer; } // Esc or Space
+                _ => {}
             }
         }
     }
@@ -1865,9 +1834,7 @@ pub fn launch_matrix() -> Result<(), &'static str> {
             matrix.columns[idx].active = false;
         }
 
-        for _ in 0..40_000u64 {
-            core::hint::spin_loop();
-        }
+        crate::cpu::tsc::pit_delay_ms(80); // 80ms per frame
     }
 
     // Final black screen with message
@@ -1888,7 +1855,7 @@ pub fn launch_matrix() -> Result<(), &'static str> {
         if let Some(sc) = crate::keyboard::try_read_key() {
             if sc & 0x80 == 0 { break; }
         }
-        for _ in 0..5000 { core::hint::spin_loop(); }
+        crate::cpu::tsc::pit_delay_ms(20);
     }
 
     crate::serial_println!("[MATRIX] Showcase complete");
@@ -1980,18 +1947,41 @@ fn draw_title_card(fb_w: u32, fb_h: u32, line1: &str, line2: &str, line3: &str, 
     crate::framebuffer::draw_text(line3, (fb_w - w3) / 2, mid_y + 24, 0x667788);
 }
 
-/// Wait N frames with optional Esc-to-skip, returns true if user hit Esc
-fn wait_frames(frames: u32, spin_per_frame: u64) -> bool {
-    for _ in 0..frames {
-        for _ in 0..spin_per_frame {
-            if let Some(sc) = crate::keyboard::try_read_key() {
-                if sc & 0x80 != 0 { continue; }
-                if sc == 0x01 { return true; } // Esc
-            }
-            core::hint::spin_loop();
+/// Wait for a given number of milliseconds, checking keyboard for Esc.
+/// Returns true if user pressed Esc (abort).
+fn wait_ms_interruptible(total_ms: u64) -> bool {
+    // Break into small chunks so we can check keyboard
+    let chunk = 50u64; // Check keyboard every 50ms
+    let mut remaining = total_ms;
+    while remaining > 0 {
+        let delay = remaining.min(chunk);
+        crate::cpu::tsc::pit_delay_ms(delay);
+        remaining -= delay;
+        // Drain keyboard
+        while let Some(sc) = crate::keyboard::try_read_key() {
+            if sc & 0x80 != 0 { continue; }
+            if sc == 0x01 { return true; } // Esc
         }
     }
     false
+}
+
+/// Wait for a given number of milliseconds, checking for Esc OR Space.
+/// Returns 0=ok, 1=esc, 2=space.
+fn wait_ms_skip(total_ms: u64) -> u8 {
+    let chunk = 50u64;
+    let mut remaining = total_ms;
+    while remaining > 0 {
+        let delay = remaining.min(chunk);
+        crate::cpu::tsc::pit_delay_ms(delay);
+        remaining -= delay;
+        while let Some(sc) = crate::keyboard::try_read_key() {
+            if sc & 0x80 != 0 { continue; }
+            if sc == 0x01 { return 1; } // Esc
+            if sc == 0x39 { return 2; } // Space
+        }
+    }
+    0
 }
 
 /// The main narrated showcase entry point
@@ -2001,7 +1991,6 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
 
     let fb_w = crate::framebuffer::FB_WIDTH.load(Ordering::Relaxed) as u32;
     let fb_h = crate::framebuffer::FB_HEIGHT.load(Ordering::Relaxed) as u32;
-    let spin_per_frame: u64 = 60_000; // ~frame timing
 
     // ═══════════════════════════════════════════════════════════════════
     // INTRO TITLE CARD
@@ -2012,7 +2001,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "Bare-Metal  //  No OS  //  Pure Rust  //  Real-Time Audio",
         0x00CCFF,
     );
-    if wait_frames(80, spin_per_frame) { return Ok(()); }
+    if wait_ms_interruptible(4000) { return Ok(()); } // 4 seconds
 
     draw_title_card(fb_w, fb_h,
         "PHASE 1: BUILDING THE BEAT",
@@ -2020,7 +2009,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "124 BPM  //  C Minor  //  32 Steps (2 Bars)",
         0x44FF88,
     );
-    if wait_frames(60, spin_per_frame) { return Ok(()); }
+    if wait_ms_interruptible(3000) { return Ok(()); } // 3 seconds
 
     // ═══════════════════════════════════════════════════════════════════
     // PHASE 1 — Building the beat track-by-track
@@ -2105,8 +2094,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         let phase_str = format!("PHASE 1  //  TRACK {}/8", track_idx + 1);
         draw_narration_overlay(card, fb_w, fb_h, &phase_str, (track_idx + 1) as u32, 8);
 
-        // Wait a moment to read the narration
-        if wait_frames(50, spin_per_frame) { return Ok(()); }
+        // Wait a moment to read the narration (2 seconds)
+        if wait_ms_interruptible(2000) { return Ok(()); }
 
         // Render and play the current mix (all unmuted tracks so far)
         let audio = studio.render_loop();
@@ -2114,36 +2103,22 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         let _ = crate::drivers::hda::write_samples_and_play(&audio, loop_dur_ms);
 
         // Animate playhead through one loop while showing narration
-        let ticks_per_step = 3u32;
-        let spin_per_tick = step_ms as u64 * 5000 / ticks_per_step as u64;
-
+        // Each step takes step_ms milliseconds (real time via PIT)
         let mut aborted = false;
         for s in 0..total_steps {
             studio.current_step = s;
             studio.update_spectrum();
 
-            for tick in 0..ticks_per_step {
-                if tick == 0 || tick == ticks_per_step - 1 {
-                    studio.draw();
-                    // Re-draw narration overlay on top
-                    let progress = ((s as u32 * ticks_per_step + tick) * 100)
-                        / (total_steps as u32 * ticks_per_step);
-                    draw_narration_overlay(card, fb_w, fb_h, &phase_str, progress, 100);
-                }
+            // Draw UI + narration
+            studio.draw();
+            let progress = (s as u32 * 100) / total_steps as u32;
+            draw_narration_overlay(card, fb_w, fb_h, &phase_str, progress, 100);
 
-                for _ in 0..spin_per_tick {
-                    if let Some(sc) = crate::keyboard::try_read_key() {
-                        if sc & 0x80 != 0 { continue; }
-                        if sc == 0x01 {
-                            let _ = crate::audio::stop();
-                            return Ok(());
-                        }
-                        // Space = skip to next track
-                        if sc == 0x39 { aborted = true; }
-                    }
-                    core::hint::spin_loop();
-                }
-                if aborted { break; }
+            // Wait exactly one step duration using PIT
+            match wait_ms_skip(step_ms as u64) {
+                1 => { let _ = crate::audio::stop(); return Ok(()); } // Esc
+                2 => { aborted = true; } // Space = skip to next track
+                _ => {}
             }
             if aborted { break; }
         }
@@ -2153,7 +2128,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         studio.current_step = 0;
         studio.playing = false;
 
-        if wait_frames(15, spin_per_frame) { return Ok(()); }
+        if wait_ms_interruptible(500) { return Ok(()); } // 0.5s pause
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -2167,7 +2142,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "Listen to how the layers combine into a unified track",
         0xFF6622,
     );
-    if wait_frames(60, spin_per_frame) { return Ok(()); }
+    if wait_ms_interruptible(3000) { return Ok(()); } // 3 seconds
 
     // Render the full mix
     let full_audio = studio.render_loop();
@@ -2184,36 +2159,21 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
     for loop_num in 0..2u32 {
         let _ = crate::drivers::hda::write_samples_and_play(&full_audio, loop_dur_ms);
 
-        let ticks_per_step = 3u32;
-        let spin_per_tick = step_ms as u64 * 5000 / ticks_per_step as u64;
-
         let mut aborted = false;
         for s in 0..total_steps {
             studio.current_step = s;
             studio.update_spectrum();
             studio.playing = true;
 
-            for tick in 0..ticks_per_step {
-                if tick == 0 || tick == ticks_per_step - 1 {
-                    studio.draw();
-                    let loop_label = format!("PHASE 2  //  LOOP {}/2", loop_num + 1);
-                    let progress = ((s as u32 * ticks_per_step + tick) * 100)
-                        / (total_steps as u32 * ticks_per_step);
-                    draw_narration_overlay(&mix_card, fb_w, fb_h, &loop_label, progress, 100);
-                }
+            studio.draw();
+            let loop_label = format!("PHASE 2  //  LOOP {}/2", loop_num + 1);
+            let progress = (s as u32 * 100) / total_steps as u32;
+            draw_narration_overlay(&mix_card, fb_w, fb_h, &loop_label, progress, 100);
 
-                for _ in 0..spin_per_tick {
-                    if let Some(sc) = crate::keyboard::try_read_key() {
-                        if sc & 0x80 != 0 { continue; }
-                        if sc == 0x01 {
-                            let _ = crate::audio::stop();
-                            return Ok(());
-                        }
-                        if sc == 0x39 { aborted = true; }
-                    }
-                    core::hint::spin_loop();
-                }
-                if aborted { break; }
+            match wait_ms_skip(step_ms as u64) {
+                1 => { let _ = crate::audio::stop(); return Ok(()); }
+                2 => { aborted = true; }
+                _ => {}
             }
             if aborted { break; }
         }
@@ -2235,7 +2195,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "Matrix rain  //  Beat-reactive  //  Pure framebuffer rendering",
         0x00FF44,
     );
-    if wait_frames(60, spin_per_frame) { return Ok(()); }
+    if wait_ms_interruptible(3000) { return Ok(()); } // 3 seconds
 
     // Create Matrix state
     let mut matrix = MatrixState::new();
@@ -2250,16 +2210,13 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             _       => "> ENTERING THE BEAT MATRIX...",
         };
         matrix.draw(0, total_steps, intro_msg, studio.bpm, "---");
-        if wait_frames(1, spin_per_frame * 2) { return Ok(()); }
+        if wait_ms_interruptible(120) { return Ok(()); } // 120ms per frame
     }
 
     // Play 3 full loops with Matrix visualization
     let matrix_loops = 3u32;
     for loop_num in 0..matrix_loops {
         let _ = crate::drivers::hda::write_samples_and_play(&full_audio, loop_dur_ms);
-
-        let ticks_per_step = 3u32;
-        let spin_per_tick = step_ms as u64 * 5000 / ticks_per_step as u64;
 
         let mut aborted = false;
         for s in 0..total_steps {
@@ -2290,24 +2247,15 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             let sub = s % 4 + 1;
             let pos_str = format!("{}:{}.{}", bar, beat, sub);
 
-            for tick in 0..ticks_per_step {
-                matrix.tick();
-                if tick == 0 || tick == ticks_per_step - 1 {
-                    matrix.draw(s, total_steps, &active_str, studio.bpm, &pos_str);
-                }
+            // Tick matrix and draw
+            matrix.tick();
+            matrix.draw(s, total_steps, &active_str, studio.bpm, &pos_str);
 
-                for _ in 0..spin_per_tick {
-                    if let Some(sc) = crate::keyboard::try_read_key() {
-                        if sc & 0x80 != 0 { continue; }
-                        if sc == 0x01 {
-                            let _ = crate::audio::stop();
-                            return Ok(());
-                        }
-                        if sc == 0x39 { aborted = true; }
-                    }
-                    core::hint::spin_loop();
-                }
-                if aborted { break; }
+            // Wait one step (PIT-timed)
+            match wait_ms_skip(step_ms as u64) {
+                1 => { let _ = crate::audio::stop(); return Ok(()); }
+                2 => { aborted = true; }
+                _ => {}
             }
             if aborted { break; }
         }
@@ -2337,7 +2285,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             matrix.columns[idx].active = false;
         }
 
-        for _ in 0..50_000u64 { core::hint::spin_loop(); }
+        crate::cpu::tsc::pit_delay_ms(100); // 100ms per frame
     }
 
     // Final credits screen
@@ -2378,7 +2326,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         if let Some(sc) = crate::keyboard::try_read_key() {
             if sc & 0x80 == 0 { break; }
         }
-        for _ in 0..5000 { core::hint::spin_loop(); }
+        crate::cpu::tsc::pit_delay_ms(20);
     }
 
     crate::serial_println!("[SHOWCASE] Narrated showcase complete");

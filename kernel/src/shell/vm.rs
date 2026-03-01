@@ -3303,7 +3303,7 @@ pub(super) fn cmd_daw(args: &[&str]) {
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
-        Some("demo") | Some("showcase") | Some("narrated") => {
+        Some("film") | Some("showcase") | Some("narrated") | Some("youtube") => {
             crate::println_color!(COLOR_GREEN, "Starting narrated showcase...");
             crate::println!("  Phase 1: Building the beat (track by track)");
             crate::println!("  Phase 2: Full mix playback");
@@ -3375,7 +3375,8 @@ pub(super) fn cmd_daw(args: &[&str]) {
             crate::println!("  daw studio                      Beat Studio (YouTube showcase mode)");
             crate::println!("  daw funky                       Funky House demo beat");
             crate::println!("  daw matrix                      Matrix visualizer showcase");
-            crate::println!("  daw demo                        Narrated showcase (YouTube video)");
+            crate::println!("  daw film                        Narrated showcase (YouTube video)");
+            crate::println!("  daw showcase                    Same as 'daw film'");
             crate::println!();
             crate::println_color!(COLOR_YELLOW, "  Export:");
             crate::println!("  daw export [path]               Export WAV (default: /home/output.wav)");
