@@ -1153,8 +1153,8 @@ pub fn stop() -> Result<(), &'static str> {
 }
 
 /// Start looped playback of audio samples (non-blocking).
-/// Audio is copied to the DMA buffer. The stream is reconfigured to loop
-/// over exactly the provided data. Call `stop()` to end playback.
+/// Audio is copied to the DMA buffer. The stream CBL and BDL are updated
+/// to loop over exactly the provided data. Call `stop()` to end playback.
 /// Returns immediately — audio keeps playing in hardware DMA.
 pub fn start_looped_playback(samples: &[i16]) -> Result<(), &'static str> {
     let mut hda = HDA.lock();
@@ -1184,39 +1184,24 @@ pub fn start_looped_playback(samples: &[i16]) -> Result<(), &'static str> {
     let sd_base = ctrl.osd_base(0);
 
     unsafe {
-        // Reset stream
-        ctrl.write8(sd_base + sd::CTL, sctl::SRST as u8);
-        for _ in 0..1000 {
-            if ctrl.read8(sd_base + sd::CTL) & sctl::SRST as u8 != 0 { break; }
-            HdaController::delay_us(10);
-        }
-        ctrl.write8(sd_base + sd::CTL, 0);
-        for _ in 0..1000 {
-            if ctrl.read8(sd_base + sd::CTL) & sctl::SRST as u8 == 0 { break; }
-            HdaController::delay_us(10);
-        }
+        // Stop stream (clear RUN bit) — do NOT reset (SRST destroys config)
+        let ctl = ctrl.read8(sd_base + sd::CTL);
+        ctrl.write8(sd_base + sd::CTL, ctl & !(sctl::RUN as u8));
+        HdaController::delay_us(100);
 
-        // Clear status
+        // Clear status bits
         ctrl.write8(sd_base + sd::STS, 0x1C);
 
-        // Reconfigure BDL: single entry covering our audio data
+        // Update BDL entry 0: point to our audio data with exact length
         let bdl = ctrl.bdl_virt as *mut BdlEntry;
         (*bdl).address = ctrl.audio_buf_phys;
         (*bdl).length = data_bytes;
         (*bdl).ioc = 1;
 
-        // Set CBL = data size → DMA loops at exactly this point
+        // Update CBL = data size → DMA wraps at exactly this point
         ctrl.write32(sd_base + sd::CBL, data_bytes);
         // Single BDL entry → LVI = 0
         ctrl.write16(sd_base + sd::LVI, 0);
-        // Format: 48kHz 16-bit stereo
-        ctrl.write16(sd_base + sd::FMT, 0x0011);
-        // BDL address
-        ctrl.write32(sd_base + sd::BDLPL, ctrl.bdl_phys as u32);
-        ctrl.write32(sd_base + sd::BDLPU, (ctrl.bdl_phys >> 32) as u32);
-        // Stream tag = 1
-        let ctl_high = (1u32) << (sctl::STREAM_TAG_SHIFT - 16);
-        ctrl.write8(sd_base + sd::CTL + 2, ctl_high as u8);
     }
 
     crate::serial_println!("[HDA] Looped playback: {} bytes ({} ms)",
