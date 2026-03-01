@@ -1284,8 +1284,7 @@ fn launch_interactive(studio: &mut BeatStudio) -> Result<(), &'static str> {
                         // Render and play the loop
                         let audio = studio.render_loop();
                         studio.update_scope(&audio);
-                        let dur_ms = studio.step_duration_ms() * studio.tracks[0].num_steps as u32;
-                        let _ = crate::drivers::hda::write_samples_and_play(&audio, dur_ms);
+                        let _ = crate::drivers::hda::start_looped_playback(&audio);
                         // Animate playhead
                         animate_playhead(studio);
                     }
@@ -1763,15 +1762,12 @@ pub fn launch_matrix() -> Result<(), &'static str> {
     }
 
     // MAIN LOOP — play + animate with looping
-    let mut loop_count = 0u32;
-    let max_loops = 4; // Play 4 loops total for the showcase
+    let max_loops = 4u32;
 
-    'outer: loop {
-        if loop_count >= max_loops { break; }
-        loop_count += 1;
+    // Start non-blocking looped playback
+    let _ = crate::drivers::hda::start_looped_playback(&audio);
 
-        // Submit audio for this loop
-        let _ = crate::drivers::hda::write_samples_and_play(&audio, total_dur_ms);
+    'outer: for _loop_count in 0..max_loops {
 
         // Animate through each step
         for s in 0..total_steps {
@@ -2001,7 +1997,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "Bare-Metal  //  No OS  //  Pure Rust  //  Real-Time Audio",
         0x00CCFF,
     );
-    if wait_ms_interruptible(4000) { return Ok(()); } // 4 seconds
+    if wait_ms_interruptible(4000) { return Ok(()); }
 
     draw_title_card(fb_w, fb_h,
         "PHASE 1: BUILDING THE BEAT",
@@ -2009,126 +2005,214 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "124 BPM  //  C Minor  //  32 Steps (2 Bars)",
         0x44FF88,
     );
-    if wait_ms_interruptible(3000) { return Ok(()); } // 3 seconds
+    if wait_ms_interruptible(3000) { return Ok(()); }
 
     // ═══════════════════════════════════════════════════════════════════
-    // PHASE 1 — Building the beat track-by-track
+    // PHASE 1 — Building the beat track-by-track (tutorial style)
     // ═══════════════════════════════════════════════════════════════════
     crate::serial_println!("[SHOWCASE] Phase 1: Building the beat");
 
-    let mut studio = BeatStudio::new();
-    studio.load_funky_house();
+    // Load the full song data into a "reference" copy
+    let mut reference = BeatStudio::new();
+    reference.load_funky_house();
 
-    // Mute all tracks initially — we'll unmute them one by one
+    // Create the "live" studio that starts empty — we'll build it up
+    let mut studio = BeatStudio::new();
+    studio.bpm = 124;
+    studio.swing = 58;
+    // Configure tracks (names, instruments, etc.) but keep all steps empty
     for t in studio.tracks.iter_mut() {
-        t.muted = true;
+        t.num_steps = 32;
+        for s in 0..MAX_STEPS {
+            t.steps[s] = BeatStep::off();
+        }
+    }
+    studio.tracks[0] = BeatTrack::new("Kick",  36, Waveform::Sine,     colors::TRACK_COLORS[0], true);
+    studio.tracks[1] = BeatTrack::new("Clap",  39, Waveform::Noise,    colors::TRACK_COLORS[1], true);
+    studio.tracks[2] = BeatTrack::new("HiHat", 42, Waveform::Noise,    colors::TRACK_COLORS[2], true);
+    studio.tracks[3] = BeatTrack::new("Bass",  36, Waveform::Square,   colors::TRACK_COLORS[3], false);
+    studio.tracks[4] = BeatTrack::new("Stab",  60, Waveform::Sawtooth, colors::TRACK_COLORS[4], false);
+    studio.tracks[5] = BeatTrack::new("Chord", 60, Waveform::Triangle, colors::TRACK_COLORS[5], false);
+    studio.tracks[6] = BeatTrack::new("Lead",  72, Waveform::Sawtooth, colors::TRACK_COLORS[6], false);
+    studio.tracks[7] = BeatTrack::new("Perc",  56, Waveform::Noise,    colors::TRACK_COLORS[7], true);
+    for t in studio.tracks.iter_mut() {
+        t.num_steps = 32;
+    }
+    // Copy envelopes and volumes from reference
+    for i in 0..8 {
+        studio.tracks[i].envelope = reference.tracks[i].envelope;
+        studio.tracks[i].volume = reference.tracks[i].volume;
+        studio.tracks[i].muted = false;
     }
 
-    // Define narration for each track reveal
+    let step_ms = studio.step_duration_ms();
+    let total_steps = 32usize;
+    let loop_dur_ms = step_ms * total_steps as u32;
+
+    // Define narration for each track
     let track_cards: [NarrationCard; 8] = [
         NarrationCard {
-            title: "KICK DRUM -- The Foundation",
-            subtitle: "Four-on-the-floor with ghost notes for groove",
-            detail: "Sine wave @ 36Hz  |  Punchy envelope (1ms atk, 120ms decay)",
+            title: "KICK -- The Foundation",
+            subtitle: "Placing four-on-the-floor kicks + ghost notes",
+            detail: "Sine wave @ 36Hz  |  Punchy thump (1ms atk, 120ms decay)",
             frames: 0,
         },
         NarrationCard {
             title: "CLAP -- The Backbeat",
-            subtitle: "Hits on 2 & 4, ghost claps for swing",
+            subtitle: "Adding claps on beats 2 & 4 with ghost flams",
             detail: "Noise burst @ 39Hz  |  Tight snap (1ms atk, 60ms decay)",
             frames: 0,
         },
         NarrationCard {
             title: "HI-HAT -- The Groove Engine",
-            subtitle: "16th note pattern with funky off-beat accents",
-            detail: "Noise @ 42Hz  |  Crispy short (1ms atk, 15ms decay)  |  Velocity dynamics",
+            subtitle: "Programming 16th notes with velocity dynamics",
+            detail: "Noise @ 42Hz  |  Crispy short (1ms atk, 15ms decay)  |  Accented off-beats",
             frames: 0,
         },
         NarrationCard {
             title: "BASS -- The Low End",
-            subtitle: "Syncopated C minor bassline: C-Eb-G-F-Bb-Ab",
+            subtitle: "Drawing syncopated C minor bassline: C-Eb-G-F-Bb-Ab",
             detail: "Square wave  |  Funky pluck envelope  |  2-bar variation",
             frames: 0,
         },
         NarrationCard {
             title: "STAB -- House Chord Hits",
-            subtitle: "Off-beat Cm7 stabs cutting through the mix",
+            subtitle: "Placing off-beat Cm7 stabs cutting through the mix",
             detail: "Sawtooth wave  |  Quick punch (2ms atk, 50ms decay)",
             frames: 0,
         },
         NarrationCard {
             title: "CHORD -- The Harmonic Bed",
-            subtitle: "Sustained pads: Cm7 -> Fm7 chord progression",
-            detail: "Triangle wave  |  Lush pad envelope  |  Chord change at bar 2",
+            subtitle: "Adding sustained pads: Cm7 -> Fm7 chord progression",
+            detail: "Triangle wave  |  Lush pad envelope  |  Chord changes at bar 2",
             frames: 0,
         },
         NarrationCard {
             title: "LEAD -- The Melody",
-            subtitle: "Disco-house riff: C-Eb-G-F ascending, call & response",
-            detail: "Sawtooth wave @ C5  |  Singing envelope  |  Peak at C6 in bar 2",
+            subtitle: "Drawing a disco-house riff: ascending C-Eb-G, call & response",
+            detail: "Sawtooth @ C5  |  Singing envelope  |  Peak at C6 in bar 2",
             frames: 0,
         },
         NarrationCard {
             title: "PERCUSSION -- The Texture",
-            subtitle: "Shakers on off-beats + fill at end of bar 2",
+            subtitle: "Laying down shakers on off-beats + fill at end of bar 2",
             detail: "Noise burst  |  Snap envelope  |  Building energy into the drop",
             frames: 0,
         },
     ];
 
-    let step_ms = studio.step_duration_ms();
-    let total_steps = studio.tracks[0].num_steps;
-    let loop_dur_ms = step_ms * total_steps as u32;
-
-    // For each track: unmute, show narration, play the current mix, animate
+    // ── For each track: show title, animate step placement, then play ──
     for track_idx in 0..8 {
-        // Unmute this track
-        studio.tracks[track_idx].muted = false;
         studio.cursor_track = track_idx;
 
-        // Draw the studio UI showing the new track
-        studio.draw();
-
-        // Draw narration overlay
+        // ── Title card for this track ──
         let card = &track_cards[track_idx];
-        let phase_str = format!("PHASE 1  //  TRACK {}/8", track_idx + 1);
-        draw_narration_overlay(card, fb_w, fb_h, &phase_str, (track_idx + 1) as u32, 8);
+        draw_title_card(fb_w, fb_h,
+            &format!("TRACK {}/8", track_idx + 1),
+            card.title,
+            card.detail,
+            colors::TRACK_COLORS[track_idx],
+        );
+        if wait_ms_interruptible(2500) { return Ok(()); }
 
-        // Wait a moment to read the narration (2 seconds)
-        if wait_ms_interruptible(2000) { return Ok(()); }
-
-        // Render and play the current mix (all unmuted tracks so far)
-        let audio = studio.render_loop();
-        studio.update_scope(&audio);
-        let _ = crate::drivers::hda::write_samples_and_play(&audio, loop_dur_ms);
-
-        // Animate playhead through one loop while showing narration
-        // Each step takes step_ms milliseconds (real time via PIT)
-        let mut aborted = false;
+        // ── Collect which steps need to be placed ──
+        let mut steps_to_place: Vec<usize> = Vec::new();
         for s in 0..total_steps {
-            studio.current_step = s;
-            studio.update_spectrum();
-
-            // Draw UI + narration
-            studio.draw();
-            let progress = (s as u32 * 100) / total_steps as u32;
-            draw_narration_overlay(card, fb_w, fb_h, &phase_str, progress, 100);
-
-            // Wait exactly one step duration using PIT
-            match wait_ms_skip(step_ms as u64) {
-                1 => { let _ = crate::audio::stop(); return Ok(()); } // Esc
-                2 => { aborted = true; } // Space = skip to next track
-                _ => {}
+            if reference.tracks[track_idx].steps[s].active {
+                steps_to_place.push(s);
             }
-            if aborted { break; }
         }
 
-        // Brief pause between tracks
-        let _ = crate::audio::stop();
-        studio.current_step = 0;
-        studio.playing = false;
+        // ── Show "placing steps" narration ──
+        let phase_str = format!("PHASE 1  //  TRACK {}/8  //  PLACING PATTERN", track_idx + 1);
 
-        if wait_ms_interruptible(500) { return Ok(()); } // 0.5s pause
+        // Draw initial state (empty track visible)
+        studio.draw();
+        draw_narration_overlay(card, fb_w, fb_h, &phase_str, 0, steps_to_place.len() as u32);
+        crate::cpu::tsc::delay_millis(500);
+
+        // ── Animate placing each step one by one ──
+        for (place_idx, &step_pos) in steps_to_place.iter().enumerate() {
+            // Move cursor to this step
+            studio.cursor_step = step_pos;
+
+            // Flash: draw with cursor on empty step (shows cursor moving)
+            studio.draw();
+            let progress = place_idx as u32;
+            let total = steps_to_place.len() as u32;
+            draw_narration_overlay(card, fb_w, fb_h, &phase_str, progress, total);
+
+            // Brief pause to see cursor moving
+            crate::cpu::tsc::delay_millis(80);
+
+            // Place the step (copy from reference)
+            studio.tracks[track_idx].steps[step_pos] = reference.tracks[track_idx].steps[step_pos];
+
+            // Redraw with the step now active (lit up)
+            studio.draw();
+            draw_narration_overlay(card, fb_w, fb_h, &phase_str, progress + 1, total);
+
+            // Pause to see the step light up
+            crate::cpu::tsc::delay_millis(120);
+
+            // Check for Esc
+            while let Some(sc) = crate::keyboard::try_read_key() {
+                if sc & 0x80 != 0 { continue; }
+                if sc == 0x01 { return Ok(()); }
+                if sc == 0x39 { break; } // Space = skip placement anim
+            }
+        }
+
+        // ── Pattern placed! Now play the current mix ──
+        let listen_str = format!("PHASE 1  //  TRACK {}/8  //  LISTEN", track_idx + 1);
+
+        let listen_card = NarrationCard {
+            title: card.title,
+            subtitle: if track_idx == 0 {
+                "Listening to the kick pattern..."
+            } else {
+                "Hear how this layer adds to the mix..."
+            },
+            detail: card.detail,
+            frames: 0,
+        };
+
+        // Render audio with all tracks placed so far
+        let audio = studio.render_loop();
+        studio.update_scope(&audio);
+
+        // Start non-blocking looped playback
+        let _ = crate::drivers::hda::start_looped_playback(&audio);
+        studio.playing = true;
+
+        // Animate playhead through 2 full loops while audio plays
+        let mut escaped = false;
+        for _loop_num in 0..2u32 {
+            for s in 0..total_steps {
+                studio.current_step = s;
+                studio.update_spectrum();
+                studio.draw();
+                let progress = (s as u32 * 100) / total_steps as u32;
+                draw_narration_overlay(&listen_card, fb_w, fb_h, &listen_str, progress, 100);
+
+                match wait_ms_skip(step_ms as u64) {
+                    1 => { escaped = true; break; }
+                    2 => { break; } // Space = skip to next track
+                    _ => {}
+                }
+            }
+            if escaped { break; }
+        }
+
+        // Stop audio, reset
+        let _ = crate::drivers::hda::stop();
+        studio.playing = false;
+        studio.current_step = 0;
+
+        if escaped { return Ok(()); }
+
+        // Brief pause between tracks
+        crate::cpu::tsc::delay_millis(300);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -2142,47 +2226,46 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "Listen to how the layers combine into a unified track",
         0xFF6622,
     );
-    if wait_ms_interruptible(3000) { return Ok(()); } // 3 seconds
+    if wait_ms_interruptible(3000) { return Ok(()); }
 
     // Render the full mix
     let full_audio = studio.render_loop();
     studio.update_scope(&full_audio);
 
-    // Play 2 loops of the full mix with the studio UI
     let mix_card = NarrationCard {
-        title: "FULL MIX -- 8 Tracks Combined",
+        title: "FULL MIX -- All 8 Tracks",
         subtitle: "Kick + Clap + HiHat + Bass + Stab + Chord + Lead + Perc",
         detail: "124 BPM  |  C Minor  |  Funky House  |  Bare-Metal Audio Engine",
         frames: 0,
     };
 
-    for loop_num in 0..2u32 {
-        let _ = crate::drivers::hda::write_samples_and_play(&full_audio, loop_dur_ms);
+    // Start non-blocking looped playback for 3 loops
+    let _ = crate::drivers::hda::start_looped_playback(&full_audio);
+    studio.playing = true;
 
-        let mut aborted = false;
+    let mut escaped = false;
+    for loop_num in 0..3u32 {
         for s in 0..total_steps {
             studio.current_step = s;
             studio.update_spectrum();
-            studio.playing = true;
-
             studio.draw();
-            let loop_label = format!("PHASE 2  //  LOOP {}/2", loop_num + 1);
+            let loop_label = format!("PHASE 2  //  LOOP {}/3", loop_num + 1);
             let progress = (s as u32 * 100) / total_steps as u32;
             draw_narration_overlay(&mix_card, fb_w, fb_h, &loop_label, progress, 100);
 
             match wait_ms_skip(step_ms as u64) {
-                1 => { let _ = crate::audio::stop(); return Ok(()); }
-                2 => { aborted = true; }
+                1 => { escaped = true; break; }
+                2 => { break; }
                 _ => {}
             }
-            if aborted { break; }
         }
-
-        let _ = crate::audio::stop();
-        studio.current_step = 0;
+        if escaped { break; }
     }
 
+    let _ = crate::drivers::hda::stop();
     studio.playing = false;
+    studio.current_step = 0;
+    if escaped { return Ok(()); }
 
     // ═══════════════════════════════════════════════════════════════════
     // PHASE 3 — Matrix Visualizer
@@ -2195,9 +2278,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "Matrix rain  //  Beat-reactive  //  Pure framebuffer rendering",
         0x00FF44,
     );
-    if wait_ms_interruptible(3000) { return Ok(()); } // 3 seconds
+    if wait_ms_interruptible(3000) { return Ok(()); }
 
-    // Create Matrix state
     let mut matrix = MatrixState::new();
 
     // Intro animation
@@ -2210,23 +2292,22 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             _       => "> ENTERING THE BEAT MATRIX...",
         };
         matrix.draw(0, total_steps, intro_msg, studio.bpm, "---");
-        if wait_ms_interruptible(120) { return Ok(()); } // 120ms per frame
+        if wait_ms_interruptible(120) { return Ok(()); }
     }
 
-    // Play 3 full loops with Matrix visualization
-    let matrix_loops = 3u32;
-    for loop_num in 0..matrix_loops {
-        let _ = crate::drivers::hda::write_samples_and_play(&full_audio, loop_dur_ms);
+    // Start non-blocking looped playback for matrix
+    let _ = crate::drivers::hda::start_looped_playback(&full_audio);
 
-        let mut aborted = false;
+    let matrix_loops = 3u32;
+    escaped = false;
+    for loop_num in 0..matrix_loops {
         for s in 0..total_steps {
             studio.current_step = s;
 
             // Flash on active tracks
             for t in 0..8 {
                 if studio.tracks[t].steps[s].active && !studio.tracks[t].muted {
-                    let vel = studio.tracks[t].steps[s].velocity;
-                    matrix.flash_beat(vel);
+                    matrix.flash_beat(studio.tracks[t].steps[s].velocity);
                 }
             }
 
@@ -2238,30 +2319,26 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
                     active_str.push(' ');
                 }
             }
-            if active_str.ends_with("> ") {
-                active_str.push_str("...");
-            }
+            if active_str.ends_with("> ") { active_str.push_str("..."); }
 
             let bar = s / 16 + 1;
             let beat = (s % 16) / 4 + 1;
             let sub = s % 4 + 1;
             let pos_str = format!("{}:{}.{}", bar, beat, sub);
 
-            // Tick matrix and draw
             matrix.tick();
             matrix.draw(s, total_steps, &active_str, studio.bpm, &pos_str);
 
-            // Wait one step (PIT-timed)
             match wait_ms_skip(step_ms as u64) {
-                1 => { let _ = crate::audio::stop(); return Ok(()); }
-                2 => { aborted = true; }
+                1 => { escaped = true; break; }
+                2 => { break; }
                 _ => {}
             }
-            if aborted { break; }
         }
-
-        let _ = crate::audio::stop();
+        if escaped { break; }
     }
+
+    let _ = crate::drivers::hda::stop();
 
     // ═══════════════════════════════════════════════════════════════════
     // OUTRO

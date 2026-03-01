@@ -903,8 +903,8 @@ impl HdaController {
             // Clear status
             self.write8(sd_base + sd::STS, 0x1C);
 
-            // Allocate audio buffer: 2 fragments × 16KB = 32KB
-            let frag_size: u32 = 16384; // 16 KB per fragment
+            // Allocate audio buffer: 1MB (fits ~5.5s of 48kHz stereo 16-bit)
+            let frag_size: u32 = 524288; // 512 KB per fragment
             let num_frags: u32 = 2;
             let total_size = frag_size * num_frags;
 
@@ -1149,6 +1149,81 @@ pub fn stop() -> Result<(), &'static str> {
     let mut hda = HDA.lock();
     let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
     ctrl.play(false);
+    Ok(())
+}
+
+/// Start looped playback of audio samples (non-blocking).
+/// Audio is copied to the DMA buffer. The stream is reconfigured to loop
+/// over exactly the provided data. Call `stop()` to end playback.
+/// Returns immediately — audio keeps playing in hardware DMA.
+pub fn start_looped_playback(samples: &[i16]) -> Result<(), &'static str> {
+    let mut hda = HDA.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+
+    // Stop current playback
+    if ctrl.playing {
+        ctrl.play(false);
+    }
+
+    // Copy samples to DMA buffer
+    let buf = ctrl.audio_buf_virt as *mut i16;
+    let buf_capacity = (ctrl.audio_buf_size / 2) as usize;
+    let to_copy = samples.len().min(buf_capacity);
+
+    unsafe {
+        core::ptr::copy_nonoverlapping(samples.as_ptr(), buf, to_copy);
+        if to_copy < buf_capacity {
+            core::ptr::write_bytes(buf.add(to_copy), 0, buf_capacity - to_copy);
+        }
+    }
+
+    // Data size in bytes (aligned to 4 = one stereo frame)
+    let data_bytes = ((to_copy * 2) as u32 + 3) & !3;
+    if data_bytes == 0 { return Err("HDA: no audio data"); }
+
+    let sd_base = ctrl.osd_base(0);
+
+    unsafe {
+        // Reset stream
+        ctrl.write8(sd_base + sd::CTL, sctl::SRST as u8);
+        for _ in 0..1000 {
+            if ctrl.read8(sd_base + sd::CTL) & sctl::SRST as u8 != 0 { break; }
+            HdaController::delay_us(10);
+        }
+        ctrl.write8(sd_base + sd::CTL, 0);
+        for _ in 0..1000 {
+            if ctrl.read8(sd_base + sd::CTL) & sctl::SRST as u8 == 0 { break; }
+            HdaController::delay_us(10);
+        }
+
+        // Clear status
+        ctrl.write8(sd_base + sd::STS, 0x1C);
+
+        // Reconfigure BDL: single entry covering our audio data
+        let bdl = ctrl.bdl_virt as *mut BdlEntry;
+        (*bdl).address = ctrl.audio_buf_phys;
+        (*bdl).length = data_bytes;
+        (*bdl).ioc = 1;
+
+        // Set CBL = data size → DMA loops at exactly this point
+        ctrl.write32(sd_base + sd::CBL, data_bytes);
+        // Single BDL entry → LVI = 0
+        ctrl.write16(sd_base + sd::LVI, 0);
+        // Format: 48kHz 16-bit stereo
+        ctrl.write16(sd_base + sd::FMT, 0x0011);
+        // BDL address
+        ctrl.write32(sd_base + sd::BDLPL, ctrl.bdl_phys as u32);
+        ctrl.write32(sd_base + sd::BDLPU, (ctrl.bdl_phys >> 32) as u32);
+        // Stream tag = 1
+        let ctl_high = (1u32) << (sctl::STREAM_TAG_SHIFT - 16);
+        ctrl.write8(sd_base + sd::CTL + 2, ctl_high as u8);
+    }
+
+    crate::serial_println!("[HDA] Looped playback: {} bytes ({} ms)",
+        data_bytes, data_bytes / (48000 * 4 / 1000));
+
+    // Start DMA (non-blocking — audio loops in hardware)
+    ctrl.play(true);
     Ok(())
 }
 
