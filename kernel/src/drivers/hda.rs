@@ -1153,8 +1153,9 @@ pub fn stop() -> Result<(), &'static str> {
 }
 
 /// Start looped playback of audio samples (non-blocking).
-/// Audio is copied to the DMA buffer. The stream CBL and BDL are updated
-/// to loop over exactly the provided data. Call `stop()` to end playback.
+/// Audio is copied to the DMA buffer. The stream is fully reset and
+/// reconfigured (including codec verbs) to loop over the data.
+/// Call `stop()` to end playback.
 /// Returns immediately — audio keeps playing in hardware DMA.
 pub fn start_looped_playback(samples: &[i16]) -> Result<(), &'static str> {
     let mut hda = HDA.lock();
@@ -1182,26 +1183,73 @@ pub fn start_looped_playback(samples: &[i16]) -> Result<(), &'static str> {
     if data_bytes == 0 { return Err("HDA: no audio data"); }
 
     let sd_base = ctrl.osd_base(0);
+    let fmt: u16 = 0x0011; // 48kHz 16-bit stereo
 
     unsafe {
-        // Stop stream (clear RUN bit) — do NOT reset (SRST destroys config)
-        let ctl = ctrl.read8(sd_base + sd::CTL);
-        ctrl.write8(sd_base + sd::CTL, ctl & !(sctl::RUN as u8));
-        HdaController::delay_us(100);
+        // ── Stream reset (SRST) — needed for VBox to pick up new CBL/BDL ──
+        ctrl.write8(sd_base + sd::CTL, sctl::SRST as u8);
+        for _ in 0..1000 {
+            if ctrl.read8(sd_base + sd::CTL) & sctl::SRST as u8 != 0 { break; }
+            HdaController::delay_us(10);
+        }
+        ctrl.write8(sd_base + sd::CTL, 0);
+        for _ in 0..1000 {
+            if ctrl.read8(sd_base + sd::CTL) & sctl::SRST as u8 == 0 { break; }
+            HdaController::delay_us(10);
+        }
 
-        // Clear status bits
+        // Clear status
         ctrl.write8(sd_base + sd::STS, 0x1C);
 
-        // Update BDL entry 0: point to our audio data with exact length
+        // BDL: single entry covering our audio data
         let bdl = ctrl.bdl_virt as *mut BdlEntry;
         (*bdl).address = ctrl.audio_buf_phys;
         (*bdl).length = data_bytes;
         (*bdl).ioc = 1;
 
-        // Update CBL = data size → DMA wraps at exactly this point
+        // Stream descriptor registers
         ctrl.write32(sd_base + sd::CBL, data_bytes);
-        // Single BDL entry → LVI = 0
         ctrl.write16(sd_base + sd::LVI, 0);
+        ctrl.write16(sd_base + sd::FMT, fmt);
+        ctrl.write32(sd_base + sd::BDLPL, ctrl.bdl_phys as u32);
+        ctrl.write32(sd_base + sd::BDLPU, (ctrl.bdl_phys >> 32) as u32);
+
+        // Stream tag = 1 in CTL bits [23:20]
+        let ctl_high = (ctrl.stream_tag as u32) << (sctl::STREAM_TAG_SHIFT - 16);
+        ctrl.write8(sd_base + sd::CTL + 2, ctl_high as u8);
+    }
+
+    // ── Re-send codec verbs (SRST cleared the DAC ↔ stream binding) ──
+    if !ctrl.codecs.is_empty() && !ctrl.output_paths.is_empty() {
+        let codec = ctrl.codecs[0];
+        let path = ctrl.output_paths[0].clone();
+        let stream_tag = ctrl.stream_tag;
+
+        // Power on widgets
+        for &nid in &path.path {
+            let _ = ctrl.codec_cmd(codec, nid, verb::SET_POWER_STATE, 0x00);
+        }
+        // Pin control
+        let _ = ctrl.codec_cmd(codec, path.pin_nid, verb::SET_PIN_CONTROL, 0xC0);
+        let eapd = ctrl.codec_cmd(codec, path.pin_nid, verb::GET_EAPD, 0).unwrap_or(0);
+        let _ = ctrl.codec_cmd(codec, path.pin_nid, verb::SET_EAPD, (eapd as u8) | 0x02);
+        // Bind DAC to stream tag
+        let _ = ctrl.codec_cmd(codec, path.dac_nid, verb::SET_CHANNEL_STREAM,
+            (stream_tag << 4) | 0);
+        // Set format on DAC
+        let _ = ctrl.set_verb_16(codec, path.dac_nid, verb::SET_STREAM_FORMAT, fmt);
+        // Unmute amps
+        for &nid in &path.path {
+            let widget = ctrl.widgets.iter().find(|w| w.nid == nid);
+            if let Some(w) = widget {
+                if w.caps & (1 << 1) != 0 {
+                    let amp_data: u16 = (1 << 15) | (1 << 13) | (1 << 12) | 0x7F;
+                    let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data);
+                    let amp_data2: u16 = (1 << 15) | (1 << 14) | (1 << 12) | 0x7F;
+                    let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data2);
+                }
+            }
+        }
     }
 
     crate::serial_println!("[HDA] Looped playback: {} bytes ({} ms)",

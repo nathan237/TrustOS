@@ -1988,6 +1988,10 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
     let fb_w = crate::framebuffer::FB_WIDTH.load(Ordering::Relaxed) as u32;
     let fb_h = crate::framebuffer::FB_HEIGHT.load(Ordering::Relaxed) as u32;
 
+    // Enable double buffering to eliminate flicker
+    crate::framebuffer::init_double_buffer();
+    crate::framebuffer::set_double_buffer_mode(true);
+
     // ═══════════════════════════════════════════════════════════════════
     // INTRO TITLE CARD
     // ═══════════════════════════════════════════════════════════════════
@@ -1997,7 +2001,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "Bare-Metal  //  No OS  //  Pure Rust  //  Real-Time Audio",
         0x00CCFF,
     );
-    if wait_ms_interruptible(4000) { return Ok(()); }
+    crate::framebuffer::swap_buffers();
+    if wait_ms_interruptible(5000) { showcase_cleanup(); return Ok(()); }
 
     draw_title_card(fb_w, fb_h,
         "PHASE 1: BUILDING THE BEAT",
@@ -2005,7 +2010,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "124 BPM  //  C Minor  //  32 Steps (2 Bars)",
         0x44FF88,
     );
-    if wait_ms_interruptible(3000) { return Ok(()); }
+    crate::framebuffer::swap_buffers();
+    if wait_ms_interruptible(4000) { showcase_cleanup(); return Ok(()); }
 
     // ═══════════════════════════════════════════════════════════════════
     // PHASE 1 — Building the beat track-by-track (tutorial style)
@@ -2113,7 +2119,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             card.detail,
             colors::TRACK_COLORS[track_idx],
         );
-        if wait_ms_interruptible(2500) { return Ok(()); }
+        crate::framebuffer::swap_buffers();
+        if wait_ms_interruptible(3500) { showcase_cleanup(); return Ok(()); }
 
         // ── Collect which steps need to be placed ──
         let mut steps_to_place: Vec<usize> = Vec::new();
@@ -2129,7 +2136,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         // Draw initial state (empty track visible)
         studio.draw();
         draw_narration_overlay(card, fb_w, fb_h, &phase_str, 0, steps_to_place.len() as u32);
-        crate::cpu::tsc::delay_millis(500);
+        crate::framebuffer::swap_buffers();
+        crate::cpu::tsc::delay_millis(800);
 
         // ── Animate placing each step one by one ──
         for (place_idx, &step_pos) in steps_to_place.iter().enumerate() {
@@ -2141,9 +2149,10 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             let progress = place_idx as u32;
             let total = steps_to_place.len() as u32;
             draw_narration_overlay(card, fb_w, fb_h, &phase_str, progress, total);
+            crate::framebuffer::swap_buffers();
 
             // Brief pause to see cursor moving
-            crate::cpu::tsc::delay_millis(80);
+            crate::cpu::tsc::delay_millis(150);
 
             // Place the step (copy from reference)
             studio.tracks[track_idx].steps[step_pos] = reference.tracks[track_idx].steps[step_pos];
@@ -2151,14 +2160,15 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             // Redraw with the step now active (lit up)
             studio.draw();
             draw_narration_overlay(card, fb_w, fb_h, &phase_str, progress + 1, total);
+            crate::framebuffer::swap_buffers();
 
             // Pause to see the step light up
-            crate::cpu::tsc::delay_millis(120);
+            crate::cpu::tsc::delay_millis(200);
 
             // Check for Esc
             while let Some(sc) = crate::keyboard::try_read_key() {
                 if sc & 0x80 != 0 { continue; }
-                if sc == 0x01 { return Ok(()); }
+                if sc == 0x01 { showcase_cleanup(); return Ok(()); }
                 if sc == 0x39 { break; } // Space = skip placement anim
             }
         }
@@ -2194,6 +2204,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
                 studio.draw();
                 let progress = (s as u32 * 100) / total_steps as u32;
                 draw_narration_overlay(&listen_card, fb_w, fb_h, &listen_str, progress, 100);
+                crate::framebuffer::swap_buffers();
 
                 match wait_ms_skip(step_ms as u64) {
                     1 => { escaped = true; break; }
@@ -2209,10 +2220,10 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         studio.playing = false;
         studio.current_step = 0;
 
-        if escaped { return Ok(()); }
+        if escaped { showcase_cleanup(); return Ok(()); }
 
         // Brief pause between tracks
-        crate::cpu::tsc::delay_millis(300);
+        crate::cpu::tsc::delay_millis(800);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -2226,7 +2237,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "Listen to how the layers combine into a unified track",
         0xFF6622,
     );
-    if wait_ms_interruptible(3000) { return Ok(()); }
+    crate::framebuffer::swap_buffers();
+    if wait_ms_interruptible(4000) { showcase_cleanup(); return Ok(()); }
 
     // Render the full mix
     let full_audio = studio.render_loop();
@@ -2252,6 +2264,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             let loop_label = format!("PHASE 2  //  LOOP {}/3", loop_num + 1);
             let progress = (s as u32 * 100) / total_steps as u32;
             draw_narration_overlay(&mix_card, fb_w, fb_h, &loop_label, progress, 100);
+            crate::framebuffer::swap_buffers();
 
             match wait_ms_skip(step_ms as u64) {
                 1 => { escaped = true; break; }
@@ -2265,7 +2278,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
     let _ = crate::drivers::hda::stop();
     studio.playing = false;
     studio.current_step = 0;
-    if escaped { return Ok(()); }
+    if escaped { showcase_cleanup(); return Ok(()); }
 
     // ═══════════════════════════════════════════════════════════════════
     // PHASE 3 — Matrix Visualizer
@@ -2278,7 +2291,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         "Matrix rain  //  Beat-reactive  //  Pure framebuffer rendering",
         0x00FF44,
     );
-    if wait_ms_interruptible(3000) { return Ok(()); }
+    crate::framebuffer::swap_buffers();
+    if wait_ms_interruptible(4000) { showcase_cleanup(); return Ok(()); }
 
     let mut matrix = MatrixState::new();
 
@@ -2292,7 +2306,8 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             _       => "> ENTERING THE BEAT MATRIX...",
         };
         matrix.draw(0, total_steps, intro_msg, studio.bpm, "---");
-        if wait_ms_interruptible(120) { return Ok(()); }
+        crate::framebuffer::swap_buffers();
+        if wait_ms_interruptible(150) { showcase_cleanup(); return Ok(()); }
     }
 
     // Start non-blocking looped playback for matrix
@@ -2328,6 +2343,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
 
             matrix.tick();
             matrix.draw(s, total_steps, &active_str, studio.bpm, &pos_str);
+            crate::framebuffer::swap_buffers();
 
             match wait_ms_skip(step_ms as u64) {
                 1 => { escaped = true; break; }
@@ -2354,6 +2370,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
             _       => "> TRUSTDAW // SYSTEM OFFLINE",
         };
         matrix.draw(0, total_steps, outro_msg, studio.bpm, "---");
+        crate::framebuffer::swap_buffers();
 
         // Deactivate columns gradually
         let to_kill = matrix.num_cols / 30;
@@ -2397,6 +2414,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
     let tag = "Press any key to exit";
     let tw = tag.len() as u32 * 8;
     crate::framebuffer::draw_text(tag, (fb_w - tw) / 2, mid + 60, 0x556677);
+    crate::framebuffer::swap_buffers();
 
     // Wait for any key
     loop {
@@ -2406,8 +2424,14 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
         crate::cpu::tsc::delay_millis(20);
     }
 
+    showcase_cleanup();
     crate::serial_println!("[SHOWCASE] Narrated showcase complete");
     Ok(())
+}
+
+/// Restore framebuffer state after showcase exits
+fn showcase_cleanup() {
+    crate::framebuffer::set_double_buffer_mode(false);
 }
 
 /// Simple LFSR pseudo-random number generator (xorshift32)
