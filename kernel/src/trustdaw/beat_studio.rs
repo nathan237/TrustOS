@@ -1995,6 +1995,7 @@ pub fn launch_narrated_showcase() -> Result<(), &'static str> {
     // ═══════════════════════════════════════════════════════════════════
     // INTRO TITLE CARD
     // ═══════════════════════════════════════════════════════════════════
+
     draw_title_card(fb_w, fb_h,
         "T R U S T D A W",
         "Building a Funky House Track from Scratch",

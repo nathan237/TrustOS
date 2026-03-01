@@ -148,19 +148,19 @@ pub fn delay_millis(millis: u64) {
 }
 
 /// PIT-based real-time delay in milliseconds — guaranteed wall-clock time
-/// Uses PIT Channel 2 one-shot mode, works reliably in VirtualBox
+/// Uses PIT Channel 2 counter polling (NOT port 0x61 bit 5, broken in VBox)
 pub fn pit_delay_ms(millis: u64) {
     const PIT_FREQ: u64 = 1_193_182;
     const PIT_CHANNEL2: u16 = 0x42;
     const PIT_COMMAND: u16 = 0x43;
-    // PIT max count = 65535 → max ~54.9ms per shot
+    // Max ~50ms per shot (safely under 54.9ms counter max)
     const MAX_MS_PER_SHOT: u64 = 50;
 
     let mut remaining = millis;
     while remaining > 0 {
         let chunk = remaining.min(MAX_MS_PER_SHOT);
-        let pit_count = (PIT_FREQ * chunk / 1000) as u16;
-        if pit_count == 0 { break; }
+        let pit_target = (PIT_FREQ * chunk / 1000) as u16;
+        if pit_target == 0 { break; }
 
         unsafe {
             use x86_64::instructions::port::Port;
@@ -168,31 +168,45 @@ pub fn pit_delay_ms(millis: u64) {
             let mut ch2_port: Port<u8> = Port::new(PIT_CHANNEL2);
             let mut port61: Port<u8> = Port::new(0x61);
 
-            // Save port 0x61
-            let val = port61.read();
-            // Disable gate first to reset
-            port61.write(val & !0x01);
+            let save61 = port61.read();
 
-            // Command: Channel 2, lobyte/hibyte, mode 0 (one-shot), binary
+            // Disable gate (stop counter), disable speaker
+            port61.write(save61 & !0x03);
+
+            // Channel 2, lobyte/hibyte, mode 0 (one-shot), binary
             cmd_port.write(0b10110000);
-            // Write count
-            ch2_port.write((pit_count & 0xFF) as u8);
-            ch2_port.write((pit_count >> 8) as u8);
+            ch2_port.write(0xFF);
+            ch2_port.write(0xFF);
 
             // Enable gate to start counting
-            port61.write((val & !0x20) | 0x01);
+            port61.write((save61 | 0x01) & !0x02);
 
-            // Wait for bit 5 of port 0x61 to go high (counter reached 0)
+            // Small I/O delay for count to load
+            for _ in 0..10 {
+                let mut dummy: Port<u8> = Port::new(0x80);
+                dummy.write(0);
+            }
+
+            // Latch and read starting count
+            cmd_port.write(0b10000000);
+            let lo = ch2_port.read();
+            let hi = ch2_port.read();
+            let start_count = (hi as u16) << 8 | lo as u16;
+
+            // Poll counter until pit_target ticks elapsed
             loop {
-                let status = port61.read();
-                if (status & 0x20) != 0 {
+                cmd_port.write(0b10000000);
+                let lo = ch2_port.read();
+                let hi = ch2_port.read();
+                let current = (hi as u16) << 8 | lo as u16;
+
+                if start_count.wrapping_sub(current) >= pit_target {
                     break;
                 }
                 core::hint::spin_loop();
             }
 
-            // Restore
-            port61.write(val);
+            port61.write(save61);
         }
         remaining -= chunk;
     }
@@ -246,57 +260,23 @@ fn calibrate_from_cpuid() -> Option<u64> {
 }
 
 /// Calibrate TSC against PIT (Programmable Interval Timer)
+/// Uses pit_delay_ms() which gives accurate wall-clock delays via I/O-port
+/// polling, then measures TSC cycles during that known interval.
+/// This works reliably in VirtualBox where PIT counter latching gives
+/// batched/fast readings but the polling loop enforces real-time overhead.
 fn calibrate_against_pit() -> u64 {
-    const PIT_FREQ: u64 = 1_193_182; // PIT frequency in Hz
-    const CALIBRATION_MS: u64 = 50;   // Calibration period
-    const PIT_CHANNEL2: u16 = 0x42;
-    const PIT_COMMAND: u16 = 0x43;
-    
-    // Configure PIT Channel 2 for one-shot mode
-    let pit_count = (PIT_FREQ * CALIBRATION_MS / 1000) as u16;
-    
-    unsafe {
-        use x86_64::instructions::port::Port;
-        
-        let mut cmd_port: Port<u8> = Port::new(PIT_COMMAND);
-        let mut ch2_port: Port<u8> = Port::new(PIT_CHANNEL2);
-        
-        // Command: Channel 2, lobyte/hibyte, mode 0 (one-shot), binary
-        cmd_port.write(0b10110000);
-        
-        // Write count
-        ch2_port.write((pit_count & 0xFF) as u8);
-        ch2_port.write((pit_count >> 8) as u8);
-        
-        // Enable Channel 2 gate
-        let mut port61: Port<u8> = Port::new(0x61);
-        let val = port61.read();
-        port61.write(val | 0x01); // Enable gate
-        
-        // Read initial TSC
-        let tsc_start = read_tsc();
-        
-        // Wait for PIT to count down
-        // Read port 0x61 bit 5 - goes high when counter reaches 0
-        loop {
-            let status = port61.read();
-            if (status & 0x20) != 0 {
-                break;
-            }
-        }
-        
-        // Read final TSC
-        let tsc_end = read_tsc();
-        
-        // Calculate frequency
-        let tsc_elapsed = tsc_end - tsc_start;
-        let freq = tsc_elapsed * 1000 / CALIBRATION_MS;
-        
-        // Restore port 0x61
-        port61.write(val);
-        
-        freq
-    }
+    // Run a 200ms PIT-polled delay and measure TSC cycles
+    let start = read_tsc();
+    pit_delay_ms(200); // 200ms wall-clock (I/O polling is wall-clock accurate)
+    let end = read_tsc();
+
+    let elapsed = end - start;
+    let freq = elapsed * 5; // 200ms × 5 = 1 second
+
+    crate::serial_println!("[TSC] PIT-polling calibration: {} cycles in 200ms → {} MHz",
+        elapsed, freq / 1_000_000);
+
+    freq
 }
 
 /// Stopwatch for precise timing
