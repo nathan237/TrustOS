@@ -70,6 +70,9 @@ Write-Host "Configuring VM (UEFI mode)..." -ForegroundColor Yellow
 & $VBoxManage modifyvm $VMName --graphicscontroller vboxsvga
 & $VBoxManage modifyvm $VMName --boot1 dvd --boot2 disk --boot3 none --boot4 none
 
+# Configure Intel HDA audio (required for TrustOS HDA driver)
+& $VBoxManage modifyvm $VMName --audio-driver default --audio-controller hda --audio-enabled on --audio-out on
+
 # Configure network with Intel e1000 (NAT mode for DHCP + internet)
 & $VBoxManage modifyvm $VMName --nic1 nat --nictype1 82540EM --cableconnected1 on
 
@@ -113,6 +116,7 @@ Write-Host "Name: $VMName" -ForegroundColor Cyan
 Write-Host "Firmware: UEFI" -ForegroundColor Cyan
 Write-Host "RAM: 1024 MB" -ForegroundColor Cyan
 Write-Host "Graphics: VMSVGA 128MB" -ForegroundColor Cyan
+Write-Host "Audio: Intel HDA (output enabled)" -ForegroundColor Cyan
 Write-Host "Serial: serial.log" -ForegroundColor Cyan
 
 Write-Host "`nStarting VM..." -ForegroundColor Yellow
