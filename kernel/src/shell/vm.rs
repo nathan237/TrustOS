@@ -3296,10 +3296,21 @@ pub(super) fn cmd_daw(args: &[&str]) {
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
-        Some("matrix") | Some("showcase") => {
+        Some("matrix") => {
             crate::println_color!(COLOR_GREEN, "Entering the Beat Matrix...");
             match crate::trustdaw::beat_studio::launch_matrix() {
                 Ok(()) => crate::println!("Beat Matrix closed"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("demo") | Some("showcase") | Some("narrated") => {
+            crate::println_color!(COLOR_GREEN, "Starting narrated showcase...");
+            crate::println!("  Phase 1: Building the beat (track by track)");
+            crate::println!("  Phase 2: Full mix playback");
+            crate::println!("  Phase 3: Matrix visualizer");
+            crate::println!("  [Esc] Exit  [Space] Skip section");
+            match crate::trustdaw::beat_studio::launch_narrated_showcase() {
+                Ok(()) => crate::println!("Narrated showcase complete"),
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
@@ -3364,6 +3375,7 @@ pub(super) fn cmd_daw(args: &[&str]) {
             crate::println!("  daw studio                      Beat Studio (YouTube showcase mode)");
             crate::println!("  daw funky                       Funky House demo beat");
             crate::println!("  daw matrix                      Matrix visualizer showcase");
+            crate::println!("  daw demo                        Narrated showcase (YouTube video)");
             crate::println!();
             crate::println_color!(COLOR_YELLOW, "  Export:");
             crate::println!("  daw export [path]               Export WAV (default: /home/output.wav)");
