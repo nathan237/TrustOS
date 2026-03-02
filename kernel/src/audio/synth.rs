@@ -326,29 +326,82 @@ impl Oscillator {
         interp as i16
     }
 
-    /// Square wave: +max for first half, -max for second half
+    /// PolyBLEP residual for smoothing waveform discontinuities.
+    /// Dramatically reduces aliasing for square and sawtooth waves.
+    /// `p` is phase position within current period [0, period).
+    /// Returns Q16 correction in [-65536, +65536].
+    fn poly_blep(&self, p: u32) -> i32 {
+        let inc = self.phase_inc;
+        if inc == 0 { return 0; }
+        let period = (TABLE_SIZE << FRAC_BITS) as u32;
+
+        // Just after a discontinuity (p < inc)
+        if p < inc {
+            let t = ((p as u64) << 16) / inc as u64;
+            let t = t as i32;
+            // 2t - t² - 1 (all in Q16 where 1.0 = 65536)
+            return 2 * t - ((t as i64 * t as i64) >> 16) as i32 - 65536;
+        }
+
+        // Just before a discontinuity (p > period - inc)
+        if p > period.saturating_sub(inc) {
+            let t = (((p as i64) - period as i64) << 16) / inc as i64;
+            let t = t as i32;
+            // t² + 2t + 1
+            return ((t as i64 * t as i64) >> 16) as i32 + 2 * t + 65536;
+        }
+
+        0
+    }
+
+    /// Band-limited square wave via PolyBLEP (removes aliasing)
     fn gen_square(&self) -> i16 {
-        let table_pos = (self.phase >> FRAC_BITS) & 0xFF;
-        if table_pos < 128 { 24000 } else { -24000 }
+        let period_mask = ((TABLE_SIZE << FRAC_BITS) - 1) as u32;
+        let half = (128u32) << FRAC_BITS;
+        let p = self.phase & period_mask;
+
+        let naive: i32 = if p < half { 24000 } else { -24000 };
+
+        // PolyBLEP corrections at rising edge (0) and falling edge (half)
+        let blep_rise = self.poly_blep(p);
+        let blep_fall = self.poly_blep(p.wrapping_sub(half) & period_mask);
+
+        let sample = naive
+            + ((blep_rise as i64 * 24000) >> 16) as i32
+            - ((blep_fall as i64 * 24000) >> 16) as i32;
+
+        sample.clamp(-32767, 32767) as i16
     }
 
-    /// Sawtooth: linear ramp from -max to +max over one period
+    /// Band-limited sawtooth wave via PolyBLEP (full 24-bit precision)
     fn gen_sawtooth(&self) -> i16 {
-        // phase goes 0→(256<<16), map to -32767→+32767
-        let pos = (self.phase >> FRAC_BITS) & 0xFF;
-        // pos: 0→255 → sample: -24000→+24000
-        ((pos as i32 * 48000 / 256) - 24000) as i16
+        let period_mask = ((TABLE_SIZE << FRAC_BITS) - 1) as u32;
+        let period = (TABLE_SIZE << FRAC_BITS) as u64;
+        let p = self.phase & period_mask;
+
+        // Full 24-bit precision naive sawtooth (was 8-bit!)
+        let naive = ((p as i64 * 48000) / period as i64 - 24000) as i32;
+
+        // PolyBLEP correction at the falling discontinuity (wrap point)
+        let blep = self.poly_blep(p);
+        let correction = ((blep as i64 * 24000) >> 16) as i32;
+
+        (naive - correction).clamp(-32767, 32767) as i16
     }
 
-    /// Triangle wave: ramp up then down
+    /// Triangle wave with full 24-bit phase precision (was 8-bit!)
     fn gen_triangle(&self) -> i16 {
-        let pos = (self.phase >> FRAC_BITS) & 0xFF;
-        if pos < 128 {
-            // Rising: 0→127 → -24000→+24000
-            ((pos as i32 * 48000 / 128) - 24000) as i16
+        let period_mask = ((TABLE_SIZE << FRAC_BITS) - 1) as u32;
+        let p = self.phase & period_mask;
+        let half = (128u32) << FRAC_BITS;
+
+        if p < half {
+            // Rising half: 0 → half → output -24000 → +24000
+            ((p as i64 * 48000 / half as i64) - 24000) as i16
         } else {
-            // Falling: 128→255 → +24000→-24000
-            (((255 - pos) as i32 * 48000 / 128) - 24000) as i16
+            // Falling half: half → period → output +24000 → -24000
+            let rev = ((TABLE_SIZE << FRAC_BITS) as u32).wrapping_sub(p);
+            ((rev as i64 * 48000 / half as i64) - 24000) as i16
         }
     }
 
@@ -366,42 +419,129 @@ impl Oscillator {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// Voice — one note being played (oscillator + envelope)
+// Low-Pass Filter — warms up harsh digital oscillators
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// A single synthesis voice (oscillator + envelope)
+/// Two-pole cascaded low-pass filter (integer DSP, −12 dB/octave)
+/// Removes harsh high-frequency aliasing artifacts and adds analog warmth.
+#[derive(Debug, Clone, Copy)]
+struct LowPassFilter {
+    y1: i32,    // first pole state
+    y2: i32,    // second pole state
+    alpha: u32, // coefficient in Q16 (65536 = full bypass)
+}
+
+impl LowPassFilter {
+    /// Create a bypass filter (no filtering)
+    fn bypass() -> Self {
+        Self { y1: 0, y2: 0, alpha: 65536 }
+    }
+
+    /// Set cutoff frequency using bilinear-transform approximation
+    fn set_cutoff(&mut self, cutoff_hz: u32) {
+        // w = 2π × fc / fs (scaled ×1000 for integer math)
+        let w = (6283u64 * cutoff_hz as u64) / SAMPLE_RATE as u64;
+        // alpha = w / (1000 + w) in Q16
+        self.alpha = ((w << 16) / (1000 + w)).min(65536) as u32;
+    }
+
+    /// Process one sample through 2-pole cascaded LPF
+    fn process(&mut self, input: i32) -> i32 {
+        let a = self.alpha as i64;
+        // First pole
+        self.y1 += (((input - self.y1) as i64 * a) >> 16) as i32;
+        // Second pole (cascaded for steeper rolloff)
+        self.y2 += (((self.y1 - self.y2) as i64 * a) >> 16) as i32;
+        self.y2
+    }
+
+    fn reset(&mut self) {
+        self.y1 = 0;
+        self.y2 = 0;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Voice — one note being played (oscillator + envelope + filter)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// A single synthesis voice: dual oscillators (unison) + envelope + filter + drift
 #[derive(Debug, Clone)]
 pub struct Voice {
     pub osc: Oscillator,
+    /// Detuned second oscillator for unison width/richness
+    osc2: Oscillator,
     pub env: Envelope,
+    /// 2-pole low-pass filter for analog warmth
+    filter: LowPassFilter,
     /// MIDI note number (for identification)
     pub note: u8,
     /// Velocity (0-127)
     pub velocity: u8,
     /// Is this voice active?
     pub active: bool,
+    /// Micro pitch drift LFO counter (makes it sound analog)
+    drift_phase: u32,
+    /// Base phase_inc of osc1 (before drift modulation)
+    base_inc: u32,
 }
 
 impl Voice {
     pub fn new() -> Self {
         Self {
             osc: Oscillator::new(Waveform::Sine, 440),
+            osc2: Oscillator::new(Waveform::Sine, 440),
             env: Envelope::default_env(),
+            filter: LowPassFilter::bypass(),
             note: 0,
             velocity: 0,
             active: false,
+            drift_phase: 0,
+            base_inc: 0,
         }
     }
 
     /// Start playing a note
     pub fn note_on(&mut self, note: u8, velocity: u8, waveform: Waveform, envelope: Envelope) {
         let freq = MIDI_FREQ[note.min(127) as usize];
+
+        // Primary oscillator
         self.osc = Oscillator::new(waveform, freq);
+        self.base_inc = self.osc.phase_inc;
+        self.drift_phase = 0;
+
+        // Detuned second oscillator (+0.5%) for unison width
+        let freq2 = freq + (freq / 200).max(1);
+        self.osc2 = Oscillator::new(waveform, freq2);
+
         self.env = envelope;
         self.env.note_on();
         self.note = note;
         self.velocity = velocity;
         self.active = true;
+
+        // Setup low-pass filter cutoff based on waveform character
+        self.filter.reset();
+        match waveform {
+            Waveform::Sine => {
+                // Sine is already pure — bypass
+                self.filter = LowPassFilter::bypass();
+            }
+            Waveform::Triangle => {
+                // Fairly clean — gentle filtering
+                let cutoff = (freq * 12).max(400).min(16000);
+                self.filter.set_cutoff(cutoff);
+            }
+            Waveform::Square | Waveform::Sawtooth => {
+                // These have strong harmonics — warmer filtering
+                let cutoff = (freq * 8).max(300).min(12000);
+                self.filter.set_cutoff(cutoff);
+            }
+            Waveform::Noise => {
+                // Tame the harsh white noise
+                self.filter.set_cutoff(6000);
+            }
+        }
     }
 
     /// Release the note
@@ -409,7 +549,7 @@ impl Voice {
         self.env.note_off();
     }
 
-    /// Generate one sample
+    /// Generate one sample: dual oscillators → drift → filter → saturation → envelope
     pub fn tick(&mut self) -> i16 {
         if !self.active {
             return 0;
@@ -421,13 +561,35 @@ impl Voice {
             return 0;
         }
 
-        let raw = self.osc.tick() as i32;
+        // ── Micro pitch drift (slow LFO ~3.5 Hz, ±0.08% = analog feel) ──
+        self.drift_phase = self.drift_phase.wrapping_add(19);  // ~3.5 Hz at 48kHz
+        let drift_idx = (self.drift_phase >> 8) as usize & 0xFF;
+        let drift_val = SINE_TABLE[drift_idx] as i32;  // -32767..+32767
+        // ±0.08% of base_inc ≈ base_inc * drift / (32767 * 1250)
+        let drift_mod = ((self.base_inc as i64 * drift_val as i64) / (32767 * 1250)) as i32;
+        self.osc.phase_inc = (self.base_inc as i32 + drift_mod).max(1) as u32;
+
+        // Mix both oscillators (unison for richness)
+        let raw1 = self.osc.tick() as i32;
+        let raw2 = self.osc2.tick() as i32;
+        let raw = (raw1 + raw2) / 2;
+
+        // Apply low-pass filter for warmth
+        let filtered = self.filter.process(raw);
+
+        // ── Analog-style soft saturation (tape warmth) ──
+        let sat = if filtered > 18000 {
+            18000 + (filtered - 18000) / 4
+        } else if filtered < -18000 {
+            -18000 + (filtered + 18000) / 4
+        } else {
+            filtered
+        };
+
         let vel_scale = self.velocity as i32;
 
-        // sample = oscillator × envelope × velocity
-        // raw is Q15 (±32767), env is Q15 (0-32767), velocity is 0-127
-        // result = raw × env / 32767 × vel / 127
-        let sample = (raw * env_level / 32767) * vel_scale / 127;
+        // sample = saturated × envelope × velocity
+        let sample = (sat * env_level / 32767) * vel_scale / 127;
         sample.clamp(-32767, 32767) as i16
     }
 }

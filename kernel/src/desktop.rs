@@ -49,6 +49,12 @@ const GREEN_MUTED: u32 = 0xFF008844;         // Borders, separators
 const GREEN_SUBTLE: u32 = 0xFF006633;        // Subtle elements
 const GREEN_GHOST: u32 = 0xFF003B1A;         // Shadows, grid
 
+// Chrome/silver from TrustOS logo — shining grey for borders
+const CHROME_BRIGHT: u32 = 0xFFB0B2B0;       // Bright chrome highlight (logo highlight)
+const CHROME_MID: u32 = 0xFF8C8E8C;          // Mid chrome (logo main grey)
+const CHROME_DIM: u32 = 0xFF606260;          // Subtle chrome (logo shadow edge)
+const CHROME_GHOST: u32 = 0xFF3A3C3A;        // Very faint chrome (unfocused borders)
+
 // Status colors (minimal use)
 const ACCENT_AMBER: u32 = 0xFFFFD166;        // Warnings
 const ACCENT_RED: u32 = 0xFFFF5555;          // Errors (rare)
@@ -495,6 +501,7 @@ pub enum WindowType {
     LabMode,      // TrustLab introspection laboratory
     #[cfg(feature = "emulators")]
     GameLab,      // Game Boy emulator analysis dashboard
+    MusicPlayer,  // Music player widget with pulse wave
 }
 
 /// Window structure
@@ -798,7 +805,488 @@ impl Window {
 use crate::graphics::{compositor, Compositor, CompositorTheme, WindowSurface, Easing};
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// 🎨 RENDER MODE - Choose between classic and OpenGL compositor
+// � MUSIC PLAYER STATE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Playback state machine
+#[derive(Clone, Copy, PartialEq)]
+pub enum PlaybackState {
+    Stopped,
+    Playing,
+    Paused,
+}
+
+/// Music player widget state — manages non-blocking audio playback + FFT visualization.
+pub struct MusicPlayerState {
+    pub state: PlaybackState,
+    /// Decoded PCM (48kHz stereo i16)
+    pub audio: Option<Vec<i16>>,
+    /// Current song title
+    pub song_title: String,
+    /// DMA write cursor (samples written so far)
+    pub write_cursor: usize,
+    /// Which DMA half was last refilled (0 or 1)
+    pub last_half: u32,
+    /// Audio exhausted flag
+    pub audio_exhausted: bool,
+    /// Total DMA-consumed samples (stereo i16, incremented on each half-buffer flip)
+    pub consumed_samples: usize,
+    /// DMA buffer capacity in i16 samples (cached after start)
+    pub dma_cap: usize,
+    /// Visual frame counter (local)
+    pub vis_frame: u32,
+    /// LPIB-based elapsed milliseconds (sync'd to hardware)
+    pub elapsed_ms: u64,
+    /// Base offset for seek (added to LPIB-derived time)
+    pub seek_base_ms: u64,
+    /// Total duration in ms
+    pub total_ms: u64,
+    /// FFT scratch buffers
+    pub fft_re: [f32; 1024],
+    pub fft_im: [f32; 1024],
+    /// Peak RMS for auto-gain
+    pub peak_rms: f32,
+    /// Smoothed band energies (sub-bass, bass, mid, treble)
+    pub sub_bass: f32,
+    pub bass: f32,
+    pub mid: f32,
+    pub treble: f32,
+    /// Beat pulse (0.0–1.0)
+    pub beat: f32,
+    /// Smoothed overall energy
+    pub energy: f32,
+    /// Previous energy for onset detection
+    pub prev_energy: f32,
+    /// Energy history ring buffer for adaptive threshold
+    pub energy_hist: [f32; 43],
+    pub hist_idx: usize,
+    pub hist_count: usize,
+    /// Waveform ring buffer (128 samples for pulse visualization)
+    pub waveform: [f32; 128],
+    pub wave_idx: usize,
+    /// Volume level (0–100)
+    pub volume: u32,
+    /// Audio/visual sync offset in ms (positive = shift visual later, negative = shift visual earlier)
+    pub av_offset_ms: i32,
+}
+
+impl MusicPlayerState {
+    pub fn new() -> Self {
+        Self {
+            state: PlaybackState::Stopped,
+            audio: None,
+            song_title: String::from("No Track"),
+            write_cursor: 0,
+            last_half: 0,
+            audio_exhausted: false,
+            consumed_samples: 0,
+            dma_cap: 0,
+            vis_frame: 0,
+            elapsed_ms: 0,
+            seek_base_ms: 0,
+            total_ms: 0,
+            fft_re: [0.0; 1024],
+            fft_im: [0.0; 1024],
+            peak_rms: 1.0,
+            sub_bass: 0.0,
+            bass: 0.0,
+            mid: 0.0,
+            treble: 0.0,
+            beat: 0.0,
+            energy: 0.0,
+            prev_energy: 0.0,
+            energy_hist: [0.0; 43],
+            hist_idx: 0,
+            hist_count: 0,
+            waveform: [0.0; 128],
+            wave_idx: 0,
+            volume: 75,
+            av_offset_ms: 0,
+        }
+    }
+
+    /// Start playback of the embedded Untitled2 track.
+    pub fn play_untitled2(&mut self) {
+        // Make sure any previous playback is fully stopped first
+        if self.state != PlaybackState::Stopped {
+            let _ = crate::drivers::hda::stop();
+            self.state = PlaybackState::Stopped;
+        }
+
+        // Decode embedded WAV
+        static UNTITLED2_WAV: &[u8] = include_bytes!("trustdaw/untitled2.wav");
+        match crate::trustdaw::audio_viz::decode_wav_to_pcm(UNTITLED2_WAV) {
+            Ok(audio) => {
+                self.song_title = String::from("Untitled (2) — Lo-Fi");
+                let total_frames = audio.len() / 2;
+                self.total_ms = (total_frames as u64 * 1000) / 48000;
+
+                // Init HDA audio (idempotent)
+                crate::audio::init().ok();
+
+                // Get DMA buffer capacity
+                let dma_cap = crate::drivers::hda::get_dma_buffer_info()
+                    .map(|(_, c)| c)
+                    .unwrap_or(0);
+                if dma_cap == 0 {
+                    crate::serial_println!("[MUSIC] No DMA buffer available");
+                    return;
+                }
+
+                // Reset stream fully: stop, SRST (clears LPIB), reconfigure
+                let _ = crate::drivers::hda::stop();
+                crate::drivers::hda::reset_stream();
+
+                // Fill initial DMA buffer and start playback
+                let initial = audio.len().min(dma_cap);
+                if let Ok(()) = crate::drivers::hda::start_looped_playback(&audio[0..initial]) {
+                    self.write_cursor = initial;
+                    self.dma_cap = dma_cap;
+                    self.audio = Some(audio);
+                    self.state = PlaybackState::Playing;
+                    self.audio_exhausted = false;
+                    self.consumed_samples = 0;
+                    self.seek_base_ms = 0;
+                    self.vis_frame = 0;
+                    self.elapsed_ms = 0;
+
+                    // Read actual LPIB to sync half-buffer tracking
+                    let lpib = crate::drivers::hda::get_playback_position();
+                    let full_bytes = (dma_cap * 2) as u32;
+                    let half_bytes = full_bytes / 2;
+                    let lpib_clamped = if lpib >= full_bytes { 0 } else { lpib };
+                    self.last_half = if lpib_clamped < half_bytes { 0 } else { 1 };
+
+                    // Apply saved volume
+                    let _ = crate::drivers::hda::set_volume(self.volume.min(100) as u8);
+
+                    // Reset FFT / beat state
+                    self.peak_rms = 1.0;
+                    self.sub_bass = 0.0;
+                    self.bass = 0.0;
+                    self.mid = 0.0;
+                    self.treble = 0.0;
+                    self.beat = 0.0;
+                    self.energy = 0.0;
+                    self.prev_energy = 0.0;
+                    self.energy_hist = [0.0; 43];
+                    self.hist_idx = 0;
+                    self.hist_count = 0;
+                    self.waveform = [0.0; 128];
+                    self.wave_idx = 0;
+                    crate::serial_println!("[MUSIC] Playing Untitled (2), {}ms, DMA={}", self.total_ms, dma_cap);
+                } else {
+                    crate::serial_println!("[MUSIC] start_looped_playback failed");
+                }
+            }
+            Err(e) => crate::serial_println!("[MUSIC] Decode error: {}", e),
+        }
+    }
+
+    /// Stop playback
+    pub fn stop(&mut self) {
+        if self.state != PlaybackState::Stopped {
+            let _ = crate::drivers::hda::stop();
+            crate::drivers::hda::reset_stream();
+            self.state = PlaybackState::Stopped;
+            self.audio = None;
+            self.write_cursor = 0;
+            self.consumed_samples = 0;
+            self.dma_cap = 0;
+            self.seek_base_ms = 0;
+            self.vis_frame = 0;
+            self.elapsed_ms = 0;
+            // Decay visual state
+            self.beat = 0.0;
+            self.energy = 0.0;
+            self.sub_bass = 0.0;
+            self.bass = 0.0;
+            self.mid = 0.0;
+            self.treble = 0.0;
+            crate::serial_println!("[MUSIC] Stopped");
+        }
+    }
+
+    /// Toggle pause/resume
+    pub fn toggle_pause(&mut self) {
+        match self.state {
+            PlaybackState::Playing => {
+                let _ = crate::drivers::hda::stop();
+                self.state = PlaybackState::Paused;
+                crate::serial_println!("[MUSIC] Paused at {}ms", self.elapsed_ms);
+            }
+            PlaybackState::Paused => {
+                // Resume by refilling DMA from current position and restarting
+                self.resume_from_current_pos();
+            }
+            _ => {}
+        }
+    }
+
+    /// Resume playback from current elapsed_ms position
+    /// Refills DMA buffer from the audio at that position and restarts HDA.
+    fn resume_from_current_pos(&mut self) {
+        // Take audio out temporarily to avoid clone (we put it back after)
+        let audio = match self.audio.take() {
+            Some(a) => a,
+            None => return,
+        };
+        let dma_cap = crate::drivers::hda::get_dma_buffer_info()
+            .map(|(_, c)| c)
+            .unwrap_or(0);
+        if dma_cap == 0 {
+            self.audio = Some(audio);
+            return;
+        }
+
+        // Compute audio sample position from elapsed_ms
+        let sample_pos = ((self.elapsed_ms as usize * 48000 * 2) / 1000).min(audio.len());
+
+        // Stop + full stream reset (SRST clears LPIB to 0, reconfigures stream)
+        let _ = crate::drivers::hda::stop();
+        crate::drivers::hda::reset_stream();
+
+        // Fill DMA buffer from new position and start
+        let initial = audio.len().saturating_sub(sample_pos).min(dma_cap);
+        if initial == 0 {
+            self.audio = Some(audio);
+            self.stop();
+            return;
+        }
+        if let Ok(()) = crate::drivers::hda::start_looped_playback(&audio[sample_pos..sample_pos + initial]) {
+            self.write_cursor = sample_pos + initial;
+            self.dma_cap = dma_cap;
+            self.consumed_samples = 0;
+            self.seek_base_ms = self.elapsed_ms;
+            self.state = PlaybackState::Playing;
+            self.audio_exhausted = false;
+
+            // After SRST, LPIB starts at 0 — always start in half 0
+            self.last_half = 0;
+
+            let _ = crate::drivers::hda::set_volume(self.volume.min(100) as u8);
+            crate::serial_println!("[MUSIC] Resumed at {}ms, sample={}", self.elapsed_ms, sample_pos);
+        } else {
+            crate::serial_println!("[MUSIC] Resume start_looped_playback failed");
+        }
+        // Put audio back
+        self.audio = Some(audio);
+    }
+
+    /// Seek to a specific millisecond position. Works from Playing or Paused.
+    pub fn seek_to(&mut self, target_ms: u64) {
+        let target_ms = target_ms.min(self.total_ms);
+        self.elapsed_ms = target_ms;
+
+        // If paused, just update position — DMA will be refilled on resume
+        if self.state == PlaybackState::Paused {
+            crate::serial_println!("[MUSIC] Seek (paused) to {}ms", target_ms);
+            return;
+        }
+
+        // If playing, do a live seek: refill DMA from new position
+        if self.state == PlaybackState::Playing {
+            self.resume_from_current_pos();
+            crate::serial_println!("[MUSIC] Seek (playing) to {}ms", target_ms);
+        }
+    }
+
+    /// Tick: DMA refill + FFT analysis. Called every desktop frame (~16ms).
+    pub fn tick(&mut self) {
+        if self.state != PlaybackState::Playing { return; }
+        let audio = match &self.audio {
+            Some(a) => a,
+            None => return,
+        };
+
+        // DMA refill using LPIB-based half-buffer ping-pong
+        if let Some((dma_ptr, dma_cap)) = crate::drivers::hda::get_dma_buffer_info() {
+            let half_i16 = dma_cap / 2;
+            let half_bytes = (half_i16 * 2) as u32;
+            let full_bytes = (dma_cap * 2) as u32;
+
+            crate::drivers::hda::clear_stream_status();
+            crate::drivers::hda::ensure_running();
+
+            let lpib = crate::drivers::hda::get_playback_position();
+            let lpib_clamped = if lpib >= full_bytes { 0 } else { lpib };
+            let current_half = if lpib_clamped < half_bytes { 0u32 } else { 1u32 };
+
+            if current_half != self.last_half {
+                // A half-buffer has been consumed — track it
+                self.consumed_samples += half_i16;
+
+                if self.write_cursor < audio.len() {
+                    let dest_offset = self.last_half as usize * half_i16;
+                    let remaining = audio.len() - self.write_cursor;
+                    let to_copy = remaining.min(half_i16);
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            audio.as_ptr().add(self.write_cursor),
+                            dma_ptr.add(dest_offset),
+                            to_copy,
+                        );
+                        if to_copy < half_i16 {
+                            core::ptr::write_bytes(dma_ptr.add(dest_offset + to_copy), 0, half_i16 - to_copy);
+                        }
+                    }
+                    self.write_cursor += to_copy;
+                    if self.write_cursor >= audio.len() {
+                        self.audio_exhausted = true;
+                    }
+                } else {
+                    let dest_offset = self.last_half as usize * half_i16;
+                    unsafe { core::ptr::write_bytes(dma_ptr.add(dest_offset), 0, half_i16); }
+                }
+                self.last_half = current_half;
+            }
+
+            // ── LPIB-based timing (synced to hardware) ──
+            // consumed_samples counts STEREO i16 samples consumed by DMA.
+            // But LPIB also tells us exactly where in the current half we are.
+            let lpib_samples = (lpib_clamped / 2) as usize; // bytes → i16
+            // Total hardware-consumed position = consumed_samples - remaining_in_current_half
+            // consumed_samples tracks how many samples have been FULLY played (past halves),
+            // plus lpib_samples tells us how far into the current DMA buffer we are.
+            // Since consumed_samples is incremented when the PREVIOUS half completes,
+            // the actual playback position is: initial_dma_fill + consumed - dma_cap + lpib_samples
+            // Simplified: the source audio position being heard RIGHT NOW is:
+            let heard_pos = if self.consumed_samples + lpib_samples >= dma_cap {
+                self.consumed_samples + lpib_samples - dma_cap
+            } else {
+                lpib_samples // still within initial DMA fill
+            };
+            // Convert stereo samples → milliseconds (48kHz stereo = 96000 samples/sec)
+            // Add seek_base_ms so seek position is preserved
+            self.elapsed_ms = self.seek_base_ms + (heard_pos as u64 * 1000) / (48000 * 2);
+        }
+
+        self.vis_frame += 1;
+
+        // Check if done
+        if self.elapsed_ms >= self.total_ms || self.audio_exhausted {
+            self.stop();
+            return;
+        }
+
+        // Audio position for FFT — use LPIB-synced position + A/V sync offset
+        let visual_ms = (self.elapsed_ms as i64 + self.av_offset_ms as i64).max(0).min(self.total_ms as i64) as u64;
+        let audio_pos = (visual_ms as usize * 48000 * 2 / 1000).min(audio.len().saturating_sub(2));
+
+        // ── Mini FFT (256-point for speed — enough for widget) ──
+        let fft_n = 256usize;
+        let mono_start = audio_pos.saturating_sub(fft_n * 2) & !1;
+        let mut max_abs: f32 = 0.0;
+        for i in 0..fft_n {
+            let idx = mono_start + i * 2;
+            let s = if idx < audio.len() { audio[idx] as f32 } else { 0.0 };
+            self.fft_re[i] = s;
+            self.fft_im[i] = 0.0;
+            let a = if s >= 0.0 { s } else { -s };
+            if a > max_abs { max_abs = a; }
+        }
+        // Auto-gain
+        if max_abs > self.peak_rms {
+            self.peak_rms += (max_abs - self.peak_rms) * 0.3;
+        } else {
+            self.peak_rms *= 0.9995;
+        }
+        let gain = if self.peak_rms > 100.0 { 16000.0 / self.peak_rms } else { 1.0 };
+        // Hann + normalize
+        for i in 0..fft_n {
+            let t = i as f32 / fft_n as f32;
+            let hann = 0.5 * (1.0 - libm::cosf(2.0 * core::f32::consts::PI * t));
+            self.fft_re[i] *= hann * gain / 32768.0;
+        }
+        // In-place FFT (256-point)
+        {
+            let re = &mut self.fft_re[..fft_n];
+            let im = &mut self.fft_im[..fft_n];
+            // Bit-reversal
+            let mut j = 0usize;
+            for i in 0..fft_n {
+                if i < j { re.swap(i, j); im.swap(i, j); }
+                let mut m = fft_n >> 1;
+                while m >= 1 && j >= m { j -= m; m >>= 1; }
+                j += m;
+            }
+            // Butterfly
+            let mut step = 2;
+            while step <= fft_n {
+                let half = step / 2;
+                let ang = -core::f32::consts::PI * 2.0 / step as f32;
+                for k in 0..half {
+                    let a = ang * k as f32;
+                    let wr = libm::cosf(a);
+                    let wi = libm::sinf(a);
+                    let mut ii = k;
+                    while ii < fft_n {
+                        let jj = ii + half;
+                        let tr = wr * re[jj] - wi * im[jj];
+                        let ti = wr * im[jj] + wi * re[jj];
+                        re[jj] = re[ii] - tr; im[jj] = im[ii] - ti;
+                        re[ii] += tr; im[ii] += ti;
+                        ii += step;
+                    }
+                }
+                step <<= 1;
+            }
+        }
+        // Band energies (256-pt FFT at 48kHz: bin = index * 187.5 Hz)
+        let mag = |lo: usize, hi: usize| -> f32 {
+            let mut s = 0.0f32;
+            for i in lo..hi.min(128) {
+                s += libm::sqrtf(self.fft_re[i] * self.fft_re[i] + self.fft_im[i] * self.fft_im[i]);
+            }
+            s / (hi - lo).max(1) as f32
+        };
+        let raw_sub = mag(1, 2);   // ~188Hz
+        let raw_bass = mag(2, 4);  // 375-750Hz
+        let raw_mid = mag(4, 16);  // 750-3000Hz
+        let raw_tre = mag(16, 60); // 3000-11.25kHz
+        let raw_e = raw_sub * 1.5 + raw_bass * 1.2 + raw_mid * 0.5 + raw_tre * 0.2;
+
+        // Smooth
+        let sm = |prev: f32, new: f32, a: f32, r: f32| -> f32 {
+            if new > prev { prev + (new - prev) * a } else { prev + (new - prev) * r }
+        };
+        self.sub_bass = sm(self.sub_bass, raw_sub.min(1.0), 0.75, 0.10);
+        self.bass = sm(self.bass, raw_bass.min(1.0), 0.70, 0.10);
+        self.mid = sm(self.mid, raw_mid.min(1.0), 0.60, 0.12);
+        self.treble = sm(self.treble, raw_tre.min(1.0), 0.70, 0.16);
+        self.energy = sm(self.energy, raw_e.min(1.5), 0.65, 0.10);
+
+        // Beat detection
+        let be = raw_sub + raw_bass * 0.8;
+        self.energy_hist[self.hist_idx] = be;
+        self.hist_idx = (self.hist_idx + 1) % 43;
+        if self.hist_count < 43 { self.hist_count += 1; }
+        let filled = self.hist_count.max(1) as f32;
+        let avg: f32 = self.energy_hist.iter().take(self.hist_count).sum::<f32>() / filled;
+        let mut var_sum = 0.0f32;
+        for i in 0..self.hist_count { let d = self.energy_hist[i] - avg; var_sum += d * d; }
+        let variance = var_sum / filled;
+        let threshold = (-15.0 * variance + 1.45f32).max(1.05).min(1.5);
+        let onset = be - self.prev_energy;
+        if be > avg * threshold && onset > 0.002 && self.hist_count > 5 {
+            let strength = ((be - avg * threshold) / avg.max(0.001)).min(1.0);
+            self.beat = (0.6 + strength * 0.4).min(1.0);
+        } else {
+            self.beat *= 0.88;
+            if self.beat < 0.02 { self.beat = 0.0; }
+        }
+        self.prev_energy = be;
+
+        // Update waveform ring buffer (sample every few frames for smooth viz)
+        let idx = audio_pos.min(audio.len().saturating_sub(1));
+        let sample = audio[idx & !1] as f32 / 32768.0;
+        self.waveform[self.wave_idx % 128] = sample;
+        self.wave_idx += 1;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// �🎨 RENDER MODE - Choose between classic and OpenGL compositor
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// Rendering backend for the desktop
@@ -868,6 +1356,8 @@ pub struct Desktop {
     pub gameboy_states: BTreeMap<u32, crate::gameboy::GameBoyEmulator>,
     // Lab mode states (window_id -> LabState)
     pub lab_states: BTreeMap<u32, crate::lab_mode::LabState>,
+    // Music player states (window_id -> MusicPlayerState)
+    pub music_player_states: BTreeMap<u32, MusicPlayerState>,
     // GameLab states (window_id -> GameLabState)
     #[cfg(feature = "emulators")]
     pub gamelab_states: BTreeMap<u32, crate::game_lab::GameLabState>,
@@ -882,6 +1372,24 @@ pub struct Desktop {
     matrix_speeds: Vec<u32>,
     matrix_seeds: Vec<u32>,
     matrix_initialized: bool,
+    matrix_beat_count: u32,
+    matrix_last_beat: bool,
+    // ── Global audio analyzer (reacts to ANY HDA output, not just music player) ──
+    // Uses Vec instead of fixed arrays to avoid bloating the static struct size
+    global_fft_re: Vec<f32>,
+    global_fft_im: Vec<f32>,
+    global_sub_bass: f32,
+    global_bass: f32,
+    global_mid: f32,
+    global_treble: f32,
+    global_energy: f32,
+    global_beat: f32,
+    global_peak_rms: f32,
+    global_prev_energy: f32,
+    global_energy_hist: Vec<f32>,
+    global_hist_idx: usize,
+    global_hist_count: usize,
+    global_audio_active: bool,
     // Terminal auto-suggestions: how many suggestion lines added after prompt
     terminal_suggestion_count: usize,
     // Terminal command history (Up/Down arrows)
@@ -1468,6 +1976,7 @@ impl Desktop {
             gameboy_states: BTreeMap::new(),
             binary_viewer_states: BTreeMap::new(),
             lab_states: BTreeMap::new(),
+            music_player_states: BTreeMap::new(),
             #[cfg(feature = "emulators")]
             gamelab_states: BTreeMap::new(),
             #[cfg(feature = "emulators")]
@@ -1478,6 +1987,23 @@ impl Desktop {
             matrix_speeds: Vec::new(),
             matrix_seeds: Vec::new(),
             matrix_initialized: false,
+            matrix_beat_count: 0,
+            matrix_last_beat: false,
+            // Global audio analyzer (heap-allocated to avoid static bloat)
+            global_fft_re: Vec::new(),
+            global_fft_im: Vec::new(),
+            global_sub_bass: 0.0,
+            global_bass: 0.0,
+            global_mid: 0.0,
+            global_treble: 0.0,
+            global_energy: 0.0,
+            global_beat: 0.0,
+            global_peak_rms: 0.0,
+            global_prev_energy: 0.0,
+            global_energy_hist: Vec::new(),
+            global_hist_idx: 0,
+            global_hist_count: 0,
+            global_audio_active: false,
             terminal_suggestion_count: 0,
             command_history: Vec::new(),
             history_index: None,
@@ -1524,6 +2050,7 @@ impl Desktop {
         self.gameboy_states.clear();
         self.binary_viewer_states.clear();
         self.lab_states.clear();
+        self.music_player_states.clear();
         // Browser
         self.browser = None;
         self.browser_url_input.clear();
@@ -1597,6 +2124,13 @@ impl Desktop {
         
         // Initialize matrix rain
         self.init_matrix_rain();
+        
+        // Auto-open music player widget in bottom-right corner
+        {
+            let mp_x = width.saturating_sub(320) as i32;
+            let mp_y = height.saturating_sub(TASKBAR_HEIGHT + 385) as i32;
+            self.create_window("Music Player", mp_x, mp_y.max(20), 300, 365, WindowType::MusicPlayer);
+        }
         
         crate::serial_println!("[Desktop] init complete");
     }
@@ -2000,6 +2534,9 @@ struct AppConfig {
             WindowType::GameLab => {
                 self.gamelab_states.insert(window.id, crate::game_lab::GameLabState::new());
             },
+            WindowType::MusicPlayer => {
+                self.music_player_states.insert(window.id, MusicPlayerState::new());
+            },
             _ => {}
         }
         
@@ -2026,6 +2563,11 @@ struct AppConfig {
                 #[cfg(feature = "emulators")]
                 self.gamelab_states.remove(&id);
                 self.lab_states.remove(&id);
+                // Stop music playback on close
+                if let Some(mp) = self.music_player_states.get_mut(&id) {
+                    mp.stop();
+                }
+                self.music_player_states.remove(&id);
                 return;
             }
         }
@@ -2045,6 +2587,10 @@ struct AppConfig {
         self.gameboy_states.remove(&id);
         self.binary_viewer_states.remove(&id);
         self.lab_states.remove(&id);
+        if let Some(mp) = self.music_player_states.get_mut(&id) {
+            mp.stop();
+        }
+        self.music_player_states.remove(&id);
         #[cfg(feature = "emulators")]
         self.gamelab_states.remove(&id);
         #[cfg(feature = "emulators")]
@@ -2572,6 +3118,121 @@ struct AppConfig {
                         }
                     }
                     
+                    // Handle music player button clicks
+                    if self.windows[i].window_type == WindowType::MusicPlayer {
+                        let win = &self.windows[i];
+                        let wx = win.x as u32;
+                        let wy = win.y as u32 + TITLE_BAR_HEIGHT;
+                        let ww = win.width;
+                        let wh = win.height.saturating_sub(TITLE_BAR_HEIGHT);
+                        let pad = 12u32;
+                        let inner_x = wx + pad;
+                        let inner_w = ww.saturating_sub(pad * 2);
+
+                        // Calculate layout positions matching draw_music_player
+                        let status_y = wy + 10 + 18;
+                        let prog_y = status_y + 20;
+                        let viz_y = prog_y + 14;
+                        let viz_h = 80u32;
+                        let bars_y = viz_y + viz_h + 6;
+                        let bar_h = 16u32;
+                        let ctrl_y = bars_y + bar_h + 10;
+                        let btn_w = 50u32;
+                        let btn_h = 24u32;
+                        let btn_gap = 8u32;
+
+                        let click_x = x as u32;
+                        let click_y = y as u32;
+                        let win_id = win.id;
+
+                        // Play/Pause button
+                        let play_x = inner_x;
+                        if click_x >= play_x && click_x < play_x + btn_w
+                            && click_y >= ctrl_y && click_y < ctrl_y + btn_h {
+                            if let Some(mp) = self.music_player_states.get_mut(&win_id) {
+                                match mp.state {
+                                    PlaybackState::Stopped => mp.play_untitled2(),
+                                    PlaybackState::Playing | PlaybackState::Paused => mp.toggle_pause(),
+                                }
+                            }
+                        }
+
+                        // Stop button
+                        let stop_x = play_x + btn_w + btn_gap;
+                        if click_x >= stop_x && click_x < stop_x + btn_w
+                            && click_y >= ctrl_y && click_y < ctrl_y + btn_h {
+                            if let Some(mp) = self.music_player_states.get_mut(&win_id) {
+                                mp.stop();
+                            }
+                        }
+
+                        // Volume bar click
+                        let vol_x = stop_x + btn_w + btn_gap + 10;
+                        let track_x = vol_x + 10;
+                        let track_w = inner_w.saturating_sub(vol_x - inner_x + 14);
+                        let vol_h = 10u32;
+                        let vol_y = ctrl_y + (btn_h - vol_h) / 2;
+                        if click_x >= track_x && click_x < track_x + track_w
+                            && click_y >= vol_y.saturating_sub(4) && click_y < vol_y + vol_h + 4 {
+                            let rel = (click_x - track_x) as f32 / track_w.max(1) as f32;
+                            let new_vol = (rel * 100.0).max(0.0).min(100.0) as u32;
+                            if let Some(mp) = self.music_player_states.get_mut(&win_id) {
+                                mp.volume = new_vol;
+                                let _ = crate::drivers::hda::set_volume(new_vol.min(100) as u8);
+                            }
+                        }
+
+                        // Progress bar seek click
+                        if click_x >= inner_x && click_x < inner_x + inner_w
+                            && click_y >= prog_y.saturating_sub(2) && click_y < prog_y + 8 {
+                            if let Some(mp) = self.music_player_states.get_mut(&win_id) {
+                                if mp.total_ms > 0 && mp.state != PlaybackState::Stopped {
+                                    let rel = (click_x - inner_x) as f32 / inner_w.max(1) as f32;
+                                    let new_ms = (rel * mp.total_ms as f32) as u64;
+                                    mp.seek_to(new_ms);
+                                }
+                            }
+                        }
+
+                        // A/V Sync buttons
+                        let sync_y = ctrl_y + btn_h + 6;
+                        let sync_btn_w = 20u32;
+                        let sync_btn_h = 16u32;
+                        let cw = crate::graphics::scaling::char_width() as u32;
+                        let minus_x = inner_x + 38;
+                        let val_x = minus_x + sync_btn_w + 4;
+                        // Compute plus_x from current offset string length
+                        let offset_len = if let Some(mp) = self.music_player_states.get(&win_id) {
+                            alloc::format!("{}ms", mp.av_offset_ms).len() as u32
+                        } else { 3 };
+                        let plus_x = val_x + offset_len * cw + 4;
+                        let zero_x = plus_x + sync_btn_w + 6;
+
+                        if click_y >= sync_y && click_y < sync_y + sync_btn_h {
+                            // "-" button: decrease offset by 10ms
+                            if click_x >= minus_x && click_x < minus_x + sync_btn_w {
+                                if let Some(mp) = self.music_player_states.get_mut(&win_id) {
+                                    mp.av_offset_ms = (mp.av_offset_ms - 10).max(-500);
+                                    crate::serial_println!("[MUSIC] A/V sync: {}ms", mp.av_offset_ms);
+                                }
+                            }
+                            // "+" button: increase offset by 10ms
+                            if click_x >= plus_x && click_x < plus_x + sync_btn_w {
+                                if let Some(mp) = self.music_player_states.get_mut(&win_id) {
+                                    mp.av_offset_ms = (mp.av_offset_ms + 10).min(500);
+                                    crate::serial_println!("[MUSIC] A/V sync: {}ms", mp.av_offset_ms);
+                                }
+                            }
+                            // "0" reset button
+                            if click_x >= zero_x && click_x < zero_x + sync_btn_w {
+                                if let Some(mp) = self.music_player_states.get_mut(&win_id) {
+                                    mp.av_offset_ms = 0;
+                                    crate::serial_println!("[MUSIC] A/V sync: reset to 0ms");
+                                }
+                            }
+                        }
+                    }
+                    
                     self.focus_window(id);
                     return;
                 }
@@ -3068,17 +3729,17 @@ struct AppConfig {
         let item_spacing = 28;
         let item_h = 26;
         
-        // App labels (indices 0-13, non-special)
-        let app_labels: [&str; 14] = [
+        // App labels (indices 0-14, non-special)
+        let app_labels: [&str; 15] = [
             "Terminal", "Files", "Calculator", "Network", "Text Editor",
             "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
-            "NES Emulator", "Game Boy", "TrustLab", "Settings",
+            "NES Emulator", "Game Boy", "TrustLab", "Music Player", "Settings",
         ];
-        let app_indices: [u8; 14] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13];
+        let app_indices: [u8; 15] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14];
         
-        // Power labels (indices 14-16, bottom-anchored)
+        // Power labels (indices 15-17, bottom-anchored)
         let power_labels: [&str; 3] = ["Exit Desktop", "Shutdown", "Reboot"];
-        let power_indices: [u8; 3] = [14, 15, 16];
+        let power_indices: [u8; 3] = [15, 16, 17];
         
         let search = self.start_menu_search.trim();
         let search_lower: String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
@@ -3126,7 +3787,7 @@ struct AppConfig {
     fn handle_menu_action(&mut self, action: u8) {
         // Matches draw_start_menu items array order:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=NES, 11=GameBoy, 12=TrustLab, 13=Settings, 14=Exit Desktop, 15=Shutdown, 16=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=NES, 11=GameBoy, 12=TrustLab, 13=MusicPlayer, 14=Settings, 15=Exit Desktop, 16=Shutdown, 17=Reboot
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
@@ -3177,19 +3838,24 @@ struct AppConfig {
             12 => { // TrustLab
                 self.open_lab_mode();
             },
-            13 => { // Settings
+            13 => { // Music Player
+                let mp_x = self.width.saturating_sub(320) as i32;
+                let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 385) as i32;
+                self.create_window("Music Player", mp_x, mp_y.max(20), 300, 365, WindowType::MusicPlayer);
+            },
+            14 => { // Settings
                 self.open_settings_panel();
             },
-            14 => { // Exit Desktop
+            15 => { // Exit Desktop
                 crate::serial_println!("[GUI] Exit Desktop from start menu");
                 EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
             },
-            15 => { // Shutdown
+            16 => { // Shutdown
                 crate::println!("\n\n=== SYSTEM SHUTDOWN ===");
                 crate::println!("Goodbye!");
                 loop { crate::arch::halt(); }
             },
-            16 => { // Reboot
+            17 => { // Reboot
                 crate::serial_println!("[SYSTEM] Reboot requested");
                 // Triple fault reboot
                 unsafe {
@@ -4284,6 +4950,24 @@ struct AppConfig {
             
             let output = Self::execute_command_static(&cmd);
             
+            // Post-command: handle commands that need &mut self (window creation, etc.)
+            let cmd_trimmed = cmd.trim();
+            if cmd_trimmed.starts_with("play ") {
+                let arg = cmd_trimmed.strip_prefix("play ").unwrap_or("").trim();
+                match arg {
+                    "u2" | "untitled2" | "lofi" | "untitled" => {
+                        // Create music player widget and start playback
+                        let mp_x = self.width.saturating_sub(320) as i32;
+                        let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 385) as i32;
+                        let wid = self.create_window("Music Player", mp_x, mp_y.max(20), 300, 365, WindowType::MusicPlayer);
+                        if let Some(mp_state) = self.music_player_states.get_mut(&wid) {
+                            mp_state.play_untitled2();
+                        }
+                    },
+                    _ => {},
+                }
+            }
+            
             if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                 // Handle "clear" specially — wipe all content
                 if cmd.trim() == "clear" {
@@ -4381,6 +5065,10 @@ struct AppConfig {
                 output.push(String::from("  \x01Gfilled3d       \x01WFilled 3D test"));
                 output.push(String::from("  \x01Gchess          \x01WChess game vs AI"));
                 output.push(String::from("  \x01Gchess3d        \x01W3D chess (Matrix style)"));
+                output.push(String::from(""));
+                // Audio
+                output.push(String::from("\x01Y[Audio]"));
+                output.push(String::from("  \x01Gplay \x01B<track>  \x01WPlay music (u2, lofi)"));
                 output.push(String::from(""));
                 // Shell
                 output.push(String::from("\x01Y[Shell]"));
@@ -4689,6 +5377,25 @@ struct AppConfig {
             "gameboy" | "gb" => {
                 output.push(String::from("\x01G\u{1F3AE} Game Boy \x01M— Opening Game Boy window..."));
                 output.push(String::from("\x01MWASD:D-Pad X/Space:A Z:B C:Select Enter:Start"));
+            },
+            _ if cmd.starts_with("play ") || cmd == "play" => {
+                let arg = cmd.strip_prefix("play ").unwrap_or("").trim();
+                if arg.is_empty() {
+                    output.push(String::from("\x01Y\u{266B} Usage: \x01Gplay u2"));
+                    output.push(String::from("\x01MTracks: u2, untitled2, lofi"));
+                } else {
+                    match arg {
+                        "u2" | "untitled2" | "lofi" | "untitled" => {
+                            output.push(String::from("\x01G\u{266B} Playing Untitled (2) — Lo-Fi"));
+                            output.push(String::from("\x01MOpening Music Player widget..."));
+                            // Will be handled by terminal command dispatch in handle_terminal_command
+                        },
+                        _ => {
+                            output.push(format!("\x01RTrack not found: \x01W{}", arg));
+                            output.push(String::from("\x01MAvailable: u2, untitled2, lofi"));
+                        },
+                    }
+                }
             },
             _ => {
                 output.push(format!("\x01Rbash: \x01Wcommand not found: \x01G{}", cmd));
@@ -5040,6 +5747,14 @@ struct AppConfig {
                 if let Some(snake) = self.snake_states.get_mut(&id) {
                     snake.tick();
                 }
+            }
+        }
+        
+        // Tick music players — always tick if playing (even minimized, for DMA refill)
+        let mp_ids: Vec<u32> = self.music_player_states.keys().copied().collect();
+        for id in mp_ids {
+            if let Some(mp) = self.music_player_states.get_mut(&id) {
+                mp.tick();
             }
         }
         
@@ -5422,17 +6137,17 @@ struct AppConfig {
             }
         }
         
-        // Rounded border
+        // Chrome border (TrustOS logo style)
         draw_rounded_rect_border(
             menu_x, menu_y,
             menu_width as u32, menu_height as u32,
-            corner_r, GREEN_MUTED,
+            corner_r, CHROME_MID,
         );
         
-        // Bright top edge (slightly inset for rounded look)
+        // Bright chrome top edge (slightly inset for rounded look)
         crate::framebuffer::fill_rect(
             (menu_x + corner_r as i32) as u32, menu_y as u32,
-            (menu_width - corner_r as i32 * 2) as u32, 1, GREEN_TERTIARY,
+            (menu_width - corner_r as i32 * 2) as u32, 1, CHROME_BRIGHT,
         );
         
         // Draw items
@@ -5475,13 +6190,183 @@ struct AppConfig {
             }
         }
     }
+
+    /// Analyze audio directly from the HDA DMA buffer — source-agnostic.
+    /// Any audio playing through HDA (music player, Game Boy, system sounds, etc.)
+    /// will drive the matrix rain visualization.
+    fn analyze_global_audio(&mut self) {
+        // Lazy-init Vec buffers on first call
+        if self.global_fft_re.len() < 256 {
+            self.global_fft_re.resize(256, 0.0);
+            self.global_fft_im.resize(256, 0.0);
+        }
+        if self.global_energy_hist.len() < 43 {
+            self.global_energy_hist.resize(43, 0.0);
+        }
+
+        // Check if HDA is playing anything
+        if !crate::drivers::hda::is_playing() {
+            // Decay all values when nothing is playing
+            self.global_sub_bass *= 0.92;
+            self.global_bass *= 0.92;
+            self.global_mid *= 0.92;
+            self.global_treble *= 0.92;
+            self.global_energy *= 0.92;
+            self.global_beat *= 0.85;
+            if self.global_energy < 0.001 {
+                self.global_audio_active = false;
+            }
+            return;
+        }
+
+        // Get DMA buffer and playback position
+        let dma_info = crate::drivers::hda::get_dma_buffer_info();
+        let lpib = crate::drivers::hda::get_playback_position();
+        
+        let (buf_ptr, buf_cap) = match dma_info {
+            Some((p, c)) if !p.is_null() && c > 512 => (p, c),
+            _ => return,
+        };
+
+        // Read 256 mono samples from around the current playback position
+        // LPIB is in bytes; convert to sample index (i16 = 2 bytes)
+        let lpib_sample = (lpib as usize) / 2;
+        // We want samples slightly behind LPIB (what's being heard now)
+        let fft_n = 256usize;
+        let read_start = if lpib_sample >= fft_n * 2 {
+            lpib_sample - fft_n * 2
+        } else {
+            // Wrap around the circular DMA buffer
+            buf_cap.saturating_sub(fft_n * 2 - lpib_sample)
+        };
+
+        let mut max_abs: f32 = 0.0;
+        for i in 0..fft_n {
+            let idx = (read_start + i * 2) % buf_cap; // stereo: skip every other (take left channel)
+            let s = unsafe { *buf_ptr.add(idx) } as f32;
+            self.global_fft_re[i] = s;
+            self.global_fft_im[i] = 0.0;
+            let a = if s >= 0.0 { s } else { -s };
+            if a > max_abs { max_abs = a; }
+        }
+
+        // Check if there's actual signal (not just silence)
+        if max_abs < 10.0 {
+            self.global_audio_active = false;
+            self.global_sub_bass *= 0.92;
+            self.global_bass *= 0.92;
+            self.global_mid *= 0.92;
+            self.global_treble *= 0.92;
+            self.global_energy *= 0.92;
+            self.global_beat *= 0.85;
+            return;
+        }
+        self.global_audio_active = true;
+
+        // Auto-gain
+        if max_abs > self.global_peak_rms {
+            self.global_peak_rms += (max_abs - self.global_peak_rms) * 0.3;
+        } else {
+            self.global_peak_rms *= 0.9995;
+        }
+        let gain = if self.global_peak_rms > 100.0 { 16000.0 / self.global_peak_rms } else { 1.0 };
+
+        // Hann window + normalize
+        for i in 0..fft_n {
+            let t = i as f32 / fft_n as f32;
+            let hann = 0.5 * (1.0 - libm::cosf(2.0 * core::f32::consts::PI * t));
+            self.global_fft_re[i] *= hann * gain / 32768.0;
+        }
+
+        // In-place radix-2 FFT (256-point)
+        {
+            let re = &mut self.global_fft_re[..fft_n];
+            let im = &mut self.global_fft_im[..fft_n];
+            // Bit-reversal
+            let mut j = 0usize;
+            for i in 0..fft_n {
+                if i < j { re.swap(i, j); im.swap(i, j); }
+                let mut m = fft_n >> 1;
+                while m >= 1 && j >= m { j -= m; m >>= 1; }
+                j += m;
+            }
+            // Butterfly
+            let mut step = 2usize;
+            while step <= fft_n {
+                let half = step >> 1;
+                let angle = -core::f32::consts::PI / half as f32;
+                let (ws, wc) = (libm::sinf(angle), libm::cosf(angle));
+                for k in (0..fft_n).step_by(step) {
+                    let (mut wr, mut wi) = (1.0f32, 0.0f32);
+                    for m in 0..half {
+                        let ii = k + m;
+                        let jj = ii + half;
+                        let tr = wr * re[jj] - wi * im[jj];
+                        let ti = wr * im[jj] + wi * re[jj];
+                        re[jj] = re[ii] - tr; im[jj] = im[ii] - ti;
+                        re[ii] += tr; im[ii] += ti;
+                        let new_wr = wr * wc - wi * ws;
+                        wi = wr * ws + wi * wc;
+                        wr = new_wr;
+                    }
+                }
+                step <<= 1;
+            }
+        }
+
+        // Band energies (256-pt FFT at 48kHz: bin = index * 187.5 Hz)
+        let mag = |re: &[f32], im: &[f32], lo: usize, hi: usize| -> f32 {
+            let mut s = 0.0f32;
+            for i in lo..hi.min(128) {
+                s += libm::sqrtf(re[i] * re[i] + im[i] * im[i]);
+            }
+            s / (hi - lo).max(1) as f32
+        };
+        let raw_sub = mag(&self.global_fft_re, &self.global_fft_im, 1, 2);
+        let raw_bass = mag(&self.global_fft_re, &self.global_fft_im, 2, 4);
+        let raw_mid = mag(&self.global_fft_re, &self.global_fft_im, 4, 16);
+        let raw_tre = mag(&self.global_fft_re, &self.global_fft_im, 16, 60);
+        let raw_e = raw_sub * 1.5 + raw_bass * 1.2 + raw_mid * 0.5 + raw_tre * 0.2;
+
+        // Smooth
+        let sm = |prev: f32, new: f32, a: f32, r: f32| -> f32 {
+            if new > prev { prev + (new - prev) * a } else { prev + (new - prev) * r }
+        };
+        self.global_sub_bass = sm(self.global_sub_bass, raw_sub.min(1.0), 0.75, 0.10);
+        self.global_bass = sm(self.global_bass, raw_bass.min(1.0), 0.70, 0.10);
+        self.global_mid = sm(self.global_mid, raw_mid.min(1.0), 0.60, 0.12);
+        self.global_treble = sm(self.global_treble, raw_tre.min(1.0), 0.70, 0.16);
+        self.global_energy = sm(self.global_energy, raw_e.min(1.5), 0.65, 0.10);
+
+        // Beat detection
+        let be = raw_sub + raw_bass * 0.8;
+        self.global_energy_hist[self.global_hist_idx] = be;
+        self.global_hist_idx = (self.global_hist_idx + 1) % 43;
+        if self.global_hist_count < 43 { self.global_hist_count += 1; }
+        let filled = self.global_hist_count.max(1) as f32;
+        let avg: f32 = self.global_energy_hist.iter().take(self.global_hist_count).sum::<f32>() / filled;
+        let mut var_sum = 0.0f32;
+        for i in 0..self.global_hist_count {
+            let d = self.global_energy_hist[i] - avg;
+            var_sum += d * d;
+        }
+        let variance = var_sum / filled;
+        let threshold = (-15.0 * variance + 1.45f32).max(1.05).min(1.5);
+        let onset = be - self.global_prev_energy;
+        if be > avg * threshold && onset > 0.002 && self.global_hist_count > 5 {
+            let strength = ((be - avg * threshold) / avg.max(0.001)).min(1.0);
+            self.global_beat = (0.6 + strength * 0.4).min(1.0);
+        } else {
+            self.global_beat *= 0.88;
+            if self.global_beat < 0.02 { self.global_beat = 0.0; }
+        }
+        self.global_prev_energy = be;
+    }
     
     fn draw_background(&mut self) {
         // ═══════════════════════════════════════════════════════════════
-        // MATRIX RAIN — Slow, atmospheric depth-parallax
-        // Slow columns = FAR (dim, desaturated)
-        // Fast columns = NEAR (bright, vivid green)
-        // Center: "TrustOS" text that lights up on matrix contact
+        // MATRIX RAIN — Multi-color, beat-synced mode switching
+        // Logo: faithful chrome/silver rendering from bitmap
         // ═══════════════════════════════════════════════════════════════
         const MATRIX_COLS: usize = 160;
         const TRAIL_LEN: usize = 30;
@@ -5489,6 +6374,25 @@ struct AppConfig {
         
         let height = self.height.saturating_sub(TASKBAR_HEIGHT);
         let width = self.width;
+        
+        // ── Analyze ALL audio from HDA DMA buffer (source-agnostic) ──
+        self.analyze_global_audio();
+        let m_beat = self.global_beat;
+        let m_energy = self.global_energy;
+        let m_sub_bass = self.global_sub_bass;
+        let m_bass = self.global_bass;
+        let m_mid = self.global_mid;
+        let m_treble = self.global_treble;
+        let m_playing = self.global_audio_active;
+        
+        // ── Beat counter for mode switching ──
+        let beat_on = m_playing && m_beat > 0.5;
+        if beat_on && !self.matrix_last_beat {
+            self.matrix_beat_count = self.matrix_beat_count.wrapping_add(1);
+        }
+        self.matrix_last_beat = beat_on;
+        // Mode toggles on each beat: even = normal, odd = sparse/void mode
+        let void_mode = m_playing && (self.matrix_beat_count % 2 == 1);
         
         // Clear background to pure black
         framebuffer::fill_rect(0, 0, width, height, 0xFF000000);
@@ -5500,7 +6404,7 @@ struct AppConfig {
         // Logo centered vertically in the available space
         let logo_center_y = height / 2;
         
-        // ── Render matrix rain ──
+        // ── Render matrix rain with color variety ──
         let col_width = width / MATRIX_COLS as u32;
         
         for col in 0..MATRIX_COLS.min(self.matrix_heads.len()) {
@@ -5508,8 +6412,43 @@ struct AppConfig {
             let seed = self.matrix_seeds[col];
             let x = (col as u32 * col_width) + col_width / 2;
             
-            // Update position (slower: speed is now 1-3)
-            let new_y = self.matrix_heads[col] + speed as i32;
+            // ── Per-column frequency band assignment (seeded) ──
+            // Each column "listens" to a frequency band:
+            // 0=sub_bass (red/magenta), 1=bass (orange/amber), 2=mid (green), 3=treble (cyan/blue)
+            let freq_band = (seed >> 3) % 4;
+            // Get the amplitude for this column's band (0.0 - 1.0+)
+            let (band_amp, band_r_base, band_g_base, band_b_base) = if m_playing {
+                match freq_band {
+                    0 => (m_sub_bass, 220u8, 30u8, 80u8),   // Sub-bass → deep red/magenta
+                    1 => (m_bass,     240u8, 140u8, 20u8),   // Bass → orange/amber
+                    2 => (m_mid,       40u8, 220u8, 60u8),   // Mid → green/emerald
+                    _ => (m_treble,    50u8, 180u8, 240u8),  // Treble → cyan/ice blue
+                }
+            } else {
+                (0.0, 20u8, 180u8, 40u8) // No music → classic green
+            };
+            // Intensity multiplier from band amplitude (0.3 = idle, up to 1.5 at max)
+            let freq_intensity = if m_playing {
+                (0.3 + band_amp * 1.2).min(1.5)
+            } else { 1.0 };
+            
+            // ── Beat-synced void mode: on odd beat counts, suppress ~40% of columns ──
+            let col_suppressed = void_mode && ((col.wrapping_mul(7) ^ self.matrix_beat_count as usize) % 5 < 2);
+            
+            // ── Music-reactive speed boost ──
+            let beat_boost = if m_playing {
+                let t = (col as u32 * 2) % (MATRIX_COLS as u32);
+                let col_phase = if t < MATRIX_COLS as u32 {
+                    t as f32 / MATRIX_COLS as f32
+                } else {
+                    2.0 - t as f32 / MATRIX_COLS as f32
+                };
+                let local_beat = m_beat * (0.5 + col_phase * 0.5);
+                (local_beat * 6.0 + band_amp * 4.0) as i32
+            } else { 0 };
+            
+            // Update position
+            let new_y = self.matrix_heads[col] + speed as i32 + beat_boost;
             if new_y > height as i32 + (TRAIL_LEN as i32 * CHAR_H as i32) {
                 let new_seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
                 self.matrix_seeds[col] = new_seed;
@@ -5523,35 +6462,59 @@ struct AppConfig {
                 self.matrix_heads[col] = new_y;
             }
             
+            // Skip rendering for suppressed columns (position still advances)
+            if col_suppressed { continue; }
+            
             let head_y = self.matrix_heads[col];
             
             // Depth from speed: 1=far(dim), 3=near(bright)
-            let depth_factor = (speed as f32 - 1.0) / 2.0; // 0.0=far, 1.0=near
-            let brightness_mult = 0.3 + depth_factor * 0.7; // 30%→100%
-            let saturation = 0.2 + depth_factor * 0.8; // 20%→100%
+            let depth_factor = (speed as f32 - 1.0) / 2.0;
+            let energy_boost = if m_playing { m_energy * 0.6 } else { 0.0 };
+            let beat_bright = if m_playing { m_beat * 0.4 } else { 0.0 };
+            let brightness_mult = (0.3 + depth_factor * 0.7 + energy_boost + beat_bright).min(1.6);
             
             for i in 0..TRAIL_LEN {
                 let char_y = head_y - (i as i32 * CHAR_H as i32);
                 if char_y < 0 || char_y >= height as i32 { continue; }
                 
+                // In void mode, skip every other character in the trail
+                if void_mode && (i % 2 == 0) && i > 0 { continue; }
+                
                 // Trail fading
+                let trail_ext = if m_playing { (m_energy * 30.0) as u8 } else { 0 };
                 let base = if i == 0 { 255u8 }
-                    else if i == 1 { 200u8 }
-                    else { 160u8.saturating_sub((i as u8).saturating_mul(7)) };
+                    else if i == 1 { 200u8.saturating_add(trail_ext / 2) }
+                    else { (160u8 + trail_ext / 3).saturating_sub((i as u8).saturating_mul(6)) };
                 if base < 15 { continue; }
                 
-                let brightness = ((base as f32) * brightness_mult) as u8;
+                let brightness = ((base as f32) * brightness_mult).min(255.0) as u8;
                 
-                // Color computation
+                // ══ Frequency-band gradient coloring ══
+                // Each column's color = its band base color × amplitude intensity × trail fade
                 let (r, g, b) = if i == 0 {
-                    // Head: white-ish glow
-                    let w = (140.0 * brightness_mult) as u8;
-                    (w, brightness.max(w), w)
+                    // HEAD: bright white-ish tinted toward the band color
+                    // At high amplitude → pure band color, at low → whitened
+                    let fi = freq_intensity.min(1.5);
+                    let white_mix = (1.0 - fi * 0.5).max(0.2);
+                    let band_mix = 1.0 - white_mix;
+                    let hr = ((band_r_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as u8;
+                    let hg = ((band_g_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as u8;
+                    let hb = ((band_b_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as u8;
+                    // Beat flash → push toward white
+                    let beat_w = if m_playing { (m_beat * 60.0).min(80.0) as u8 } else { 0 };
+                    (hr.saturating_add(beat_w), hg.saturating_add(beat_w), hb.saturating_add(beat_w))
                 } else {
-                    // Trail: green with depth-based atmospheric tint
-                    let gray_tint = ((15.0 * (1.0 - saturation)) as u8).min(40);
-                    let blue_tint = ((30.0 * (1.0 - saturation)) as u8).min(50);
-                    (gray_tint, brightness, blue_tint)
+                    // TRAIL: band base color scaled by amplitude intensity + trail fade
+                    let fade = brightness as f32 / 255.0;
+                    let fi = freq_intensity;
+                    // At low amplitude: dim base color. At high amplitude: saturated band color.
+                    let tr = ((band_r_base as f32 * fi * fade).min(255.0)) as u8;
+                    let tg = ((band_g_base as f32 * fi * fade).min(255.0)) as u8;
+                    let tb = ((band_b_base as f32 * fi * fade).min(255.0)) as u8;
+                    // Cross-bleed: add a touch of neighboring bands for richness
+                    let bleed_r = if m_playing { (m_sub_bass * 15.0 * fade).min(25.0) as u8 } else { 0 };
+                    let bleed_b = if m_playing { (m_treble * 15.0 * fade).min(25.0) as u8 } else { 0 };
+                    (tr.saturating_add(bleed_r), tg, tb.saturating_add(bleed_b))
                 };
                 
                 let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
@@ -5577,15 +6540,48 @@ struct AppConfig {
             }
         }
         
-        // ── Draw TrustOS fleur-de-lis logo — centered on screen ──
-        // Transparent interior: only outline/edge pixels drawn, matrix rain visible through
+        // ═══════════════════════════════════════════════════════════════
+        // LOGO — Faithful chrome/silver rendering from bitmap
+        // Dark interior pixels → matrix rain shows through
+        // Bright chrome/silver pixels → alpha blended over matrix rain
+        // ═══════════════════════════════════════════════════════════════
         {
             let logo_w = crate::logo_bitmap::LOGO_W as u32;
             let logo_h = crate::logo_bitmap::LOGO_H as u32;
             let logo_x = (width / 2).saturating_sub(logo_w / 2);
-            // Center logo vertically in available space
             let logo_y = logo_center_y.saturating_sub(logo_h / 2);
             
+            // Subtle green glow behind the chrome edges (drawn first, behind the logo)
+            for ly in 0..logo_h {
+                for lx in 0..logo_w {
+                    if !crate::logo_bitmap::logo_edge_pixel(lx as usize, ly as usize) { continue; }
+                    let px = logo_x + lx;
+                    let py = logo_y + ly;
+                    if px >= width || py >= height { continue; }
+                    // 3px green glow halo
+                    let glow_g: u32 = if m_playing { 30 + (m_beat * 40.0) as u32 } else { 25 };
+                    for gdy in 0..5u32 {
+                        for gdx in 0..5u32 {
+                            let gx = px as i32 + gdx as i32 - 2;
+                            let gy = py as i32 + gdy as i32 - 2;
+                            if gx >= 0 && gy >= 0 && (gx as u32) < width && (gy as u32) < height {
+                                let dist = ((gdx as i32 - 2).unsigned_abs() + (gdy as i32 - 2).unsigned_abs()) as u32;
+                                if dist > 0 && dist <= 2 {
+                                    let existing = framebuffer::get_pixel(gx as u32, gy as u32);
+                                    let eg = (existing >> 8) & 0xFF;
+                                    if eg < 40 {
+                                        let fade = glow_g / (dist + 1);
+                                        framebuffer::put_pixel(gx as u32, gy as u32,
+                                            0xFF000000 | (fade.min(255) << 8));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Draw actual logo pixels — chrome/silver faithfully, skip near-black
             for ly in 0..logo_h {
                 for lx in 0..logo_w {
                     let argb = crate::logo_bitmap::logo_pixel(lx as usize, ly as usize);
@@ -5594,70 +6590,37 @@ struct AppConfig {
                     let g = (argb >> 8) & 0xFF;
                     let b = argb & 0xFF;
                     
-                    // Skip near-black / transparent pixels
                     if a < 20 { continue; }
                     let luminance = (r * 77 + g * 150 + b * 29) >> 8;
-                    if luminance < 15 { continue; }
+                    // Skip dark pixels — matrix rain shows through
+                    if luminance < 18 { continue; }
                     
                     let px = logo_x + lx;
                     let py = logo_y + ly;
                     if px >= width || py >= height { continue; }
                     
-                    let is_edge = crate::logo_bitmap::logo_edge_pixel(lx as usize, ly as usize);
-                    
-                    // Check if near edge (within 3px) for softer falloff
-                    let near_edge = if !is_edge {
-                        let mut min_dist = 99u32;
-                        for dy in 0..5u32 {
-                            for dx in 0..5u32 {
-                                let nx = lx as i32 + dx as i32 - 2;
-                                let ny = ly as i32 + dy as i32 - 2;
-                                if nx >= 0 && ny >= 0 && nx < logo_w as i32 && ny < logo_h as i32 {
-                                    if crate::logo_bitmap::logo_edge_pixel(nx as usize, ny as usize) {
-                                        let d = ((dx as i32 - 2).unsigned_abs() + (dy as i32 - 2).unsigned_abs()) as u32;
-                                        if d < min_dist { min_dist = d; }
-                                    }
-                                }
-                            }
-                        }
-                        min_dist
-                    } else { 0 };
-                    
-                    if is_edge {
-                        // Edge pixels: bright green glow corona (3px)
-                        for gdy in 0..5u32 {
-                            for gdx in 0..5u32 {
-                                let gx = px + gdx;
-                                let gy = py + gdy;
-                                if gx >= 2 && gy >= 2 && gx - 2 < width && gy - 2 < height {
-                                    let existing = framebuffer::get_pixel(gx - 2, gy - 2);
-                                    let eg = (existing >> 8) & 0xFF;
-                                    if eg < 40 {
-                                        framebuffer::put_pixel(gx - 2, gy - 2, 0xFF002A10);
-                                    }
-                                }
-                            }
-                        }
-                        // Draw edge pixel: use original color but boost green channel
-                        let edge_r = (r / 3).min(60);
-                        let edge_g = (g.max(luminance) + 40).min(255);
-                        let edge_b = (b / 3).min(60);
-                        framebuffer::put_pixel(px, py, 0xFF000000 | (edge_r << 16) | (edge_g << 8) | edge_b);
-                    } else if near_edge <= 2 {
-                        // Near-edge: very subtle tint (15-30% alpha), matrix visible
-                        let alpha_val = if near_edge == 1 { 45u32 } else { 20u32 };
+                    if luminance >= 60 {
+                        // Bright chrome/silver: draw faithfully with slight beat shimmer
+                        let beat_add = if m_playing { (m_beat * 20.0).min(30.0) as u32 } else { 0 };
+                        let pr = (r + beat_add).min(255);
+                        let pg = (g + beat_add).min(255);
+                        let pb = (b + beat_add).min(255);
+                        framebuffer::put_pixel(px, py, 0xFF000000 | (pr << 16) | (pg << 8) | pb);
+                    } else {
+                        // Semi-dark: alpha blend over matrix rain so both are visible
+                        let alpha = ((luminance as u32) * 255 / 60).min(255);
                         let bg = framebuffer::get_pixel(px, py);
-                        let inv = 255 - alpha_val;
-                        let edge_g2 = g.max(60).min(200);
-                        let nr = ((r / 4) * alpha_val + ((bg >> 16) & 0xFF) * inv) / 255;
-                        let ng = (edge_g2 * alpha_val + ((bg >> 8) & 0xFF) * inv) / 255;
-                        let nb = ((b / 4) * alpha_val + (bg & 0xFF) * inv) / 255;
+                        let inv = 255 - alpha;
+                        let nr = (r * alpha + ((bg >> 16) & 0xFF) * inv) / 255;
+                        let ng = (g * alpha + ((bg >> 8) & 0xFF) * inv) / 255;
+                        let nb = (b * alpha + (bg & 0xFF) * inv) / 255;
                         framebuffer::put_pixel(px, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
                     }
-                    // Interior pixels (far from edge): skip entirely → matrix rain shows through
                 }
             }
         }
+        
+        // (Beat flash overlay removed — was too aggressive)
     }
     
     /// Draw wallpaper from loaded image data
@@ -5936,8 +6899,8 @@ struct AppConfig {
                 framebuffer::put_pixel(dx, dy, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
             }
         }
-        // Right edge: subtle dark green separator
-        framebuffer::fill_rect(DOCK_WIDTH + 9, 0, 1, dock_h, 0xFF002210);
+        // Right edge: chrome separator
+        framebuffer::fill_rect(DOCK_WIDTH + 9, 0, 1, dock_h, CHROME_GHOST);
         
         let icon_size = 36u32;
         let n_icons = self.icons.len().max(1) as u32;
@@ -5994,7 +6957,7 @@ struct AppConfig {
                 }
                 // Inner highlight (rounded to match icon shape)
                 draw_rounded_rect((ix as i32) - 3, (iy as i32) - 2, icon_size + 6, icon_size + 16, 6, 0xFF001A0A);
-                draw_rounded_rect_border((ix as i32) - 3, (iy as i32) - 2, icon_size + 6, icon_size + 16, 6, 0xFF00AA44);
+                draw_rounded_rect_border((ix as i32) - 3, (iy as i32) - 2, icon_size + 6, icon_size + 16, 6, CHROME_MID);
             }
             
             // Icon background — rounded dark square with colored accent glow
@@ -6016,7 +6979,7 @@ struct AppConfig {
                 // Colored accent border on hover
                 draw_rounded_rect_border(ix as i32, iy as i32, icon_size, icon_size, 6, accent_color);
             } else {
-                draw_rounded_rect_border(ix as i32, iy as i32, icon_size, icon_size, 6, 0xFF1A2A1A);
+                draw_rounded_rect_border(ix as i32, iy as i32, icon_size, icon_size, 6, CHROME_GHOST);
             }
             
             // Use accent color for hovered icons, muted version for normal
@@ -6252,23 +7215,23 @@ struct AppConfig {
             // Subtle green tint overlay
             framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT - radius, 0x00AA44, 8);
             
-            // Rounded top border — glowing green arc
+            // Rounded top border — chrome arc (TrustOS logo grey)
             for row in 0..radius {
                 let vert_dist = ri - row as i32;
                 let horiz = fast_sqrt_i32(r2 - vert_dist * vert_dist) as u32;
                 let left_x = radius - horiz;
                 let right_x = w - radius + horiz;
                 if left_x < w {
-                    framebuffer::put_pixel(left_x, y + row, 0xFF0D5D2A);
+                    framebuffer::put_pixel(left_x, y + row, CHROME_DIM);
                 }
                 if right_x > 0 && right_x - 1 < w {
-                    framebuffer::put_pixel(right_x - 1, y + row, 0xFF0D5D2A);
+                    framebuffer::put_pixel(right_x - 1, y + row, CHROME_DIM);
                 }
             }
             // Straight top border between corners
             if w > radius * 2 {
                 for px in radius..(w - radius) {
-                    framebuffer::put_pixel(px, y, 0xFF0D5D2A);
+                    framebuffer::put_pixel(px, y, CHROME_DIM);
                 }
             }
         }
@@ -6279,8 +7242,8 @@ struct AppConfig {
             draw_rounded_rect(4, (y + 5) as i32, 104, 30, 8, 0xFF003318);
             framebuffer::fill_rect_alpha(4, y + 5, 104, 30, 0x00CC66, 50);
         }
-        // Rounded border
-        let border_color = if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_GHOST };
+        // Rounded chrome border
+        let border_color = if start_hover || self.start_menu_open { CHROME_BRIGHT } else { CHROME_GHOST };
         draw_rounded_rect_border(4, (y + 5) as i32, 104, 30, 8, border_color);
         let txt_color = if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_SECONDARY };
         self.draw_text_smooth(16, (y + 11) as i32, "TrustOS", txt_color);
@@ -6307,8 +7270,8 @@ struct AppConfig {
                 draw_rounded_rect(btn_x as i32, btn_y as i32, btn_w, 30, 6, 0xFF000D05);
                 framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, 30, 0x008833, 40);
             }
-            // Rounded border
-            let bdr = if w.focused { GREEN_PRIMARY } else if is_hover { GREEN_MUTED } else { GREEN_GHOST };
+            // Rounded chrome border
+            let bdr = if w.focused { CHROME_BRIGHT } else if is_hover { CHROME_MID } else { CHROME_GHOST };
             draw_rounded_rect_border(btn_x as i32, btn_y as i32, btn_w, 30, 6, bdr);
             
             // Window title (truncated, anti-aliased)
@@ -6459,9 +7422,9 @@ struct AppConfig {
             framebuffer::fill_rect_alpha(menu_x as u32, menu_y as u32, menu_w, menu_h, 0x060A08, 210);
         }
         
-        // Double border
-        let border1 = hc(GREEN_PRIMARY, 0xFFFFFFFF);
-        let border2 = hc(GREEN_SUBTLE, 0xFF888888);
+        // Double chrome border (TrustOS logo style)
+        let border1 = hc(CHROME_BRIGHT, 0xFFFFFFFF);
+        let border2 = hc(CHROME_DIM, 0xFF888888);
         framebuffer::draw_rect(menu_x as u32, menu_y as u32, menu_w, menu_h, border1);
         framebuffer::draw_rect((menu_x + 1) as u32, (menu_y + 1) as u32, menu_w - 2, menu_h - 2, border2);
         
@@ -6473,8 +7436,8 @@ struct AppConfig {
         }
         self.draw_text_smooth(menu_x + 10, menu_y + 6, "TrustOS Menu", hc(GREEN_PRIMARY, 0xFFFFFF00));
         
-        // Separator
-        framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 26) as u32, menu_w - 4, GREEN_MUTED);
+        // Separator (chrome)
+        framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 26) as u32, menu_w - 4, CHROME_DIM);
         
         // ── Search bar ──
         let search_y = menu_y + 30;
@@ -6482,7 +7445,7 @@ struct AppConfig {
         let search_pad = 8i32;
         // Search bar background
         framebuffer::fill_rect((menu_x + search_pad) as u32, search_y as u32, menu_w - search_pad as u32 * 2, search_h, 0xFF0A120A);
-        framebuffer::draw_rect((menu_x + search_pad) as u32, search_y as u32, menu_w - search_pad as u32 * 2, search_h, GREEN_MUTED);
+        framebuffer::draw_rect((menu_x + search_pad) as u32, search_y as u32, menu_w - search_pad as u32 * 2, search_h, CHROME_DIM);
         
         // Search icon (magnifying glass)
         let mag_x = menu_x + search_pad + 8;
@@ -6517,7 +7480,7 @@ struct AppConfig {
         let items_start_y = search_y + search_h as i32 + 4;
         
         // Menu items — full list
-        let items: [(&str, &str, bool); 17] = [
+        let items: [(&str, &str, bool); 18] = [
             (">_", "Terminal", false),
             ("[]", "Files", false),
             ("##", "Calculator", false),
@@ -6531,6 +7494,7 @@ struct AppConfig {
             ("NE", "NES Emulator", false),
             ("GB", "Game Boy", false),
             ("Lb", "TrustLab", false),
+            ("Mu", "Music Player", false),
             ("@)", "Settings", false),
             ("<-", "Exit Desktop", true),
             ("!!", "Shutdown", true),
@@ -6674,23 +7638,23 @@ struct AppConfig {
             framebuffer::fill_rect(x as u32, y as u32, w, h, win_bg);
         }
         
-        // Green border (rounded)
+        // Chrome/silver border (TrustOS logo style)
         let border_color = if window.focused {
-            hc(GREEN_PRIMARY, 0xFFFFFFFF)
+            hc(CHROME_BRIGHT, 0xFFFFFFFF)
         } else {
-            hc(GREEN_SUBTLE, 0xFF888888)
+            hc(CHROME_GHOST, 0xFF888888)
         };
         if corner_radius > 0 {
             draw_rounded_rect_border(x, y, w, h, corner_radius, border_color);
             if w > 4 && h > 4 {
                 draw_rounded_rect_border(x + 1, y + 1, w - 2, h - 2, corner_radius.saturating_sub(1), 
-                    if window.focused { GREEN_MUTED } else { GREEN_GHOST });
+                    if window.focused { CHROME_DIM } else { CHROME_GHOST });
             }
         } else {
             framebuffer::draw_rect(x as u32, y as u32, w, h, border_color);
             if w > 4 && h > 4 {
                 framebuffer::draw_rect((x + 1) as u32, (y + 1) as u32, w - 2, h - 2, 
-                    if window.focused { GREEN_MUTED } else { GREEN_GHOST });
+                    if window.focused { CHROME_DIM } else { CHROME_GHOST });
             }
         }
         
@@ -6738,9 +7702,9 @@ struct AppConfig {
             framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w - 4, titlebar_h - 2, 0x080C08, 200);
         }
         
-        // Title bar bottom separator
+        // Title bar bottom separator (chrome)
         framebuffer::draw_hline((x + 2) as u32, (y + titlebar_h as i32) as u32, w - 4, 
-            if window.focused { GREEN_MUTED } else { GREEN_GHOST });
+            if window.focused { CHROME_DIM } else { CHROME_GHOST });
         
         // Window icon (2-char representation)
         let icon_str = match window.window_type {
@@ -6753,6 +7717,7 @@ struct AppConfig {
             WindowType::Game => "Sk",
             WindowType::Chess => "Kk",
             WindowType::Chess3D => "C3",
+            WindowType::MusicPlayer => "Mu",
             _ => "::",
         };
         let icon_color = if window.focused { GREEN_PRIMARY } else { GREEN_TERTIARY };
@@ -6891,6 +7856,14 @@ struct AppConfig {
         // Calculator is handled separately
         if window.window_type == WindowType::Calculator {
             self.draw_calculator(window);
+            return;
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // MUSIC PLAYER — Glass-like widget with pulse wave visualization
+        // ═══════════════════════════════════════════════════════════════
+        if window.window_type == WindowType::MusicPlayer {
+            self.draw_music_player(window);
             return;
         }
         
@@ -9114,6 +10087,272 @@ struct AppConfig {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════════
+    // 🎵 MUSIC PLAYER — Glass-like widget with pulse wave visualization
+    // ═══════════════════════════════════════════════════════════════════════════
+    fn draw_music_player(&self, window: &Window) {
+        let wx = window.x as u32;
+        let wy = window.y as u32 + TITLE_BAR_HEIGHT;
+        let ww = window.width;
+        let wh = window.height.saturating_sub(TITLE_BAR_HEIGHT);
+
+        if ww < 80 || wh < 80 { return; }
+
+        // ── Glass background ──
+        // Dark frosted glass with subtle green tint
+        framebuffer::fill_rect_alpha(wx, wy, ww, wh, 0x050E08, 200);
+        // Subtle inner glow border
+        framebuffer::fill_rect_alpha(wx + 1, wy + 1, ww - 2, 1, 0x00FF66, 25);
+        framebuffer::fill_rect_alpha(wx + 1, wy + wh - 1, ww - 2, 1, 0x00FF66, 15);
+        framebuffer::fill_rect_alpha(wx, wy + 1, 1, wh - 2, 0x00FF66, 20);
+        framebuffer::fill_rect_alpha(wx + ww - 1, wy + 1, 1, wh - 2, 0x00FF66, 20);
+
+        let state = match self.music_player_states.get(&window.id) {
+            Some(s) => s,
+            None => return,
+        };
+
+        let pad = 12u32;
+        let inner_x = wx + pad;
+        let inner_w = ww.saturating_sub(pad * 2);
+
+        // ── Song title ──
+        let title_y = wy + 10;
+        let title = &state.song_title;
+        // Cyan-green glow for title
+        self.draw_text(inner_x as i32, title_y as i32, title, 0xFF00FFAA);
+        // Subtle bold
+        self.draw_text(inner_x as i32 + 1, title_y as i32, title, 0xFF00FFAA);
+
+        // ── Status line ──
+        let status_y = title_y + 18;
+        let status = match state.state {
+            PlaybackState::Playing => "PLAYING",
+            PlaybackState::Paused => "PAUSED",
+            PlaybackState::Stopped => "STOPPED",
+        };
+        let status_color = match state.state {
+            PlaybackState::Playing => 0xFF00CC66,
+            PlaybackState::Paused => 0xFFFFAA00,
+            PlaybackState::Stopped => 0xFF888888,
+        };
+        self.draw_text(inner_x as i32, status_y as i32, status, status_color);
+
+        // ── Time display ──
+        let elapsed_s = (state.elapsed_ms / 1000) as u32;
+        let total_s = (state.total_ms / 1000) as u32;
+        let time_str = alloc::format!(
+            "{}:{:02} / {}:{:02}",
+            elapsed_s / 60, elapsed_s % 60,
+            total_s / 60, total_s % 60
+        );
+        // Right-align time
+        let cw = crate::graphics::scaling::char_width() as u32;
+        let time_x = (inner_x + inner_w).saturating_sub(time_str.len() as u32 * cw);
+        self.draw_text(time_x as i32, status_y as i32, &time_str, 0xFF88CCAA);
+
+        // ── Progress bar ──
+        let prog_y = status_y + 20;
+        let prog_h = 4u32;
+        // Background track
+        framebuffer::fill_rect_alpha(inner_x, prog_y, inner_w, prog_h, 0x224433, 180);
+        // Fill
+        if state.total_ms > 0 {
+            let fill_w = ((state.elapsed_ms as u64 * inner_w as u64) / state.total_ms.max(1) as u64) as u32;
+            let fill_w = fill_w.min(inner_w);
+            if fill_w > 0 {
+                framebuffer::fill_rect(inner_x, prog_y, fill_w, prog_h, 0xFF00FF88);
+                // Glow on progress head
+                if fill_w > 2 {
+                    framebuffer::fill_rect_alpha(inner_x + fill_w - 2, prog_y.saturating_sub(1), 4, prog_h + 2, 0x00FF88, 120);
+                }
+            }
+        }
+
+        // ── Pulse wave visualization ──
+        let viz_y = prog_y + 14;
+        let viz_h = 80u32;
+        // Viz background
+        framebuffer::fill_rect_alpha(inner_x, viz_y, inner_w, viz_h, 0x030908, 160);
+        // Border
+        framebuffer::fill_rect_alpha(inner_x, viz_y, inner_w, 1, 0x00FF66, 30);
+        framebuffer::fill_rect_alpha(inner_x, viz_y + viz_h - 1, inner_w, 1, 0x00FF66, 20);
+
+        let mid_y = viz_y + viz_h / 2;
+        let half_h = (viz_h / 2 - 4) as f32;
+
+        if state.state == PlaybackState::Playing || state.state == PlaybackState::Paused {
+            // Draw waveform as pulsing green oscilloscope
+            let n_points = inner_w.min(128) as usize;
+            let beat_glow = state.beat;
+
+            for i in 0..n_points {
+                let wave_i = (state.wave_idx + i) % 128;
+                let sample = state.waveform[wave_i];
+
+                // Apply beat pulse to amplitude
+                let amp = sample * (1.0 + beat_glow * 0.5);
+                let y_offset = (amp * half_h).max(-half_h).min(half_h) as i32;
+
+                let px = inner_x + i as u32;
+                let py = (mid_y as i32 + y_offset) as u32;
+                let py = py.max(viz_y + 2).min(viz_y + viz_h - 3);
+
+                // Color: green base + beat-reactive cyan shift
+                let g_base = 0xCC;
+                let b_shift = (beat_glow * 180.0) as u32;
+                let r_shift = (state.energy * 60.0).min(60.0) as u32;
+                let color = 0xFF000000
+                    | (r_shift.min(0xFF) << 16)
+                    | (g_base << 8)
+                    | b_shift.min(0xFF);
+
+                // Draw column from center to point for filled look
+                let center = mid_y;
+                if py < center {
+                    for yy in py..center {
+                        let fade = 1.0 - ((center - yy) as f32 / half_h).min(1.0) * 0.4;
+                        let g = ((g_base as f32 * fade) as u32).min(0xFF);
+                        let b = ((b_shift as f32 * fade) as u32).min(0xFF);
+                        let r = ((r_shift as f32 * fade) as u32).min(0xFF);
+                        let c = 0xFF000000 | (r << 16) | (g << 8) | b;
+                        framebuffer::put_pixel(px, yy, c);
+                    }
+                } else {
+                    for yy in center..=py {
+                        let fade = 1.0 - ((yy - center) as f32 / half_h).min(1.0) * 0.4;
+                        let g = ((g_base as f32 * fade) as u32).min(0xFF);
+                        let b = ((b_shift as f32 * fade) as u32).min(0xFF);
+                        let r = ((r_shift as f32 * fade) as u32).min(0xFF);
+                        let c = 0xFF000000 | (r << 16) | (g << 8) | b;
+                        framebuffer::put_pixel(px, yy, c);
+                    }
+                }
+
+                // Bright tip pixel
+                framebuffer::put_pixel(px, py, 0xFF00FFCC);
+            }
+
+            // Beat flash overlay
+            if beat_glow > 0.3 {
+                let flash_alpha = ((beat_glow - 0.3) * 60.0) as u32;
+                framebuffer::fill_rect_alpha(inner_x, viz_y, inner_w, viz_h, 0x00FF88, flash_alpha);
+            }
+        } else {
+            // Stopped: draw flat line
+            framebuffer::fill_rect(inner_x + 4, mid_y, inner_w - 8, 1, 0xFF334433);
+            self.draw_text(
+                (inner_x + inner_w / 2 - 20) as i32,
+                (mid_y - 6) as i32,
+                "---",
+                0xFF445544,
+            );
+        }
+
+        // ── Frequency bars (mini) ──
+        let bars_y = viz_y + viz_h + 6;
+        let bar_h = 16u32;
+        let bar_w = inner_w / 4 - 4;
+        let bands = [
+            (state.sub_bass, 0xFF00FF44, "SB"),
+            (state.bass, 0xFF00CC88, "BA"),
+            (state.mid, 0xFF00AACC, "MD"),
+            (state.treble, 0xFF8866FF, "TR"),
+        ];
+        for (bi, (level, color, label)) in bands.iter().enumerate() {
+            let bx = inner_x + bi as u32 * (bar_w + 4);
+            // Background
+            framebuffer::fill_rect_alpha(bx, bars_y, bar_w, bar_h, 0x112211, 150);
+            // Fill
+            let fill = (level.min(1.0) * bar_w as f32) as u32;
+            if fill > 0 {
+                framebuffer::fill_rect(bx, bars_y, fill, bar_h, *color);
+                // Glow
+                framebuffer::fill_rect_alpha(bx, bars_y, fill, bar_h, 0xFFFFFF, 15);
+            }
+            // Label
+            self.draw_text(bx as i32 + 2, bars_y as i32 + 3, label, 0xFFAABBAA);
+        }
+
+        // ── Controls row ──
+        let ctrl_y = bars_y + bar_h + 10;
+        let btn_w = 50u32;
+        let btn_h = 24u32;
+        let btn_gap = 8u32;
+
+        // Play button
+        let play_x = inner_x;
+        let play_label = match state.state {
+            PlaybackState::Playing => "PAUSE",
+            _ => "PLAY",
+        };
+        let play_bg = match state.state {
+            PlaybackState::Playing => 0x00AA55,
+            _ => 0x005533,
+        };
+        framebuffer::fill_rect_alpha(play_x, ctrl_y, btn_w, btn_h, play_bg, 200);
+        framebuffer::fill_rect_alpha(play_x, ctrl_y, btn_w, 1, 0x00FF88, 60);
+        self.draw_text(play_x as i32 + 4, ctrl_y as i32 + 6, play_label, 0xFF00FFAA);
+
+        // Stop button
+        let stop_x = play_x + btn_w + btn_gap;
+        framebuffer::fill_rect_alpha(stop_x, ctrl_y, btn_w, btn_h, 0x553300, 200);
+        framebuffer::fill_rect_alpha(stop_x, ctrl_y, btn_w, 1, 0xFF8844, 60);
+        self.draw_text(stop_x as i32 + 6, ctrl_y as i32 + 6, "STOP", 0xFFFF8844);
+
+        // ── Volume control ──
+        let vol_x = stop_x + btn_w + btn_gap + 10;
+        let vol_w = inner_w.saturating_sub(vol_x - inner_x + 4);
+        let vol_h = 10u32;
+        let vol_y = ctrl_y + (btn_h - vol_h) / 2;
+
+        // Volume label
+        self.draw_text(vol_x as i32 - 8, vol_y as i32 - 1, "V", 0xFF88BBAA);
+
+        // Volume track
+        let track_x = vol_x + 10;
+        let track_w = vol_w.saturating_sub(14);
+        framebuffer::fill_rect_alpha(track_x, vol_y + 3, track_w, 4, 0x224433, 180);
+        // Volume fill
+        let vol_fill = (state.volume as u32 * track_w) / 100;
+        if vol_fill > 0 {
+            framebuffer::fill_rect(track_x, vol_y + 3, vol_fill, 4, 0xFF00CC88);
+        }
+        // Volume knob
+        let knob_x = track_x + vol_fill;
+        if knob_x >= track_x && knob_x + 4 <= track_x + track_w + 4 {
+            framebuffer::fill_rect(knob_x, vol_y, 4, vol_h, 0xFF00FFAA);
+        }
+        // Volume percentage
+        let vol_str = alloc::format!("{}%", state.volume);
+        let vol_txt_x = (track_x + track_w + 6).min(wx + ww - 30);
+        self.draw_text(vol_txt_x as i32, vol_y as i32 - 1, &vol_str, 0xFF88CCAA);
+
+        // ── A/V Sync control ──
+        let sync_y = ctrl_y + btn_h + 6;
+        let sync_btn_w = 20u32;
+        let sync_btn_h = 16u32;
+        // Label
+        self.draw_text(inner_x as i32, sync_y as i32 + 2, "SYNC", 0xFF668877);
+        // "-" button
+        let minus_x = inner_x + 38;
+        framebuffer::fill_rect_alpha(minus_x, sync_y, sync_btn_w, sync_btn_h, 0x442222, 180);
+        self.draw_text(minus_x as i32 + 6, sync_y as i32 + 2, "-", 0xFFFF8866);
+        // Value display
+        let offset_str = alloc::format!("{}ms", state.av_offset_ms);
+        let val_x = minus_x + sync_btn_w + 4;
+        let offset_color = if state.av_offset_ms == 0 { 0xFF888888 } else { 0xFF00CCAA };
+        self.draw_text(val_x as i32, sync_y as i32 + 2, &offset_str, offset_color);
+        // "+" button
+        let plus_x = val_x + (offset_str.len() as u32 * cw) + 4;
+        framebuffer::fill_rect_alpha(plus_x, sync_y, sync_btn_w, sync_btn_h, 0x224422, 180);
+        self.draw_text(plus_x as i32 + 5, sync_y as i32 + 2, "+", 0xFF88FF88);
+        // "0" reset button
+        let zero_x = plus_x + sync_btn_w + 6;
+        framebuffer::fill_rect_alpha(zero_x, sync_y, sync_btn_w, sync_btn_h, 0x333333, 180);
+        self.draw_text(zero_x as i32 + 6, sync_y as i32 + 2, "0", 0xFFAAAAAA);
+    }
+
     /// Draw interactive Calculator
     fn draw_calculator(&self, window: &Window) {
         use crate::gui::windows11::colors;
@@ -10042,7 +11281,7 @@ pub fn run() {
     
     crate::serial_println!("[GUI] Starting desktop environment...");
     crate::serial_println!("[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start");
-    crate::serial_println!("[GUI] Target: 60 FPS with HLT-based frame limiting");
+    crate::serial_println!("[GUI] Target: ~31 FPS (32ms) with HLT-based frame limiting");
     
     loop {
         // Check exit flag

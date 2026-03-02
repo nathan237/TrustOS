@@ -3184,6 +3184,47 @@ pub(super) fn cmd_synth_pattern(args: &[&str]) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Audio File Player / Visualizer
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub(super) fn cmd_play(args: &[&str]) {
+    let path = args.first().copied().unwrap_or("");
+    if path.is_empty() || path == "help" || path == "--help" {
+        crate::println_color!(COLOR_CYAN, "play - Audio file visualizer");
+        crate::println!();
+        crate::println!("Usage: play <file.wav>");
+        crate::println!("       play /home/song.wav");
+        crate::println!("       play /mnt/sda1/music.wav");
+        crate::println!();
+        crate::println!("Plays a WAV file with a 3D matrix rain visualizer.");
+        crate::println!("Supported formats: WAV (16-bit PCM, any sample rate)");
+        crate::println!();
+        crate::println!("Controls:");
+        crate::println!("  [Esc]   Exit visualizer");
+        return;
+    }
+
+    // Built-in embedded songs
+    if path == "untitled2" || path == "u2" || path == "lofi" {
+        crate::println_color!(COLOR_GREEN, "Playing embedded 'Untitled (2)' — Dark Lo-Fi / Ambient...");
+        crate::println!("  [Esc] Exit");
+        match crate::trustdaw::audio_viz::play_untitled2() {
+            Ok(()) => crate::println!("Playback complete"),
+            Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+        }
+        return;
+    }
+
+    crate::println_color!(COLOR_GREEN, "Starting Audio Visualizer...");
+    crate::println!("  File: {}", path);
+    crate::println!("  [Esc] Exit");
+    match crate::trustdaw::audio_viz::play_file(path) {
+        Ok(()) => crate::println!("Playback complete"),
+        Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // TrustDAW — Digital Audio Workstation
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -3314,6 +3355,51 @@ pub(super) fn cmd_daw(args: &[&str]) {
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
+        Some("anthem") => {
+            crate::println_color!(COLOR_GREEN, "Starting TrustOS Anthem — Renaissance Numérique...");
+            crate::println!("  5 Sections: Intro → Build → Drop → Stable → Outro");
+            crate::println!("  Key: C minor → C major  |  106 BPM  |  ~3 min");
+            crate::println!("  [Esc] Exit  [Space] Skip section");
+            match crate::trustdaw::beat_studio::launch_anthem_showcase() {
+                Ok(()) => crate::println!("TrustOS Anthem complete"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("trap") | Some("gangsta") | Some("rap") | Some("cyber") | Some("neon") => {
+            crate::println_color!(COLOR_GREEN, "Starting Cyberpunk Showcase — NEON PROTOCOL...");
+            crate::println!("  Sub Bass + Aggressive 16th Hats + Synth Arps + Digital Lead");
+            crate::println!("  100 BPM  |  Eb minor  |  Dark Cyberpunk");
+            crate::println!("  [Esc] Exit  [Space] Skip section");
+            match crate::trustdaw::beat_studio::launch_trap_showcase() {
+                Ok(()) => crate::println!("Neon Protocol Showcase complete"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("untitled2") | Some("u2") | Some("lofi") => {
+            crate::println_color!(COLOR_GREEN, "Generating 'Untitled 2' — Dark Lo-Fi / Ambient...");
+            crate::println!("  Keys + Sub + Dusty Drums + Emotional Lead");
+            crate::println!("  85 BPM  |  A minor  |  6 sections  |  ~3 min");
+            crate::println!("  3D Matrix Visualizer  |  [Esc] Exit");
+            match crate::trustdaw::audio_viz::play_untitled2() {
+                Ok(()) => crate::println!("Untitled 2 complete"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("viz") | Some("visualizer") => {
+            let path = args.get(1).copied().unwrap_or("");
+            if path.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "Usage: daw viz <file.wav>");
+                crate::println!("  Plays audio file with 3D matrix rain visualizer");
+            } else {
+                crate::println_color!(COLOR_GREEN, "Starting Audio Visualizer...");
+                crate::println!("  File: {}", path);
+                crate::println!("  [Esc] Exit");
+                match crate::trustdaw::audio_viz::play_file(path) {
+                    Ok(()) => crate::println!("Visualizer complete"),
+                    Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+                }
+            }
+        }
         Some("export") | Some("wav") => {
             let path = args.get(1).copied().unwrap_or("/home/output.wav");
             crate::println!("Exporting to {}...", path);
@@ -3377,6 +3463,13 @@ pub(super) fn cmd_daw(args: &[&str]) {
             crate::println!("  daw matrix                      Matrix visualizer showcase");
             crate::println!("  daw film                        Narrated showcase (YouTube video)");
             crate::println!("  daw showcase                    Same as 'daw film'");
+            crate::println!("  daw anthem                      TrustOS Anthem — Renaissance Numerique");
+            crate::println!("  daw trap                        Neon Protocol — Cyberpunk Trap");
+            crate::println!("  daw untitled2                   Untitled 2 — Dark Lo-Fi Ambient");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "  Visualizer:");
+            crate::println!("  daw viz <file.wav>              Audio file visualizer (3D matrix + waveform)");
+            crate::println!("  play <file.wav>                 Same as 'daw viz'");
             crate::println!();
             crate::println_color!(COLOR_YELLOW, "  Export:");
             crate::println!("  daw export [path]               Export WAV (default: /home/output.wav)");

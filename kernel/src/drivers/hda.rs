@@ -1028,12 +1028,13 @@ impl HdaController {
                 let stream_bit = 1u32 << (self.num_iss as u32); // First output stream
                 self.write32(reg::INTCTL, intctl | (1 << 31) | (1 << 30) | stream_bit);
 
-                // Clear status bits
+                // Clear status bits (BCIS, FIFOE, DESE — write-1-to-clear)
                 self.write8(sd_base + sd::STS, 0x1C);
 
-                // Start stream: RUN + IOCE
+                // Start stream: RUN only (no IOCE — we poll, not interrupt-driven)
+                // IOCE causes VBox to halt the stream when BCIS isn't acknowledged
                 let ctl = self.read8(sd_base + sd::CTL);
-                self.write8(sd_base + sd::CTL, ctl | sctl::RUN as u8 | sctl::IOCE as u8);
+                self.write8(sd_base + sd::CTL, (ctl | sctl::RUN as u8) & !(sctl::IOCE as u8));
 
                 self.playing = true;
                 crate::serial_println!("[HDA] Playback started");
@@ -1152,11 +1153,54 @@ pub fn stop() -> Result<(), &'static str> {
     Ok(())
 }
 
+/// Reset the output stream (SRST): clears LPIB, FIFOs, and all stream state.
+/// Reconfigures CBL/LVI/FMT/BDL so the next start_looped_playback works correctly.
+/// Must be called AFTER stop() and BEFORE start_looped_playback() to ensure
+/// the hardware reads from position 0 on the next start.
+pub fn reset_stream() {
+    let hda = HDA.lock();
+    if let Some(ctrl) = hda.as_ref() {
+        if ctrl.audio_buf_size == 0 { return; }
+        let sd_base = ctrl.osd_base(0);
+        unsafe {
+            // Assert SRST (make sure RUN is clear first)
+            let ctl = ctrl.read8(sd_base + sd::CTL);
+            ctrl.write8(sd_base + sd::CTL, (ctl & !(sctl::RUN as u8)) | sctl::SRST as u8);
+            for _ in 0..1000 {
+                if ctrl.read8(sd_base + sd::CTL) & (sctl::SRST as u8) != 0 { break; }
+                HdaController::delay_us(10);
+            }
+            // Deassert SRST
+            ctrl.write8(sd_base + sd::CTL, 0);
+            for _ in 0..1000 {
+                if ctrl.read8(sd_base + sd::CTL) & (sctl::SRST as u8) == 0 { break; }
+                HdaController::delay_us(10);
+            }
+            // Clear status
+            ctrl.write8(sd_base + sd::STS, 0x1C);
+
+            // Reconfigure stream descriptor (SRST clears all registers)
+            let num_frags: u16 = 2;
+            let fmt: u16 = 0x0011; // 48kHz, 16-bit, stereo
+            ctrl.write32(sd_base + sd::CBL, ctrl.audio_buf_size);
+            ctrl.write16(sd_base + sd::LVI, num_frags - 1);
+            ctrl.write16(sd_base + sd::FMT, fmt);
+            ctrl.write32(sd_base + sd::BDLPL, ctrl.bdl_phys as u32);
+            ctrl.write32(sd_base + sd::BDLPU, (ctrl.bdl_phys >> 32) as u32);
+
+            // Restore stream tag
+            let ctl_high = (ctrl.stream_tag as u32) << (sctl::STREAM_TAG_SHIFT - 16);
+            ctrl.write8(sd_base + sd::CTL + 2, ctl_high as u8);
+        }
+        crate::serial_println!("[HDA] Stream reset (LPIB→0, reconfig done)");
+    }
+}
+
 /// Start looped playback of audio samples (non-blocking).
-/// Audio is copied to the DMA buffer. The stream is fully reset and
-/// reconfigured (including codec verbs) to loop over the data.
+/// Audio is copied to the DMA buffer. The stream keeps running with
+/// its original init-time configuration (no SRST, no BDL/format changes).
+/// Silence is zero-padded to CBL boundary for clean looping.
 /// Call `stop()` to end playback.
-/// Returns immediately — audio keeps playing in hardware DMA.
 pub fn start_looped_playback(samples: &[i16]) -> Result<(), &'static str> {
     let mut hda = HDA.lock();
     let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
@@ -1173,91 +1217,97 @@ pub fn start_looped_playback(samples: &[i16]) -> Result<(), &'static str> {
 
     unsafe {
         core::ptr::copy_nonoverlapping(samples.as_ptr(), buf, to_copy);
+        // Zero the rest of the buffer (silence padding)
         if to_copy < buf_capacity {
             core::ptr::write_bytes(buf.add(to_copy), 0, buf_capacity - to_copy);
         }
     }
 
-    // Data size in bytes (aligned to 4 = one stereo frame)
-    let data_bytes = ((to_copy * 2) as u32 + 3) & !3;
-    if data_bytes == 0 { return Err("HDA: no audio data"); }
+    let data_bytes = (to_copy * 2) as u32;
+    crate::serial_println!("[HDA] Looped playback: {} bytes ({} ms), buf={}",
+        data_bytes, data_bytes / (48000 * 4 / 1000), ctrl.audio_buf_size);
 
-    let sd_base = ctrl.osd_base(0);
-    let fmt: u16 = 0x0011; // 48kHz 16-bit stereo
+    // Just start DMA — buffer is already configured from init
+    // The stream uses the original CBL (full buffer size) and BDL from setup_output_stream.
+    // Audio data is followed by silence which loops back around.
+    ctrl.play(true);
+    Ok(())
+}
 
-    unsafe {
-        // ── Stream reset (SRST) — needed for VBox to pick up new CBL/BDL ──
-        ctrl.write8(sd_base + sd::CTL, sctl::SRST as u8);
-        for _ in 0..1000 {
-            if ctrl.read8(sd_base + sd::CTL) & sctl::SRST as u8 != 0 { break; }
-            HdaController::delay_us(10);
-        }
-        ctrl.write8(sd_base + sd::CTL, 0);
-        for _ in 0..1000 {
-            if ctrl.read8(sd_base + sd::CTL) & sctl::SRST as u8 == 0 { break; }
-            HdaController::delay_us(10);
-        }
+/// Get DMA buffer virtual address and capacity for direct streaming.
+/// Returns (pointer to i16 buffer, capacity in i16 samples).
+/// Used by the visualizer for gapless ping-pong streaming without stop/restart.
+pub fn get_dma_buffer_info() -> Option<(*mut i16, usize)> {
+    let hda = HDA.lock();
+    let ctrl = hda.as_ref()?;
+    if ctrl.audio_buf_virt == 0 { return None; }
+    Some((ctrl.audio_buf_virt as *mut i16, (ctrl.audio_buf_size / 2) as usize))
+}
 
-        // Clear status
-        ctrl.write8(sd_base + sd::STS, 0x1C);
-
-        // BDL: single entry covering our audio data
-        let bdl = ctrl.bdl_virt as *mut BdlEntry;
-        (*bdl).address = ctrl.audio_buf_phys;
-        (*bdl).length = data_bytes;
-        (*bdl).ioc = 1;
-
-        // Stream descriptor registers
-        ctrl.write32(sd_base + sd::CBL, data_bytes);
-        ctrl.write16(sd_base + sd::LVI, 0);
-        ctrl.write16(sd_base + sd::FMT, fmt);
-        ctrl.write32(sd_base + sd::BDLPL, ctrl.bdl_phys as u32);
-        ctrl.write32(sd_base + sd::BDLPU, (ctrl.bdl_phys >> 32) as u32);
-
-        // Stream tag = 1 in CTL bits [23:20]
-        let ctl_high = (ctrl.stream_tag as u32) << (sctl::STREAM_TAG_SHIFT - 16);
-        ctrl.write8(sd_base + sd::CTL + 2, ctl_high as u8);
+/// Check if HDA is currently playing audio.
+pub fn is_playing() -> bool {
+    let hda = HDA.lock();
+    match hda.as_ref() {
+        Some(ctrl) => ctrl.is_playing(),
+        None => false,
     }
+}
 
-    // ── Re-send codec verbs (SRST cleared the DAC ↔ stream binding) ──
-    if !ctrl.codecs.is_empty() && !ctrl.output_paths.is_empty() {
-        let codec = ctrl.codecs[0];
-        let path = ctrl.output_paths[0].clone();
-        let stream_tag = ctrl.stream_tag;
+/// Get current DMA playback position (LPIB register) in bytes.
+pub fn get_playback_position() -> u32 {
+    let hda = HDA.lock();
+    match hda.as_ref() {
+        Some(ctrl) => ctrl.stream_position(),
+        None => 0,
+    }
+}
 
-        // Power on widgets
-        for &nid in &path.path {
-            let _ = ctrl.codec_cmd(codec, nid, verb::SET_POWER_STATE, 0x00);
+/// Start DMA playback without modifying the buffer.
+/// Assumes the DMA buffer has been pre-filled by the caller.
+pub fn start_dma() -> Result<(), &'static str> {
+    let mut hda = HDA.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    if !ctrl.playing {
+        ctrl.play(true);
+    }
+    Ok(())
+}
+
+/// Clear the stream status bits (BCIS, FIFOE, DESE) to acknowledge
+/// any pending DMA completions. Must be called periodically during
+/// long looped playback to prevent VBox from stalling the stream.
+pub fn clear_stream_status() {
+    let hda = HDA.lock();
+    if let Some(ctrl) = hda.as_ref() {
+        let sd_base = ctrl.osd_base(0);
+        unsafe {
+            // Write 0x1C to clear BCIS (bit 2), FIFOE (bit 3), DESE (bit 4)
+            ctrl.write8(sd_base + sd::STS, 0x1C);
         }
-        // Pin control
-        let _ = ctrl.codec_cmd(codec, path.pin_nid, verb::SET_PIN_CONTROL, 0xC0);
-        let eapd = ctrl.codec_cmd(codec, path.pin_nid, verb::GET_EAPD, 0).unwrap_or(0);
-        let _ = ctrl.codec_cmd(codec, path.pin_nid, verb::SET_EAPD, (eapd as u8) | 0x02);
-        // Bind DAC to stream tag
-        let _ = ctrl.codec_cmd(codec, path.dac_nid, verb::SET_CHANNEL_STREAM,
-            (stream_tag << 4) | 0);
-        // Set format on DAC
-        let _ = ctrl.set_verb_16(codec, path.dac_nid, verb::SET_STREAM_FORMAT, fmt);
-        // Unmute amps
-        for &nid in &path.path {
-            let widget = ctrl.widgets.iter().find(|w| w.nid == nid);
-            if let Some(w) = widget {
-                if w.caps & (1 << 1) != 0 {
-                    let amp_data: u16 = (1 << 15) | (1 << 13) | (1 << 12) | 0x7F;
-                    let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data);
-                    let amp_data2: u16 = (1 << 15) | (1 << 14) | (1 << 12) | 0x7F;
-                    let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data2);
-                }
+    }
+}
+
+/// Ensure the DMA stream is still running. If the RUN bit was cleared
+/// (e.g. by unacknowledged interrupts), re-enable it.
+/// Returns true if the stream had to be re-started.
+pub fn ensure_running() -> bool {
+    let hda = HDA.lock();
+    if let Some(ctrl) = hda.as_ref() {
+        if !ctrl.playing { return false; }
+        let sd_base = ctrl.osd_base(0);
+        unsafe {
+            let ctl = ctrl.read8(sd_base + sd::CTL);
+            if ctl & (sctl::RUN as u8) == 0 {
+                // Stream stalled — clear status and restart
+                ctrl.write8(sd_base + sd::STS, 0x1C);
+                ctrl.write8(sd_base + sd::CTL, ctl | sctl::RUN as u8);
+                crate::serial_println!("[HDA] Stream stalled — restarted (LPIB={})",
+                    ctrl.stream_position());
+                return true;
             }
         }
     }
-
-    crate::serial_println!("[HDA] Looped playback: {} bytes ({} ms)",
-        data_bytes, data_bytes / (48000 * 4 / 1000));
-
-    // Start DMA (non-blocking — audio loops in hardware)
-    ctrl.play(true);
-    Ok(())
+    false
 }
 
 /// Get status info

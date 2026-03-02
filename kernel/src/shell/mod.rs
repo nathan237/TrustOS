@@ -203,7 +203,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // Hardware
     "lspci", "lshw", "hwinfo", "gpu", "gpuexec", "sdma", "neural", "a11y",
     // Audio
-    "beep", "audio", "synth",
+    "beep", "audio", "synth", "play",
     // Network
     "ifconfig", "ip", "ipconfig", "ping", "curl", "wget", "download",
     "nslookup", "dig", "arp", "route", "netstat",
@@ -1054,6 +1054,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "beep" => vm::cmd_beep(args),
         "audio" => vm::cmd_audio(args),
         "synth" => vm::cmd_synth(args),
+        "play" => vm::cmd_play(args),
         "daw" | "trustdaw" => vm::cmd_daw(args),
         "ifconfig" | "ip" => vm::cmd_ifconfig(),
         "ipconfig" => vm::cmd_ipconfig(args),
