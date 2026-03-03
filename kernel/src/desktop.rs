@@ -914,7 +914,10 @@ impl MusicPlayerState {
         }
 
         // Decode embedded WAV
+        #[cfg(feature = "daw")]
         static UNTITLED2_WAV: &[u8] = include_bytes!("trustdaw/untitled2.wav");
+        #[cfg(not(feature = "daw"))]
+        static UNTITLED2_WAV: &[u8] = &[];
         match crate::trustdaw::audio_viz::decode_wav_to_pcm(UNTITLED2_WAV) {
             Ok(audio) => {
                 self.song_title = String::from("Untitled (2) — Lo-Fi");
@@ -1374,6 +1377,8 @@ pub struct Desktop {
     matrix_initialized: bool,
     matrix_beat_count: u32,
     matrix_last_beat: bool,
+    // Ghost mesh: invisible 3D wireframes revealed by rain collision
+    ghost_mesh: crate::ghost_mesh::GhostMeshState,
     // ── Global audio analyzer (reacts to ANY HDA output, not just music player) ──
     // Uses Vec instead of fixed arrays to avoid bloating the static struct size
     global_fft_re: Vec<f32>,
@@ -1432,6 +1437,8 @@ pub struct Desktop {
     gesture_buffer: crate::gesture::GestureBuffer,
     /// Touch-based cursor mode (true when last input was touch)
     pub touch_mode: bool,
+    /// Mobile UI state (portrait mode, same style as desktop)
+    pub mobile_state: crate::mobile::MobileState,
 }
 
 /// Calculator state for interactive calculator windows
@@ -1989,6 +1996,7 @@ impl Desktop {
             matrix_initialized: false,
             matrix_beat_count: 0,
             matrix_last_beat: false,
+            ghost_mesh: crate::ghost_mesh::GhostMeshState::new(),
             // Global audio analyzer (heap-allocated to avoid static bloat)
             global_fft_re: Vec::new(),
             global_fft_im: Vec::new(),
@@ -2026,6 +2034,8 @@ impl Desktop {
             gesture_recognizer: crate::gesture::GestureRecognizer::new(1280, 800),
             gesture_buffer: crate::gesture::GestureBuffer::new(),
             touch_mode: false,
+            // Mobile UI
+            mobile_state: crate::mobile::MobileState::new(),
         }
     }
     
@@ -2137,9 +2147,9 @@ impl Desktop {
     
     /// Initialize matrix rain background data (depth-parallax advancing effect)
     fn init_matrix_rain(&mut self) {
-        // 160 columns for depth-parallax advancing matrix rain
+        // 192 columns: 1920/192 = 10px per col, denser than 160 (12px)
         // Speeds 2-6: slow=far(dim), fast=near(bright) → illusion of advancing
-        const MATRIX_COLS: usize = 160;
+        const MATRIX_COLS: usize = 192;
         const TRAIL_LEN: usize = 30;
         const CHAR_H: usize = 16;
         const CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
@@ -2745,6 +2755,27 @@ struct AppConfig {
 
     /// Handle mouse click
     pub fn handle_click(&mut self, x: i32, y: i32, pressed: bool) {
+        // ════════ MOBILE MODE: route clicks to mobile gesture system ════════
+        if self.mobile_state.active {
+            let vx = self.mobile_state.vp_x;
+            let vy = self.mobile_state.vp_y;
+            let vw = self.mobile_state.vp_w as i32;
+            let vh = self.mobile_state.vp_h as i32;
+            // Check if click is inside viewport
+            if x >= vx && x < vx + vw && y >= vy && y < vy + vh {
+                let local_x = x - vx;
+                let local_y = y - vy;
+                let evt = if pressed {
+                    crate::mobile::GestureEvent::TapDown(local_x, local_y)
+                } else {
+                    crate::mobile::GestureEvent::TapUp(local_x, local_y)
+                };
+                let action = crate::mobile::handle_gesture(&mut self.mobile_state, evt);
+                self.apply_mobile_action(action);
+            }
+            return;
+        }
+        
         // Lock screen blocks all mouse interaction
         if self.lock_screen_active { return; }
         
@@ -5970,6 +6001,13 @@ struct AppConfig {
             self.needs_full_redraw = true;
         }
         
+        // ════════ MOBILE MODE: render portrait UI instead of desktop ════════
+        if self.mobile_state.active {
+            self.draw_mobile_mode();
+            framebuffer::swap_buffers();
+            return;
+        }
+        
         // OPTIMIZATION 1: Background caching
         // Only draw background once, then cache it
         // Matrix rain is animated — redraw background every frame
@@ -6363,12 +6401,134 @@ struct AppConfig {
         self.global_prev_energy = be;
     }
     
+    // ═══════════════════════════════════════════════════════════════════
+    // MOBILE MODE: portrait UI within a centered viewport
+    // Uses EXACT same style: matrix rain, chrome borders, glass panels
+    // ═══════════════════════════════════════════════════════════════════
+    fn draw_mobile_mode(&mut self) {
+        // Calculate viewport (iPhone 16 aspect ratio centered on screen)
+        let (vx, vy, vw, vh) = crate::mobile::calculate_viewport(self.width, self.height);
+        self.mobile_state.vp_x = vx;
+        self.mobile_state.vp_y = vy;
+        self.mobile_state.vp_w = vw;
+        self.mobile_state.vp_h = vh;
+
+        // Clear entire screen to deep black
+        framebuffer::clear_backbuffer(0xFF000000);
+
+        // Draw matrix rain background (same as desktop, full screen)
+        self.draw_background();
+
+        // Darken area outside viewport for phone-frame effect
+        if vx > 0 {
+            framebuffer::fill_rect(0, 0, vx as u32, self.height, 0xFF020202);
+            framebuffer::fill_rect((vx + vw as i32) as u32, 0, (self.width as i32 - vx - vw as i32).max(0) as u32, self.height, 0xFF020202);
+        }
+
+        // Phone chrome frame (same border style as desktop windows)
+        crate::mobile::draw_phone_frame(vx, vy, vw, vh);
+
+        // Tick animations
+        crate::mobile::tick_animations(&mut self.mobile_state);
+
+        // Update time string from RTC cache
+        if self.frame_count % 60 == 0 || self.mobile_state.time_str.is_empty() {
+            let dt = crate::rtc::read_rtc();
+            use core::fmt::Write;
+            self.mobile_state.time_str.clear();
+            let _ = core::write!(self.mobile_state.time_str, "{:02}:{:02}", dt.hour, dt.minute);
+        }
+
+        let frame = self.mobile_state.anim_frame;
+        let view = self.mobile_state.view;
+        let time_str = self.mobile_state.time_str.clone();
+        let hl = self.mobile_state.highlighted_icon;
+
+        // Status bar (always visible)
+        crate::mobile::draw_status_bar(vx, vy, vw, vh, &time_str, frame);
+
+        match view {
+            crate::mobile::MobileView::Home => {
+                crate::mobile::draw_home_screen(vx, vy, vw, vh, hl, frame);
+                crate::mobile::draw_dock(vx, vy, vw, vh, -1, frame);
+                crate::mobile::draw_gesture_bar(vx, vy, vw, vh);
+            }
+            crate::mobile::MobileView::AppFullscreen => {
+                // Draw app content area
+                let app_idx = self.mobile_state.active_app_id.unwrap_or(0);
+                let app_name = if (app_idx as usize) < crate::mobile::app_count() {
+                    crate::mobile::app_name(app_idx as usize)
+                } else { "App" };
+                crate::mobile::draw_app_bar(vx, vy, vw, app_name, frame);
+                // App content placeholder
+                let cy = vy + crate::mobile::APP_BAR_H as i32;
+                let ch = vh.saturating_sub(crate::mobile::APP_BAR_H + 20);
+                framebuffer::fill_rect_alpha(vx.max(0) as u32, cy.max(0) as u32, vw, ch, 0x050A06, 200);
+                // Draw gesture bar at bottom
+                crate::mobile::draw_gesture_bar(vx, vy, vw, vh);
+            }
+            crate::mobile::MobileView::AppSwitcher => {
+                crate::mobile::draw_app_switcher(vx, vy, vw, vh, &[], 0, frame);
+                crate::mobile::draw_gesture_bar(vx, vy, vw, vh);
+            }
+            crate::mobile::MobileView::ControlCenter => {
+                crate::mobile::draw_home_screen(vx, vy, vw, vh, hl, frame);
+                crate::mobile::draw_dock(vx, vy, vw, vh, -1, frame);
+                crate::mobile::draw_control_center(vx, vy, vw, vh, self.mobile_state.cc_progress, frame);
+                crate::mobile::draw_gesture_bar(vx, vy, vw, vh);
+            }
+        }
+
+        // Draw cursor on top
+        self.draw_cursor();
+    }
+
+    /// Apply a mobile gesture action
+    fn apply_mobile_action(&mut self, action: crate::mobile::MobileAction) {
+        use crate::mobile::MobileAction;
+        match action {
+            MobileAction::None => {}
+            MobileAction::GoHome => {
+                self.mobile_state.view = crate::mobile::MobileView::Home;
+                self.mobile_state.active_app_id = None;
+            }
+            MobileAction::OpenSwitcher => {
+                self.mobile_state.view = crate::mobile::MobileView::AppSwitcher;
+            }
+            MobileAction::OpenControlCenter => {
+                self.mobile_state.view = crate::mobile::MobileView::ControlCenter;
+                self.mobile_state.cc_progress = 1; // start animating
+            }
+            MobileAction::CloseControlCenter => {
+                self.mobile_state.view = crate::mobile::MobileView::Home;
+            }
+            MobileAction::LaunchApp(idx) => {
+                self.mobile_state.view = crate::mobile::MobileView::AppFullscreen;
+                self.mobile_state.active_app_id = Some(idx as u32);
+                crate::serial_println!("[Mobile] Launch app #{}", idx);
+            }
+            MobileAction::LaunchDockApp(slot) => {
+                let idx = crate::mobile::dock_app_index(slot as usize);
+                self.mobile_state.view = crate::mobile::MobileView::AppFullscreen;
+                self.mobile_state.active_app_id = Some(idx as u32);
+                crate::serial_println!("[Mobile] Launch dock app slot={} -> idx={}", slot, idx);
+            }
+            MobileAction::BackFromApp => {
+                self.mobile_state.view = crate::mobile::MobileView::Home;
+                self.mobile_state.active_app_id = None;
+            }
+            MobileAction::CloseSwitcherCard(id) => {
+                self.mobile_state.closing_cards.push((id, 255));
+            }
+        }
+    }
+
     fn draw_background(&mut self) {
         // ═══════════════════════════════════════════════════════════════
         // MATRIX RAIN — Multi-color, beat-synced mode switching
         // Logo: faithful chrome/silver rendering from bitmap
         // ═══════════════════════════════════════════════════════════════
-        const MATRIX_COLS: usize = 160;
+        const MATRIX_COLS: usize = 192;
         const TRAIL_LEN: usize = 30;
         const CHAR_H: u32 = 16;
         
@@ -6400,6 +6560,17 @@ struct AppConfig {
         if !self.matrix_initialized {
             return;
         }
+        
+        // ── Ghost Mesh: update invisible 3D sphere projection ──
+        // Always update (wireframe is faintly visible), deformation only when playing
+        crate::ghost_mesh::update(
+            &mut self.ghost_mesh,
+            width, height,
+            MATRIX_COLS,
+            m_beat, m_energy,
+            m_sub_bass, m_bass, m_mid, m_treble,
+            m_playing,
+        );
         
         // Logo centered vertically in the available space
         let logo_center_y = height / 2;
@@ -6447,8 +6618,12 @@ struct AppConfig {
                 (local_beat * 6.0 + band_amp * 4.0) as i32
             } else { 0 };
             
-            // Update position
-            let new_y = self.matrix_heads[col] + speed as i32 + beat_boost;
+            // Ghost mesh: slow rain in columns that intersect the 3D shape
+            let ghost_slow = if m_playing {
+                crate::ghost_mesh::column_slow_factor(&self.ghost_mesh, col) as i32
+            } else { 100 };
+            let effective_advance = ((speed as i32 + beat_boost) * ghost_slow) / 100;
+            let new_y = self.matrix_heads[col] + effective_advance;
             if new_y > height as i32 + (TRAIL_LEN as i32 * CHAR_H as i32) {
                 let new_seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
                 self.matrix_seeds[col] = new_seed;
@@ -6473,6 +6648,12 @@ struct AppConfig {
             let beat_bright = if m_playing { m_beat * 0.4 } else { 0.0 };
             let brightness_mult = (0.3 + depth_factor * 0.7 + energy_boost + beat_bright).min(1.6);
             
+            // Ghost mesh: columns inside shape allow dimmer trail chars through
+            let ghost_col_inside = m_playing && col < self.ghost_mesh.column_bounds.len() && {
+                let (bmin, bmax) = self.ghost_mesh.column_bounds[col];
+                bmin >= 0 && bmax > bmin
+            };
+            
             for i in 0..TRAIL_LEN {
                 let char_y = head_y - (i as i32 * CHAR_H as i32);
                 if char_y < 0 || char_y >= height as i32 { continue; }
@@ -6485,7 +6666,7 @@ struct AppConfig {
                 let base = if i == 0 { 255u8 }
                     else if i == 1 { 200u8.saturating_add(trail_ext / 2) }
                     else { (160u8 + trail_ext / 3).saturating_sub((i as u8).saturating_mul(6)) };
-                if base < 15 { continue; }
+                if base < (if ghost_col_inside { 5 } else { 15 }) { continue; }
                 
                 let brightness = ((base as f32) * brightness_mult).min(255.0) as u8;
                 
@@ -6517,11 +6698,42 @@ struct AppConfig {
                     (tr.saturating_add(bleed_r), tg, tb.saturating_add(bleed_b))
                 };
                 
+                // ── Ghost Mesh v4: modulate rain through invisible 3D shape ──
+                let (mut r, mut g, mut b) = (r, g, b);
+                let mut ghost_trail_boost: u8 = 0;
+                if m_playing {
+                    let fx = crate::ghost_mesh::check_rain_collision(
+                        &self.ghost_mesh, col, char_y,
+                        self.ghost_mesh.beat_pulse, m_energy,
+                    );
+                    if fx.glow > 0 || fx.ripple > 0 {
+                        let (mr, mg, mb) = crate::ghost_mesh::modulate_rain_color(
+                            r, g, b, fx.glow, fx.depth, fx.ripple,
+                            m_beat, m_energy,
+                        );
+                        r = mr; g = mg; b = mb;
+                        ghost_trail_boost = fx.trail_boost;
+                    }
+                }
+                // Trail extension: boost brightness for trailing chars near shape
+                if ghost_trail_boost > 0 {
+                    let boost = 1.0 + ghost_trail_boost as f32 / 100.0;
+                    r = (r as f32 * boost).min(255.0) as u8;
+                    g = (g as f32 * boost).min(255.0) as u8;
+                    b = (b as f32 * boost).min(255.0) as u8;
+                }
+                
                 let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
                 
-                // Character selection with slow mutation
-                let char_seed = seed.wrapping_add((i as u32 * 7919) ^ (self.frame_count as u32 / 12));
-                let chars: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
+                // Character selection: denser glyphs + faster mutation inside shape
+                let inside_shape = ghost_trail_boost > 30;
+                let mutation_speed = if inside_shape { 4u32 } else { 12u32 };
+                let char_seed = seed.wrapping_add((i as u32 * 7919) ^ (self.frame_count as u32 / mutation_speed));
+                let chars: &[u8] = if inside_shape {
+                    b"@#$%&WM8BOX0ZNHK"  // dense glyphs inside shape
+                } else {
+                    b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|"
+                };
                 let c = chars[(char_seed as usize) % chars.len()] as char;
                 let glyph = crate::framebuffer::font::get_glyph(c);
                 
@@ -6539,6 +6751,8 @@ struct AppConfig {
                 }
             }
         }
+        
+        // Ghost mesh: no overlay drawing — rain IS the only renderer
         
         // ═══════════════════════════════════════════════════════════════
         // LOGO — Faithful chrome/silver rendering from bitmap
