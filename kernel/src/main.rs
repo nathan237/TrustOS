@@ -29,7 +29,6 @@ mod task;
 mod desktop;
 mod mobile;
 mod visualizer;
-mod crt_scanline;
 mod drone_swarm;
 mod disk;
 mod network;

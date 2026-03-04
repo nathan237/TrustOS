@@ -45,3 +45,13 @@ where
     }
     result
 }
+
+/// Initialize aarch64 interrupt infrastructure (vectors + GIC)
+/// NOTE: Timer is NOT enabled here — it's started later by set_bootstrap_ready()
+/// to avoid spurious IRQs during boot init (VFS, threads, etc.)
+pub fn init_platform() {
+    super::vectors::init();
+    super::gic::init();
+    // Timer deferred to set_bootstrap_ready() — no IRQs during early boot
+    crate::log!("aarch64 platform interrupts initialized (GICv2, timer deferred)");
+}

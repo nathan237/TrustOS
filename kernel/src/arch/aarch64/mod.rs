@@ -11,6 +11,8 @@ pub mod context;
 pub mod timer;
 pub mod boot;
 pub mod syscall_arch;
+pub mod gic;
+pub mod vectors;
 
 /// Halt the CPU until the next interrupt (WFI — Wait For Interrupt)
 #[inline(always)]

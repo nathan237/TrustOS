@@ -27,7 +27,7 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
-lto = "thin"
+lto = true
 opt-level = 2
 
 [patch.crates-io]

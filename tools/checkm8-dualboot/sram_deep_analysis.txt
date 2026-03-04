@@ -1,0 +1,480 @@
+﻿================================================================================
+PHASE 1: Finding all xrefs (BL and B) to target functions
+================================================================================
+
+[*] Scanning entire ROM for BL/B to target functions...
+  Total instructions decoded: 128
+
+  0x100008af0 (Target1 writer (SRAM 0x19C008448)):
+    No direct BL/B xrefs found ΓÇö must be called indirectly
+
+  0x100002844 (Target2 writer (SRAM 0x19C008B48)):
+    No direct BL/B xrefs found ΓÇö must be called indirectly
+
+  0x10000addc (Target3 writer (SRAM 0x19C010620)):
+    No direct BL/B xrefs found ΓÇö must be called indirectly
+
+  0x1000028c0 (Target2 BLR consumer):
+    No direct BL/B xrefs found ΓÇö must be called indirectly
+
+  0x10000ad80 (Target3 BLR consumer):
+    No direct BL/B xrefs found ΓÇö must be called indirectly
+
+
+================================================================================
+PHASE 2: Searching ROM for function pointers in data
+================================================================================
+
+  Searching for 0x100008af0 (Target1 writer (SRAM 0x19C008448)) in ROM data...
+    Not found as literal pointer in ROM data
+
+  Searching for 0x100002844 (Target2 writer (SRAM 0x19C008B48)) in ROM data...
+    Not found as literal pointer in ROM data
+
+  Searching for 0x10000addc (Target3 writer (SRAM 0x19C010620)) in ROM data...
+    Not found as literal pointer in ROM data
+
+  Searching for 0x1000028c0 (Target2 BLR consumer) in ROM data...
+    Not found as literal pointer in ROM data
+
+  Searching for 0x10000ad80 (Target3 BLR consumer) in ROM data...
+    Not found as literal pointer in ROM data
+
+
+================================================================================
+PHASE 3: ADRP sequences that reference target addresses
+================================================================================
+
+  Looking for ADRP #0x100008000 (page for 0x100008af0, Target1 writer (SRAM 0x19C008448))...
+
+  Looking for ADRP #0x100002000 (page for 0x100002844, Target2 writer (SRAM 0x19C008B48))...
+
+  Looking for ADRP #0x10000a000 (page for 0x10000addc, Target3 writer (SRAM 0x19C010620))...
+
+  Looking for ADRP #0x100002000 (page for 0x1000028c0, Target2 BLR consumer)...
+
+  Looking for ADRP #0x10000a000 (page for 0x10000ad80, Target3 BLR consumer)...
+
+
+================================================================================
+PHASE 4: DEEP ANALYSIS ΓÇö Target 2 (SRAM 0x19C008B48)
+================================================================================
+
+[*] func_0x100002844 analysis:
+    
+    Arguments: x0, x1, x2
+    Saves: x19=x0 (index), x21=x1 (callback ptr), x20=x2 (callback arg)
+    
+    Computes: x8 = 0x19C008B48 + w19 * 0x18
+    Stores: STP x21, x20, [x8]  ΓåÆ  stores (x1, x2) at array[x0]
+    
+    This is an INTERRUPT/EVENT HANDLER REGISTRATION function.
+    Array base = 0x19C008B48, entry size = 0x18 (24 bytes)
+    Each entry: [callback_ptr (8 bytes), callback_arg (8 bytes), ???]
+    
+    The value stored at SRAM 0x19C008B48 comes directly from the
+    function's x1 argument (the callback pointer).
+
+[*] func_0x1000028C0 (BLR consumer) analysis:
+    
+    Reads a hardware register at 0x23B102004
+    Loops while events pending:
+      - Extracts index = w8 & 0x1FF
+      - Loads callback = array[index].ptr from [0x19C008B48 + index*24]
+      - Loads arg = array[index].arg from [0x19C008B48 + index*24 + 8]
+      - If callback != NULL: BLR callback(arg)
+    
+    This is an INTERRUPT DISPATCH LOOP.
+
+[*] Checking USB initialization flow...
+    Looking for functions that reference 0x100002844...
+    Page: 0x100002000, Offset: 0x844
+
+[*] Disassembling USB init functions that might register handlers:
+
+[*] func_0x1000020c8:
+
+================================================================================
+  func_0x1000020c8
+================================================================================
+  0x01000020c8:  mov      x8, #0x200000000
+  0x01000020cc:  movk     x8, #0x3500, lsl #16
+  0x01000020d0:  movk     x8, #0x8024
+  0x01000020d4:  lsr      w9, w1, #2
+  0x01000020d8:  ldr      wzr, [x8]
+  0x01000020dc:  b        #0x1000020ec
+  0x01000020e0:  ldr      w10, [x0], #4
+  0x01000020e4:  str      w10, [x8, #0x1dc]
+  0x01000020e8:  sub      x9, x9, #1
+  0x01000020ec:  cbnz     x9, #0x1000020e0
+  0x01000020f0:  ret      
+  0x01000020f4:  cmp      w0, #3
+  0x01000020f8:  b.hs     #0x100002108
+  0x01000020fc:  lsl      w8, w0, #6
+  0x0100002100:  add      w0, w8, #0x80
+  0x0100002104:  ret      
+  0x0100002108:  stp      x29, x30, [sp, #-0x10]!
+  0x010000210c:  mov      x29, sp
+  0x0100002110:  adr      x0, #0x10001c240
+  0x0100002114:  nop      
+  0x0100002118:  mov      x1, x0
+  0x010000211c:  bl       #0x100008978
+  0x0100002120:  sub      sp, sp, #0x60
+  0x0100002124:  stp      x22, x21, [sp, #0x30]
+  0x0100002128:  stp      x20, x19, [sp, #0x40]
+  0x010000212c:  stp      x29, x30, [sp, #0x50]
+  0x0100002130:  add      x29, sp, #0x50
+  0x0100002134:  mov      x19, x1
+  0x0100002138:  adrp     x8, #0x19c008000
+  0x010000213c:  nop      
+  0x0100002140:  ldr      x8, [x8, #0x448]
+  0x0100002144:  str      x8, [sp, #0x28]
+
+[*] func_0x1000020f4:
+
+================================================================================
+  func_0x1000020f4
+================================================================================
+  0x01000020f4:  cmp      w0, #3
+  0x01000020f8:  b.hs     #0x100002108
+  0x01000020fc:  lsl      w8, w0, #6
+  0x0100002100:  add      w0, w8, #0x80
+  0x0100002104:  ret      
+  0x0100002108:  stp      x29, x30, [sp, #-0x10]!
+  0x010000210c:  mov      x29, sp
+  0x0100002110:  adr      x0, #0x10001c240
+  0x0100002114:  nop      
+  0x0100002118:  mov      x1, x0
+  0x010000211c:  bl       #0x100008978
+  0x0100002120:  sub      sp, sp, #0x60
+  0x0100002124:  stp      x22, x21, [sp, #0x30]
+  0x0100002128:  stp      x20, x19, [sp, #0x40]
+  0x010000212c:  stp      x29, x30, [sp, #0x50]
+  0x0100002130:  add      x29, sp, #0x50
+  0x0100002134:  mov      x19, x1
+  0x0100002138:  adrp     x8, #0x19c008000
+  0x010000213c:  nop      
+  0x0100002140:  ldr      x8, [x8, #0x448]
+  0x0100002144:  str      x8, [sp, #0x28]
+  0x0100002148:  stur     xzr, [sp, #0x1c]
+  0x010000214c:  stur     xzr, [sp, #0x14]
+  0x0100002150:  stur     xzr, [sp, #0xc]
+  0x0100002154:  stur     xzr, [sp, #4]
+  0x0100002158:  orr      w8, w0, #0x10000000
+  0x010000215c:  str      w8, [sp]
+  0x0100002160:  and      w8, w0, #0x7000000
+  0x0100002164:  cbz      w8, #0x100002174
+  0x0100002168:  mov      w1, #4
+  0x010000216c:  mov      x0, sp
+  0x0100002170:  b        #0x1000021b0
+
+[*] func_0x100002120:
+
+================================================================================
+  func_0x100002120
+================================================================================
+  0x0100002120:  sub      sp, sp, #0x60
+  0x0100002124:  stp      x22, x21, [sp, #0x30]
+  0x0100002128:  stp      x20, x19, [sp, #0x40]
+  0x010000212c:  stp      x29, x30, [sp, #0x50]
+  0x0100002130:  add      x29, sp, #0x50
+  0x0100002134:  mov      x19, x1
+  0x0100002138:  adrp     x8, #0x19c008000
+  0x010000213c:  nop      
+  0x0100002140:  ldr      x8, [x8, #0x448]
+  0x0100002144:  str      x8, [sp, #0x28]
+  0x0100002148:  stur     xzr, [sp, #0x1c]
+  0x010000214c:  stur     xzr, [sp, #0x14]
+  0x0100002150:  stur     xzr, [sp, #0xc]
+  0x0100002154:  stur     xzr, [sp, #4]
+  0x0100002158:  orr      w8, w0, #0x10000000
+  0x010000215c:  str      w8, [sp]
+  0x0100002160:  and      w8, w0, #0x7000000
+  0x0100002164:  cbz      w8, #0x100002174
+  0x0100002168:  mov      w1, #4
+  0x010000216c:  mov      x0, sp
+  0x0100002170:  b        #0x1000021b0
+  0x0100002174:  ubfx     w0, w0, #0x16, #2
+  0x0100002178:  bl       #0x1000020f4
+  0x010000217c:  lsr      w20, w0, #3
+  0x0100002180:  mov      x8, sp
+  0x0100002184:  orr      x21, x8, #4
+  0x0100002188:  mov      w3, #0x20
+  0x010000218c:  mov      x0, x21
+  0x0100002190:  mov      x1, x19
+  0x0100002194:  mov      x2, x20
+  0x0100002198:  bl       #0x10000ffe8
+  0x010000219c:  mov      w1, #4
+
+[*] func_0x1000021e4:
+
+================================================================================
+  func_0x1000021e4
+================================================================================
+  0x01000021e4:  sub      sp, sp, #0x30
+  0x01000021e8:  stp      x29, x30, [sp, #0x20]
+  0x01000021ec:  add      x29, sp, #0x20
+  0x01000021f0:  adrp     x8, #0x19c008000
+  0x01000021f4:  nop      
+  0x01000021f8:  ldr      x8, [x8, #0x448]
+  0x01000021fc:  stur     x8, [x29, #-8]
+  0x0100002200:  stur     xzr, [sp, #0xc]
+  0x0100002204:  stur     xzr, [sp, #4]
+  0x0100002208:  and      w8, w0, #3
+  0x010000220c:  and      w9, w1, #1
+  0x0100002210:  lsl      w9, w9, #0x19
+  0x0100002214:  bfi      w9, w8, #0x1a, #2
+  0x0100002218:  bfi      w9, w2, #0x17, #1
+  0x010000221c:  orr      w8, w9, #0x20000000
+  0x0100002220:  str      w8, [sp]
+  0x0100002224:  cbz      x3, #0x100002238
+  0x0100002228:  ldr      x8, [x3, #8]
+  0x010000222c:  stur     x8, [sp, #0xc]
+  0x0100002230:  ldr      x8, [x3]
+  0x0100002234:  stur     x8, [sp, #4]
+  0x0100002238:  mov      w1, #0x14
+  0x010000223c:  mov      x0, sp
+  0x0100002240:  bl       #0x1000020c8
+  0x0100002244:  ldur     x8, [x29, #-8]
+  0x0100002248:  adrp     x9, #0x19c008000
+  0x010000224c:  nop      
+  0x0100002250:  ldr      x9, [x9, #0x448]
+  0x0100002254:  sub      x8, x9, x8
+  0x0100002258:  cbnz     x8, #0x100002268
+  0x010000225c:  ldp      x29, x30, [sp, #0x20]
+  0x0100002260:  add      sp, sp, #0x30
+
+[*] func_0x10000226c:
+
+================================================================================
+  func_0x10000226c
+================================================================================
+  0x010000226c:  sub      sp, sp, #0x30
+  0x0100002270:  stp      x29, x30, [sp, #0x20]
+  0x0100002274:  add      x29, sp, #0x20
+  0x0100002278:  adrp     x8, #0x19c008000
+  0x010000227c:  nop      
+  0x0100002280:  ldr      x8, [x8, #0x448]
+  0x0100002284:  stur     x8, [x29, #-8]
+  0x0100002288:  and      w8, w0, #1
+  0x010000228c:  and      w9, w1, #3
+  0x0100002290:  lsl      w9, w9, #0x19
+  0x0100002294:  bfi      w9, w8, #0x1b, #1
+  0x0100002298:  bfxil    w9, w4, #0, #0x18
+  0x010000229c:  mov      w8, #0x50000000
+  0x01000022a0:  orr      w8, w9, w8
+  0x01000022a4:  str      w8, [sp, #8]
+  0x01000022a8:  lsr      x8, x2, #0x10
+  0x01000022ac:  and      w8, w8, #0xff0000
+  0x01000022b0:  ubfx     x9, x3, #0x20, #8
+  0x01000022b4:  orr      w8, w9, w8
+  0x01000022b8:  stp      w8, w2, [sp, #0xc]
+  0x01000022bc:  str      w3, [sp, #0x14]
+  0x01000022c0:  mov      w1, #0x10
+  0x01000022c4:  add      x0, sp, #8
+  0x01000022c8:  bl       #0x1000020c8
+  0x01000022cc:  ldur     x8, [x29, #-8]
+  0x01000022d0:  adrp     x9, #0x19c008000
+  0x01000022d4:  nop      
+  0x01000022d8:  ldr      x9, [x9, #0x448]
+  0x01000022dc:  sub      x8, x9, x8
+  0x01000022e0:  cbnz     x8, #0x1000022f0
+  0x01000022e4:  ldp      x29, x30, [sp, #0x20]
+  0x01000022e8:  add      sp, sp, #0x30
+
+
+================================================================================
+PHASE 5: Who writes to SRAM 0x19C010620?
+================================================================================
+[*] Looking for ADRP #0x19c010000 followed by STR [reg, #0x620]...
+
+
+================================================================================
+PHASE 6: Who calls the Target 1 writer (0x100008AF0)?
+================================================================================
+[*] Looking for ADRP #0x100008000 + ADD #0xaf0...
+
+[*] What's at 0x100008B58 (called from USB):
+
+================================================================================
+  func_0x100008B58
+================================================================================
+  0x0100008b58:  stp      x29, x30, [sp, #-0x10]!
+  0x0100008b5c:  mov      x29, sp
+  0x0100008b60:  adr      x0, #0x10001c240
+  0x0100008b64:  nop      
+  0x0100008b68:  mov      x1, x0
+  0x0100008b6c:  bl       #0x100008978
+  0x0100008b70:  stp      x22, x21, [sp, #-0x30]!
+  0x0100008b74:  stp      x20, x19, [sp, #0x10]
+  0x0100008b78:  stp      x29, x30, [sp, #0x20]
+  0x0100008b7c:  add      x29, sp, #0x20
+  0x0100008b80:  mov      x19, x2
+  0x0100008b84:  mov      x21, x1
+  0x0100008b88:  mov      x20, x0
+  0x0100008b8c:  cmp      x3, #0x2f
+  0x0100008b90:  b.ls     #0x100008bb4
+  0x0100008b94:  bl       #0x10001c094
+  0x0100008b98:  mov      x1, x21
+  0x0100008b9c:  mov      x2, x20
+  0x0100008ba0:  mov      x3, x19
+  0x0100008ba4:  ldp      x29, x30, [sp, #0x20]
+  0x0100008ba8:  ldp      x20, x19, [sp, #0x10]
+  0x0100008bac:  ldp      x22, x21, [sp], #0x30
+  0x0100008bb0:  b        #0x1000183ec
+  0x0100008bb4:  adr      x0, #0x10001c240
+  0x0100008bb8:  nop      
+  0x0100008bbc:  mov      x1, x0
+
+
+================================================================================
+PHASE 7: Interrupt registration flow for Target 2
+================================================================================
+[*] Checking for BLR calls in range where 0x100002844 might be the target...
+  0x100002844 not found as literal in ROM data - called via computed address
+
+
+================================================================================
+PHASE 8: Pointer references for Target 3 (0x10000AD80)
+================================================================================
+  0x10000AD80 not found as literal in ROM data
+  0x10000ADDC not found as literal in ROM data
+
+[*] All stores to SRAM 0x19C010620:
+
+
+================================================================================
+FINAL DETAILED ASSESSMENT
+================================================================================
+
+============================================================
+TARGET 1: SRAM 0x19C008448
+============================================================
+WRITER: func_0x100008AF0
+  This is NOT the panic function (panic is 0x100008978).
+  The writer is a separate small function at 0x100008AF0.
+
+WHAT IT WRITES:
+  Path A (lock acquired, cbz taken ΓåÆ w0==0):
+    - Reads current [0x19C008448] into x8
+    - ANDs with 7 ΓåÆ gets 3-bit index
+    - Clears a byte in SRAM buffer at [0x19C00BD90 + index]
+    - Reloads x8 from [0x19C00BD90] (first 8 bytes of buffer)
+    - Stores x8 ΓåÆ [0x19C008448]
+  
+  Path B (lock not acquired):
+    - Constructs constant x8 = 0x4752_4004_4430_3631
+    - Stores to [0x19C00BD90]
+    - Then stores same x8 ΓåÆ [0x19C008448]
+
+VALUE SOURCE: Entirely ROM-derived constant or self-referential SRAM manipulation.
+  The constant 0x47524004_44303631 = ASCII "16D@RG" (part of a debug/tracking string).
+  This is a cyclic buffer pointer/counter ΓÇö NOT a function pointer.
+
+IS THIS A FUNCTION POINTER? UNLIKELY.
+  The value is manipulated with AND #7 and byte operations.
+  At the BLR site (0x100002458), the code does:
+    ldr x8, [x27, #8] ΓåÆ loads from a struct, NOT directly from 0x19C008448
+  The 0x19C008448 is used as a CANARY/COOKIE, not a code pointer.
+
+VERDICT: NOT EXPLOITABLE
+  The value is ROM-constant or self-derived. Not attacker-controllable.
+  The BLR at 0x100002458 uses a different value (struct field).
+
+============================================================
+TARGET 2: SRAM 0x19C008B48  *** USB CODE ***
+============================================================
+WRITER: func_0x100002844 ΓÇö Interrupt handler registration
+  
+  void register_handler(uint32_t index, void* callback, void* arg) {
+    lock();
+    uint64_t* entry = (uint64_t*)(0x19C008B48 + index * 24);
+    entry[0] = callback;   // x1
+    entry[1] = arg;        // x2
+    if (index <= 0x1FF) {
+      // Configure hardware interrupt controller at 0x23B102000
+      uint32_t* hw = (uint32_t*)0x23B102000;
+      uint32_t bit = 1 << hw[0];
+      hw[index + 0x400] = bit;
+    }
+    unlock();
+    return 0;
+  }
+
+WHAT IT WRITES:
+  The callback pointer (x1) and argument (x2) from the caller.
+  These are stored at SRAM 0x19C008B48 + index*24.
+
+CONSUMER (BLR at 0x100002914):
+  func_0x1000028C0 ΓÇö Interrupt dispatch loop
+  Reads from hardware register 0x23B102004
+  Extracts interrupt index, looks up callback from the array,
+  and BLR's to it with the stored argument.
+
+VALUE SOURCE:
+  The stored values come from whoever calls register_handler().
+  No direct BL callers found ΓÇö meaning it's either:
+  a) Called via a function pointer table (vtable), or
+  b) Called via a trampoline/wrapper
+
+ATTACKER CONTROLLABILITY:
+  The callback registration happens during USB/interrupt initialization.
+  The caller provides ROM function addresses as callbacks.
+  The interrupt controller hardware register 0x23B10xxxx is not
+  USB-writable ΓÇö an attacker cannot trigger arbitrary interrupt indices.
+  
+  HOWEVER: If the SRAM at 0x19C008B48 can be overflowed/corrupted
+  via a DFU heap overflow (like checkm8), an attacker could overwrite
+  the callback pointer stored there, and the next interrupt dispatch
+  would BLR to the attacker's value.
+
+VERDICT: CONDITIONALLY EXPLOITABLE
+  NOT directly controllable via USB protocol data.
+  BUT exploitable via SRAM corruption (heap overflow) since:
+  - The callback table lives in SRAM
+  - The dispatch loop blindly trusts the loaded value
+  - No pointer authentication on the BLR
+
+============================================================
+TARGET 3: SRAM 0x19C010620
+============================================================
+WRITER: func_0x10000ADDC ΓÇö Block device frequency detection
+  
+  uint32_t get_block_freq() {
+    uint64_t cookie = *(uint64_t*)0x19C008448;  // canary
+    uint32_t cached = *(uint32_t*)0x19C010628;
+    if (cached != 0) return cached;
+    
+    // Query hardware for clock frequency
+    uint32_t raw;
+    hw_query(0x700, 0x10000, &raw);
+    if (raw == 0) goto check_canary;
+    
+    uint32_t freq = raw / 1000000;  // Divide by 1M
+    if (raw % 1000000 != 0) goto check_canary;
+    
+    *(uint32_t*)0x19C010628 = freq;  // Cache it
+    // ...check canary and return
+  }
+
+WHAT IT WRITES:
+  A hardware-derived clock frequency value to 0x19C010628 (NOT 0x19C010620).
+  The value at 0x19C010620 is not written by this function!
+
+CONSUMER (BLR at 0x10000ADA8):
+  func_0x10000AD80 loads from [0x19C010620] (not [0x19C010628]).
+  These are DIFFERENT offsets ΓÇö the BLR reads from +0x620, the writer
+  writes to +0x628.
+
+  The value at 0x19C010620 must be written by a DIFFERENT function.
+
+ATTACKER CONTROLLABILITY:
+  The writer at 0x10000ADDC writes a hardware clock constant, not user data.
+  But the BLR source (0x19C010620) is written elsewhere ΓÇö need to find that writer.
+
+VERDICT: NEEDS FURTHER ANALYSIS
+  The 0x10000ADDC function only writes to 0x19C010628 (cached frequency).
+  The BLR at 0x10000ADA8 reads from 0x19C010620 ΓÇö a different cell.
+  The actual writer of 0x19C010620 needs to be identified.
+
+[*] Second-pass analysis complete.

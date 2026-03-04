@@ -1,0 +1,186 @@
+﻿[*] Full ROM scan with skipdata enabled...
+  Total items: 131072, Real instructions: 128497
+
+================================================================================
+PROPER XREF SCAN
+================================================================================
+
+  0x100008af0 (T1 writer): 1 refs
+    BL at 0x1000017fc
+
+  0x100002844 (T2 writer (USB)): 4 refs
+    BL at 0x10000a15c
+    B at 0x10000a178
+    BL at 0x10000aff8
+    BL at 0x10000bb44
+
+  0x10000addc (T3 writer): 3 refs
+    BL at 0x10000adc4
+    BL at 0x10000ae84
+    BL at 0x10000aeac
+
+  0x1000028c0 (T2 BLR consumer): No BL/B refs
+
+  0x10000ad80 (T3 BLR consumer): 1 refs
+    BL at 0x10000ac5c
+
+
+================================================================================
+FINDING TRUE WRITER OF SRAM 0x19C010620
+================================================================================
+
+[*] All ADRP references to page 0x19C010000:
+  *** STR to [x8, #0x620] at 0x10000ad28 (ADRP at 0x10000ad24)
+
+================================================================================
+  WRITER of SRAM 0x19C010620 at 0x10000ad28
+================================================================================
+  0x010000ad04:  ldp      x29, x30, [sp], #0x10
+  0x010000ad08:  ret      
+  0x010000ad0c:  mov      w0, #2
+  0x010000ad10:  b        #0x1000004d4
+  0x010000ad14:  stp      x20, x19, [sp, #-0x20]!
+  0x010000ad18:  stp      x29, x30, [sp, #0x10]
+  0x010000ad1c:  add      x29, sp, #0x10
+  0x010000ad20:  mov      x19, x0
+  0x010000ad24:  adrp     x8, #0x19c010000
+  0x010000ad28:  str      x1, [x8, #0x620]
+  0x010000ad2c:  cbz      x1, #0x10000ad6c
+  0x010000ad30:  bl       #0x1000004e0
+  0x010000ad34:  sub      x8, x19, x0
+  0x010000ad38:  cmp      x0, x19
+  0x010000ad3c:  csel     x8, xzr, x8, hi
+  0x010000ad40:  mov      w9, #0x7fffffff
+  0x010000ad44:  cmp      x8, x9
+  LDR from [x8, #0x620] at 0x10000ada0 (ADRP at 0x10000ad9c)
+
+[*] All ADRP+ADD constructing 0x19C010620:
+
+
+================================================================================
+FINDING CALLERS OF 0x100002844 (Target 2)
+================================================================================
+
+[*] ADRP+ADD constructing 0x1000028C0 (interrupt dispatch):
+
+
+================================================================================
+func_0x100008B58 ΓÇö called from USB, might be related to Target 1
+================================================================================
+[*] Does 0x100008B58 call 0x100008AF0?
+
+
+================================================================================
+ALL XREFS TO 0x100008AF0 (Target 1 writer)
+================================================================================
+  BL at 0x1000017fc
+
+================================================================================
+  ref to 0x100008AF0
+================================================================================
+  0x01000017f4:  bl       #0x100008be8
+  0x01000017f8:  bl       #0x100008c90
+  0x01000017fc:  bl       #0x100008af0
+  0x0100001800:  add      x0, sp, #0x40
+
+
+================================================================================
+DETAILED ANALYSIS: BLR x8 at 0x100002458
+================================================================================
+
+From the USB handler at 0x1000023CC:
+  0x100002420: adrp x8, #0x19c008000    ; (NOP follows, meaning ADRP was relaxed)
+  0x100002424: nop
+  0x100002428: ldr  x8, [x8, #0x448]    ; x8 = [0x19C008448]  -- this is the CANARY
+  0x10000242c: str  x8, [sp, #8]        ; save canary to stack
+  0x100002430: mov  w0, #0x57
+  0x100002434: mov  w1, #1
+  0x100002438: bl   #0x100008370        ; some_func(0x57, 1)
+  0x10000243c: mov  w0, #0x300
+  0x100002440: mov  w1, #0x70000
+  0x100002444: mov  x2, sp
+  0x100002448: bl   #0x1000113b4        ; heap_alloc/get_buffer(0x300, 0x70000, &ptr)
+  0x10000244c: ldr  x27, [sp]           ; x27 = allocated buffer/object
+  0x100002450: ldr  x8, [x27, #8]       ; x8 = object->vtable[1] or object->method1
+  0x100002454: mov  w0, #7
+  0x100002458: blr  x8                  ; call object->func(7)
+
+The BLR here loads from [x27+8], where x27 is a pointer returned by
+func_0x1000113b4. This is NOT loading from SRAM 0x19C008448 directly.
+
+0x19C008448 is loaded at 0x100002428 and saved as a STACK CANARY (sp+8).
+It's checked later to detect stack corruption.
+
+So the BLR at 0x100002458 is calling through an OBJECT POINTER
+returned by an allocator, not through the SRAM cell 0x19C008448.
+
+[*] func_0x1000113B4 (called before the BLR):
+
+================================================================================
+  func_0x1000113B4 ΓÇö returns object/buffer
+================================================================================
+  0x01000113b4:  stp      x29, x30, [sp, #-0x10]!
+  0x01000113b8:  mov      x29, sp
+  0x01000113bc:  bl       #0x1000112d8
+  0x01000113c0:  tbz      w0, #0, #0x1000113cc
+  0x01000113c4:  ldp      x29, x30, [sp], #0x10
+  0x01000113c8:  ret      
+  0x01000113cc:  adr      x0, #0x10001c240
+  0x01000113d0:  nop      
+  0x01000113d4:  mov      x1, x0
+  0x01000113d8:  bl       #0x100008978
+  0x01000113dc:  sub      sp, sp, #0x40
+  0x01000113e0:  stp      x20, x19, [sp, #0x20]
+  0x01000113e4:  stp      x29, x30, [sp, #0x30]
+  0x01000113e8:  add      x29, sp, #0x30
+  0x01000113ec:  mov      x19, x1
+  0x01000113f0:  adrp     x8, #0x19c008000
+  0x01000113f4:  nop      
+  0x01000113f8:  ldr      x8, [x8, #0x448]
+  0x01000113fc:  str      x8, [sp, #0x18]
+  0x0100011400:  ldr      x8, [x0, #8]
+  0x0100011404:  ldr      w0, [x8, #0x10]
+  0x0100011408:  bl       #0x100011138
+  0x010001140c:  mov      x20, x0
+  0x0100011410:  cbz      x20, #0x10001145c
+  0x0100011414:  mov      x1, sp
+  0x0100011418:  mov      x0, x20
+  0x010001141c:  bl       #0x10001132c
+  0x0100011420:  cbz      w0, #0x10001147c
+  0x0100011424:  ldr      w8, [x20, #4]
+  0x0100011428:  and      w8, w8, #0xff0000
+  0x010001142c:  sub      w8, w8, #0x10, lsl #12
+  0x0100011430:  lsr      w8, w8, #0x10
+  0x0100011434:  sub      w9, w8, #2
+  0x0100011438:  cmp      w9, #2
+  0x010001143c:  b.lo     #0x100011464
+
+
+================================================================================
+SRAM LAYOUT CHECK: Where is the DFU heap vs interrupt table?
+================================================================================
+
+Key SRAM regions identified:
+  0x19C008448     ΓÇö Stack canary / cookie
+  0x19C008B48     ΓÇö Interrupt callback table (24-byte entries, up to 512)
+                    Table spans: 0x19C008B48 to 0x19C008B48 + 512*24 = 0x19C00BB48
+  0x19C00BD90     ΓÇö Debug/tracking buffer (8 bytes)
+  0x19C00BDA0     ΓÇö Panic counter
+  0x19C010620     ΓÇö Unknown callback pointer
+  0x19C010628     ΓÇö Cached block device frequency
+  0x19C011408     ΓÇö Panic handler pointer
+  0x19C011410     ΓÇö Panic string pointer
+
+The interrupt callback table at 0x19C008B48 spans ~12KB (0x3000 bytes).
+If the DFU heap is nearby and can overflow into this region, the callbacks
+could be corrupted to achieve code execution.
+
+
+[*] Checking ADRP+NOP patterns (linker relaxation):
+  0x100002420: ADRP x8, #0x19c008000 + NOP => x8 = 0x19c008000
+
+[*] ADR instructions in USB handler:
+  0x1000023d4: ADR x0, #0x10001c240
+  0x100002488: ADR x0, #0x10001c240
+
+[*] Final pass analysis complete.

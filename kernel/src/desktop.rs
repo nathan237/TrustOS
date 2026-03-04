@@ -1588,8 +1588,6 @@ pub struct Desktop {
     pub matrix_projection: MatrixProjection,
     // Visualizer: multi-mode 3D wireframes revealed by rain collision
     visualizer: crate::visualizer::VisualizerState,
-    // CRT progressive scanline: shapes formed by phosphor beam sweep
-    crt_scan: crate::crt_scanline::CrtScanState,
     // Drone swarm: holographic wireframe formations rendered through rain
     drone_swarm: crate::drone_swarm::DroneSwarmState,
     // ── Global audio analyzer (reacts to ANY HDA output, not just music player) ──
@@ -2213,7 +2211,6 @@ impl Desktop {
             matrix_overrides: BTreeMap::new(),
             matrix_projection: MatrixProjection::empty(),
             visualizer: crate::visualizer::VisualizerState::new(),
-            crt_scan: crate::crt_scanline::CrtScanState::new(),
             drone_swarm: crate::drone_swarm::DroneSwarmState::new(),
             // Global audio analyzer (heap-allocated to avoid static bloat)
             global_fft_re: Vec::new(),
@@ -2401,8 +2398,6 @@ impl Desktop {
             }
         }
         self.matrix_initialized = true;
-        // Initialize CRT progressive scanline engine
-        crate::crt_scanline::init(&mut self.crt_scan, self.width, height);
         // Initialize drone swarm holographic formations
         crate::drone_swarm::init(&mut self.drone_swarm, self.width, height);
         // Activate test projection image (centered 256×256 zone)
@@ -6959,10 +6954,10 @@ struct AppConfig {
         // Column density: far=every col (dense shadow), near=sparse (rain streams)
         // skip=1 → all cols, 2 → half, 3 → third, 4 → quarter
         const LAYER_COL_SKIP: [usize; 6] = [1, 1, 2, 2, 3, 4];
-        // Atmospheric color shift: far=blue/grey haze, near=vivid/warm
-        const LAYER_ATMO_R: [i16; 6]    = [-12, -8, -4,  0,  3,  6];
-        const LAYER_ATMO_G: [i16; 6]    = [ -2,  0,  0,  0,  2,  4];
-        const LAYER_ATMO_B: [i16; 6]    = [ 12,  8,  4,  0, -1, -3];
+        // Atmospheric color shift: far=dimmer green, near=vivid green (NO blue)
+        const LAYER_ATMO_R: [i16; 6]    = [-8, -5, -3,  0,  2,  4];
+        const LAYER_ATMO_G: [i16; 6]    = [-4, -2,  0,  0,  3,  6];
+        const LAYER_ATMO_B: [i16; 6]    = [ 0,  0,  0,  0,  0,  0];
         
         let height = self.height.saturating_sub(TASKBAR_HEIGHT);
         let width = self.width;
@@ -6986,12 +6981,12 @@ struct AppConfig {
         // Void mode: activates every 8th beat → very subtle, preserves density
         let void_mode = m_playing && (self.matrix_beat_count % 8 == 7);
         
-        // CRT phosphor base: near-black with faint green tint
-        framebuffer::fill_rect(0, 0, width, height, 0xFF010302);
-        // Reflection zone: bottom 12% slightly lighter (wet floor illusion)
+        // Pure black background with micro green tint
+        framebuffer::fill_rect(0, 0, width, height, 0xFF010200);
+        // Reflection zone: bottom 12% faint green glow (no blue)
         let refl_start = height * 88 / 100;
         if refl_start < height {
-            framebuffer::fill_rect(0, refl_start, width, height - refl_start, 0xFF030305);
+            framebuffer::fill_rect(0, refl_start, width, height - refl_start, 0xFF020300);
         }
         
         if !self.matrix_initialized {
@@ -7011,9 +7006,6 @@ struct AppConfig {
         );
         
         if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} viz done", self.frame_count); }
-        // ── CRT Scanline: advance beam position + pattern cycling ──
-        crate::crt_scanline::update(&mut self.crt_scan);
-        
         // ── Drone Swarm: advance choreography, project, render glow buffer ──
         crate::drone_swarm::update(&mut self.drone_swarm);
         
@@ -7077,13 +7069,13 @@ struct AppConfig {
             // Get the amplitude for this column's band (0.0 - 1.0+)
             let (band_amp, band_r_base, band_g_base, band_b_base) = if m_playing {
                 match freq_band {
-                    0 => (m_sub_bass,  80u8, 180u8, 60u8),   // Sub-bass → muted green-red
-                    1 => (m_bass,      90u8, 195u8, 55u8),   // Bass → warm green
-                    2 => (m_mid,       50u8, 200u8, 70u8),   // Mid → classic green
-                    _ => (m_treble,    60u8, 175u8, 140u8),  // Treble → teal-green
+                    0 => (m_sub_bass,  60u8, 200u8, 10u8),   // Sub-bass → deep green
+                    1 => (m_bass,      70u8, 210u8, 8u8),    // Bass → warm green
+                    2 => (m_mid,       40u8, 220u8, 12u8),   // Mid → pure green
+                    _ => (m_treble,    50u8, 190u8, 15u8),   // Treble → bright green
                 }
             } else {
-                (0.0, 55u8, 185u8, 55u8) // No music → desaturated green
+                (0.0, 30u8, 200u8, 10u8) // No music → pure green
             };
             // Intensity multiplier from band amplitude (0.3 = idle, up to 1.5 at max)
             let freq_intensity = if m_playing {
@@ -7131,11 +7123,12 @@ struct AppConfig {
             
             let head_y = self.matrix_heads[idx];
             
-            // Depth from speed: 1=far(dim), 3=near(bright)
-            let depth_factor = (speed as f32 - 1.0) / 2.0;
+            // Speed-based brightness: faster drops = brighter
+            let col_speed = (speed as f32) * layer_spd;
+            let speed_norm = (col_speed / 5.0).min(1.0); // 0..1 normalized to max speed
             let energy_boost = if m_playing { m_energy * 0.3 } else { 0.0 };
             let beat_bright = if m_playing { m_beat * 0.15 } else { 0.0 };
-            let brightness_mult = ((0.5 + depth_factor * 0.5 + energy_boost + beat_bright) * fov_dim * layer_dim).min(1.5);
+            let brightness_mult = ((0.3 + speed_norm * 0.7 + energy_boost + beat_bright) * fov_dim * layer_dim).min(1.5);
             
             // Visualizer: columns inside shape allow dimmer trail chars through
             let ghost_col_inside = m_playing && col < self.visualizer.column_bounds.len() && {
@@ -7143,7 +7136,11 @@ struct AppConfig {
                 bmin >= 0 && bmax > bmin
             };
             
-            for i in 0..layer_trail {
+            // Speed-dependent effective trail: fast drops get full trail, slow drops get shorter
+            let speed_trail = ((layer_trail as f32) * (0.4 + speed_norm * 0.6)) as usize;
+            let eff_trail = speed_trail.max(3).min(layer_trail);
+            
+            for i in 0..eff_trail {
                 
                 let char_y = head_y - (i as i32 * eff_char_h as i32);
                 if char_y < 0 || char_y >= height as i32 { continue; }
@@ -7151,47 +7148,46 @@ struct AppConfig {
                 // In void mode, skip every 5th character (very subtle)
                 if void_mode && (i % 5 == 0) && i > 3 { continue; }
                 
-                // Trail fading — normalized by per-layer trail length
+                // Trail fading — faster drops fade slower (longer visible trail)
                 let trail_ext = if m_playing { (m_energy * 30.0) as u8 } else { 0 };
-                let fade_rate = (200u8 as u16 / (layer_trail as u16).max(1)) as u8;
+                let fade_rate = (200u8 as u16 / (eff_trail as u16).max(1)) as u8;
+                // Speed bonus: fast drops sustain brightness longer
+                let speed_sustain = (speed_norm * 30.0) as u8;
                 let base = if i == 0 { 255u8 }
-                    else if i == 1 { 220u8.saturating_add(trail_ext / 2) }
-                    else { (200u8 + trail_ext / 3).saturating_sub((i as u8).saturating_mul(fade_rate.max(3))) };
+                    else if i == 1 { (230u8 + speed_sustain / 2).min(255).saturating_add(trail_ext / 2) }
+                    else { (210u8 + trail_ext / 3 + speed_sustain / 3).saturating_sub((i as u8).saturating_mul(fade_rate.max(3))) };
                 if base < (if ghost_col_inside { 2 } else { 3 }) { continue; }
                 
                 let brightness = ((base as f32) * brightness_mult).min(255.0) as u8;
                 
-                // ══ Frequency-band gradient coloring ══
-                // Each column's color = its band base color × amplitude intensity × trail fade
-                // Apply atmospheric perspective: far layer → blue/grey shift
+                // ══ Speed-based green→white gradient coloring ══
+                // Faster drops → brighter, whiter, longer visible trail
+                // Each layer progressively reduces intensity
                 let (r, g, b) = if i == 0 {
-                    // HEAD: tinted toward the band color with a bright core
-                    let fi = freq_intensity.min(1.5);
-                    let white_mix = (0.40 - fi * 0.12).max(0.15);
+                    // HEAD: fast = near white, slow = dim green
+                    let white_mix = (0.25 + speed_norm * 0.55).min(0.80); // 0.25..0.80 based on speed
                     let band_mix = 1.0 - white_mix;
                     let hr = ((band_r_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as i16;
                     let hg = ((band_g_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as i16;
-                    let hb = ((band_b_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as i16;
-                    let beat_w = if m_playing { (m_beat * 12.0).min(20.0) as i16 } else { 0 };
+                    let hb = ((band_b_base as f32 * band_mix * 0.15) * brightness_mult).min(40.0) as i16; // crush blue
+                    let beat_w = if m_playing { (m_beat * 18.0).min(35.0) as i16 } else { 0 };
                     // Atmospheric shift
                     let fr = (hr + beat_w + atmo_r).max(0).min(255) as u8;
                     let fg = (hg + beat_w + atmo_g).max(0).min(255) as u8;
-                    let fb = (hb + beat_w + atmo_b).max(0).min(255) as u8;
+                    let fb = (hb + atmo_b).max(0).min(40) as u8; // hard cap blue
                     (fr, fg, fb)
                 } else {
-                    // TRAIL: band base color scaled by amplitude intensity + trail fade
+                    // TRAIL: speed drives brightness floor + green purity
                     let fade = brightness as f32 / 255.0;
                     let fi = freq_intensity;
-                    let tr = ((band_r_base as f32 * fi * fade).min(255.0)) as i16;
-                    let tg = ((band_g_base as f32 * fi * fade).min(255.0)) as i16;
-                    let tb = ((band_b_base as f32 * fi * fade).min(255.0)) as i16;
-                    // Cross-bleed
-                    let bleed_r = if m_playing { (m_sub_bass * 15.0 * fade).min(25.0) as i16 } else { 0 };
-                    let bleed_b = if m_playing { (m_treble * 15.0 * fade).min(25.0) as i16 } else { 0 };
+                    let speed_green = 0.8 + speed_norm * 0.4; // faster = greener
+                    let tr = ((band_r_base as f32 * fi * fade * (1.0 - speed_norm * 0.3)).min(255.0)) as i16;
+                    let tg = ((band_g_base as f32 * fi * fade * speed_green).min(255.0)) as i16;
+                    let tb = ((band_b_base as f32 * fi * fade * 0.15).min(30.0)) as i16; // crush blue in trail
                     // Atmospheric shift
-                    let fr = (tr + bleed_r + atmo_r).max(0).min(255) as u8;
+                    let fr = (tr + atmo_r).max(0).min(255) as u8;
                     let fg = (tg + atmo_g).max(0).min(255) as u8;
-                    let fb = (tb + bleed_b + atmo_b).max(0).min(255) as u8;
+                    let fb = (tb + atmo_b).max(0).min(30) as u8; // hard cap blue
                     (fr, fg, fb)
                 };
                 
@@ -7241,19 +7237,6 @@ struct AppConfig {
                     b = (b as f32 * boost).min(255.0) as u8;
                 }
                 
-                // ── CRT Scanline: progressive phosphor beam shapes ──
-                let scan_fx = crate::crt_scanline::query(
-                    &self.crt_scan, x as f32, char_y as f32,
-                );
-                if scan_fx.brightness != 1.0 || scan_fx.color_g != 0 {
-                    let bf = scan_fx.brightness;
-                    r = ((r as f32 * bf).min(255.0)) as u8;
-                    g = ((g as f32 * bf).min(255.0)) as u8;
-                    b = ((b as f32 * bf).min(255.0)) as u8;
-                    r = ((r as i16 + scan_fx.color_r).max(0).min(255)) as u8;
-                    g = ((g as i16 + scan_fx.color_g).max(0).min(255)) as u8;
-                    b = ((b as i16 + scan_fx.color_b).max(0).min(255)) as u8;
-                }
                 let x_flow = x;
                 
                 // ── Drone Swarm: holographic wireframe formations ──
@@ -7342,8 +7325,7 @@ struct AppConfig {
                             fg = ((fg as f32 * scanline).min(255.0)) as u8;
                             fb = ((fb as f32 * scanline).min(255.0)) as u8;
                             if in_reflection {
-                                fg = (fg as u16 + 8).min(255) as u8;
-                                fb = (fb as u16 + 18).min(255) as u8;
+                                fg = (fg as u16 + 10).min(255) as u8;
                             }
                             let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
                             framebuffer::put_pixel(px, py, fc);
@@ -7381,8 +7363,7 @@ struct AppConfig {
                             fg = ((fg as f32 * scanline).min(255.0)) as u8;
                             fb = ((fb as f32 * scanline).min(255.0)) as u8;
                             if in_reflection {
-                                fg = (fg as u16 + 8).min(255) as u8;
-                                fb = (fb as u16 + 18).min(255) as u8;
+                                fg = (fg as u16 + 10).min(255) as u8;
                             }
                             let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
                             framebuffer::put_pixel(px, py, fc);
@@ -7411,8 +7392,7 @@ struct AppConfig {
                                     fg = ((fg as f32 * scanline).min(255.0)) as u8;
                                     fb = ((fb as f32 * scanline).min(255.0)) as u8;
                                     if in_reflection {
-                                        fg = (fg as u16 + 8).min(255) as u8;
-                                        fb = (fb as u16 + 18).min(255) as u8;
+                                        fg = (fg as u16 + 10).min(255) as u8;
                                     }
                                     let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
                                     framebuffer::put_pixel(px, py, fc);
