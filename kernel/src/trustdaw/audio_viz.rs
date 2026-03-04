@@ -1037,10 +1037,16 @@ pub fn play_file(path: &str) -> Result<(), &'static str> {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /// The real "Untitled (2)" WAV embedded at compile time (16-bit PCM, 48 kHz stereo)
-static UNTITLED2_WAV: &[u8] = include_bytes!("untitled2.wav");
+#[cfg(feature = "daw")]
+pub static UNTITLED2_WAV: &[u8] = include_bytes!("untitled2.wav");
+#[cfg(not(feature = "daw"))]
+pub static UNTITLED2_WAV: &[u8] = &[];
 
 /// Play the embedded "Untitled (2)" through the 3D holographic visualizer.
 pub fn play_untitled2() -> Result<(), &'static str> {
+    if UNTITLED2_WAV.is_empty() {
+        return Err("Audio not available (slim build — daw feature disabled)");
+    }
     crate::serial_println!("[VIZ] Loading embedded 'Untitled (2)' ({} bytes)...", UNTITLED2_WAV.len());
 
     let audio = decode_wav_to_pcm(UNTITLED2_WAV)?;

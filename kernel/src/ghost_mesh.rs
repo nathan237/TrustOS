@@ -49,10 +49,30 @@ pub struct RainEffect {
     pub trail_boost: u8,
     /// Beat-ripple ring intensity at this position (0-120).
     pub ripple: u8,
+    /// Dimming factor for contrast zone just outside shape (0=normal, 1-200=dim).
+    pub dim: u8,
+    /// Fresnel rim glow: 0=interior, 255=silhouette edge (0-255).
+    pub fresnel: u8,
+    /// Specular highlight intensity at this position (0-255).
+    pub specular: u8,
+    /// Ambient occlusion: 0=fully lit, 255=fully occluded (darkened in creases/poles).
+    pub ao: u8,
+    /// Bloom: bright glow bleed (0-255). High near bright edges, used for soft spread.
+    pub bloom: u8,
+    /// Scanline rays: volumetric light ray intensity (0-255) below the shape.
+    pub scanline: u8,
+    /// Inner glow: warm core emanation from sphere center (0-255).
+    pub inner_glow: u8,
+    /// Shadow: darkening below the shape (0=normal, 1-200=shadow).
+    pub shadow: u8,
 }
 
 impl RainEffect {
-    pub const NONE: Self = Self { glow: 0, depth: 128, trail_boost: 0, ripple: 0 };
+    pub const NONE: Self = Self {
+        glow: 0, depth: 128, trail_boost: 0, ripple: 0, dim: 0,
+        fresnel: 0, specular: 0, ao: 0, bloom: 0, scanline: 0,
+        inner_glow: 0, shadow: 0,
+    };
 }
 
 // ═══════════════════════════════════════
@@ -107,6 +127,14 @@ pub struct GhostMeshState {
     pub smooth_treble: f32,
     pub beat_pulse: f32,
     pub initialized: bool,
+    /// Specular highlight screen position (projected from light direction)
+    pub spec_x: i32,
+    pub spec_y: i32,
+    /// Shadow zone: y range below the sphere where shadow falls
+    pub shadow_y_start: i32,
+    pub shadow_y_end: i32,
+    /// Center of mass Y (for scanline rays origin)
+    pub shape_center_y: i32,
 }
 
 impl GhostMeshState {
@@ -137,6 +165,11 @@ impl GhostMeshState {
             smooth_treble: 0.0,
             beat_pulse: 0.0,
             initialized: false,
+            spec_x: 0,
+            spec_y: 0,
+            shadow_y_start: 0,
+            shadow_y_end: 0,
+            shape_center_y: 0,
         }
     }
 
@@ -297,8 +330,10 @@ pub fn update(
         state.smooth_treble   *= 0.95;
     }
 
-    if playing && beat > 0.5 { state.beat_pulse = 1.0; }
-    state.beat_pulse *= 0.92;
+    // Beat pulse — fires on bass/kick hits, not just any transient
+    let bass_beat = playing && beat > 0.5 && (sub_bass + bass) > 0.4;
+    if bass_beat { state.beat_pulse = 1.0; }
+    state.beat_pulse *= 0.90;  // slightly longer decay for heavier feel
 
     // ── Beat ripple: restart ring on strong beat ──
     if state.beat_pulse > 0.9 {
@@ -308,29 +343,40 @@ pub fn update(
         state.ripple_radius += 6.0;
     }
 
-    // ── Rotation ──
-    let bb = if playing { (beat * 25.0) as i32 } else { 0 };
-    state.rot_x += state.rot_speed_x + bb / 4;
-    state.rot_y += state.rot_speed_y + bb;
+    // ── Rotation (bass/kick-driven) ──
+    let bass_hit = if playing {
+        ((state.smooth_sub_bass + state.smooth_bass) * 15.0 + beat * 8.0) as i32
+    } else { 0 };
+    state.rot_x += state.rot_speed_x + bass_hit / 4;
+    state.rot_y += state.rot_speed_y + bass_hit;
     state.rot_z += state.rot_speed_z;
     state.rot_x %= 6283;
     state.rot_y %= 6283;
     state.rot_z %= 6283;
 
-    // ── Scale ──
+    // ── Scale (pumps with bass/kick, capped to stay on-screen) ──
     state.scale_target = if playing {
-        200 + (state.smooth_bass * 60.0) as i32 + (state.beat_pulse * 40.0) as i32
-    } else { 200 };
+        140 + ((state.smooth_sub_bass + state.smooth_bass) * 30.0) as i32
+            + (state.beat_pulse * 30.0) as i32
+    } else { 140 };
     state.scale += (state.scale_target - state.scale) / 3;
-    if state.scale < 100 { state.scale = 100; }
+    if state.scale < 80 { state.scale = 80; }
+    if state.scale > 220 { state.scale = 220; }
 
-    // ── Deform sphere ──
-    let amps = [state.smooth_sub_bass, state.smooth_bass, state.smooth_mid, state.smooth_treble];
+    // ── Deform sphere (bass/drum-dominant) ──
+    // Sub-bass & bass push 3-4× harder than mid/treble
+    let amps = [
+        state.smooth_sub_bass * 1.2,   // 0: sub_bass → strong push
+        state.smooth_bass     * 1.0,   // 1: bass/kick → solid push
+        state.smooth_mid      * 0.25,  // 2: mid → subtle
+        state.smooth_treble   * 0.15,  // 3: treble → almost none
+    ];
+    let bass_pulse = state.beat_pulse * (0.3 + state.smooth_sub_bass * 0.3 + state.smooth_bass * 0.2);
     for i in 0..state.base_verts.len() {
         let bv = state.base_verts[i];
         let band = state.vert_bands[i] as usize;
-        let amp = if band < 4 { amps[band] } else { energy };
-        let r = 1.0 + 0.5 * amp + state.beat_pulse * 0.25 * amp;
+        let amp = if band < 4 { amps[band] } else { energy * 0.2 };
+        let r = 1.0 + 0.35 * amp + bass_pulse * 0.25;
         state.deformed_verts[i] = V3::new(bv.x * r, bv.y * r, bv.z * r);
     }
 
@@ -353,6 +399,54 @@ pub fn update(
     }
     state.z_min = zmin;
     state.z_max = zmax;
+
+    // ── Specular highlight: find vertex closest to light direction ──
+    // Light comes from upper-right (direction: x=0.5, y=0.7, z=0.5)
+    // We find which projected vertex is closest to where a specular
+    // reflection would appear (vertex with normal most aligned to light)
+    {
+        let mut best_dot: i32 = i32::MIN;
+        let mut best_sx: i32 = cx;
+        let mut best_sy: i32 = cy;
+        // Light direction in world space (fixed, upper-right-front)
+        let light_x: i32 = 500;  // milli-units
+        let light_y: i32 = 700;
+        let light_z: i32 = 500;
+        for (vi, v) in state.deformed_verts.iter().enumerate() {
+            // Transform vertex normal (≈ vertex position for a sphere)
+            let (nx, ny, nz) = transform_vertex(*v, rx, ry, rz, 1000);
+            // Dot product with light direction
+            let dot = (nx * light_x + ny * light_y + nz * light_z) / 1000;
+            if dot > best_dot {
+                best_dot = dot;
+                if vi < pverts.len() {
+                    best_sx = pverts[vi].0;
+                    best_sy = pverts[vi].1;
+                }
+            }
+        }
+        state.spec_x = best_sx;
+        state.spec_y = best_sy;
+    }
+
+    // ── Shadow zone: darkened area below the shape ──
+    // Light from above → shadow cast downward
+    {
+        // Find global shape bounding box vertically from column_bounds
+        // (computed at end of prev frame, good enough for smooth shadow)
+        let mut global_bmax: i32 = -1;
+        for &(_, bmax) in state.column_bounds.iter() {
+            if bmax > global_bmax { global_bmax = bmax; }
+        }
+        if global_bmax > 0 {
+            state.shadow_y_start = global_bmax;
+            state.shadow_y_end = global_bmax + 120; // 120px shadow zone
+        } else {
+            state.shadow_y_start = 0;
+            state.shadow_y_end = 0;
+        }
+        state.shape_center_y = cy;
+    }
 
     // ── Column hit-map (edge proximity) ──
     let col_w = if matrix_cols > 0 { screen_w as i32 / matrix_cols as i32 } else { 8 };
@@ -479,18 +573,87 @@ pub fn check_rain_collision(
         let boosted = (best_edge_glow as u32 + (beat_pulse * 60.0) as u32).min(255) as u8;
 
         // Z-depth → 0 (back) to 255 (front)
-        // Lower z = closer to camera = FRONT = brighter
         let z_range = (state.z_max - state.z_min).max(1) as i32;
         let z_norm = ((state.z_max as i32 - best_z as i32) * 255 / z_range).max(0).min(255) as u8;
 
+        // Fresnel: how close is this pixel to the silhouette boundary?
+        // Pixels at bmin/bmax = max fresnel (rim), center = 0
+        let fresnel_val = {
+            let (bmin, bmax) = state.column_bounds[col];
+            if bmin >= 0 && bmax > bmin {
+                let half = ((bmax - bmin) / 2).max(1);
+                let center_y = (bmin + bmax) / 2;
+                let from_center = (pixel_y - center_y).abs();
+                // Quadratic: rises fast near edges
+                let rim_t = (from_center as f32 / half as f32).min(1.0);
+                (rim_t * rim_t * 255.0) as u8
+            } else { 0u8 }
+        };
+
+        // Specular: distance from specular hotspot
+        let spec_val = {
+            let sdx = pixel_x - state.spec_x;
+            let sdy = pixel_y - state.spec_y;
+            let sdist = isqrt(sdx * sdx + sdy * sdy);
+            let spec_radius = 45i32;
+            if sdist < spec_radius {
+                let t = (spec_radius - sdist) as f32 / spec_radius as f32;
+                (t * t * 255.0) as u8
+            } else { 0u8 }
+        };
+
         // Trail boost: near-edge chars get extra brightness
         let trail_b = (best_edge_glow as u32 * 80 / 255).min(80) as u8;
+
+        // ── Ambient Occlusion: darken near poles (top/bottom of silhouette) ──
+        let ao_val = {
+            let (bmin, bmax) = state.column_bounds[col];
+            if bmin >= 0 && bmax > bmin {
+                let half = ((bmax - bmin) / 2).max(1);
+                let center_y = (bmin + bmax) / 2;
+                let from_center = (pixel_y - center_y).abs();
+                // Near edges = more occlusion (creases/poles)
+                let edge_t = (from_center as f32 / half as f32).min(1.0);
+                // Also darken back faces more
+                let back_t = 1.0 - (z_norm as f32 / 255.0); // 1=back, 0=front
+                ((edge_t * 0.4 + back_t * 0.3) * 120.0).min(120.0) as u8
+            } else { 0u8 }
+        };
+
+        // ── Bloom: bright edges bleed light ──
+        let bloom_val = if boosted > 100 {
+            ((boosted as u32 - 100) * 200 / 155).min(200) as u8
+        } else { 0u8 };
+
+        // ── Scanline rays: vertical light rays below shape ──
+        let scanline_val = 0u8; // only active outside shape (below)
+
+        // ── Inner glow: warm core emanation ──
+        let inner_glow_val = {
+            let dx_c = pixel_x - state.center_x;
+            let dy_c = pixel_y - state.shape_center_y;
+            let d_sq = dx_c * dx_c + dy_c * dy_c;
+            let radius = 80i32;
+            let r_sq = radius * radius;
+            if d_sq < r_sq {
+                let t = 1.0 - (d_sq as f32 / r_sq as f32);
+                (t * 160.0) as u8
+            } else { 0u8 }
+        };
 
         return RainEffect {
             glow: boosted,
             depth: z_norm,
             trail_boost: trail_b,
             ripple: ripple_val,
+            dim: 0,
+            fresnel: fresnel_val,
+            specular: spec_val,
+            ao: ao_val,
+            bloom: bloom_val,
+            scanline: scanline_val,
+            inner_glow: inner_glow_val,
+            shadow: 0,
         };
     }
 
@@ -502,21 +665,139 @@ pub fn check_rain_collision(
         let to_edge = to_top.min(to_bot);
         let half = (bmax - bmin) / 2;
         if half <= 0 {
-            return RainEffect { glow: 0, depth: 128, trail_boost: 0, ripple: ripple_val };
+            return RainEffect { glow: 0, depth: 128, trail_boost: 0, ripple: ripple_val, dim: 0,
+                fresnel: 0, specular: 0, ao: 0, bloom: 0, scanline: 0, inner_glow: 0, shadow: 0 };
         }
+        // Fresnel for volume fill too
+        let center_y = (bmin + bmax) / 2;
+        let from_center = (pixel_y - center_y).abs();
+        let rim_t = (from_center as f32 / half as f32).min(1.0);
+        let fresnel_vol = (rim_t * rim_t * 180.0) as u8;
+
+        // Specular for volume fill
+        let spec_vol = {
+            let sdx = pixel_x - state.spec_x;
+            let sdy = pixel_y - state.spec_y;
+            let sdist = isqrt(sdx * sdx + sdy * sdy);
+            let spec_radius = 55i32; // wider for volume
+            if sdist < spec_radius {
+                let t = (spec_radius - sdist) as f32 / spec_radius as f32;
+                (t * t * 200.0) as u8
+            } else { 0u8 }
+        };
+
         let base_fill = 15u32 + 25 * (half - to_edge).max(0) as u32 / half as u32;
         let boosted = (base_fill + (energy * 15.0) as u32 + (beat_pulse * 25.0) as u32).min(75) as u8;
+
+        // ── AO for volume: near edges and back-face darken ──
+        let ao_vol = {
+            let edge_t = (from_center as f32 / half as f32).min(1.0);
+            (edge_t * 0.5 * 100.0).min(100.0) as u8
+        };
+
+        // ── Bloom for volume ──
+        let bloom_vol = if boosted > 50 {
+            ((boosted as u32 - 50) * 80 / 25).min(80) as u8
+        } else { 0u8 };
+
+        // ── Inner glow: strongest at center of sphere ──
+        let inner_glow_vol = {
+            let dx_c = pixel_x - state.center_x;
+            let dy_c = pixel_y - state.shape_center_y;
+            let d_sq = dx_c * dx_c + dy_c * dy_c;
+            let radius = 100i32;
+            let r_sq = radius * radius;
+            if d_sq < r_sq {
+                let t = 1.0 - (d_sq as f32 / r_sq as f32);
+                (t * 200.0) as u8
+            } else { 0u8 }
+        };
+
         return RainEffect {
             glow: boosted,
-            depth: 128,        // volume fill → neutral depth
-            trail_boost: 20,   // subtle trail extension inside volume
+            depth: 128,
+            trail_boost: 20,
             ripple: ripple_val,
+            dim: 0,
+            fresnel: fresnel_vol,
+            specular: spec_vol,
+            ao: ao_vol,
+            bloom: bloom_vol,
+            scanline: 0,
+            inner_glow: inner_glow_vol,
+            shadow: 0,
         };
+    }
+
+    // ── Contrast dim zone: chars just outside the shape boundary ──
+    // Creates a dark "halo" that makes the bright shape pop
+    if bmin >= 0 && bmax > bmin {
+        let margin = 60i32; // pixels of dim zone outside boundary
+        let dist_outside = if pixel_y < bmin {
+            bmin - pixel_y
+        } else if pixel_y > bmax {
+            pixel_y - bmax
+        } else { 0 };
+        if dist_outside > 0 && dist_outside < margin {
+            // Smooth fade: strongest dim nearest edge, fades to normal
+            let dim_val = ((margin - dist_outside) * 160 / margin) as u8;
+            return RainEffect {
+                glow: 0, depth: 128, trail_boost: 0, ripple: ripple_val,
+                dim: dim_val, fresnel: 0, specular: 0,
+                ao: 0, bloom: 0, scanline: 0, inner_glow: 0, shadow: 0,
+            };
+        }
+    }
+
+    // ── Shadow zone: darkened area below the shape ──
+    if state.shadow_y_start > 0 && pixel_y > state.shadow_y_start && pixel_y < state.shadow_y_end {
+        // Check if this column is within the shape's horizontal span
+        let (bmin, bmax) = state.column_bounds[col];
+        // Shadow extends from columns that had shape above
+        // Use adjacent columns' bounds for a wider, softer shadow
+        let has_shape_above = bmin >= 0 || {
+            let left = if col > 0 { state.column_bounds[col - 1].0 >= 0 } else { false };
+            let right = if col + 1 < state.column_bounds.len() { state.column_bounds[col + 1].0 >= 0 } else { false };
+            left || right
+        };
+        if has_shape_above {
+            let shadow_depth = state.shadow_y_end - state.shadow_y_start;
+            let from_start = pixel_y - state.shadow_y_start;
+            let shadow_t = 1.0 - (from_start as f32 / shadow_depth as f32);
+            let shadow_val = (shadow_t * shadow_t * 140.0) as u8; // quadratic fade
+            if shadow_val > 5 {
+                return RainEffect {
+                    glow: 0, depth: 128, trail_boost: 0, ripple: ripple_val,
+                    dim: 0, fresnel: 0, specular: 0,
+                    ao: 0, bloom: 0, scanline: 0, inner_glow: 0, shadow: shadow_val,
+                };
+            }
+        }
+    }
+
+    // ── Scanline rays: vertical light shafts below the shape ──
+    if state.shadow_y_start > 0 && pixel_y > state.shadow_y_start && pixel_y < state.shadow_y_start + 200 {
+        // Only a few columns get rays (every ~10th column near center)
+        let col_center = state.center_x / state.col_w.max(1);
+        let col_dist = (col as i32 - col_center).abs();
+        if col_dist < 15 && (col % 4 == 0 || col % 4 == 1) {
+            let shaft_depth = pixel_y - state.shadow_y_start;
+            let fade = 1.0 - (shaft_depth as f32 / 200.0);
+            let ray_val = (fade * fade * 80.0 * energy) as u8;
+            if ray_val > 3 {
+                return RainEffect {
+                    glow: 0, depth: 128, trail_boost: 0, ripple: ripple_val,
+                    dim: 0, fresnel: 0, specular: 0,
+                    ao: 0, bloom: 0, scanline: ray_val, inner_glow: 0, shadow: 0,
+                };
+            }
+        }
     }
 
     // Outside shape — ripple may still be visible
     if ripple_val > 0 {
-        return RainEffect { glow: 0, depth: 128, trail_boost: 0, ripple: ripple_val };
+        return RainEffect { glow: 0, depth: 128, trail_boost: 0, ripple: ripple_val, dim: 0,
+            fresnel: 0, specular: 0, ao: 0, bloom: 0, scanline: 0, inner_glow: 0, shadow: 0 };
     }
 
     RainEffect::NONE
@@ -533,18 +814,41 @@ pub fn check_rain_collision(
 pub fn modulate_rain_color(
     base_r: u8, base_g: u8, base_b: u8,
     glow: u8, depth: u8, ripple: u8,
+    fresnel: u8, specular: u8,
+    ao: u8, bloom: u8, scanline: u8, inner_glow: u8, shadow: u8,
     beat: f32, energy: f32,
 ) -> (u8, u8, u8) {
     let mut r = base_r as f32;
     let mut g = base_g as f32;
     let mut b = base_b as f32;
 
+    // ── Shadow: darken rain below the shape ──
+    if shadow > 5 {
+        let s = 1.0 - (shadow as f32 / 255.0) * 0.6;
+        r *= s; g *= s; b *= s;
+    }
+
+    // ── Scanline rays: vertical light shafts (green-tinted) ──
+    if scanline > 3 {
+        let ray = scanline as f32 / 255.0;
+        r = (r + ray * 15.0).min(255.0);
+        g = (g + ray * 50.0).min(255.0);
+        b = (b + ray * 25.0).min(255.0);
+    }
+
+    // ── Ambient Occlusion: darken creases and back faces ──
+    if ao > 0 && glow > 0 {
+        let ao_factor = 1.0 - (ao as f32 / 255.0) * 0.45;
+        r *= ao_factor;
+        g *= ao_factor;
+        b *= ao_factor;
+    }
+
     if glow > 0 {
         let g_f = glow as f32 / 255.0;
 
         if glow > 80 {
             // ── Strong edge glow → shift toward bright white-green ──
-            // Scale by depth: front edges get full glow, back edges ~40%
             let depth_scale = 0.4 + 0.6 * (depth as f32 / 255.0);
             let g_f = g_f * depth_scale;
             let shift = beat * 0.2;
@@ -555,7 +859,7 @@ pub fn modulate_rain_color(
             g = (g * (1.0 - g_f) + tg * g_f).min(255.0);
             b = (b * (1.0 - g_f) + tb * g_f).min(255.0);
         } else {
-            // ── Volume fill → subtle brightness boost, keep original hue ──
+            // ── Volume fill → subtle brightness boost ──
             let boost = g_f * 2.5;
             r = (r * (1.0 + boost)).min(255.0);
             g = (g * (1.0 + boost)).min(255.0);
@@ -563,12 +867,48 @@ pub fn modulate_rain_color(
         }
     }
 
-    // ── Beat ripple → cyan-white flash ──
+    // ── Inner glow: warm green-cyan core emanation ──
+    if inner_glow > 20 {
+        let ig = (inner_glow as f32 - 20.0) / 235.0;
+        let ig = ig * ig; // quadratic for soft falloff
+        // Warm green-cyan with a hint of white
+        r = (r + ig * 30.0).min(255.0);
+        g = (g + ig * 70.0).min(255.0);
+        b = (b + ig * 45.0).min(255.0);
+    }
+
+    // ── Fresnel rim glow: bright cyan-white halo at silhouette edges ──
+    if fresnel > 120 {
+        let f_t = (fresnel as f32 - 120.0) / 135.0;
+        r = (r + f_t * 80.0).min(255.0);
+        g = (g + f_t * 120.0).min(255.0);
+        b = (b + f_t * 100.0).min(255.0);
+    }
+
+    // ── Specular highlight: bright white hotspot ──
+    if specular > 30 {
+        let s_t = (specular as f32 - 30.0) / 225.0;
+        let s_t = s_t * s_t;
+        r = (r + s_t * 180.0).min(255.0);
+        g = (g + s_t * 200.0).min(255.0);
+        b = (b + s_t * 190.0).min(255.0);
+    }
+
+    // ── Bloom: soft glow bleed from bright areas ──
+    if bloom > 10 {
+        let bl = bloom as f32 / 255.0;
+        // Bloom adds a gentle uniform bright wash
+        r = (r + bl * 40.0).min(255.0);
+        g = (g + bl * 55.0).min(255.0);
+        b = (b + bl * 45.0).min(255.0);
+    }
+
+    // ── Beat ripple → gentle cyan tint ──
     if ripple > 0 {
         let rip = ripple as f32 / 255.0;
-        r = (r + 60.0 * rip).min(255.0);
-        g = (g + 90.0 * rip).min(255.0);
-        b = (b + 80.0 * rip).min(255.0);
+        r = (r + 20.0 * rip).min(255.0);
+        g = (g + 35.0 * rip).min(255.0);
+        b = (b + 30.0 * rip).min(255.0);
     }
 
     (r as u8, g as u8, b as u8)

@@ -93,14 +93,14 @@ pub struct XhciPortRegs {
 }
 
 // PORTSC bits
-const PORTSC_CCS: u32 = 1 << 0;     // Current Connect Status
-const PORTSC_PED: u32 = 1 << 1;     // Port Enabled
-const PORTSC_PR: u32 = 1 << 4;      // Port Reset
-const PORTSC_PLS_MASK: u32 = 0xF << 5; // Port Link State
-const PORTSC_PP: u32 = 1 << 9;      // Port Power
-const PORTSC_SPEED_MASK: u32 = 0xF << 10; // Port Speed
-const PORTSC_CSC: u32 = 1 << 17;    // Connect Status Change
-const PORTSC_PRC: u32 = 1 << 21;    // Port Reset Change
+pub(crate) const PORTSC_CCS: u32 = 1 << 0;     // Current Connect Status
+pub(crate) const PORTSC_PED: u32 = 1 << 1;     // Port Enabled
+pub(crate) const PORTSC_PR: u32 = 1 << 4;      // Port Reset
+pub(crate) const PORTSC_PLS_MASK: u32 = 0xF << 5; // Port Link State
+pub(crate) const PORTSC_PP: u32 = 1 << 9;      // Port Power
+pub(crate) const PORTSC_SPEED_MASK: u32 = 0xF << 10; // Port Speed
+pub(crate) const PORTSC_CSC: u32 = 1 << 17;    // Connect Status Change
+pub(crate) const PORTSC_PRC: u32 = 1 << 21;    // Port Reset Change
 
 // Port speeds
 const SPEED_FULL: u32 = 1;   // USB 1.1 Full Speed (12 Mbps)
@@ -140,29 +140,29 @@ impl Trb {
 }
 
 // TRB types
-const TRB_TYPE_NORMAL: u32 = 1;
-const TRB_TYPE_SETUP: u32 = 2;
-const TRB_TYPE_DATA: u32 = 3;
-const TRB_TYPE_STATUS: u32 = 4;
-const TRB_TYPE_LINK: u32 = 6;
-const TRB_TYPE_EVENT_DATA: u32 = 7;
-const TRB_TYPE_NO_OP: u32 = 8;
-const TRB_TYPE_ENABLE_SLOT: u32 = 9;
-const TRB_TYPE_DISABLE_SLOT: u32 = 10;
-const TRB_TYPE_ADDRESS_DEVICE: u32 = 11;
-const TRB_TYPE_CONFIGURE_EP: u32 = 12;
-const TRB_TYPE_EVALUATE_CTX: u32 = 13;
-const TRB_TYPE_RESET_EP: u32 = 14;
-const TRB_TYPE_NO_OP_CMD: u32 = 23;
+pub(crate) const TRB_TYPE_NORMAL: u32 = 1;
+pub(crate) const TRB_TYPE_SETUP: u32 = 2;
+pub(crate) const TRB_TYPE_DATA: u32 = 3;
+pub(crate) const TRB_TYPE_STATUS: u32 = 4;
+pub(crate) const TRB_TYPE_LINK: u32 = 6;
+pub(crate) const TRB_TYPE_EVENT_DATA: u32 = 7;
+pub(crate) const TRB_TYPE_NO_OP: u32 = 8;
+pub(crate) const TRB_TYPE_ENABLE_SLOT: u32 = 9;
+pub(crate) const TRB_TYPE_DISABLE_SLOT: u32 = 10;
+pub(crate) const TRB_TYPE_ADDRESS_DEVICE: u32 = 11;
+pub(crate) const TRB_TYPE_CONFIGURE_EP: u32 = 12;
+pub(crate) const TRB_TYPE_EVALUATE_CTX: u32 = 13;
+pub(crate) const TRB_TYPE_RESET_EP: u32 = 14;
+pub(crate) const TRB_TYPE_NO_OP_CMD: u32 = 23;
 
 // Event TRB types
-const TRB_TYPE_TRANSFER_EVENT: u32 = 32;
-const TRB_TYPE_CMD_COMPLETION: u32 = 33;
-const TRB_TYPE_PORT_STATUS_CHANGE: u32 = 34;
+pub(crate) const TRB_TYPE_TRANSFER_EVENT: u32 = 32;
+pub(crate) const TRB_TYPE_CMD_COMPLETION: u32 = 33;
+pub(crate) const TRB_TYPE_PORT_STATUS_CHANGE: u32 = 34;
 
 // TRB control bits
-const TRB_CYCLE: u32 = 1 << 0;
-const TRB_IOC: u32 = 1 << 5;   // Interrupt on Completion
+pub(crate) const TRB_CYCLE: u32 = 1 << 0;
+pub(crate) const TRB_IOC: u32 = 1 << 5;   // Interrupt on Completion
 
 /// Command Ring (256 TRBs)
 #[repr(C, align(64))]
@@ -291,8 +291,8 @@ pub struct XhciController {
 // The raw pointers point to memory-mapped I/O regions that are valid for the controller's lifetime.
 unsafe impl Send for XhciController {}
 
-static CONTROLLER: Mutex<Option<XhciController>> = Mutex::new(None);
-static INITIALIZED: AtomicBool = AtomicBool::new(false);
+pub(crate) static CONTROLLER: Mutex<Option<XhciController>> = Mutex::new(None);
+pub(crate) static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 // ============================================================================
 // Helper functions
@@ -661,7 +661,7 @@ fn enumerate_ports() {
 // ============================================================================
 
 /// Enqueue a TRB on the command ring and ring doorbell 0
-fn submit_command(controller: &mut XhciController, trb: Trb) {
+pub(crate) fn submit_command(controller: &mut XhciController, trb: Trb) {
     let idx = controller.cmd_enqueue;
     
     // Write TRB with correct cycle bit
@@ -775,21 +775,21 @@ fn wait_transfer_event(controller: &mut XhciController) -> Option<(u8, u32, u8)>
 // ============================================================================
 
 /// A per-endpoint transfer ring (256 TRBs)
-struct TransferRing {
+pub(crate) struct TransferRing {
     trbs: Box<[Trb; 256]>,
-    phys: u64,
-    enqueue: usize,
-    cycle: bool,
+    pub(crate) phys: u64,
+    pub(crate) enqueue: usize,
+    pub(crate) cycle: bool,
 }
 
 impl TransferRing {
-    fn new() -> Option<Self> {
+    pub(crate) fn new() -> Option<Self> {
         let trbs = Box::new([Trb::new(); 256]);
         let phys = virt_to_phys(trbs.as_ptr() as u64);
         Some(Self { trbs, phys, enqueue: 0, cycle: true })
     }
     
-    fn enqueue_trb(&mut self, mut trb: Trb) {
+    pub(crate) fn enqueue_trb(&mut self, mut trb: Trb) {
         if self.cycle {
             trb.control |= TRB_CYCLE;
         } else {
@@ -810,14 +810,14 @@ impl TransferRing {
 
 /// Per-slot transfer rings (slot → endpoint_id → TransferRing)
 /// We store only the control endpoint (EP0, DCI=1) and one interrupt IN endpoint per slot
-struct SlotRings {
-    ep0: TransferRing,         // Control endpoint (DCI 1)
-    interrupt_in: Option<TransferRing>, // HID interrupt IN endpoint
-    interrupt_dci: u8,         // DCI of the interrupt IN endpoint
-    bulk_in: Option<TransferRing>,    // Bulk IN endpoint (mass storage)
-    bulk_in_dci: u8,
-    bulk_out: Option<TransferRing>,   // Bulk OUT endpoint (mass storage)
-    bulk_out_dci: u8,
+pub(crate) struct SlotRings {
+    pub(crate) ep0: TransferRing,         // Control endpoint (DCI 1)
+    pub(crate) interrupt_in: Option<TransferRing>, // HID interrupt IN endpoint
+    pub(crate) interrupt_dci: u8,         // DCI of the interrupt IN endpoint
+    pub(crate) bulk_in: Option<TransferRing>,    // Bulk IN endpoint (mass storage)
+    pub(crate) bulk_in_dci: u8,
+    pub(crate) bulk_out: Option<TransferRing>,   // Bulk OUT endpoint (mass storage)
+    pub(crate) bulk_out_dci: u8,
 }
 
 // ============================================================================
@@ -861,7 +861,7 @@ fn alloc_scratchpad_buffers(controller: &mut XhciController) {
 // ============================================================================
 
 /// Per-slot state tracked outside the main controller to avoid borrow issues
-static SLOT_RINGS: Mutex<Vec<Option<SlotRings>>> = Mutex::new(Vec::new());
+pub(crate) static SLOT_RINGS: Mutex<Vec<Option<SlotRings>>> = Mutex::new(Vec::new());
 
 fn init_slot_rings(max_slots: u8) {
     let mut rings = SLOT_RINGS.lock();

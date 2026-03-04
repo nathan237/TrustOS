@@ -422,6 +422,7 @@ fn unmap_for_swap(cr3: u64, virt_addr: u64, slot: SwapSlot) {
     pt[pt_idx] = ((slot as u64) << 1) | (1u64 << 62);
     
     // Flush TLB for this page
+    #[cfg(target_arch = "x86_64")]
     unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt_addr, options(nostack, preserves_flags)); }
 }
 
@@ -451,6 +452,7 @@ fn remap_after_swap(cr3: u64, virt_addr: u64, phys_addr: u64) {
     let flags: u64 = 1 | (1 << 1) | (1 << 2); // PRESENT | WRITABLE | USER
     pt[pt_idx] = (phys_addr & !0xFFF) | flags;
     
+    #[cfg(target_arch = "x86_64")]
     unsafe { core::arch::asm!("invlpg [{}]", in(reg) virt_addr, options(nostack, preserves_flags)); }
 }
 

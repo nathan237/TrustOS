@@ -175,13 +175,18 @@ impl AddressSpace {
     
     /// Create address space that maps kernel memory
     pub fn new_with_kernel() -> Option<Self> {
-        let mut space = Self::new()?;
-        
-        // Copy kernel mappings from current page table
-        // This ensures kernel code/data is accessible in all address spaces
-        space.map_kernel_space()?;
-        
-        Some(space)
+        // Address space management uses x86_64 page table format (PML4/PDPT/PD/PT).
+        // On aarch64, Limine manages page tables and we use kernel space for all
+        // processes until proper aarch64 page table support is added.
+        #[cfg(not(target_arch = "x86_64"))]
+        return None;
+
+        #[cfg(target_arch = "x86_64")]
+        {
+            let mut space = Self::new()?;
+            space.map_kernel_space()?;
+            Some(space)
+        }
     }
     
     /// Get CR3 value (physical address of PML4)
@@ -478,13 +483,18 @@ static KERNEL_CR3: AtomicU64 = AtomicU64::new(0);
 
 /// Initialize paging subsystem
 pub fn init() {
-    // Save current CR3 for kernel space
+    // Save current page table base for kernel space
     let cr3: u64;
     #[cfg(target_arch = "x86_64")]
     unsafe {
         core::arch::asm!("mov {}, cr3", out(reg) cr3);
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        // On aarch64, TTBR1_EL1 holds the kernel page table base
+        core::arch::asm!("mrs {}, TTBR1_EL1", out(reg) cr3, options(nomem, nostack));
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     { cr3 = 0; }
     KERNEL_CR3.store(cr3, Ordering::SeqCst);
     

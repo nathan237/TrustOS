@@ -302,13 +302,16 @@ pub fn init() {
         crate::log_debug!("[VFS] No block device, root will be ramfs");
     }
     
-    // Try to mount FAT32 partitions from AHCI
-    crate::log_debug!("[VFS] Looking for FAT32 partitions...");
-    if let Some(fat32_fs) = fat32::try_mount_fat32() {
-        mount("/mnt/fat32", fat32_fs).ok();
-        crate::log!("[VFS] Mounted FAT32 at /mnt/fat32");
-    } else {
-        crate::log_debug!("[VFS] No FAT32 partition found");
+    // Try to mount FAT32 partitions from AHCI (x86_64 only — AHCI uses PCI I/O ports)
+    #[cfg(target_arch = "x86_64")]
+    {
+        crate::log_debug!("[VFS] Looking for FAT32 partitions...");
+        if let Some(fat32_fs) = fat32::try_mount_fat32() {
+            mount("/mnt/fat32", fat32_fs).ok();
+            crate::log!("[VFS] Mounted FAT32 at /mnt/fat32");
+        } else {
+            crate::log_debug!("[VFS] No FAT32 partition found");
+        }
     }
     
     crate::log!("[OK] VFS initialized");

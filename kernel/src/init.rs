@@ -31,12 +31,13 @@ impl Default for InitConfig {
 pub fn start() {
     crate::log!("[INIT] Starting init process (PID 1)...");
     
-    // Create the init process
+    // Create the init process — use KERNEL flag so it shares kernel address space
+    // (no user-space address space management on aarch64 yet)
     let init_proc = crate::process::Process::new(
         PID_INIT,
         0, // Parent is kernel
         "init",
-        ProcessFlags(ProcessFlags::INIT | ProcessFlags::DAEMON)
+        ProcessFlags(ProcessFlags::INIT | ProcessFlags::DAEMON | ProcessFlags::KERNEL)
     );
     
     // Add to process table manually (special case for init)

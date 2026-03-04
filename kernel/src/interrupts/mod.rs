@@ -85,6 +85,11 @@ pub fn init() {
         syscall::init();
     }
     
+    #[cfg(target_arch = "aarch64")]
+    {
+        crate::arch::platform::interrupts::init_platform();
+    }
+    
     // Enable interrupts (portable)
     crate::arch::interrupts_enable();
     
@@ -110,6 +115,28 @@ where
 pub fn set_bootstrap_ready(ready: bool) {
     #[cfg(target_arch = "x86_64")]
     handlers::set_bootstrap_ready(ready);
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(target_arch = "aarch64")]
+    {
+        AARCH64_BOOTSTRAP_READY.store(ready, core::sync::atomic::Ordering::SeqCst);
+        if ready {
+            // Start the preemptive timer NOW — it was deferred from init_platform()
+            crate::arch::platform::gic::enable_timer(10);
+            crate::serial_println!("[BOOTSTRAP] aarch64 timer started (10ms ticks)");
+        }
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     let _ = ready;
+}
+
+#[cfg(target_arch = "aarch64")]
+static AARCH64_BOOTSTRAP_READY: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Check if bootstrap is ready (used by aarch64 timer handler)
+pub fn is_bootstrap_ready() -> bool {
+    #[cfg(target_arch = "x86_64")]
+    { return true; } // x86_64 uses its own flag in handlers
+    #[cfg(target_arch = "aarch64")]
+    { return AARCH64_BOOTSTRAP_READY.load(core::sync::atomic::Ordering::SeqCst); }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    { false }
 }

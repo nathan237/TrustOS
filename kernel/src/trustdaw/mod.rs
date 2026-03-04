@@ -27,6 +27,7 @@ pub mod wav_export;
 pub mod ui;
 pub mod beat_studio;
 pub mod audio_viz;
+pub mod disk_audio;
 
 use alloc::string::String;
 use alloc::format;

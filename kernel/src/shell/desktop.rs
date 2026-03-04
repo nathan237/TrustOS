@@ -343,6 +343,39 @@ pub(super) fn launch_desktop_env(initial_window: Option<(&str, crate::desktop::W
     crate::println_color!(COLOR_GREEN, "\nReturned to TrustOS shell. Type 'help' for commands.");
 }
 
+/// Launch the desktop environment in mobile portrait mode.
+/// Same desktop loop but with mobile_state.active = true.
+pub(super) fn launch_mobile_env() {
+    use crate::desktop;
+    let (width, height) = crate::framebuffer::get_dimensions();
+    if width == 0 || height == 0 {
+        crate::println_color!(COLOR_RED, "Error: Invalid framebuffer!");
+        return;
+    }
+    crate::mouse::set_screen_size(width, height);
+    
+    let mut d = desktop::DESKTOP.lock();
+    d.init(width, height);
+    // Enable mobile mode
+    d.mobile_state.active = true;
+    d.mobile_state.view = crate::mobile::MobileView::Home;
+    let (vx, vy, vw, vh) = crate::mobile::calculate_viewport(width, height);
+    d.mobile_state.vp_x = vx;
+    d.mobile_state.vp_y = vy;
+    d.mobile_state.vp_w = vw;
+    d.mobile_state.vp_h = vh;
+    crate::serial_println!("[Mobile] Viewport: {}x{} at ({},{}) on {}x{}", vw, vh, vx, vy, width, height);
+    
+    drop(d);
+    crate::serial_println!("[Mobile] Entering mobile desktop loop");
+    desktop::run();
+    // Desktop exited -- restore shell
+    crate::serial_println!("[Mobile] Returned to shell");
+    let (w, h) = crate::framebuffer::get_dimensions();
+    crate::framebuffer::fill_rect(0, 0, w, h, 0xFF000000);
+    crate::println_color!(COLOR_GREEN, "\nReturned to TrustOS shell. Type 'help' for commands.");
+}
+
 // ==================== SIGNATURE -- KERNEL PROOF OF AUTHORSHIP ====================
 
 pub(super) fn cmd_signature(args: &[&str]) {

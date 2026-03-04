@@ -425,6 +425,198 @@ pub enum ContextAction {
     Cancel,
 }
 
+/// Per-cell pixel override: 8×16 = 128 ARGB pixels.
+/// Each pixel is independently colored. 0x00000000 = transparent (skip).
+/// Used to render arbitrary pixel content through the matrix rain.
+#[derive(Clone)]
+pub struct CellPixels {
+    pub pixels: [u32; 128],  // row-major: pixels[row * 8 + col]
+}
+
+impl CellPixels {
+    pub const fn blank() -> Self {
+        CellPixels { pixels: [0; 128] }
+    }
+
+    /// Initialize from a glyph: lit pixels get `color`, unlit stay 0 (transparent).
+    pub fn from_glyph(c: char, color: u32) -> Self {
+        let glyph = crate::framebuffer::font::get_glyph(c);
+        let mut px = [0u32; 128];
+        for row in 0..16 {
+            let bits = glyph[row];
+            for bit in 0..8u8 {
+                if bits & (0x80 >> bit) != 0 {
+                    px[row * 8 + bit as usize] = color;
+                }
+            }
+        }
+        CellPixels { pixels: px }
+    }
+
+    /// Set a single pixel (0..7, 0..15) to a color.
+    #[inline]
+    pub fn set(&mut self, x: u8, y: u8, color: u32) {
+        if x < 8 && y < 16 {
+            self.pixels[y as usize * 8 + x as usize] = color;
+        }
+    }
+
+    /// Get a single pixel.
+    #[inline]
+    pub fn get(&self, x: u8, y: u8) -> u32 {
+        if x < 8 && y < 16 { self.pixels[y as usize * 8 + x as usize] } else { 0 }
+    }
+
+    /// Fill all pixels with one color.
+    pub fn fill(&mut self, color: u32) {
+        self.pixels = [color; 128];
+    }
+}
+
+/// Screen-space projection zone: a fixed rectangular area where the matrix rain
+/// reveals a colorful image as it falls through the zone.
+/// Unlike CellPixels (trail-indexed, scrolls with rain), this is anchored to
+/// screen coordinates. Rain intensity modulates how brightly each image pixel
+/// is revealed — creating a holographic reveal effect.
+pub struct MatrixProjection {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<u32>,  // row-major ARGB: pixels[y * width + x]
+    pub active: bool,
+}
+
+impl MatrixProjection {
+    pub const fn empty() -> Self {
+        MatrixProjection {
+            x: 0,
+            y: 0,
+            width: 0,
+            height: 0,
+            pixels: Vec::new(),
+            active: false,
+        }
+    }
+
+    /// Generate a colorful procedural test image: plasma gradient with geometric shapes.
+    pub fn generate_test_image(width: u32, height: u32) -> Vec<u32> {
+        let w = width as usize;
+        let h = height as usize;
+        let mut pixels = vec![0u32; w * h];
+
+        for py in 0..h {
+            for px in 0..w {
+                // Normalized coordinates (0.0 - 1.0)
+                let u = px as f32 / w as f32;
+                let v = py as f32 / h as f32;
+                // Center-relative (-1.0 to 1.0)
+                let cx = u * 2.0 - 1.0;
+                let cy = v * 2.0 - 1.0;
+
+                // ── Plasma base: overlapping sine waves ──
+                // Fast approximate sqrt for no_std (Newton-Raphson, 2 iterations)
+                fn fast_sqrt(x: f32) -> f32 {
+                    if x <= 0.0 { return 0.0; }
+                    let mut guess = x * 0.5;
+                    guess = 0.5 * (guess + x / guess);
+                    guess = 0.5 * (guess + x / guess);
+                    guess
+                }
+                let d = fast_sqrt(cx * cx + cy * cy); // distance from center
+
+                // Fast integer-approximated sine using parabolic approximation
+                fn fast_sin(x: f32) -> f32 {
+                    // Reduce to [-PI, PI]
+                    let x = x % 6.2832;
+                    let x = if x > 3.1416 { x - 6.2832 } else if x < -3.1416 { x + 6.2832 } else { x };
+                    // Parabolic approximation
+                    if x < 0.0 {
+                        1.27323954 * x + 0.405284735 * x * x
+                    } else {
+                        1.27323954 * x - 0.405284735 * x * x
+                    }
+                }
+
+                let s1 = fast_sin(u * 10.0 + v * 6.0) * 0.5 + 0.5;
+                let s2 = fast_sin(d * 12.0 - v * 4.0) * 0.5 + 0.5;
+                let s3 = fast_sin((cx + cy) * 8.0) * 0.5 + 0.5;
+
+                let mut r = (s1 * 0.5 + s2 * 0.3 + s3 * 0.2).min(1.0);
+                let mut g = (s2 * 0.5 + s3 * 0.3 + s1 * 0.2).min(1.0);
+                let mut b = (s3 * 0.5 + s1 * 0.3 + s2 * 0.2).min(1.0);
+
+                // ── Geometric shapes overlay ──
+
+                // Central diamond: bright cyan
+                let diamond = cx.abs() + cy.abs();
+                if diamond < 0.35 {
+                    let t = 1.0 - diamond / 0.35;
+                    r = r * (1.0 - t * 0.8) + 0.1 * t;
+                    g = g * (1.0 - t * 0.5) + 1.0 * t * 0.5 + g * t * 0.5;
+                    b = b * (1.0 - t * 0.5) + 1.0 * t * 0.5 + b * t * 0.5;
+                }
+
+                // Concentric rings: magenta glow
+                let ring1 = (d - 0.5).abs();
+                if ring1 < 0.04 {
+                    let t = 1.0 - ring1 / 0.04;
+                    r = (r + t * 0.9).min(1.0);
+                    g = g * (1.0 - t * 0.6);
+                    b = (b + t * 0.8).min(1.0);
+                }
+                let ring2 = (d - 0.75).abs();
+                if ring2 < 0.03 {
+                    let t = 1.0 - ring2 / 0.03;
+                    r = (r + t * 0.3).min(1.0);
+                    g = (g + t * 0.9).min(1.0);
+                    b = g * (1.0 - t * 0.3);
+                }
+
+                // Corner accents: warm orange triangles
+                let top_left = (1.0 - u) + (1.0 - v);
+                if top_left > 1.7 {
+                    let t = ((top_left - 1.7) / 0.3).min(1.0);
+                    r = (r + t * 0.6).min(1.0);
+                    g = (g + t * 0.3).min(1.0);
+                    b = b * (1.0 - t * 0.4);
+                }
+                let bot_right = u + v;
+                if bot_right > 1.7 {
+                    let t = ((bot_right - 1.7) / 0.3).min(1.0);
+                    r = r * (1.0 - t * 0.3);
+                    g = (g + t * 0.4).min(1.0);
+                    b = (b + t * 0.7).min(1.0);
+                }
+
+                // Cross-hair lines through center: white with glow
+                if cy.abs() < 0.012 || cx.abs() < 0.012 {
+                    r = (r * 0.5 + 0.5).min(1.0);
+                    g = (g * 0.5 + 0.5).min(1.0);
+                    b = (b * 0.5 + 0.5).min(1.0);
+                }
+
+                // Vignette: darken edges
+                let vig: f32 = if (1.0 - d * 0.7) > 0.0 { 1.0 - d * 0.7 } else { 0.0 };
+                r *= vig;
+                g *= vig;
+                b *= vig;
+
+                // Boost saturation a bit
+                r = (r * 1.3).min(1.0);
+                g = (g * 1.2).min(1.0);
+                b = (b * 1.3).min(1.0);
+
+                let ri = (r * 255.0) as u32;
+                let gi = (g * 255.0) as u32;
+                let bi = (b * 255.0) as u32;
+                pixels[py * w + px] = 0xFF000000 | (ri << 16) | (gi << 8) | bi;
+            }
+        }
+        pixels
+    }
+}
+
 /// Context menu structure
 #[derive(Clone)]
 pub struct ContextMenu {
@@ -913,12 +1105,21 @@ impl MusicPlayerState {
             self.state = PlaybackState::Stopped;
         }
 
-        // Decode embedded WAV
-        #[cfg(feature = "daw")]
-        static UNTITLED2_WAV: &[u8] = include_bytes!("trustdaw/untitled2.wav");
-        #[cfg(not(feature = "daw"))]
-        static UNTITLED2_WAV: &[u8] = &[];
-        match crate::trustdaw::audio_viz::decode_wav_to_pcm(UNTITLED2_WAV) {
+        // Try loading WAV from data disk first (saves ~29 MB in kernel binary)
+        // Fall back to embedded WAV if disk loading fails
+        let wav_data_owned;
+        let wav_data: &[u8] = match crate::trustdaw::disk_audio::load_wav_from_disk() {
+            Ok(data) => {
+                crate::serial_println!("[MUSIC] Loaded WAV from data disk ({} bytes)", data.len());
+                wav_data_owned = data;
+                &wav_data_owned
+            }
+            Err(e) => {
+                crate::serial_println!("[MUSIC] Disk load failed ({}), using embedded WAV", e);
+                crate::trustdaw::audio_viz::UNTITLED2_WAV
+            }
+        };
+        match crate::trustdaw::audio_viz::decode_wav_to_pcm(wav_data) {
             Ok(audio) => {
                 self.song_title = String::from("Untitled (2) — Lo-Fi");
                 let total_frames = audio.len() / 2;
@@ -1377,8 +1578,20 @@ pub struct Desktop {
     matrix_initialized: bool,
     matrix_beat_count: u32,
     matrix_last_beat: bool,
-    // Ghost mesh: invisible 3D wireframes revealed by rain collision
-    ghost_mesh: crate::ghost_mesh::GhostMeshState,
+    /// Rain speed preset: 0=slow, 1=mid, 2=fast
+    pub matrix_rain_preset: u8,
+    /// Per-cell pixel overrides: key = flat cell index (idx * MAX_TRAIL + trail_i).
+    /// When a cell has an override, its custom pixel block is rendered instead of
+    /// the standard glyph. Rain color/intensity modulation still applies.
+    pub matrix_overrides: BTreeMap<usize, CellPixels>,
+    /// Screen-space projection zone: static image revealed by rain.
+    pub matrix_projection: MatrixProjection,
+    // Visualizer: multi-mode 3D wireframes revealed by rain collision
+    visualizer: crate::visualizer::VisualizerState,
+    // CRT progressive scanline: shapes formed by phosphor beam sweep
+    crt_scan: crate::crt_scanline::CrtScanState,
+    // Drone swarm: holographic wireframe formations rendered through rain
+    drone_swarm: crate::drone_swarm::DroneSwarmState,
     // ── Global audio analyzer (reacts to ANY HDA output, not just music player) ──
     // Uses Vec instead of fixed arrays to avoid bloating the static struct size
     global_fft_re: Vec<f32>,
@@ -1996,7 +2209,12 @@ impl Desktop {
             matrix_initialized: false,
             matrix_beat_count: 0,
             matrix_last_beat: false,
-            ghost_mesh: crate::ghost_mesh::GhostMeshState::new(),
+            matrix_rain_preset: 1, // default = mid
+            matrix_overrides: BTreeMap::new(),
+            matrix_projection: MatrixProjection::empty(),
+            visualizer: crate::visualizer::VisualizerState::new(),
+            crt_scan: crate::crt_scanline::CrtScanState::new(),
+            drone_swarm: crate::drone_swarm::DroneSwarmState::new(),
             // Global audio analyzer (heap-allocated to avoid static bloat)
             global_fft_re: Vec::new(),
             global_fft_im: Vec::new(),
@@ -2138,8 +2356,12 @@ impl Desktop {
         // Auto-open music player widget in bottom-right corner
         {
             let mp_x = width.saturating_sub(320) as i32;
-            let mp_y = height.saturating_sub(TASKBAR_HEIGHT + 385) as i32;
-            self.create_window("Music Player", mp_x, mp_y.max(20), 300, 365, WindowType::MusicPlayer);
+            let mp_y = height.saturating_sub(TASKBAR_HEIGHT + 415) as i32;
+            let wid = self.create_window("Music Player", mp_x, mp_y.max(20), 300, 395, WindowType::MusicPlayer);
+            // Auto-play on desktop launch for showcase
+            if let Some(mp_state) = self.music_player_states.get_mut(&wid) {
+                mp_state.play_untitled2();
+            }
         }
         
         crate::serial_println!("[Desktop] init complete");
@@ -2147,37 +2369,173 @@ impl Desktop {
     
     /// Initialize matrix rain background data (depth-parallax advancing effect)
     fn init_matrix_rain(&mut self) {
-        // 192 columns: 1920/192 = 10px per col, denser than 160 (12px)
-        // Speeds 2-6: slow=far(dim), fast=near(bright) → illusion of advancing
-        const MATRIX_COLS: usize = 192;
-        const TRAIL_LEN: usize = 30;
-        const CHAR_H: usize = 16;
+        // 320 columns × 6 layers: depth-layered rain with far=dense/slow, near=sparse/fast
+        const MATRIX_COLS: usize = 320;
+        const NUM_LAYERS: usize = 6;
+        const MAX_TRAIL: usize = 40;   // must match draw_background
         const CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
         
-        // Pre-generate character set for trail rendering
-        self.matrix_chars = vec![0u8; MATRIX_COLS * TRAIL_LEN];
-        self.matrix_heads = vec![0i32; MATRIX_COLS];
-        self.matrix_speeds = vec![2u32; MATRIX_COLS];
-        self.matrix_seeds = vec![0u32; MATRIX_COLS];
+        let total = MATRIX_COLS * NUM_LAYERS;
+        self.matrix_chars = vec![0u8; total * MAX_TRAIL];
+        self.matrix_heads = vec![0i32; total];
+        self.matrix_speeds = vec![2u32; total];
+        self.matrix_seeds = vec![0u32; total];
         
         let height = self.height.saturating_sub(TASKBAR_HEIGHT);
         
         for col in 0..MATRIX_COLS {
-            let seed = (col as u32).wrapping_mul(2654435761) ^ 0xDEADBEEF;
-            // Pre-gen chars for this column's trail
-            for i in 0..TRAIL_LEN {
-                let char_seed = seed.wrapping_add((i as u32).wrapping_mul(7919));
-                self.matrix_chars[col * TRAIL_LEN + i] = CHARS[(char_seed as usize) % CHARS.len()];
+            for layer in 0..NUM_LAYERS {
+                let idx = col * NUM_LAYERS + layer;
+                let seed = (col as u32).wrapping_mul(2654435761)
+                    ^ 0xDEADBEEF
+                    ^ ((layer as u32).wrapping_mul(0x9E3779B9));
+                for i in 0..MAX_TRAIL {
+                    let char_seed = seed.wrapping_add((i as u32).wrapping_mul(7919));
+                    self.matrix_chars[idx * MAX_TRAIL + i] = CHARS[(char_seed as usize) % CHARS.len()];
+                }
+                // Stagger start positions so layers don't overlap initially
+                let spread = height / 2 + (layer as u32) * height / 6;
+                self.matrix_heads[idx] = -((seed % spread.max(1)) as i32);
+                self.matrix_speeds[idx] = 1 + (seed % 3);
+                self.matrix_seeds[idx] = seed;
             }
-            // Start position (randomized, many start off-screen)
-            self.matrix_heads[col] = -((seed % (height / 2)) as i32);
-            // Speed 1-3 (determines depth: 1=far/dim, 3=near/bright) — slower rain
-            self.matrix_speeds[col] = 1 + (seed % 3);
-            self.matrix_seeds[col] = seed;
         }
         self.matrix_initialized = true;
+        // Initialize CRT progressive scanline engine
+        crate::crt_scanline::init(&mut self.crt_scan, self.width, height);
+        // Initialize drone swarm holographic formations
+        crate::drone_swarm::init(&mut self.drone_swarm, self.width, height);
+        // Activate test projection image (centered 256×256 zone)
+        // self.activate_test_projection(); // TODO: re-enable when projection art is ready
     }
+
+    /// Activate a colorful test image projection zone centered on screen.
+    /// The matrix rain will reveal this image as it falls through the zone.
+    pub fn activate_test_projection(&mut self) {
+        let proj_w: u32 = 256;
+        let proj_h: u32 = 256;
+        let screen_w = self.width;
+        let screen_h = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let proj_x = (screen_w / 2).saturating_sub(proj_w / 2);
+        let proj_y = (screen_h / 2).saturating_sub(proj_h / 2);
+        let pixels = MatrixProjection::generate_test_image(proj_w, proj_h);
+        self.matrix_projection = MatrixProjection {
+            x: proj_x,
+            y: proj_y,
+            width: proj_w,
+            height: proj_h,
+            pixels,
+            active: true,
+        };
+    }
+
+    /// Deactivate the projection zone.
+    pub fn deactivate_projection(&mut self) {
+        self.matrix_projection.active = false;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // MATRIX CELL PIXEL OVERRIDE API
+    // ═══════════════════════════════════════════════════════════════════
     
+    /// Matrix layout constants (must match draw_background)
+    const MATRIX_COLS: usize = 320;
+    const MATRIX_LAYERS: usize = 6;
+    const MATRIX_MAX_TRAIL: usize = 40;
+
+    /// Set rain speed preset: 0=slow, 1=mid, 2=fast
+    pub fn set_rain_preset(&mut self, preset: u8) {
+        self.matrix_rain_preset = preset.min(2);
+        crate::serial_println!("[RAIN] Speed preset set to {}", ["slow", "mid", "fast"][self.matrix_rain_preset as usize]);
+    }
+
+    /// Compute the flat cell index for (col, layer, trail_pos).
+    #[inline]
+    fn matrix_cell_key(col: usize, layer: usize, trail_i: usize) -> usize {
+        (col * Self::MATRIX_LAYERS + layer) * Self::MATRIX_MAX_TRAIL + trail_i
+    }
+
+    /// Override a cell with a custom pixel block.
+    /// `col` 0..320, `layer` 0..3, `trail_i` 0..40.
+    /// Returns a mutable reference to the pixel block for further editing.
+    pub fn matrix_override_cell(&mut self, col: usize, layer: usize, trail_i: usize, cell: CellPixels) -> &mut CellPixels {
+        let key = Self::matrix_cell_key(col, layer, trail_i);
+        self.matrix_overrides.insert(key, cell);
+        self.matrix_overrides.get_mut(&key).unwrap()
+    }
+
+    /// Override a cell, initializing it from the current glyph character at that position.
+    /// Gives you the glyph shape as a starting point for per-pixel editing.
+    pub fn matrix_override_from_glyph(&mut self, col: usize, layer: usize, trail_i: usize, color: u32) -> &mut CellPixels {
+        let idx = col * Self::MATRIX_LAYERS + layer;
+        let char_idx = idx * Self::MATRIX_MAX_TRAIL + trail_i;
+        let c = if char_idx < self.matrix_chars.len() {
+            self.matrix_chars[char_idx] as char
+        } else {
+            '#'
+        };
+        let cell = CellPixels::from_glyph(c, color);
+        self.matrix_override_cell(col, layer, trail_i, cell)
+    }
+
+    /// Get a mutable reference to an existing cell override (None if not overridden).
+    pub fn matrix_get_cell_mut(&mut self, col: usize, layer: usize, trail_i: usize) -> Option<&mut CellPixels> {
+        let key = Self::matrix_cell_key(col, layer, trail_i);
+        self.matrix_overrides.get_mut(&key)
+    }
+
+    /// Set a single pixel in a cell override. Creates the override if needed (blank).
+    pub fn matrix_cell_set_pixel(&mut self, col: usize, layer: usize, trail_i: usize, px: u8, py: u8, color: u32) {
+        let key = Self::matrix_cell_key(col, layer, trail_i);
+        let cell = self.matrix_overrides.entry(key).or_insert_with(CellPixels::blank);
+        cell.set(px, py, color);
+    }
+
+    /// Remove the override for a specific cell (reverts to normal glyph rendering).
+    pub fn matrix_clear_cell(&mut self, col: usize, layer: usize, trail_i: usize) {
+        let key = Self::matrix_cell_key(col, layer, trail_i);
+        self.matrix_overrides.remove(&key);
+    }
+
+    /// Clear ALL cell overrides.
+    pub fn matrix_clear_overrides(&mut self) {
+        self.matrix_overrides.clear();
+    }
+
+    /// Set a rectangular block of cells to custom pixel blocks.
+    /// Useful for drawing images/sprites across multiple cells.
+    /// `pixel_data` is a flat ARGB buffer of `pw × ph` pixels.
+    /// The image is tiled across the matrix cell grid starting at (start_col, layer, start_trail).
+    pub fn matrix_blit_image(&mut self, start_col: usize, layer: usize, start_trail: usize,
+                              pixel_data: &[u32], pw: usize, ph: usize) {
+        // Number of cells needed
+        let cells_w = (pw + 7) / 8;
+        let cells_h = (ph + 15) / 16;
+        
+        for cy in 0..cells_h {
+            for cx in 0..cells_w {
+                let col = start_col + cx;
+                let trail_i = start_trail + cy;
+                if col >= Self::MATRIX_COLS || trail_i >= Self::MATRIX_MAX_TRAIL { continue; }
+                
+                let mut cell = CellPixels::blank();
+                for py in 0..16u8 {
+                    for px in 0..8u8 {
+                        let src_x = cx * 8 + px as usize;
+                        let src_y = cy * 16 + py as usize;
+                        if src_x < pw && src_y < ph {
+                            let color = pixel_data[src_y * pw + src_x];
+                            if color & 0xFF000000 != 0 {  // non-transparent
+                                cell.set(px, py, color);
+                            }
+                        }
+                    }
+                }
+                self.matrix_override_cell(col, layer, trail_i, cell);
+            }
+        }
+    }
+
     /// Open TrustCode with a demo Rust file
     fn open_trustcode_demo(&mut self) {
         // Create a sample Rust file in ramfs
@@ -2560,8 +2918,10 @@ struct AppConfig {
     
     /// Close a window (with animation if enabled)
     pub fn close_window(&mut self, id: u32) {
+        crate::serial_println!("[GUI] close_window({}) start", id);
         if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
             if w.animate_close() {
+                crate::serial_println!("[GUI] close_window({}) animate path", id);
                 // Animation started — immediately free heavyweight emulator/game states
                 // (the window chrome will still animate, but we don't need the state)
                 #[cfg(feature = "emulators")]
@@ -2575,12 +2935,17 @@ struct AppConfig {
                 self.lab_states.remove(&id);
                 // Stop music playback on close
                 if let Some(mp) = self.music_player_states.get_mut(&id) {
+                    crate::serial_println!("[GUI] close_window({}) stopping music...", id);
                     mp.stop();
+                    crate::serial_println!("[GUI] close_window({}) music stopped", id);
                 }
+                crate::serial_println!("[GUI] close_window({}) removing mp state...", id);
                 self.music_player_states.remove(&id);
+                crate::serial_println!("[GUI] close_window({}) animate path done", id);
                 return;
             }
         }
+        crate::serial_println!("[GUI] close_window({}) immediate remove path", id);
         // No animation, remove immediately
         self.windows.retain(|w| w.id != id);
         // Clean up states
@@ -2598,9 +2963,13 @@ struct AppConfig {
         self.binary_viewer_states.remove(&id);
         self.lab_states.remove(&id);
         if let Some(mp) = self.music_player_states.get_mut(&id) {
+            crate::serial_println!("[GUI] close_window({}) stopping music (imm)...", id);
             mp.stop();
+            crate::serial_println!("[GUI] close_window({}) music stopped (imm)", id);
         }
+        crate::serial_println!("[GUI] close_window({}) removing mp state (imm)...", id);
         self.music_player_states.remove(&id);
+        crate::serial_println!("[GUI] close_window({}) immediate path done", id);
         #[cfg(feature = "emulators")]
         self.gamelab_states.remove(&id);
         #[cfg(feature = "emulators")]
@@ -2879,7 +3248,10 @@ struct AppConfig {
                     
                     // Handle browser content clicks
                     if self.windows[i].window_type == WindowType::Browser {
-                        self.handle_browser_click(x, y, &self.windows[i].clone());
+                        let bx = self.windows[i].x;
+                        let by = self.windows[i].y;
+                        let bw = self.windows[i].width;
+                        self.handle_browser_click(x, y, bx, by, bw);
                     }
                     
                     // Handle file manager content clicks (mouse navigation + double-click open)
@@ -3260,6 +3632,31 @@ struct AppConfig {
                                     mp.av_offset_ms = 0;
                                     crate::serial_println!("[MUSIC] A/V sync: reset to 0ms");
                                 }
+                            }
+                        }
+
+                        // Visualizer mode buttons
+                        let viz_mode_y = sync_y + sync_btn_h + 8;
+                        let vm_btn_w = 20u32;
+                        let vm_btn_h = 16u32;
+                        let vm_prev_x = inner_x + 30;
+                        if click_y >= viz_mode_y && click_y < viz_mode_y + vm_btn_h {
+                            // "<" previous mode
+                            if click_x >= vm_prev_x && click_x < vm_prev_x + vm_btn_w {
+                                let m = self.visualizer.mode;
+                                self.visualizer.mode = if m == 0 { crate::visualizer::NUM_MODES - 1 } else { m - 1 };
+                                crate::serial_println!("[VISUALIZER] Mode: {} ({})", self.visualizer.mode,
+                                    crate::visualizer::MODE_NAMES[self.visualizer.mode as usize % crate::visualizer::NUM_MODES as usize]);
+                            }
+                            // ">" next mode — calculate position from mode name length
+                            let current_mode = self.visualizer.mode;
+                            let mode_name_len = crate::visualizer::MODE_NAMES[current_mode as usize % crate::visualizer::NUM_MODES as usize].len() as u32;
+                            let name_x = vm_prev_x + vm_btn_w + 6;
+                            let vm_next_x = name_x + mode_name_len * cw + 6;
+                            if click_x >= vm_next_x && click_x < vm_next_x + vm_btn_w {
+                                self.visualizer.mode = (self.visualizer.mode + 1) % crate::visualizer::NUM_MODES;
+                                crate::serial_println!("[VISUALIZER] Mode: {} ({})", self.visualizer.mode,
+                                    crate::visualizer::MODE_NAMES[self.visualizer.mode as usize % crate::visualizer::NUM_MODES as usize]);
                             }
                         }
                     }
@@ -3872,7 +4269,7 @@ struct AppConfig {
             13 => { // Music Player
                 let mp_x = self.width.saturating_sub(320) as i32;
                 let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 385) as i32;
-                self.create_window("Music Player", mp_x, mp_y.max(20), 300, 365, WindowType::MusicPlayer);
+                self.create_window("Music Player", mp_x, mp_y.max(20), 300, 395, WindowType::MusicPlayer);
             },
             14 => { // Settings
                 self.open_settings_panel();
@@ -4990,7 +5387,7 @@ struct AppConfig {
                         // Create music player widget and start playback
                         let mp_x = self.width.saturating_sub(320) as i32;
                         let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 385) as i32;
-                        let wid = self.create_window("Music Player", mp_x, mp_y.max(20), 300, 365, WindowType::MusicPlayer);
+                        let wid = self.create_window("Music Player", mp_x, mp_y.max(20), 300, 395, WindowType::MusicPlayer);
                         if let Some(mp_state) = self.music_player_states.get_mut(&wid) {
                             mp_state.play_untitled2();
                         }
@@ -6525,12 +6922,47 @@ struct AppConfig {
 
     fn draw_background(&mut self) {
         // ═══════════════════════════════════════════════════════════════
-        // MATRIX RAIN — Multi-color, beat-synced mode switching
+        // MATRIX RAIN — Multi-color, beat-synced, depth-layered
         // Logo: faithful chrome/silver rendering from bitmap
         // ═══════════════════════════════════════════════════════════════
-        const MATRIX_COLS: usize = 192;
-        const TRAIL_LEN: usize = 30;
-        const CHAR_H: u32 = 16;
+        const MATRIX_COLS: usize = 320;
+        const MAX_TRAIL: usize = 40;
+        const NUM_LAYERS: usize = 6;
+        
+        // ── Per-layer depth parameters (6 layers: far→near) ──
+        // Layer 0 = DEEPEST BG  (slowest, dimmest, densest — shadow wash)
+        // Layer 1 = FAR BG      (slow, dark, long trails)
+        // Layer 2 = MID-FAR     (moderate fog layer)
+        // Layer 3 = MID-NEAR    (medium, visible characters)
+        // Layer 4 = NEAR         (faster, bright, vivid colors)
+        // Layer 5 = FOREGROUND   (fastest, brightest, sparse)
+        // Trail length: far=long, near=short (shadow effect)
+        const LAYER_TRAIL: [usize; 6]  = [18, 15, 12, 10, 7, 5];
+        // Char height (pixel spacing): far=small/tight, near=large/spaced
+        const LAYER_CHAR_H: [u32; 6]   = [10, 11, 13, 15, 17, 20];
+        // Brightness: far=very dim, near=full
+        const LAYER_DIM: [f32; 6]       = [0.15, 0.25, 0.38, 0.55, 0.78, 1.0];
+        // Speed multipliers per preset: [slow, mid, fast] for each layer
+        // Far layers always slow, near layers scale with preset
+        const LAYER_SPEED_PRESETS: [[f32; 6]; 3] = [
+            // slow:  gentle drift everywhere
+            [0.3, 0.4, 0.6, 0.9, 1.3, 1.8],
+            // mid:   balanced cinematic rain
+            [0.5, 0.7, 1.0, 1.5, 2.2, 3.0],
+            // fast:  intense downpour
+            [0.8, 1.1, 1.6, 2.4, 3.5, 5.0],
+        ];
+        let preset = (self.matrix_rain_preset as usize).min(2);
+        let layer_speed: [f32; 6] = LAYER_SPEED_PRESETS[preset];
+        // Parallax sway: far=none, near=slight
+        const LAYER_SWAY: [f32; 6]      = [0.0, 0.0, 0.3, 0.6, 1.2, 2.0];
+        // Column density: far=every col (dense shadow), near=sparse (rain streams)
+        // skip=1 → all cols, 2 → half, 3 → third, 4 → quarter
+        const LAYER_COL_SKIP: [usize; 6] = [1, 1, 2, 2, 3, 4];
+        // Atmospheric color shift: far=blue/grey haze, near=vivid/warm
+        const LAYER_ATMO_R: [i16; 6]    = [-12, -8, -4,  0,  3,  6];
+        const LAYER_ATMO_G: [i16; 6]    = [ -2,  0,  0,  0,  2,  4];
+        const LAYER_ATMO_B: [i16; 6]    = [ 12,  8,  4,  0, -1, -3];
         
         let height = self.height.saturating_sub(TASKBAR_HEIGHT);
         let width = self.width;
@@ -6551,20 +6983,26 @@ struct AppConfig {
             self.matrix_beat_count = self.matrix_beat_count.wrapping_add(1);
         }
         self.matrix_last_beat = beat_on;
-        // Mode toggles on each beat: even = normal, odd = sparse/void mode
-        let void_mode = m_playing && (self.matrix_beat_count % 2 == 1);
+        // Void mode: activates every 8th beat → very subtle, preserves density
+        let void_mode = m_playing && (self.matrix_beat_count % 8 == 7);
         
-        // Clear background to pure black
-        framebuffer::fill_rect(0, 0, width, height, 0xFF000000);
+        // CRT phosphor base: near-black with faint green tint
+        framebuffer::fill_rect(0, 0, width, height, 0xFF010302);
+        // Reflection zone: bottom 12% slightly lighter (wet floor illusion)
+        let refl_start = height * 88 / 100;
+        if refl_start < height {
+            framebuffer::fill_rect(0, refl_start, width, height - refl_start, 0xFF030305);
+        }
         
         if !self.matrix_initialized {
             return;
         }
+        if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} start", self.frame_count); }
         
-        // ── Ghost Mesh: update invisible 3D sphere projection ──
+        // ── Visualizer: update multi-mode 3D shape projection ──
         // Always update (wireframe is faintly visible), deformation only when playing
-        crate::ghost_mesh::update(
-            &mut self.ghost_mesh,
+        crate::visualizer::update(
+            &mut self.visualizer,
             width, height,
             MATRIX_COLS,
             m_beat, m_energy,
@@ -6572,39 +7010,89 @@ struct AppConfig {
             m_playing,
         );
         
+        if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} viz done", self.frame_count); }
+        // ── CRT Scanline: advance beam position + pattern cycling ──
+        crate::crt_scanline::update(&mut self.crt_scan);
+        
+        // ── Drone Swarm: advance choreography, project, render glow buffer ──
+        crate::drone_swarm::update(&mut self.drone_swarm);
+        
         // Logo centered vertically in the available space
         let logo_center_y = height / 2;
         
         // ── Render matrix rain with color variety ──
         let col_width = width / MATRIX_COLS as u32;
+        let half_cols = MATRIX_COLS as f32 / 2.0;
         
-        for col in 0..MATRIX_COLS.min(self.matrix_heads.len()) {
-            let speed = self.matrix_speeds[col];
-            let seed = self.matrix_seeds[col];
-            let x = (col as u32 * col_width) + col_width / 2;
+        if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} rain start", self.frame_count); }
+        for layer in 0..NUM_LAYERS {
+        // ── Parallax sway: horizontal drift based on frame time ──
+        // Each layer oscillates at a different frequency for organic motion
+        let sway_amp = LAYER_SWAY[layer];
+        let sway_freq = match layer { 4 => 0.010f32, 5 => 0.014, 3 => 0.006, _ => 0.0 };
+        let sway_offset = if sway_amp > 0.0 {
+            let phase = (self.frame_count as f32) * sway_freq;
+            // Use two sine waves at different frequencies for non-repetitive motion
+            let s1 = libm::sinf(phase);
+            let s2 = libm::sinf(phase * 1.7 + 2.0) * 0.4;
+            ((s1 + s2) * sway_amp) as i32
+        } else { 0i32 };
+        let col_skip = LAYER_COL_SKIP[layer];
+        let atmo_r = LAYER_ATMO_R[layer];
+        let atmo_g = LAYER_ATMO_G[layer];
+        let atmo_b = LAYER_ATMO_B[layer];
+        
+        for col in 0..MATRIX_COLS.min(self.matrix_heads.len() / NUM_LAYERS) {
+            // Column density: skip columns based on layer
+            if col_skip > 1 && (col % col_skip) != 0 { continue; }
+            
+            let idx = col * NUM_LAYERS + layer;
+            let speed = self.matrix_speeds[idx];
+            let seed = self.matrix_seeds[idx];
+            // Apply horizontal parallax sway to x position
+            let base_x = (col as u32 * col_width) + col_width / 2;
+            let x = (base_x as i32 + sway_offset).max(0).min(width as i32 - 1) as u32;
+            
+            // ── Per-layer depth parameters ──
+            let layer_trail = LAYER_TRAIL[layer];
+            let layer_base_h = LAYER_CHAR_H[layer];
+            let layer_dim: f32 = LAYER_DIM[layer];
+            let layer_spd: f32 = layer_speed[layer];
+            
+            // ── FOV depth: columns at screen edges → more spaced, slower ──
+            // fov_t: 0.0 at center, 1.0 at extreme edges (quadratic)
+            let from_center = ((col as f32) - half_cols).abs() / half_cols;
+            let fov_t = (from_center * from_center).min(1.0);
+            // Char spacing: layer base + minimal FOV expansion at edges
+            let fov_extra = (fov_t * (layer_base_h as f32 * 0.15)) as u32;
+            let eff_char_h: u32 = layer_base_h + fov_extra;
+            // Speed reduction: edges ~12% slower (subtle convergence)
+            let fov_speed_pct: i32 = (100.0 - fov_t * 12.0) as i32;
+            // Minimal dim at periphery (preserve density at edges)
+            let fov_dim: f32 = 1.0 - fov_t * 0.04;
             
             // ── Per-column frequency band assignment (seeded) ──
-            // Each column "listens" to a frequency band:
-            // 0=sub_bass (red/magenta), 1=bass (orange/amber), 2=mid (green), 3=treble (cyan/blue)
-            let freq_band = (seed >> 3) % 4;
+            // Same band for all layers in a column (use layer-0 seed)
+            let freq_band = (self.matrix_seeds[col * NUM_LAYERS] >> 3) % 4;
             // Get the amplitude for this column's band (0.0 - 1.0+)
             let (band_amp, band_r_base, band_g_base, band_b_base) = if m_playing {
                 match freq_band {
-                    0 => (m_sub_bass, 220u8, 30u8, 80u8),   // Sub-bass → deep red/magenta
-                    1 => (m_bass,     240u8, 140u8, 20u8),   // Bass → orange/amber
-                    2 => (m_mid,       40u8, 220u8, 60u8),   // Mid → green/emerald
-                    _ => (m_treble,    50u8, 180u8, 240u8),  // Treble → cyan/ice blue
+                    0 => (m_sub_bass,  80u8, 180u8, 60u8),   // Sub-bass → muted green-red
+                    1 => (m_bass,      90u8, 195u8, 55u8),   // Bass → warm green
+                    2 => (m_mid,       50u8, 200u8, 70u8),   // Mid → classic green
+                    _ => (m_treble,    60u8, 175u8, 140u8),  // Treble → teal-green
                 }
             } else {
-                (0.0, 20u8, 180u8, 40u8) // No music → classic green
+                (0.0, 55u8, 185u8, 55u8) // No music → desaturated green
             };
             // Intensity multiplier from band amplitude (0.3 = idle, up to 1.5 at max)
             let freq_intensity = if m_playing {
                 (0.3 + band_amp * 1.2).min(1.5)
             } else { 1.0 };
             
-            // ── Beat-synced void mode: on odd beat counts, suppress ~40% of columns ──
-            let col_suppressed = void_mode && ((col.wrapping_mul(7) ^ self.matrix_beat_count as usize) % 5 < 2);
+            // ── Beat-synced void mode: suppress a few columns on 8th beat ──
+            // Suppress only ~6% of columns in void mode (subtle pulse)
+            let col_suppressed = void_mode && ((col.wrapping_mul(7) ^ self.matrix_beat_count as usize) % 16 == 0);
             
             // ── Music-reactive speed boost ──
             let beat_boost = if m_playing {
@@ -6618,101 +7106,131 @@ struct AppConfig {
                 (local_beat * 6.0 + band_amp * 4.0) as i32
             } else { 0 };
             
-            // Ghost mesh: slow rain in columns that intersect the 3D shape
+            // Visualizer: slow rain in columns that intersect the 3D shape
             let ghost_slow = if m_playing {
-                crate::ghost_mesh::column_slow_factor(&self.ghost_mesh, col) as i32
+                crate::visualizer::column_slow_factor(&self.visualizer, col) as i32
             } else { 100 };
-            let effective_advance = ((speed as i32 + beat_boost) * ghost_slow) / 100;
-            let new_y = self.matrix_heads[col] + effective_advance;
-            if new_y > height as i32 + (TRAIL_LEN as i32 * CHAR_H as i32) {
+            let speed_adj = ((speed as f32) * layer_spd) as i32;
+            let effective_advance = (((speed_adj + beat_boost) * ghost_slow / 100) * fov_speed_pct / 100).max(1);
+            let new_y = self.matrix_heads[idx] + effective_advance;
+            if new_y > height as i32 + (layer_trail as i32 * eff_char_h as i32) {
                 let new_seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
-                self.matrix_seeds[col] = new_seed;
-                self.matrix_heads[col] = -((new_seed % (height / 2)) as i32);
+                self.matrix_seeds[idx] = new_seed;
+                self.matrix_heads[idx] = -((new_seed % (height / 3)) as i32);
                 let chars: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
-                for i in 0..TRAIL_LEN {
+                for i in 0..layer_trail.min(MAX_TRAIL) {
                     let cs = new_seed.wrapping_add((i as u32).wrapping_mul(7919));
-                    self.matrix_chars[col * TRAIL_LEN + i] = chars[(cs as usize) % chars.len()];
+                    self.matrix_chars[idx * MAX_TRAIL + i] = chars[(cs as usize) % chars.len()];
                 }
             } else {
-                self.matrix_heads[col] = new_y;
+                self.matrix_heads[idx] = new_y;
             }
             
             // Skip rendering for suppressed columns (position still advances)
             if col_suppressed { continue; }
             
-            let head_y = self.matrix_heads[col];
+            let head_y = self.matrix_heads[idx];
             
             // Depth from speed: 1=far(dim), 3=near(bright)
             let depth_factor = (speed as f32 - 1.0) / 2.0;
-            let energy_boost = if m_playing { m_energy * 0.6 } else { 0.0 };
-            let beat_bright = if m_playing { m_beat * 0.4 } else { 0.0 };
-            let brightness_mult = (0.3 + depth_factor * 0.7 + energy_boost + beat_bright).min(1.6);
+            let energy_boost = if m_playing { m_energy * 0.3 } else { 0.0 };
+            let beat_bright = if m_playing { m_beat * 0.15 } else { 0.0 };
+            let brightness_mult = ((0.5 + depth_factor * 0.5 + energy_boost + beat_bright) * fov_dim * layer_dim).min(1.5);
             
-            // Ghost mesh: columns inside shape allow dimmer trail chars through
-            let ghost_col_inside = m_playing && col < self.ghost_mesh.column_bounds.len() && {
-                let (bmin, bmax) = self.ghost_mesh.column_bounds[col];
+            // Visualizer: columns inside shape allow dimmer trail chars through
+            let ghost_col_inside = m_playing && col < self.visualizer.column_bounds.len() && {
+                let (bmin, bmax) = self.visualizer.column_bounds[col];
                 bmin >= 0 && bmax > bmin
             };
             
-            for i in 0..TRAIL_LEN {
-                let char_y = head_y - (i as i32 * CHAR_H as i32);
+            for i in 0..layer_trail {
+                
+                let char_y = head_y - (i as i32 * eff_char_h as i32);
                 if char_y < 0 || char_y >= height as i32 { continue; }
                 
-                // In void mode, skip every other character in the trail
-                if void_mode && (i % 2 == 0) && i > 0 { continue; }
+                // In void mode, skip every 5th character (very subtle)
+                if void_mode && (i % 5 == 0) && i > 3 { continue; }
                 
-                // Trail fading
+                // Trail fading — normalized by per-layer trail length
                 let trail_ext = if m_playing { (m_energy * 30.0) as u8 } else { 0 };
+                let fade_rate = (200u8 as u16 / (layer_trail as u16).max(1)) as u8;
                 let base = if i == 0 { 255u8 }
-                    else if i == 1 { 200u8.saturating_add(trail_ext / 2) }
-                    else { (160u8 + trail_ext / 3).saturating_sub((i as u8).saturating_mul(6)) };
-                if base < (if ghost_col_inside { 5 } else { 15 }) { continue; }
+                    else if i == 1 { 220u8.saturating_add(trail_ext / 2) }
+                    else { (200u8 + trail_ext / 3).saturating_sub((i as u8).saturating_mul(fade_rate.max(3))) };
+                if base < (if ghost_col_inside { 2 } else { 3 }) { continue; }
                 
                 let brightness = ((base as f32) * brightness_mult).min(255.0) as u8;
                 
                 // ══ Frequency-band gradient coloring ══
                 // Each column's color = its band base color × amplitude intensity × trail fade
+                // Apply atmospheric perspective: far layer → blue/grey shift
                 let (r, g, b) = if i == 0 {
-                    // HEAD: bright white-ish tinted toward the band color
-                    // At high amplitude → pure band color, at low → whitened
+                    // HEAD: tinted toward the band color with a bright core
                     let fi = freq_intensity.min(1.5);
-                    let white_mix = (1.0 - fi * 0.5).max(0.2);
+                    let white_mix = (0.40 - fi * 0.12).max(0.15);
                     let band_mix = 1.0 - white_mix;
-                    let hr = ((band_r_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as u8;
-                    let hg = ((band_g_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as u8;
-                    let hb = ((band_b_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as u8;
-                    // Beat flash → push toward white
-                    let beat_w = if m_playing { (m_beat * 60.0).min(80.0) as u8 } else { 0 };
-                    (hr.saturating_add(beat_w), hg.saturating_add(beat_w), hb.saturating_add(beat_w))
+                    let hr = ((band_r_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as i16;
+                    let hg = ((band_g_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as i16;
+                    let hb = ((band_b_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as i16;
+                    let beat_w = if m_playing { (m_beat * 12.0).min(20.0) as i16 } else { 0 };
+                    // Atmospheric shift
+                    let fr = (hr + beat_w + atmo_r).max(0).min(255) as u8;
+                    let fg = (hg + beat_w + atmo_g).max(0).min(255) as u8;
+                    let fb = (hb + beat_w + atmo_b).max(0).min(255) as u8;
+                    (fr, fg, fb)
                 } else {
                     // TRAIL: band base color scaled by amplitude intensity + trail fade
                     let fade = brightness as f32 / 255.0;
                     let fi = freq_intensity;
-                    // At low amplitude: dim base color. At high amplitude: saturated band color.
-                    let tr = ((band_r_base as f32 * fi * fade).min(255.0)) as u8;
-                    let tg = ((band_g_base as f32 * fi * fade).min(255.0)) as u8;
-                    let tb = ((band_b_base as f32 * fi * fade).min(255.0)) as u8;
-                    // Cross-bleed: add a touch of neighboring bands for richness
-                    let bleed_r = if m_playing { (m_sub_bass * 15.0 * fade).min(25.0) as u8 } else { 0 };
-                    let bleed_b = if m_playing { (m_treble * 15.0 * fade).min(25.0) as u8 } else { 0 };
-                    (tr.saturating_add(bleed_r), tg, tb.saturating_add(bleed_b))
+                    let tr = ((band_r_base as f32 * fi * fade).min(255.0)) as i16;
+                    let tg = ((band_g_base as f32 * fi * fade).min(255.0)) as i16;
+                    let tb = ((band_b_base as f32 * fi * fade).min(255.0)) as i16;
+                    // Cross-bleed
+                    let bleed_r = if m_playing { (m_sub_bass * 15.0 * fade).min(25.0) as i16 } else { 0 };
+                    let bleed_b = if m_playing { (m_treble * 15.0 * fade).min(25.0) as i16 } else { 0 };
+                    // Atmospheric shift
+                    let fr = (tr + bleed_r + atmo_r).max(0).min(255) as u8;
+                    let fg = (tg + atmo_g).max(0).min(255) as u8;
+                    let fb = (tb + bleed_b + atmo_b).max(0).min(255) as u8;
+                    (fr, fg, fb)
                 };
                 
-                // ── Ghost Mesh v4: modulate rain through invisible 3D shape ──
+                // ── Visualizer: modulate rain through invisible 3D shape ──
                 let (mut r, mut g, mut b) = (r, g, b);
                 let mut ghost_trail_boost: u8 = 0;
+                let mut ghost_depth: u8 = 128;
                 if m_playing {
-                    let fx = crate::ghost_mesh::check_rain_collision(
-                        &self.ghost_mesh, col, char_y,
-                        self.ghost_mesh.beat_pulse, m_energy,
+                    let fx = crate::visualizer::check_rain_collision(
+                        &self.visualizer, col, char_y,
+                        self.visualizer.beat_pulse, m_energy,
                     );
-                    if fx.glow > 0 || fx.ripple > 0 {
-                        let (mr, mg, mb) = crate::ghost_mesh::modulate_rain_color(
+                    if fx.glow > 0 || fx.ripple > 0 || fx.fresnel > 0 || fx.specular > 0
+                        || fx.scanline > 0 || fx.inner_glow > 0 || fx.shadow > 0 {
+                        let (mr, mg, mb) = crate::visualizer::modulate_rain_color(
                             r, g, b, fx.glow, fx.depth, fx.ripple,
+                            fx.fresnel, fx.specular,
+                            fx.ao, fx.bloom, fx.scanline, fx.inner_glow, fx.shadow,
                             m_beat, m_energy,
                         );
                         r = mr; g = mg; b = mb;
                         ghost_trail_boost = fx.trail_boost;
+                        ghost_depth = fx.depth;
+                    }
+                    // Image mode: blend rain color toward image pixel color
+                    if fx.target_blend > 0 {
+                        let t = fx.target_blend as f32 / 255.0;
+                        let inv = 1.0 - t;
+                        r = (r as f32 * inv + fx.target_r as f32 * t) as u8;
+                        g = (g as f32 * inv + fx.target_g as f32 * t) as u8;
+                        b = (b as f32 * inv + fx.target_b as f32 * t) as u8;
+                        ghost_trail_boost = fx.trail_boost;
+                    }
+                    // Contrast dim zone: darken rain just outside the shape
+                    if fx.dim > 0 {
+                        let keep = 1.0 - (fx.dim as f32 / 255.0);
+                        r = (r as f32 * keep) as u8;
+                        g = (g as f32 * keep) as u8;
+                        b = (b as f32 * keep) as u8;
                     }
                 }
                 // Trail extension: boost brightness for trailing chars near shape
@@ -6723,28 +7241,280 @@ struct AppConfig {
                     b = (b as f32 * boost).min(255.0) as u8;
                 }
                 
+                // ── CRT Scanline: progressive phosphor beam shapes ──
+                let scan_fx = crate::crt_scanline::query(
+                    &self.crt_scan, x as f32, char_y as f32,
+                );
+                if scan_fx.brightness != 1.0 || scan_fx.color_g != 0 {
+                    let bf = scan_fx.brightness;
+                    r = ((r as f32 * bf).min(255.0)) as u8;
+                    g = ((g as f32 * bf).min(255.0)) as u8;
+                    b = ((b as f32 * bf).min(255.0)) as u8;
+                    r = ((r as i16 + scan_fx.color_r).max(0).min(255)) as u8;
+                    g = ((g as i16 + scan_fx.color_g).max(0).min(255)) as u8;
+                    b = ((b as i16 + scan_fx.color_b).max(0).min(255)) as u8;
+                }
+                let x_flow = x;
+                
+                // ── Drone Swarm: holographic wireframe formations ──
+                let drone_fx = crate::drone_swarm::query(
+                    &self.drone_swarm, x_flow as f32, char_y as f32,
+                );
+                if drone_fx.brightness != 1.0 || drone_fx.color_r != 0 {
+                    let bf = drone_fx.brightness;
+                    r = ((r as f32 * bf).min(255.0)) as u8;
+                    g = ((g as f32 * bf).min(255.0)) as u8;
+                    b = ((b as f32 * bf).min(255.0)) as u8;
+                    r = ((r as i16 + drone_fx.color_r).max(0).min(255)) as u8;
+                    g = ((g as i16 + drone_fx.color_g).max(0).min(255)) as u8;
+                    b = ((b as i16 + drone_fx.color_b).max(0).min(255)) as u8;
+                }
+                
                 let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
                 
-                // Character selection: denser glyphs + faster mutation inside shape
+                // Character selection: depth-of-field glyph selection
+                // Front face → dense/heavy glyphs, back face → light/thin glyphs
                 let inside_shape = ghost_trail_boost > 30;
-                let mutation_speed = if inside_shape { 4u32 } else { 12u32 };
+                let mutation_speed = if inside_shape { 10u32 } else { 28u32 };
                 let char_seed = seed.wrapping_add((i as u32 * 7919) ^ (self.frame_count as u32 / mutation_speed));
                 let chars: &[u8] = if inside_shape {
-                    b"@#$%&WM8BOX0ZNHK"  // dense glyphs inside shape
+                    if ghost_depth > 180 {
+                        // Front face: heavy/dense glyphs (sharp focus)
+                        b"@#$%&WM8BOXZNHK"
+                    } else if ghost_depth < 80 {
+                        // Back face: light/thin glyphs (out of focus)
+                        b".:;~-'`"
+                    } else {
+                        // Mid-depth: medium weight glyphs
+                        b"0123456789ABCDEF"
+                    }
                 } else {
                     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|"
                 };
                 let c = chars[(char_seed as usize) % chars.len()] as char;
                 let glyph = crate::framebuffer::font::get_glyph(c);
                 
-                for (gr, &bits) in glyph.iter().enumerate() {
-                    let py = char_y as u32 + gr as u32;
-                    if py >= height || bits == 0 { continue; }
-                    for bit in 0..8u32 {
-                        if bits & (0x80 >> bit) != 0 {
-                            let px = x + bit;
-                            if px < width {
-                                framebuffer::put_pixel(px, py, color);
+                // ── Standard 8×16 glyph rendering + CRT scanline ──
+                // Check for screen-space projection zone overlap
+                let in_proj = self.matrix_projection.active
+                    && x_flow + 8 > self.matrix_projection.x
+                    && x_flow < self.matrix_projection.x + self.matrix_projection.width
+                    && (char_y as u32) + 16 > self.matrix_projection.y
+                    && (char_y as u32) < self.matrix_projection.y + self.matrix_projection.height;
+
+                // Check for per-cell pixel override (skip if projection takes priority)
+                let cell_key = idx * MAX_TRAIL + i;
+                let has_override = !in_proj && self.matrix_overrides.contains_key(&cell_key);
+                
+                let cr = ((color >> 16) & 0xFF) as u8;
+                let cg = ((color >> 8) & 0xFF) as u8;
+                let cb = (color & 0xFF) as u8;
+                let overlap_boost: u8 = if layer > 0 { 30u8 } else { 0 };
+                
+                if in_proj {
+                    // ── PROJECTION MODE: reveal image pixels through rain ──
+                    // Every pixel in the cell block is sampled from the projection
+                    // image and modulated by rain intensity (brightness).
+                    // Rain head = full brightness, trail = fading reveal.
+                    let proj = &self.matrix_projection;
+                    let intensity = brightness as f32 / 255.0;
+                    for gr in 0..16usize {
+                        let py = char_y as u32 + gr as u32;
+                        if py >= height { continue; }
+                        if py < proj.y || py >= proj.y + proj.height { continue; }
+                        let scanline: f32 = if py & 1 == 0 { 1.0 } else { 0.96 };
+                        let in_reflection = py > height * 88 / 100;
+                        let img_y = (py - proj.y) as usize;
+                        for bit in 0..8u32 {
+                            let px = x_flow + bit;
+                            if px >= width { continue; }
+                            if px < proj.x || px >= proj.x + proj.width { continue; }
+                            let img_x = (px - proj.x) as usize;
+                            let pixel_color = proj.pixels[img_y * proj.width as usize + img_x];
+                            if pixel_color & 0xFF000000 == 0 { continue; }
+                            let pr = ((pixel_color >> 16) & 0xFF) as f32;
+                            let pg = ((pixel_color >> 8) & 0xFF) as f32;
+                            let pb = (pixel_color & 0xFF) as f32;
+                            let mut fr = (pr * intensity).min(255.0) as u8;
+                            let mut fg = (pg * intensity).min(255.0) as u8;
+                            let mut fb = (pb * intensity).min(255.0) as u8;
+                            fr = ((fr as f32 * scanline).min(255.0)) as u8;
+                            fg = ((fg as f32 * scanline).min(255.0)) as u8;
+                            fb = ((fb as f32 * scanline).min(255.0)) as u8;
+                            if in_reflection {
+                                fg = (fg as u16 + 8).min(255) as u8;
+                                fb = (fb as u16 + 18).min(255) as u8;
+                            }
+                            let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
+                            framebuffer::put_pixel(px, py, fc);
+                        }
+                    }
+                } else if has_override {
+                    // ── OVERRIDE MODE: render per-pixel from CellPixels ──
+                    let cell_pixels = &self.matrix_overrides[&cell_key];
+                    for gr in 0..16usize {
+                        let py = char_y as u32 + gr as u32;
+                        if py >= height { continue; }
+                        let scanline: f32 = if py & 1 == 0 { 1.0 } else { 0.96 };
+                        let in_reflection = py > height * 88 / 100;
+                        for bit in 0..8u32 {
+                            let pixel_color = cell_pixels.pixels[gr * 8 + bit as usize];
+                            if pixel_color & 0xFF000000 == 0 { continue; } // transparent
+                            let px = x_flow + bit;
+                            if px >= width { continue; }
+                            // Extract pixel's own RGB, then modulate by rain intensity
+                            let pr = ((pixel_color >> 16) & 0xFF) as f32;
+                            let pg = ((pixel_color >> 8) & 0xFF) as f32;
+                            let pb = (pixel_color & 0xFF) as f32;
+                            // Modulate: blend the override pixel toward the rain color/intensity
+                            // intensity = brightness / 255 (how bright this trail position is)
+                            let intensity = brightness as f32 / 255.0;
+                            let mut fr = (pr * intensity).min(255.0) as u8;
+                            let mut fg = (pg * intensity).min(255.0) as u8;
+                            let mut fb = (pb * intensity).min(255.0) as u8;
+                            if overlap_boost > 0 {
+                                fr = (fr as u16 + overlap_boost as u16).min(255) as u8;
+                                fg = (fg as u16 + overlap_boost as u16).min(255) as u8;
+                                fb = (fb as u16 + overlap_boost as u16).min(255) as u8;
+                            }
+                            fr = ((fr as f32 * scanline).min(255.0)) as u8;
+                            fg = ((fg as f32 * scanline).min(255.0)) as u8;
+                            fb = ((fb as f32 * scanline).min(255.0)) as u8;
+                            if in_reflection {
+                                fg = (fg as u16 + 8).min(255) as u8;
+                                fb = (fb as u16 + 18).min(255) as u8;
+                            }
+                            let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
+                            framebuffer::put_pixel(px, py, fc);
+                        }
+                    }
+                } else {
+                    // ── NORMAL MODE: standard glyph rendering ──
+                    for (gr, &bits) in glyph.iter().enumerate() {
+                        let py = char_y as u32 + gr as u32;
+                        if py >= height || bits == 0 { continue; }
+                        let scanline: f32 = if py & 1 == 0 { 1.0 } else { 0.96 };
+                        let in_reflection = py > height * 88 / 100;
+                        for bit in 0..8u32 {
+                            if bits & (0x80 >> bit) != 0 {
+                                let px = x_flow + bit;
+                                if px < width {
+                                    let mut fr = cr;
+                                    let mut fg = cg;
+                                    let mut fb = cb;
+                                    if overlap_boost > 0 {
+                                        fr = (fr as u16 + overlap_boost as u16).min(255) as u8;
+                                        fg = (fg as u16 + overlap_boost as u16).min(255) as u8;
+                                        fb = (fb as u16 + overlap_boost as u16).min(255) as u8;
+                                    }
+                                    fr = ((fr as f32 * scanline).min(255.0)) as u8;
+                                    fg = ((fg as f32 * scanline).min(255.0)) as u8;
+                                    fb = ((fb as f32 * scanline).min(255.0)) as u8;
+                                    if in_reflection {
+                                        fg = (fg as u16 + 8).min(255) as u8;
+                                        fb = (fb as u16 + 18).min(255) as u8;
+                                    }
+                                    let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
+                                    framebuffer::put_pixel(px, py, fc);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } // for col
+        } // for layer
+        
+        // ═════════════════════════════════════════════════════════════
+        // GHOST FILL LAYERS — invisible rain that only renders inside
+        // the 3D shape, filling gaps for a much denser silhouette
+        // ═════════════════════════════════════════════════════════════
+        if m_playing {
+            const NUM_FILL: usize = 5;
+            const FILL_TRAIL: usize = 20;
+            const FILL_CH: u32 = 16;  // Fill layers use standard 8×16 glyphs
+            
+            for col in 0..MATRIX_COLS.min(self.visualizer.column_bounds.len()) {
+                // Skip columns with no shape at all (free)
+                let (bmin, bmax) = self.visualizer.column_bounds[col];
+                if bmin < 0 || bmax <= bmin { continue; }
+                
+                let x = (col as u32 * col_width) + col_width / 2;
+                
+                for fill in 0..NUM_FILL {
+                    let fill_seed = (col as u32).wrapping_mul(2654435761)
+                        ^ ((fill as u32 + 17).wrapping_mul(0x9E3779B9));
+                    let fill_speed = 1 + (fill_seed % 3);
+                    
+                    // Virtual scrolling head: wraps within a range covering the screen
+                    let total_h = (height + FILL_TRAIL as u32 * FILL_CH) as u32;
+                    let raw_pos = (self.frame_count as u32)
+                        .wrapping_mul(fill_speed)
+                        .wrapping_add(fill_seed);
+                    let virtual_head = (raw_pos % total_h.max(1)) as i32
+                        - (FILL_TRAIL as i32 * FILL_CH as i32);
+                    
+                    for i in 0..FILL_TRAIL {
+                        let char_y = virtual_head - (i as i32 * FILL_CH as i32);
+                        if char_y < 0 || char_y >= height as i32 { continue; }
+                        
+                        // Quick bounds reject: only check collision near the shape
+                        let margin = 12i32;
+                        if char_y < bmin - margin || char_y > bmax + margin { continue; }
+                        
+                        let fx = crate::visualizer::check_rain_collision(
+                            &self.visualizer, col, char_y,
+                            self.visualizer.beat_pulse, m_energy,
+                        );
+                        // Only render if truly inside or on an edge — invisible otherwise
+                        // (image mode uses target_blend instead of glow)
+                        if fx.glow == 0 && fx.target_blend == 0 { continue; }
+                        
+                        // Trail fade for fill chars
+                        let base = if i == 0 { 180u8 }
+                            else { 120u8.saturating_sub((i as u8).saturating_mul(7)) };
+                        if base < 10 { continue; }
+                        
+                        // Start from a dim base tinted toward the shape color
+                        let dim_r = (base as u32 / 8) as u8;
+                        let dim_g = (base as u32 / 3) as u8;
+                        let dim_b = (base as u32 / 7) as u8;
+                        let (mut mr, mut mg, mut mb) = crate::visualizer::modulate_rain_color(
+                            dim_r, dim_g, dim_b,
+                            fx.glow, fx.depth, fx.ripple,
+                            fx.fresnel, fx.specular,
+                            fx.ao, fx.bloom, fx.scanline, fx.inner_glow, fx.shadow,
+                            m_beat, m_energy,
+                        );
+                        // Image mode: blend fill chars toward image color too
+                        if fx.target_blend > 0 {
+                            let t = fx.target_blend as f32 / 255.0;
+                            let inv = 1.0 - t;
+                            mr = (mr as f32 * inv + fx.target_r as f32 * t) as u8;
+                            mg = (mg as f32 * inv + fx.target_g as f32 * t) as u8;
+                            mb = (mb as f32 * inv + fx.target_b as f32 * t) as u8;
+                        }
+                        
+                        let color = 0xFF000000 | ((mr as u32) << 16) | ((mg as u32) << 8) | (mb as u32);
+                        
+                        // Dense glyphs for fill (shape-revealing characters)
+                        let cs = fill_seed.wrapping_add(
+                            (i as u32 * 7919) ^ (self.frame_count as u32 / 8)
+                        );
+                        let fill_chars: &[u8] = b"@#$%&WM8BOX0ZNHK";
+                        let c = fill_chars[(cs as usize) % fill_chars.len()] as char;
+                        let glyph = crate::framebuffer::font::get_glyph(c);
+                        
+                        for (gr, &bits) in glyph.iter().enumerate() {
+                            let py = char_y as u32 + gr as u32;
+                            if py >= height || bits == 0 { continue; }
+                            for bit in 0..8u32 {
+                                if bits & (0x80 >> bit) != 0 {
+                                    let px = x + bit;
+                                    if px < width {
+                                        framebuffer::put_pixel(px, py, color);
+                                    }
+                                }
                             }
                         }
                     }
@@ -6752,9 +7522,11 @@ struct AppConfig {
             }
         }
         
+        if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} rain+fill done", self.frame_count); }
         // Ghost mesh: no overlay drawing — rain IS the only renderer
         
         // ═══════════════════════════════════════════════════════════════
+        if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} logo start", self.frame_count); }
         // LOGO — Faithful chrome/silver rendering from bitmap
         // Dark interior pixels → matrix rain shows through
         // Bright chrome/silver pixels → alpha blended over matrix rain
@@ -10565,6 +11337,26 @@ struct AppConfig {
         let zero_x = plus_x + sync_btn_w + 6;
         framebuffer::fill_rect_alpha(zero_x, sync_y, sync_btn_w, sync_btn_h, 0x333333, 180);
         self.draw_text(zero_x as i32 + 6, sync_y as i32 + 2, "0", 0xFFAAAAAA);
+
+        // ── Visualizer mode selector ──
+        let viz_mode_y = sync_y + sync_btn_h + 8;
+        let vm_btn_w = 20u32;
+        let vm_btn_h = 16u32;
+        // Label
+        self.draw_text(inner_x as i32, viz_mode_y as i32 + 2, "VIZ", 0xFF668877);
+        // "◀" previous
+        let vm_prev_x = inner_x + 30;
+        framebuffer::fill_rect_alpha(vm_prev_x, viz_mode_y, vm_btn_w, vm_btn_h, 0x442244, 180);
+        self.draw_text(vm_prev_x as i32 + 5, viz_mode_y as i32 + 2, "<", 0xFFCC88FF);
+        // Mode name
+        let current_mode = self.visualizer.mode;
+        let mode_name = crate::visualizer::MODE_NAMES[current_mode as usize % crate::visualizer::NUM_MODES as usize];
+        let name_x = vm_prev_x + vm_btn_w + 6;
+        self.draw_text(name_x as i32, viz_mode_y as i32 + 2, mode_name, 0xFF00FFCC);
+        // "▶" next
+        let vm_next_x = name_x + (mode_name.len() as u32 * cw) + 6;
+        framebuffer::fill_rect_alpha(vm_next_x, viz_mode_y, vm_btn_w, vm_btn_h, 0x224444, 180);
+        self.draw_text(vm_next_x as i32 + 5, viz_mode_y as i32 + 2, ">", 0xFF88FFCC);
     }
 
     /// Draw interactive Calculator
@@ -10904,11 +11696,11 @@ struct AppConfig {
     }
     
     /// Handle mouse click inside browser window
-    fn handle_browser_click(&mut self, x: i32, y: i32, window: &Window) {
+    fn handle_browser_click(&mut self, x: i32, y: i32, win_x: i32, win_y: i32, win_w: u32) {
         let toolbar_height: u32 = 36;
-        let browser_x = window.x as u32 + 4;
-        let browser_y = window.y as u32 + TITLE_BAR_HEIGHT + 4;
-        let browser_w = window.width.saturating_sub(8);
+        let browser_x = win_x as u32 + 4;
+        let browser_y = win_y as u32 + TITLE_BAR_HEIGHT + 4;
+        let browser_w = win_w.saturating_sub(8);
         
         if browser_w < 100 {
             return;
@@ -11523,18 +12315,35 @@ pub fn run() {
             let _ctrl = crate::keyboard::is_key_pressed(0x1D);
             let win = crate::keyboard::is_key_pressed(0x5B);
             
-            // ESC (ASCII 27) → close focused window, or exit desktop if none
+            // ESC (ASCII 27) → route to handle_keyboard_input which handles
+            // start menu close, browser cancel, rename cancel, etc.
+            // If no specific handler catches it, close the focused window.
             if key == 27 {
-                let mut d = DESKTOP.lock();
-                let has_focused = d.windows.iter().any(|w| w.focused && !w.minimized);
-                if has_focused {
-                    d.close_focused_window();
-                    crate::serial_println!("[GUI] ESC: closed focused window");
+                crate::serial_println!("[GUI] ESC pressed");
+                // Try-lock to avoid blocking the render loop; skip if locked
+                if let Some(mut d) = DESKTOP.try_lock() {
+                    // If start menu is open, close it
+                    if d.start_menu_open {
+                        d.start_menu_open = false;
+                        d.start_menu_search.clear();
+                        d.start_menu_selected = -1;
+                        crate::serial_println!("[GUI] ESC: closed start menu");
+                        drop(d);
+                        continue;
+                    }
+                    // Otherwise close focused window (if any)
+                    let focused_info = d.windows.iter().find(|w| w.focused && !w.minimized).map(|w| w.id);
+                    if let Some(wid) = focused_info {
+                        crate::serial_println!("[GUI] ESC: closing window {}", wid);
+                        d.close_focused_window();
+                        crate::serial_println!("[GUI] ESC: window closed OK");
+                    } else {
+                        crate::serial_println!("[GUI] ESC: no focused window, ignoring");
+                    }
+                    drop(d);
                 } else {
-                    crate::serial_println!("[GUI] ESC: no window open, exiting desktop");
-                    EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
+                    crate::serial_println!("[GUI] ESC: lock busy, skipping");
                 }
-                drop(d);
                 continue;
             }
             

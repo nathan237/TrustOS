@@ -47,6 +47,11 @@ pub fn ref_count(phys: u64) -> u32 {
 /// Called from page fault handler when a user-mode write protection violation occurs.
 /// Returns `true` if the fault was a COW fault and was resolved.
 pub fn handle_cow_fault(fault_addr: u64) -> bool {
+    #[cfg(not(target_arch = "x86_64"))]
+    { let _ = fault_addr; return false; } // COW requires x86_64 page tables
+    
+    #[cfg(target_arch = "x86_64")]
+    {
     let page_addr = fault_addr & !0xFFF;
     let hhdm = super::hhdm_offset();
 
@@ -102,6 +107,7 @@ pub fn handle_cow_fault(fault_addr: u64) -> bool {
     // Flush TLB entry
     unsafe { core::arch::asm!("invlpg [{}]", in(reg) page_addr, options(nostack, preserves_flags)); }
     true
+    } // end cfg x86_64
 }
 
 /// Clone an address space with COW semantics.
@@ -110,6 +116,11 @@ pub fn handle_cow_fault(fault_addr: u64) -> bool {
 /// The child gets a fresh address space sharing the same physical pages.
 /// On first write, the page fault handler allocates a private copy.
 pub fn clone_cow(parent_cr3: u64) -> Option<AddressSpace> {
+    #[cfg(not(target_arch = "x86_64"))]
+    { let _ = parent_cr3; return None; } // COW requires x86_64 page tables
+    
+    #[cfg(target_arch = "x86_64")]
+    {
     let hhdm = super::hhdm_offset();
     let mut child = AddressSpace::new_with_kernel()?;
     let parent_pml4 = unsafe { &*((parent_cr3 + hhdm) as *const PageTable) };
@@ -158,6 +169,7 @@ pub fn clone_cow(parent_cr3: u64) -> Option<AddressSpace> {
                     ref_increment(phys);
 
                     // Flush parent TLB for this page
+                    #[cfg(target_arch = "x86_64")]
                     unsafe {
                         core::arch::asm!("invlpg [{}]", in(reg) virt,
                                          options(nostack, preserves_flags));
@@ -168,4 +180,5 @@ pub fn clone_cow(parent_cr3: u64) -> Option<AddressSpace> {
     }
 
     Some(child)
+    } // end cfg x86_64
 }

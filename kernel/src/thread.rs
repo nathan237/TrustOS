@@ -49,6 +49,7 @@ impl ThreadFlags {
 }
 
 /// CPU context saved during context switch
+#[cfg(target_arch = "x86_64")]
 #[derive(Debug, Clone, Default)]
 #[repr(C)]
 pub struct ThreadContext {
@@ -76,6 +77,35 @@ pub struct ThreadContext {
     
     // Flags
     pub rflags: u64,
+}
+
+/// CPU context saved during context switch (aarch64)
+#[cfg(target_arch = "aarch64")]
+#[derive(Debug, Clone, Default)]
+#[repr(C)]
+pub struct ThreadContext {
+    // Callee-saved registers
+    pub x19: u64,
+    pub x20: u64,
+    pub x21: u64,
+    pub x22: u64,
+    pub x23: u64,
+    pub x24: u64,
+    pub x25: u64,
+    pub x26: u64,
+    pub x27: u64,
+    pub x28: u64,
+    pub fp: u64,   // x29
+    pub lr: u64,   // x30
+    pub sp: u64,
+}
+
+/// CPU context stub for unsupported architectures
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+#[derive(Debug, Clone, Default)]
+#[repr(C)]
+pub struct ThreadContext {
+    _placeholder: u64,
 }
 
 /// Thread Control Block (TCB)
@@ -138,24 +168,35 @@ impl Thread {
         // Set up initial context for kernel thread
         let mut context = ThreadContext::default();
         
-        // Initial RSP points to top of stack, minus space for return address
-        context.rsp = stack_top - 8;
-        context.rip = entry;
-        context.rflags = 0x202; // IF=1, reserved=1
-        context.cs = crate::gdt::KERNEL_CODE_SELECTOR as u64;
-        context.ss = crate::gdt::KERNEL_DATA_SELECTOR as u64;
-        
-        // Set up stack with thread_entry_wrapper as return address
-        // This wrapper will call the actual entry point with the argument
-        unsafe {
-            let ret_addr_ptr = (stack_top - 8) as *mut u64;
-            *ret_addr_ptr = thread_entry_wrapper as u64;
+        #[cfg(target_arch = "x86_64")]
+        {
+            // Initial RSP points to top of stack, minus space for return address
+            context.rsp = stack_top - 8;
+            context.rip = entry;
+            context.rflags = 0x202; // IF=1, reserved=1
+            context.cs = crate::gdt::KERNEL_CODE_SELECTOR as u64;
+            context.ss = crate::gdt::KERNEL_DATA_SELECTOR as u64;
+            
+            // Set up stack with thread_entry_wrapper as return address
+            // This wrapper will call the actual entry point with the argument
+            unsafe {
+                let ret_addr_ptr = (stack_top - 8) as *mut u64;
+                *ret_addr_ptr = thread_entry_wrapper as u64;
+            }
+            
+            // R12 = entry point, R13 = argument (callee-saved, used by wrapper)
+            context.r12 = entry;
+            context.r13 = arg;
+            context.rip = thread_entry_wrapper as u64;
         }
         
-        // R12 = entry point, R13 = argument (callee-saved, used by wrapper)
-        context.r12 = entry;
-        context.r13 = arg;
-        context.rip = thread_entry_wrapper as u64;
+        #[cfg(target_arch = "aarch64")]
+        {
+            context.sp = stack_top;
+            context.lr = thread_entry_wrapper as u64;
+            context.x19 = entry;
+            context.x20 = arg;
+        }
         
         Self {
             tid,
@@ -197,21 +238,33 @@ impl Thread {
         // Set up initial context for user thread
         let mut context = ThreadContext::default();
         
-        // User thread starts in Ring 3
-        context.user_rsp = user_stack;
-        context.user_rip = entry;
-        context.rflags = 0x202; // IF=1
-        context.cs = crate::gdt::USER_CODE_SELECTOR as u64;
-        context.ss = crate::gdt::USER_DATA_SELECTOR as u64;
+        #[cfg(target_arch = "x86_64")]
+        {
+            // User thread starts in Ring 3
+            context.user_rsp = user_stack;
+            context.user_rip = entry;
+            context.rflags = 0x202; // IF=1
+            context.cs = crate::gdt::USER_CODE_SELECTOR as u64;
+            context.ss = crate::gdt::USER_DATA_SELECTOR as u64;
+            
+            // Kernel context for first entry
+            context.rsp = kernel_stack_top;
+            context.rip = user_thread_entry as u64;
+            
+            // Store entry point and arg in callee-saved registers
+            context.r12 = entry;
+            context.r13 = user_stack;
+            context.r14 = arg;
+        }
         
-        // Kernel context for first entry
-        context.rsp = kernel_stack_top;
-        context.rip = user_thread_entry as u64;
-        
-        // Store entry point and arg in callee-saved registers
-        context.r12 = entry;
-        context.r13 = user_stack;
-        context.r14 = arg;
+        #[cfg(target_arch = "aarch64")]
+        {
+            context.sp = kernel_stack_top;
+            context.lr = user_thread_entry as u64;
+            context.x19 = entry;
+            context.x20 = user_stack;
+            context.x21 = arg;
+        }
         
         Self {
             tid,
@@ -267,7 +320,20 @@ extern "C" fn thread_entry_wrapper() {
     );
 }
 
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(target_arch = "aarch64")]
+#[unsafe(naked)]
+extern "C" fn thread_entry_wrapper() {
+    core::arch::naked_asm!(
+        "msr daifclr, #0xf",   // Enable all interrupts
+        "mov x0, x20",         // arg -> first parameter
+        "blr x19",             // Call entry point
+        "bl {exit}",           // Call thread_exit
+        "brk #0",              // Should never reach here
+        exit = sym thread_exit,
+    );
+}
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 extern "C" fn thread_entry_wrapper() {
     // Thread entry not implemented for this architecture yet
 }
@@ -554,28 +620,31 @@ fn try_steal_work(my_cpu: usize) -> Option<Tid> {
 
 /// Initialize thread subsystem (BSP only)
 pub fn init() {
-    // Create idle thread (TID 0) for BSP
-    let idle_thread = Thread {
-        tid: 0,
-        pid: 0,
-        name: String::from("idle"),
-        state: ThreadState::Running,
-        flags: ThreadFlags(ThreadFlags::KERNEL | ThreadFlags::MAIN),
-        context: ThreadContext::default(),
-        kernel_stack: None,
-        kernel_stack_top: 0,
-        user_stack_top: 0,
-        entry_point: 0,
-        entry_arg: 0,
-        exit_code: 0,
-        cpu_time: 0,
-        joiner: None,
-    };
-    
-    THREADS.write().insert(0, idle_thread);
-    CURRENT_TIDS[0].store(0, Ordering::SeqCst);
-    
-    crate::log!("[THREAD] Thread subsystem initialized");
+    crate::serial_println!("[THREAD] Creating idle thread...");
+    // Disable interrupts during init to prevent IRQ interference with spinlocks
+    crate::arch::without_interrupts(|| {
+        // Create idle thread (TID 0) for BSP
+        let idle_thread = Thread {
+            tid: 0,
+            pid: 0,
+            name: String::from("idle"),
+            state: ThreadState::Running,
+            flags: ThreadFlags(ThreadFlags::KERNEL | ThreadFlags::MAIN),
+            context: ThreadContext::default(),
+            kernel_stack: None,
+            kernel_stack_top: 0,
+            user_stack_top: 0,
+            entry_point: 0,
+            entry_arg: 0,
+            exit_code: 0,
+            cpu_time: 0,
+            joiner: None,
+        };
+        
+        THREADS.write().insert(0, idle_thread);
+        CURRENT_TIDS[0].store(0, Ordering::SeqCst);
+    });
+    crate::serial_println!("[THREAD] Thread subsystem initialized");
 }
 
 /// Initialize scheduler for an Application Processor.
@@ -719,6 +788,7 @@ fn context_switch(from: Tid, to: Tid) {
     }
     
     // Update TSS with new kernel stack (for Ring 3 -> Ring 0 transitions)
+    #[cfg(target_arch = "x86_64")]
     if to_kernel_stack != 0 {
         crate::gdt::set_kernel_stack(to_kernel_stack);
         
@@ -784,8 +854,34 @@ extern "C" fn switch_context(from: *mut ThreadContext, to: *const ThreadContext)
     );
 }
 
-/// Context switch stub for non-x86_64 architectures (no-op)
-#[cfg(not(target_arch = "x86_64"))]
+/// Context switch stub for non-x86_64/non-aarch64 architectures (no-op)
+#[cfg(target_arch = "aarch64")]
+#[unsafe(naked)]
+extern "C" fn switch_context(_from: *mut ThreadContext, _to: *const ThreadContext) {
+    core::arch::naked_asm!(
+        // Save callee-saved registers to 'from' (x0)
+        "stp x19, x20, [x0, #0]",
+        "stp x21, x22, [x0, #16]",
+        "stp x23, x24, [x0, #32]",
+        "stp x25, x26, [x0, #48]",
+        "stp x27, x28, [x0, #64]",
+        "stp x29, x30, [x0, #80]",
+        "mov x9, sp",
+        "str x9, [x0, #96]",
+        // Load callee-saved registers from 'to' (x1)
+        "ldp x19, x20, [x1, #0]",
+        "ldp x21, x22, [x1, #16]",
+        "ldp x23, x24, [x1, #32]",
+        "ldp x25, x26, [x1, #48]",
+        "ldp x27, x28, [x1, #64]",
+        "ldp x29, x30, [x1, #80]",
+        "ldr x9, [x1, #96]",
+        "mov sp, x9",
+        "ret",
+    );
+}
+
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 extern "C" fn switch_context(_from: *mut ThreadContext, _to: *const ThreadContext) {
     // Context switching not implemented for this architecture yet
 }

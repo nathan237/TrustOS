@@ -295,7 +295,7 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    timecmd <cmd>       Run command & measure elapsed time");
     crate::println!("    benchmark [test]    Run performance benchmarks");
     crate::println!("    keytest             Interactive keyboard scancode tester");
-    crate::println!("    test                Run internal kernel test suite");
+    crate::println!("    hwtest              Run internal kernel test suite");
     crate::println!("    inttest             Integration test (20 tests, +FAT32 +DHCP +VirtIO +IPv6 +Pipe)");
     crate::println!("    panic               Trigger kernel panic (debug only)");
     crate::println!();

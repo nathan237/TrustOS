@@ -187,9 +187,9 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // User management
     "login", "su", "passwd", "adduser", "useradd", "deluser", "userdel", "users", "logout",
     // Test and debug
-    "test", "keytest", "hexdump", "xxd", "panic",
+    "hwtest", "keytest", "hexdump", "xxd", "panic",
     // Desktop GUI (multi-layer compositor)
-    "desktop", "gui", "cosmic", "open", "trustedit",
+    "desktop", "gui", "mobile", "cosmic", "open", "trustedit",
     // Kernel signature
     "signature",
     // Security
@@ -202,6 +202,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "disk", "dd", "ahci", "fdisk", "partitions",
     // Hardware
     "lspci", "lshw", "hwinfo", "gpu", "gpuexec", "sdma", "neural", "a11y",
+    // USB / checkm8
+    "lsusb", "checkm8",
     // Audio
     "beep", "audio", "synth", "play",
     // Network
@@ -222,7 +224,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // TrustProbe
     "hwscan", "trustprobe", "probe",
     // Fun
-    "neofetch", "matrix", "cowsay",
+    "neofetch", "matrix", "cowsay", "rain",
     // Showcase
     "showcase",
     "showcase3d",
@@ -946,7 +948,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "adduser" | "useradd" => commands::cmd_adduser(args),
         "deluser" | "userdel" => commands::cmd_deluser(args),
         "users" => commands::cmd_users(),
-        "test" => commands::cmd_test(),
+        "hwtest" => commands::cmd_test(),
         "memtest" => commands::cmd_memtest(),
         "inttest" => commands::cmd_inttest(),
         "debugnew" => commands::cmd_debugnew(),
@@ -960,6 +962,29 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "suspend" | "s3" => commands::cmd_sleep(),
         "neofetch" => commands::cmd_neofetch(),
         "matrix" => commands::cmd_matrix(),
+        "rain" => {
+            // rain [slow|mid|fast] — set matrix rain speed preset
+            if args.is_empty() {
+                let d = crate::desktop::DESKTOP.lock();
+                let name = match d.matrix_rain_preset { 0 => "slow", 2 => "fast", _ => "mid" };
+                drop(d);
+                crate::println!("Current rain preset: {}", name);
+                crate::println!("Usage: rain <slow|mid|fast>");
+            } else {
+                let preset: u8 = match args[0] {
+                    "slow" | "s" | "0" => 0,
+                    "mid" | "m" | "1" | "medium" => 1,
+                    "fast" | "f" | "2" => 2,
+                    _ => {
+                        crate::println!("Unknown preset '{}'. Use: slow, mid, fast", args[0]);
+                        return;
+                    }
+                };
+                crate::desktop::DESKTOP.lock().set_rain_preset(preset);
+                let name = match preset { 0 => "slow", 2 => "fast", _ => "mid" };
+                crate::println!("Rain speed set to: {}", name);
+            }
+        },
         "cowsay" => commands::cmd_cowsay(args),
 
         // -- desktop module: COSMIC, Showcase, Benchmark, Signature, Security --
@@ -969,6 +994,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "demo" | "tutorial" | "tour" => desktop::cmd_demo(args),
         "filled3d" => desktop::cmd_filled3d(),
         "desktop" | "gui" => desktop::launch_desktop_env(None),
+        "mobile" => desktop::launch_mobile_env(),
         "cosmic" => desktop::cmd_cosmic_v2(),
         "open" => desktop::cmd_open(args),
         "trustedit" | "edit3d" | "3dedit" => desktop::launch_desktop_env(Some(("TrustEdit 3D", crate::desktop::WindowType::ModelEditor, 100, 60, 700, 500))),
@@ -978,7 +1004,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "security" | "sec" | "caps" => desktop::cmd_security(args),
 
         // -- vm module: VM, Linux, Distro, Alpine, Disk, Hardware, Network core --
-        "vm" | "linux" | "gui" => {
+        "vm" | "linux" => {
             if args.is_empty() {
                 vm::cmd_linux_shell();
             } else {
@@ -1071,6 +1097,11 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "exec" | "run" | "./" => vm::cmd_exec(args, command),
         "elfinfo" => vm::cmd_elfinfo(args),
         "lsusb" => unix::cmd_lsusb(),
+        "checkm8" => {
+            let arg_str = args.join(" ");
+            let result = crate::drivers::checkm8::run_exploit(&arg_str);
+            crate::println!("{}", result);
+        }
         "lscpu" => unix::cmd_lscpu(),
         "smpstatus" => unix::cmd_smpstatus(),
         "smp" => unix::cmd_smp(args),

@@ -381,8 +381,8 @@ const SCANCODE_TO_ASCII_SHIFT: [u8; 128] = [
 
 /// Process a scancode from the keyboard interrupt
 pub fn handle_scancode(scancode: u8) {
-    // Debug: log all scancodes
-    crate::serial_println!("[KB-IRQ] scancode=0x{:02X}", scancode);
+    // Debug: log all scancodes (disabled — too noisy for serial automation)
+    // crate::serial_println!("[KB-IRQ] scancode=0x{:02X}", scancode);
     
     // Ignore invalid/spurious scancodes and PS/2 controller responses
     // 0xFA = ACK, 0xFE = Resend, 0xFC = Error, 0xEE = Echo
@@ -606,7 +606,7 @@ pub fn handle_scancode(scancode: u8) {
     
     // If valid ASCII, add to buffer
     if ascii != 0 {
-        crate::serial_println!("[KB-BUF] push ascii={} (0x{:02X}) char='{}'", ascii, ascii, ascii as char);
+        // crate::serial_println!("[KB-BUF] push ascii={} (0x{:02X}) char='{}'", ascii, ascii, ascii as char);
         KEYBOARD_BUFFER.lock().push(ascii);
         // Sticky keys: consume latched modifiers after a non-modifier key
         crate::accessibility::sticky_consume_latched();

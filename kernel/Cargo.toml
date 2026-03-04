@@ -32,6 +32,10 @@ name = "trustos_kernel"
 path = "src/main.rs"
 
 [features]
-default = ["emulators"]
+default = ["emulators", "daw", "hires-logo"]
 ## NES + Game Boy emulators and GameLab analysis dashboard
 emulators = []
+## TrustDAW embedded audio (includes ~29 MB WAV). Disable for slim builds.
+daw = []
+## High-res 400×400 ARGB logo bitmap (~647 KB). Disable for slim builds.
+hires-logo = []

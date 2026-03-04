@@ -7,6 +7,10 @@
 *.img
 *.iso
 
+# Generated data disks
+trustos_data.img
+trustos_audio.vdi
+
 # Cargo
 Cargo.lock
 
@@ -92,6 +96,9 @@ server/packages/*.tar.gz
 *.png
 *.ppm
 qemu_screenshot*.png
+
+# Keep showcase screenshots
+!screenshots/*.png
 
 # Linux kernel binaries
 linux/bzImage

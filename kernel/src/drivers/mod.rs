@@ -9,12 +9,18 @@ pub mod ata;
 pub mod usb;
 pub mod usb_storage;
 pub mod xhci;
+pub mod checkm8;
 pub mod input;
 pub mod pci_ids;
 pub mod partition;
 pub mod virtio_gpu;
 pub mod hda;
 pub mod amdgpu;
+
+/// Apple Silicon hardware drivers (AIC, UART, DART, PMGR)
+/// Used for iPhone/iPad bare-metal boot via checkm8/PongoOS
+#[cfg(target_arch = "aarch64")]
+pub mod apple;
 
 use alloc::boxed::Box;
 use alloc::string::String;

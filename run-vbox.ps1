@@ -91,7 +91,7 @@ if (Test-Path $ISOPath) {
     Write-Host "  3. Or run build-limine.ps1" -ForegroundColor Gray
 }
 
-# Create and attach a persistent data disk (AHCI port 1)
+# Persistent data disk on AHCI port 1 (for TrustFS filesystem)
 $DataVdi = "$PSScriptRoot\trustos_data.vdi"
 if (-not (Test-Path $DataVdi)) {
     Write-Host "Creating 64 MB data disk: $DataVdi" -ForegroundColor Yellow
@@ -99,7 +99,29 @@ if (-not (Test-Path $DataVdi)) {
     Write-Host "Data disk created" -ForegroundColor Green
 }
 & $VBoxManage storageattach $VMName --storagectl "SATA" --port 1 --device 0 --type hdd --medium $DataVdi
-Write-Host "Data disk attached on SATA port 1" -ForegroundColor Green
+Write-Host "Data disk (TrustFS) attached on SATA port 1" -ForegroundColor Green
+
+# Audio data disk on AHCI port 2 (raw sectors with WAV)
+$AudioImg = "$PSScriptRoot\trustos_data.img"
+$AudioVdi = "$PSScriptRoot\trustos_audio.vdi"
+$WavFile = "$PSScriptRoot\kernel\src\trustdaw\untitled2.wav"
+if (Test-Path $WavFile) {
+    Write-Host "Preparing audio disk with WAV..." -ForegroundColor Yellow
+    python "$PSScriptRoot\prepare-data-disk.py"
+    if (Test-Path $AudioImg) {
+        if (Test-Path $AudioVdi) {
+            & $VBoxManage storageattach $VMName --storagectl "SATA" --port 2 --device 0 --medium none 2>$null
+            & $VBoxManage closemedium disk $AudioVdi --delete 2>$null
+            Remove-Item $AudioVdi -ErrorAction SilentlyContinue
+        }
+        & $VBoxManage convertfromraw $AudioImg $AudioVdi --format VDI
+        Write-Host "Audio disk created with WAV" -ForegroundColor Green
+    }
+}
+if (Test-Path $AudioVdi) {
+    & $VBoxManage storageattach $VMName --storagectl "SATA" --port 2 --device 0 --type hdd --medium $AudioVdi
+    Write-Host "Audio disk attached on SATA port 2" -ForegroundColor Green
+}
 
 # Enable serial port for output
 & $VBoxManage modifyvm $VMName --uart1 0x3F8 4 --uartmode1 file "$PSScriptRoot\serial.log"
