@@ -9,6 +9,8 @@ pub mod icmp;
 pub mod tcp;
 pub mod udp;
 pub mod dhcp;
+pub mod dhcpd;
+pub mod tftpd;
 pub mod dns;
 pub mod http;
 pub mod https;
@@ -100,6 +102,12 @@ pub fn poll() {
     
     // Poll DHCP client
     dhcp::poll();
+    
+    // Poll TFTP server retransmissions
+    tftpd::poll();
+
+    // Check TCP retransmissions
+    tcp::check_retransmits();
 }
 
 /// Send raw ethernet frame

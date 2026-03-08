@@ -655,6 +655,25 @@ pub fn set_ipv4_config(ip: Ipv4Address, subnet: Ipv4Address, gateway: Option<Ipv
     }
 }
 
+/// Apply a MAC-derived fallback IP if DHCP has not configured one yet.
+/// Useful for shared L2 networks (QEMU socket/mcast) without a DHCP server.
+/// Produces 10.0.100.{mac[5]} on a /24 subnet.
+pub fn ensure_fallback_ip() {
+    let already_set = {
+        let iface = INTERFACE.lock();
+        iface.as_ref().and_then(|i| i.ip).is_some()
+    };
+    if already_set {
+        return;
+    }
+    let mac = get_mac_address().unwrap_or([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
+    let host = if mac[5] == 0 { 1 } else if mac[5] == 255 { 254 } else { mac[5] };
+    let ip = Ipv4Address::new(10, 0, 100, host);
+    let subnet = Ipv4Address::new(255, 255, 255, 0);
+    set_ipv4_config(ip, subnet, None);
+    crate::serial_println!("[NET] Fallback IP from MAC: {}", ip);
+}
+
 /// Bring interface up
 pub fn up() {
     let mut iface = INTERFACE.lock();

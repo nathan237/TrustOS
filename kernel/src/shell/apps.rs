@@ -2994,6 +2994,93 @@ pub(super) fn cmd_trustview(args: &[&str]) {
     }
 }
 
+/// RISC-V Universal Translation Layer: run ANY architecture's binaries
+pub(super) fn cmd_rv_xlat(args: &[&str]) {
+    let path = args.get(0).copied().unwrap_or("");
+
+    if path.is_empty() || path == "help" || path == "-h" {
+        crate::println_color!(COLOR_CYAN, "+--------------------------------------------------------------+");
+        crate::println_color!(COLOR_CYAN, "|     TrustOS RISC-V Universal Translation Layer               |");
+        crate::println_color!(COLOR_CYAN, "|  Run x86_64/ARM64/MIPS binaries via RISC-V IR translation    |");
+        crate::println_color!(COLOR_CYAN, "+--------------------------------------------------------------+");
+        crate::println!();
+        crate::println!("Usage: rv-xlat <elf-binary>");
+        crate::println!();
+        crate::println!("Supports: x86_64, AArch64, RISC-V (passthrough), MIPS64");
+        crate::println!("Pipeline: Source ISA → RISC-V IR → Interpreter → Syscall xlat");
+        crate::println!();
+        crate::println!("Examples:");
+        crate::println!("  rv-xlat /alpine/bin/true    # Run x86_64 binary via RV translation");
+        crate::println!("  rv-xlat /bin/hello_arm      # Run ARM64 binary via RV translation");
+        crate::println!();
+        crate::println!("See also: rv-disasm (show RISC-V IR without executing)");
+        return;
+    }
+
+    // Read the ELF binary
+    let data = match crate::ramfs::with_fs(|fs| fs.read_file(path).map(|d| d.to_vec())) {
+        Ok(d) => d,
+        Err(_) => {
+            crate::println_color!(COLOR_RED, "Cannot read file: {}", path);
+            return;
+        }
+    };
+
+    // Detect architecture
+    match crate::riscv_translator::detect_elf_arch(&data) {
+        Some(arch) => {
+            crate::println_color!(COLOR_GREEN, "[RV-XLAT] Detected: {} binary ({} bytes)", arch.name(), data.len());
+        }
+        None => {
+            crate::println_color!(COLOR_RED, "Not a valid ELF binary");
+            return;
+        }
+    }
+
+    // Translate and run
+    match crate::riscv_translator::translate_and_run(&data) {
+        Ok(code) => {
+            crate::println!();
+            if code == 0 {
+                crate::println_color!(COLOR_GREEN, "[RV-XLAT] Process exited successfully (code 0)");
+            } else {
+                crate::println_color!(COLOR_YELLOW, "[RV-XLAT] Process exited with code {}", code);
+            }
+        }
+        Err(e) => {
+            crate::println_color!(COLOR_RED, "[RV-XLAT] Error: {}", e);
+        }
+    }
+}
+
+/// RISC-V disassembly: show RISC-V IR translation without executing
+pub(super) fn cmd_rv_disasm(args: &[&str]) {
+    let path = args.get(0).copied().unwrap_or("");
+
+    if path.is_empty() || path == "help" {
+        crate::println!("Usage: rv-disasm <elf-binary>");
+        crate::println!("Shows the RISC-V IR translation of a binary");
+        return;
+    }
+
+    let data = match crate::ramfs::with_fs(|fs| fs.read_file(path).map(|d| d.to_vec())) {
+        Ok(d) => d,
+        Err(_) => {
+            crate::println_color!(COLOR_RED, "Cannot read file: {}", path);
+            return;
+        }
+    };
+
+    match crate::riscv_translator::translate_and_disasm(&data) {
+        Ok(output) => {
+            crate::println!("{}", output);
+        }
+        Err(e) => {
+            crate::println_color!(COLOR_RED, "Error: {}", e);
+        }
+    }
+}
+
 /// Transpile command: analyze and convert Linux binaries to Rust
 pub(super) fn cmd_transpile(args: &[&str]) {
     let subcmd = args.get(0).copied().unwrap_or("help");

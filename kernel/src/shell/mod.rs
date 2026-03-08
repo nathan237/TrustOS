@@ -49,6 +49,15 @@ pub fn is_capturing() -> bool {
     CAPTURE_MODE.load(core::sync::atomic::Ordering::Relaxed)
 }
 
+/// Clear the capture buffer and return its contents.
+/// Used by the desktop terminal to retrieve command output.
+pub fn take_captured() -> String {
+    let mut buf = CAPTURE_BUF.lock();
+    let s = buf.clone();
+    buf.clear();
+    s
+}
+
 /// Draw a solid block cursor at the current console position (no cursor movement).
 /// Uses fill_rect directly to avoid non-ASCII character encoding issues.
 #[inline]
@@ -634,6 +643,10 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                 if count % 5000 == 0 {
                     crate::netstack::poll();
                 }
+                // Poll mesh network more frequently for RPC responsiveness
+                if count % 100 == 0 && crate::jarvis::mesh::is_active() {
+                    crate::jarvis::mesh_poll();
+                }
                 // Poll Jarvis mentor serial commands (learn from external AI)
                 if count % 10000 == 0 {
                     crate::jarvis::mentor::poll_serial();
@@ -761,7 +774,7 @@ pub fn read_line() -> alloc::string::String {
 }
 
 /// Execute a shell command (handles pipes and redirection)
-pub(super) fn execute_command(cmd: &str) {
+pub fn execute_command(cmd: &str) {
     if cmd.is_empty() {
         return;
     }
@@ -1231,6 +1244,8 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "wayland" | "wl" => apps::cmd_wayland(args),
         "gterm" | "graphterm" => apps::cmd_gterm(args),
         "transpile" | "disasm" | "analyze" => apps::cmd_transpile(args),
+        "rv-xlat" | "rvxlat" | "xlat" => apps::cmd_rv_xlat(args),
+        "rv-disasm" | "rvdisasm" => apps::cmd_rv_disasm(args),
         "trustview" | "tv" => apps::cmd_trustview(args),
         "lab" | "trustlab" => apps::cmd_lab(args),
         "hwscan" | "trustprobe" | "probe" => apps::cmd_hwscan(args),
@@ -1242,6 +1257,9 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
 
         // -- Jarvis AI assistant --
         "jarvis" | "j" | "ai" | "assistant" => jarvis::cmd_jarvis(args),
+        "mesh" | "jarvis-mesh" | "jmesh" => commands::cmd_mesh(args),
+        "pxe" | "pxeboot" | "replicate" => commands::cmd_pxe(args),
+        "guardian" | "pact" | "gardien" => commands::cmd_guardian(args),
 
         "" => {}
         _ if unix::try_stub(command) => {}

@@ -1,0 +1,121 @@
+{
+  "vtable": {
+    "vtable_candidates": []
+  },
+  "kernel_functions": {
+    "ml_io_map": {
+      "status": "xrefs_not_found",
+      "string_va": "0xfffffff00ad2b0a6"
+    },
+    "ml_phys_read": {
+      "status": "xrefs_not_found",
+      "string_va": "0xfffffff007059813"
+    },
+    "ml_phys_write": {
+      "status": "xrefs_not_found",
+      "string_va": "0xfffffff007059852"
+    },
+    "allproc": {
+      "status": "string_not_found"
+    },
+    "current_proc": {
+      "status": "xrefs_not_found",
+      "string_va": "0xfffffff007010230"
+    },
+    "proc_ucred": {
+      "status": "xrefs_not_found",
+      "string_va": "0xfffffff00ad035ce"
+    },
+    "IOSurfaceRootUserClient::externalMethod": {
+      "status": "xrefs_not_found",
+      "string_va": "0xfffffff0070ae673"
+    }
+  },
+  "dispatch_table": {},
+  "proc_offsets": {
+    "p_comm": {
+      "hits": 5,
+      "first_file": "0x5386d",
+      "first_va": "0xfffffff00705786d"
+    },
+    "p_fd": {
+      "hits": 2,
+      "first_file": "0x69e98",
+      "first_va": "0xfffffff00706de98"
+    },
+    "p_list": {
+      "hits": 9,
+      "first_file": "0x5e41e",
+      "first_va": "0xfffffff00706241e"
+    },
+    "p_flag": {
+      "hits": 20,
+      "first_file": "0x731f3",
+      "first_va": "0xfffffff0070771f3"
+    },
+    "p_stat": {
+      "hits": 20,
+      "first_file": "0x5c079",
+      "first_va": "0xfffffff007060079"
+    },
+    "task_t": {
+      "hits": 20,
+      "first_file": "0x435c0",
+      "first_va": "0xfffffff0070475c0"
+    },
+    "kernproc": {
+      "hits": 3,
+      "first_file": "0x7d961",
+      "first_va": "0xfffffff007081961"
+    },
+    "initproc": {
+      "hits": 6,
+      "first_file": "0x86ea8",
+      "first_va": "0xfffffff00708aea8"
+    },
+    "proc_ref": {
+      "hits": 4,
+      "first_file": "0x87691",
+      "first_va": "0xfffffff00708b691"
+    },
+    "proc_rele": {
+      "hits": 1,
+      "first_file": "0x3cff51b",
+      "first_va": "0xfffffff00ad0351b"
+    },
+    "kauth_cred": {
+      "hits": 20,
+      "first_file": "0x8591b",
+      "first_va": "0xfffffff00708991b"
+    },
+    "posix_cred": {
+      "hits": 2,
+      "first_file": "0x8793c",
+      "first_va": "0xfffffff00708b93c"
+    },
+    "known_offsets_reference": {
+      "p_list.le_next": "+0x00",
+      "p_list.le_prev": "+0x08",
+      "task": "+0x10",
+      "p_pid": "+0x68   (varies: 0x60-0x70)",
+      "p_fd": "+0x100  (varies)",
+      "p_ucred": "+0x0D8 (varies: 0xD0-0x100)",
+      "p_comm": "+0x2B8 (varies: 0x280-0x300)",
+      "p_flag": "+0x0E0 (varies)"
+    }
+  },
+  "function_signatures": {
+    "task_suspend": {
+      "string_va": "0xfffffff0070b063a",
+      "functions": []
+    },
+    "iosurface_max_check": {
+      "string_va": "0xfffffff00778e76c",
+      "functions": []
+    },
+    "iosurface_allocate": {
+      "string_va": "0xfffffff00778e3b6",
+      "functions": []
+    }
+  }
+}

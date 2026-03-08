@@ -12,6 +12,7 @@
 //! - Keyboard shortcuts
 
 pub mod engine;
+pub mod vsync;
 pub mod windows11;
 
 pub use engine::*;

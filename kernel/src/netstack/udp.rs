@@ -8,18 +8,36 @@ use spin::Mutex;
 static RX_UDP: Mutex<BTreeMap<u16, Vec<Vec<u8>>>> = Mutex::new(BTreeMap::new());
 static NEXT_UDP_PORT: AtomicU16 = AtomicU16::new(49152);
 
-pub fn handle_packet(data: &[u8]) {
+pub fn handle_packet(data: &[u8], src_ip: [u8; 4]) {
     if data.len() < 8 {
         return;
     }
 
-    let _src_port = u16::from_be_bytes([data[0], data[1]]);
+    let src_port = u16::from_be_bytes([data[0], data[1]]);
     let dst_port = u16::from_be_bytes([data[2], data[3]]);
     let payload = &data[8..];
 
-    // DHCP uses ports 67/68
+    // DHCP client (port 68)
     if dst_port == 68 {
         crate::netstack::dhcp::handle_packet(payload);
+        return;
+    }
+
+    // DHCP server (port 67) — PXE boot requests
+    if dst_port == 67 {
+        crate::netstack::dhcpd::handle_packet(payload);
+        return;
+    }
+
+    // TFTP server (port 69) — initial read requests
+    if dst_port == 69 {
+        crate::netstack::tftpd::handle_request_packet(payload, src_ip, src_port);
+        return;
+    }
+
+    // TFTP transfer sessions (ephemeral ports 50000+)
+    if crate::netstack::tftpd::is_transfer_port(dst_port) {
+        crate::netstack::tftpd::handle_transfer_packet(payload, src_ip, src_port, dst_port);
         return;
     }
 

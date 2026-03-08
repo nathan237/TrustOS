@@ -1,0 +1,57 @@
+{
+  "timestamp": "2026-03-02T20:21:03.142227",
+  "device": "iPhone XR (A12/T8020)",
+  "script": "uaf_characterize_v2.py",
+  "tests_run": [
+    "B"
+  ],
+  "results": {
+    "B": {
+      "test": "B_incomplete_transfer",
+      "results": [
+        {
+          "timeout_ms": 1,
+          "completed": true,
+          "time_ms": 1.23,
+          "state": 5,
+          "post_abort_state": null
+        },
+        {
+          "timeout_ms": 5,
+          "completed": true,
+          "time_ms": 1.05,
+          "state": 5,
+          "post_abort_state": null
+        },
+        {
+          "timeout_ms": 10,
+          "completed": true,
+          "time_ms": 1.17,
+          "state": 5,
+          "post_abort_state": null
+        },
+        {
+          "timeout_ms": 50,
+          "completed": true,
+          "time_ms": 1.02,
+          "state": 5,
+          "post_abort_state": null
+        },
+        {
+          "timeout_ms": 100,
+          "completed": true,
+          "time_ms": 1.11,
+          "state": 5,
+          "post_abort_state": null
+        },
+        {
+          "timeout_ms": 500,
+          "completed": true,
+          "time_ms": 1.12,
+          "state": 5,
+          "post_abort_state": null
+        }
+      ]
+    }
+  }
+}

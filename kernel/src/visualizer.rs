@@ -70,9 +70,9 @@ impl RainEffect {
 // Visualizer mode enum
 // ═══════════════════════════════════════
 
-pub const NUM_MODES: u8 = 7;
+pub const NUM_MODES: u8 = 8;
 
-pub const MODE_NAMES: [&str; 7] = [
+pub const MODE_NAMES: [&str; 8] = [
     "Sphere",
     "Morphing",
     "Lorenz",
@@ -80,6 +80,7 @@ pub const MODE_NAMES: [&str; 7] = [
     "Ribbon",
     "Starburst",
     "Image",
+    "FlowField",
 ];
 
 // ═══════════════════════════════════════
@@ -1229,9 +1230,9 @@ pub fn modulate_rain_color(
     }
     if scanline > 3 {
         let ray = scanline as f32 / 255.0;
-        r = (r + ray * 15.0).min(255.0);
+        r = (r + ray * 5.0).min(255.0);
         g = (g + ray * 50.0).min(255.0);
-        b = (b + ray * 25.0).min(255.0);
+        b = (b + ray * 5.0).min(255.0);
     }
     if ao > 0 && glow > 0 {
         let ao_factor = 1.0 - (ao as f32 / 255.0) * 0.45;
@@ -1242,54 +1243,76 @@ pub fn modulate_rain_color(
         if glow > 80 {
             let depth_scale = 0.4 + 0.6 * (depth as f32 / 255.0);
             let g_f = g_f * depth_scale;
-            let shift = beat * 0.2;
-            let tr = (140.0 + shift * 80.0 + energy * 60.0).min(255.0);
+            // Matrix palette: glow is green/white, NEVER yellow
+            let tr = (100.0 + energy * 40.0).min(180.0);
             let tg = 255.0f32;
-            let tb = (190.0 + shift * 40.0 + energy * 30.0).min(255.0);
+            let tb = (100.0 + energy * 30.0).min(180.0);
             r = (r * (1.0 - g_f) + tr * g_f).min(255.0);
             g = (g * (1.0 - g_f) + tg * g_f).min(255.0);
             b = (b * (1.0 - g_f) + tb * g_f).min(255.0);
         } else {
             let boost = g_f * 2.5;
-            r = (r * (1.0 + boost)).min(255.0);
+            // Only boost green channel significantly
+            r = (r * (1.0 + boost * 0.3)).min(255.0);
             g = (g * (1.0 + boost)).min(255.0);
-            b = (b * (1.0 + boost)).min(255.0);
+            b = (b * (1.0 + boost * 0.3)).min(255.0);
         }
     }
     if inner_glow > 20 {
         let ig = (inner_glow as f32 - 20.0) / 235.0;
         let ig = ig * ig;
-        r = (r + ig * 30.0).min(255.0);
-        g = (g + ig * 70.0).min(255.0);
-        b = (b + ig * 45.0).min(255.0);
+        // Interior color: deep inside the shape gets a vivid color tint
+        // Color varies by depth: near-face = bright cyan, far-face = deep green
+        let depth_t = depth as f32 / 255.0;
+        // Interior color palette: cyan-green gradient based on depth
+        let int_r = 0.0 + depth_t * 20.0;       // very little red
+        let int_g = 120.0 + depth_t * 100.0;     // strong green
+        let int_b = 80.0 + (1.0 - depth_t) * 80.0; // cyan bias for near faces
+        // Blend toward interior color (stronger for deeper inner_glow)
+        let blend = (ig * 0.65).min(0.65); // max 65% color blend
+        r = (r * (1.0 - blend) + int_r * blend).min(255.0);
+        g = (g * (1.0 - blend) + int_g * blend).min(255.0);
+        b = (b * (1.0 - blend) + int_b * blend).min(255.0);
+        // Also boost overall brightness inside shape
+        let bright_boost = ig * 40.0;
+        g = (g + bright_boost).min(255.0);
+        b = (b + bright_boost * 0.5).min(255.0);
     }
     if fresnel > 120 {
         let f_t = (fresnel as f32 - 120.0) / 135.0;
-        r = (r + f_t * 80.0).min(255.0);
-        g = (g + f_t * 120.0).min(255.0);
-        b = (b + f_t * 100.0).min(255.0);
+        // Edges push strongly toward white (contour effect)
+        let white_push = f_t * f_t; // quadratic for sharp edge
+        r = (r * (1.0 - white_push) + 220.0 * white_push).min(255.0);
+        g = (g * (1.0 - white_push) + 255.0 * white_push).min(255.0);
+        b = (b * (1.0 - white_push) + 220.0 * white_push).min(255.0);
     }
     if specular > 30 {
         let s_t = (specular as f32 - 30.0) / 225.0;
         let s_t = s_t * s_t;
-        r = (r + s_t * 180.0).min(255.0);
+        // Specular highlights: near-white hot spots
+        r = (r + s_t * 160.0).min(255.0);
         g = (g + s_t * 200.0).min(255.0);
-        b = (b + s_t * 190.0).min(255.0);
+        b = (b + s_t * 160.0).min(255.0);
     }
     if bloom > 10 {
         let bl = bloom as f32 / 255.0;
-        r = (r + bl * 40.0).min(255.0);
+        r = (r + bl * 15.0).min(255.0);
         g = (g + bl * 55.0).min(255.0);
-        b = (b + bl * 45.0).min(255.0);
+        b = (b + bl * 15.0).min(255.0);
     }
     if ripple > 0 {
         let rip = ripple as f32 / 255.0;
-        r = (r + 20.0 * rip).min(255.0);
+        r = (r + 5.0 * rip).min(255.0);
         g = (g + 35.0 * rip).min(255.0);
-        b = (b + 30.0 * rip).min(255.0);
+        b = (b + 5.0 * rip).min(255.0);
     }
 
-    (r as u8, g as u8, b as u8)
+    // Matrix palette enforcement: R and B must never exceed G
+    // This guarantees pure white/green/dark-green/black — no yellow ever
+    let g_final = g as u8;
+    let r_final = (r as u8).min(g_final);
+    let b_final = (b as u8).min(g_final);
+    (r_final, g_final, b_final)
 }
 
 // ═══════════════════════════════════════

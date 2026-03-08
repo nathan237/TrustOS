@@ -1,0 +1,360 @@
+{
+  "timestamp": "2026-03-02T21:07:35.508517",
+  "device": "iPhone XR (A12/T8020)",
+  "results": {
+    "A": [
+      {
+        "attempt": 0,
+        "state_before": 2,
+        "stall_ok": false,
+        "time_ms": 0.47,
+        "alive": true,
+        "state_after": 2,
+        "dnload_after_stall": true,
+        "dnload_state": 5
+      },
+      {
+        "attempt": 1,
+        "state_before": null,
+        "stall_ok": false,
+        "time_ms": 0.11,
+        "alive": false,
+        "state_after": null
+      },
+      {
+        "attempt": 2,
+        "state_before": 2,
+        "stall_ok": false,
+        "time_ms": 0.5,
+        "alive": true,
+        "state_after": 2,
+        "dnload_after_stall": true,
+        "dnload_state": 5
+      },
+      {
+        "attempt": 3,
+        "state_before": null,
+        "stall_ok": false,
+        "time_ms": 0.1,
+        "alive": false,
+        "state_after": null
+      },
+      {
+        "attempt": 4,
+        "state_before": 2,
+        "stall_ok": false,
+        "time_ms": 0.5,
+        "alive": true,
+        "state_after": 2,
+        "dnload_after_stall": true,
+        "dnload_state": 5
+      },
+      {
+        "timeout": 1,
+        "stall_ok": false,
+        "time_ms": 0.11,
+        "alive": false
+      },
+      {
+        "timeout": 2,
+        "stall_ok": false,
+        "time_ms": 0.5,
+        "alive": true
+      },
+      {
+        "timeout": 5,
+        "stall_ok": false,
+        "time_ms": 0.48,
+        "alive": true
+      },
+      {
+        "timeout": 10,
+        "stall_ok": false,
+        "time_ms": 0.48,
+        "alive": true
+      },
+      {
+        "timeout": 50,
+        "stall_ok": false,
+        "time_ms": 0.49,
+        "alive": true
+      },
+      {
+        "timeout": 100,
+        "stall_ok": false,
+        "time_ms": 0.52,
+        "alive": true
+      },
+      {
+        "variant": "multi_stall",
+        "survived": 20,
+        "state": 2
+      }
+    ],
+    "B": [
+      {
+        "leak_rounds": 1,
+        "events": [],
+        "stall_ok": false,
+        "leaks_completed": 1,
+        "no_leak_ok": true,
+        "state_after_reset": 5,
+        "upload_len": 0,
+        "upload_nonzero": false,
+        "uaf_survived": false
+      },
+      {
+        "leak_rounds": 3,
+        "events": [],
+        "stall_ok": false,
+        "leaks_completed": 3,
+        "no_leak_ok": true,
+        "state_after_reset": 5,
+        "upload_len": 0,
+        "upload_nonzero": false,
+        "uaf_survived": false
+      },
+      {
+        "leak_rounds": 10,
+        "events": [],
+        "stall_ok": false,
+        "leaks_completed": 10,
+        "no_leak_ok": true,
+        "state_after_reset": 5,
+        "upload_len": 0,
+        "upload_nonzero": false,
+        "uaf_survived": false
+      },
+      {
+        "leak_rounds": 30,
+        "events": [],
+        "stall_ok": false,
+        "leaks_completed": 30,
+        "no_leak_ok": true,
+        "state_after_reset": 5,
+        "upload_len": 0,
+        "upload_nonzero": false,
+        "uaf_survived": false
+      }
+    ],
+    "C": [
+      {
+        "stalls": 0,
+        "events": [
+          "crashed_at_upload"
+        ],
+        "state_after_stalls": 2,
+        "dnload1_ok": true,
+        "state_after_abort": null,
+        "upload_error": "[Errno 5] Input/Output Error"
+      },
+      {
+        "stalls": 1,
+        "events": [
+          "crashed_at_upload"
+        ],
+        "state_after_stalls": 2,
+        "dnload1_ok": true,
+        "state_after_abort": null,
+        "upload_error": "[Errno 5] Input/Output Error"
+      },
+      {
+        "stalls": 5,
+        "events": [
+          "crashed_at_upload"
+        ],
+        "state_after_stalls": 2,
+        "dnload1_ok": true,
+        "state_after_abort": null,
+        "upload_error": "[Errno 5] Input/Output Error"
+      },
+      {
+        "stalls": 10,
+        "events": [
+          "crashed_at_upload"
+        ],
+        "state_after_stalls": 2,
+        "dnload1_ok": true,
+        "state_after_abort": null,
+        "upload_error": "[Errno 5] Input/Output Error"
+      }
+    ],
+    "D": [
+      {
+        "name": "stall_dnload_stall_abort",
+        "ops": [
+          "stall",
+          "dnload",
+          "stall",
+          "abort"
+        ],
+        "events": [
+          "stall:False",
+          "dnload:ok",
+          "stall:False",
+          "abort:state=?",
+          "CRASHED after abort (step 4)"
+        ],
+        "alive": false
+      },
+      {
+        "name": "dnload_stall_abort",
+        "ops": [
+          "dnload",
+          "stall",
+          "abort"
+        ],
+        "events": [
+          "dnload:ok",
+          "stall:False",
+          "abort:state=?",
+          "CRASHED after abort (step 3)"
+        ],
+        "alive": false
+      },
+      {
+        "name": "stall_dnload_abort_stall",
+        "ops": [
+          "stall",
+          "dnload",
+          "abort",
+          "stall"
+        ],
+        "events": [
+          "stall:False",
+          "dnload:ok",
+          "abort:state=?",
+          "CRASHED after abort (step 3)"
+        ],
+        "alive": false
+      },
+      {
+        "name": "dnload_abort_stall_dnload",
+        "ops": [
+          "dnload",
+          "abort",
+          "stall",
+          "dnload"
+        ],
+        "events": [
+          "dnload:ok",
+          "abort:state=?",
+          "CRASHED after abort (step 2)"
+        ],
+        "alive": false
+      },
+      {
+        "name": "stall_dnload_stall_abort_dnload",
+        "ops": [
+          "stall",
+          "dnload",
+          "stall",
+          "abort",
+          "dnload"
+        ],
+        "events": [
+          "stall:False",
+          "dnload:ok",
+          "stall:False",
+          "abort:state=?",
+          "CRASHED after abort (step 4)"
+        ],
+        "alive": false
+      }
+    ],
+    "E": [
+      {
+        "timeout_ms": 1,
+        "timed_out": false,
+        "actual_time_ms": 1.12,
+        "alive": true,
+        "state": 5
+      },
+      {
+        "timeout_ms": 2,
+        "timed_out": false,
+        "actual_time_ms": 0.1,
+        "alive": false,
+        "state": null
+      },
+      {
+        "timeout_ms": 3,
+        "timed_out": false,
+        "actual_time_ms": 1.12,
+        "alive": true,
+        "state": 5
+      },
+      {
+        "timeout_ms": 5,
+        "timed_out": false,
+        "actual_time_ms": 0.09,
+        "alive": false,
+        "state": null
+      },
+      {
+        "timeout_ms": 10,
+        "timed_out": false,
+        "actual_time_ms": 1.14,
+        "alive": true,
+        "state": 5
+      },
+      {
+        "timeout_ms": 20,
+        "timed_out": false,
+        "actual_time_ms": 0.09,
+        "alive": false,
+        "state": null
+      },
+      {
+        "timeout_ms": 50,
+        "timed_out": false,
+        "actual_time_ms": 1.25,
+        "alive": true,
+        "state": 5
+      },
+      {
+        "variant": "stall_dnload",
+        "timeout": 1,
+        "crashed_at_stall": true
+      },
+      {
+        "variant": "stall_dnload",
+        "timeout": 5,
+        "stall_ok": false,
+        "timed_out": false,
+        "actual_time_ms": 1.12,
+        "alive": true,
+        "state": 5
+      },
+      {
+        "variant": "stall_dnload",
+        "timeout": 10,
+        "crashed_at_stall": true
+      },
+      {
+        "variant": "stall_dnload",
+        "timeout": 50,
+        "stall_ok": false,
+        "timed_out": false,
+        "actual_time_ms": 1.16,
+        "alive": true,
+        "state": 5
+      },
+      {
+        "variant": "full_sequence",
+        "timeout": 1,
+        "crashed_at_stall": true
+      },
+      {
+        "variant": "full_sequence",
+        "timeout": 5,
+        "crashed_at_abort": true
+      },
+      {
+        "variant": "full_sequence",
+        "timeout": 50,
+        "crashed_at_abort": true
+      }
+    ]
+  }
+}

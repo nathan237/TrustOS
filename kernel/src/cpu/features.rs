@@ -19,6 +19,7 @@ pub fn has_feature(feature: Feature) -> bool {
         Feature::Avx => caps.map(|c| c.avx).unwrap_or(false),
         Feature::Avx2 => caps.map(|c| c.avx2).unwrap_or(false),
         Feature::Avx512f => caps.map(|c| c.avx512f).unwrap_or(false),
+        Feature::Fma => caps.map(|c| c.fma).unwrap_or(false),
         Feature::AesNi => caps.map(|c| c.aesni).unwrap_or(false),
         Feature::Pclmulqdq => caps.map(|c| c.pclmulqdq).unwrap_or(false),
         Feature::Sha => caps.map(|c| c.sha_ext).unwrap_or(false),
@@ -47,6 +48,7 @@ pub enum Feature {
     Avx,
     Avx2,
     Avx512f,
+    Fma,
     
     // Crypto
     AesNi,
@@ -75,6 +77,7 @@ impl core::fmt::Display for Feature {
             Feature::Avx => write!(f, "AVX"),
             Feature::Avx2 => write!(f, "AVX2"),
             Feature::Avx512f => write!(f, "AVX-512F"),
+            Feature::Fma => write!(f, "FMA"),
             Feature::AesNi => write!(f, "AES-NI"),
             Feature::Pclmulqdq => write!(f, "PCLMULQDQ"),
             Feature::Sha => write!(f, "SHA-NI"),
@@ -101,6 +104,7 @@ pub fn print_features() {
         Feature::Avx,
         Feature::Avx2,
         Feature::Avx512f,
+        Feature::Fma,
         Feature::AesNi,
         Feature::Pclmulqdq,
         Feature::Sha,

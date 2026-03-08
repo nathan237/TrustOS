@@ -98,7 +98,6 @@ $qemuArgs = @(
     "-device", "intel-hda",
     "-device", "hda-duplex",
     "-device", "qemu-xhci,id=xhci",
-    "-device", "usb-kbd,bus=xhci.0",
     "-device", "usb-mouse,bus=xhci.0",
     "-serial", $serialArg,
     "-no-reboot"

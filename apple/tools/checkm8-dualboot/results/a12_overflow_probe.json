@@ -1,0 +1,12 @@
+{
+  "findings": [
+    {
+      "title": "Manifest accepted!",
+      "detail": "SecureROM accepted manifest of garbage data! State=dfuMANIFEST-WAIT-RESET",
+      "severity": "critical",
+      "timestamp": "2026-03-02T15:48:11.615239"
+    }
+  ],
+  "device": "CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C20802E IBFL:3C SRTG:[iBoot-3865.0.0.4.7]",
+  "timestamp": "2026-03-02T15:48:21.286695"
+}

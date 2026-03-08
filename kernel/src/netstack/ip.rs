@@ -2,6 +2,31 @@
 
 use alloc::vec::Vec;
 
+/// Derive a unique fallback IP from the NIC MAC address.
+/// Produces 10.0.100.{mac[5]} on /24 so each node on a shared L2
+/// gets a distinct address even without DHCP.
+fn mac_fallback_config() -> ([u8; 4], [u8; 4], Option<[u8; 4]>) {
+    let mac = crate::drivers::net::get_mac()
+        .unwrap_or([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]);
+    // Use last byte of MAC, clamp to 1..254 to stay valid host address
+    let host = if mac[5] == 0 { 1 } else if mac[5] == 255 { 254 } else { mac[5] };
+    ([10, 0, 100, host], [255, 255, 255, 0], None)
+}
+
+/// Check if dest_ip is a broadcast address (global or subnet broadcast).
+/// Broadcast packets use Ethernet MAC FF:FF:FF:FF:FF:FF, no ARP needed.
+fn is_broadcast(dest: [u8; 4], src: &[u8; 4], mask: &[u8; 4]) -> bool {
+    // Global broadcast
+    if dest == [255, 255, 255, 255] {
+        return true;
+    }
+    // Subnet broadcast: host bits all 1s  (e.g. 10.0.100.255 on /24)
+    (dest[0] & !mask[0]) == !mask[0] &&
+    (dest[1] & !mask[1]) == !mask[1] &&
+    (dest[2] & !mask[2]) == !mask[2] &&
+    (dest[3] & !mask[3]) == !mask[3]
+}
+
 /// IPv4 header structure (minimum 20 bytes)
 #[repr(C, packed)]
 struct Ipv4Header {
@@ -77,7 +102,7 @@ pub fn handle_packet(data: &[u8]) {
     match protocol {
         1 => crate::netstack::icmp::handle_packet(payload, ttl, source), // ICMP
         6 => crate::netstack::tcp::handle_packet(payload, source, dest), // TCP
-        17 => crate::netstack::udp::handle_packet(payload),      // UDP
+        17 => crate::netstack::udp::handle_packet(payload, source),      // UDP
         _ => {
             crate::serial_println!("[IP] Unsupported protocol {}", protocol);
         }
@@ -88,7 +113,7 @@ pub fn handle_packet(data: &[u8]) {
 pub fn send_packet_with_ttl(dest_ip: [u8; 4], protocol: u8, payload: &[u8], ttl: u8) -> Result<(), &'static str> {
     let (source_ip, subnet, gateway) = crate::network::get_ipv4_config()
         .map(|(ip, mask, gw)| (*ip.as_bytes(), *mask.as_bytes(), gw.map(|g| *g.as_bytes())))
-        .unwrap_or(([192, 168, 56, 100], [255, 255, 255, 0], None));
+        .unwrap_or_else(mac_fallback_config);
 
     // ── Firewall: OUTPUT chain ──
     let (sport, dport) = extract_ports(protocol, payload);
@@ -131,23 +156,27 @@ pub fn send_packet_with_ttl(dest_ip: [u8; 4], protocol: u8, payload: &[u8], ttl:
     let mut packet = header;
     packet.extend_from_slice(payload);
 
-    let dest_mac = match crate::netstack::arp::resolve(next_hop_ip) {
-        Some(mac) => mac,
-        None => {
-            crate::netstack::arp::send_request(next_hop_ip)?;
-            let start = crate::logger::get_ticks();
-            let mut spins: u32 = 0;
-            loop {
-                crate::netstack::poll();
-                if let Some(mac) = crate::netstack::arp::resolve(next_hop_ip) {
-                    break mac;
+    let dest_mac = if is_broadcast(dest_ip, &source_ip, &subnet) {
+        [0xFF; 6]
+    } else {
+        match crate::netstack::arp::resolve(next_hop_ip) {
+            Some(mac) => mac,
+            None => {
+                crate::netstack::arp::send_request(next_hop_ip)?;
+                let start = crate::logger::get_ticks();
+                let mut spins: u32 = 0;
+                loop {
+                    crate::netstack::poll();
+                    if let Some(mac) = crate::netstack::arp::resolve(next_hop_ip) {
+                        break mac;
+                    }
+                    if crate::logger::get_ticks().saturating_sub(start) > 1000 {
+                        return Err("ARP timeout");
+                    }
+                    spins = spins.wrapping_add(1);
+                    if spins > 2_000_000 { return Err("ARP timeout"); }
+                    crate::arch::halt();
                 }
-                if crate::logger::get_ticks().saturating_sub(start) > 1000 {
-                    return Err("ARP timeout");
-                }
-                spins = spins.wrapping_add(1);
-                if spins > 2_000_000 { return Err("ARP timeout"); }
-                crate::arch::halt();
             }
         }
     };
@@ -157,10 +186,10 @@ pub fn send_packet_with_ttl(dest_ip: [u8; 4], protocol: u8, payload: &[u8], ttl:
 
 /// Send IPv4 packet
 pub fn send_packet(dest_ip: [u8; 4], protocol: u8, payload: &[u8]) -> Result<(), &'static str> {
-    // Get our IP/subnet/gateway (default to host-only network settings)
+    // Get our IP/subnet/gateway (derive from MAC when DHCP unavailable)
     let (source_ip, subnet, gateway) = crate::network::get_ipv4_config()
         .map(|(ip, mask, gw)| (*ip.as_bytes(), *mask.as_bytes(), gw.map(|g| *g.as_bytes())))
-        .unwrap_or(([192, 168, 56, 100], [255, 255, 255, 0], None));
+        .unwrap_or_else(mac_fallback_config);
 
     // ── Firewall: OUTPUT chain ──
     let (sport, dport) = extract_ports(protocol, payload);
@@ -215,30 +244,30 @@ pub fn send_packet(dest_ip: [u8; 4], protocol: u8, payload: &[u8]) -> Result<(),
     let mut packet = header;
     packet.extend_from_slice(payload);
     
-    // Resolve MAC via ARP (next hop)
-    let dest_mac = match crate::netstack::arp::resolve(next_hop_ip) {
-        Some(mac) => mac,
-        None => {
-            // Send ARP request
-            crate::netstack::arp::send_request(next_hop_ip)?;
-            
-            // Wait for ARP reply (with timeout)
-            let start = crate::logger::get_ticks();
-            let mut spins: u32 = 0;
-            loop {
-                crate::netstack::poll();
-
-                if let Some(mac) = crate::netstack::arp::resolve(next_hop_ip) {
-                    break mac;
+    // Resolve MAC — broadcast IPs use FF:FF:FF:FF:FF:FF directly
+    let dest_mac = if is_broadcast(dest_ip, &source_ip, &subnet) {
+        [0xFF; 6]
+    } else {
+        match crate::netstack::arp::resolve(next_hop_ip) {
+            Some(mac) => mac,
+            None => {
+                crate::netstack::arp::send_request(next_hop_ip)?;
+                let start = crate::logger::get_ticks();
+                let mut spins: u32 = 0;
+                loop {
+                    crate::netstack::poll();
+                    if let Some(mac) = crate::netstack::arp::resolve(next_hop_ip) {
+                        break mac;
+                    }
+                    if crate::logger::get_ticks().saturating_sub(start) > 1000 {
+                        return Err("ARP timeout");
+                    }
+                    spins = spins.wrapping_add(1);
+                    if spins > 2_000_000 {
+                        return Err("ARP timeout");
+                    }
+                    crate::arch::halt();
                 }
-                if crate::logger::get_ticks().saturating_sub(start) > 1000 {
-                    return Err("ARP timeout");
-                }
-                spins = spins.wrapping_add(1);
-                if spins > 2_000_000 {
-                    return Err("ARP timeout");
-                }
-                crate::arch::halt();
             }
         }
     };

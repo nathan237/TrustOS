@@ -66,6 +66,10 @@ pub struct EditorState {
     pub find_matches: Vec<(usize, usize)>,
     /// Current match index
     pub find_match_idx: usize,
+    /// Go-to-line mode: None=normal, Some(input)=dialog active
+    pub goto_line_input: Option<String>,
+    /// Matching bracket position (line, col) — calculated each frame
+    pub matching_bracket: Option<(usize, usize)>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -125,6 +129,8 @@ impl EditorState {
             find_replace_mode: false,
             find_matches: Vec::new(),
             find_match_idx: 0,
+            goto_line_input: None,
+            matching_bracket: None,
         }
     }
     
@@ -531,6 +537,45 @@ impl EditorState {
             }
         }
         
+        // ── Go-to-line mode input handling ──
+        if self.goto_line_input.is_some() {
+            match key {
+                0x1B => { // Escape — close dialog
+                    self.goto_line_input = None;
+                    return true;
+                }
+                0x0D | 0x0A => { // Enter — jump to line
+                    if let Some(ref input) = self.goto_line_input {
+                        if let Ok(line_num) = input.parse::<usize>() {
+                            if line_num > 0 && line_num <= self.lines.len() {
+                                self.cursor_line = line_num - 1;
+                                self.cursor_col = 0;
+                                self.ensure_cursor_visible();
+                                self.status_message = Some(format!("Go to line {}", line_num));
+                            } else {
+                                self.status_message = Some(format!("Invalid line (1-{})", self.lines.len()));
+                            }
+                        }
+                    }
+                    self.goto_line_input = None;
+                    return true;
+                }
+                0x08 => { // Backspace
+                    if let Some(ref mut input) = self.goto_line_input {
+                        input.pop();
+                    }
+                    return true;
+                }
+                c if c >= b'0' && c <= b'9' => {
+                    if let Some(ref mut input) = self.goto_line_input {
+                        input.push(c as char);
+                    }
+                    return true;
+                }
+                _ => { return true; }
+            }
+        }
+        
         let shift_held = crate::keyboard::is_key_pressed(0x2A) || crate::keyboard::is_key_pressed(0x36);
         
         match key {
@@ -570,6 +615,66 @@ impl EditorState {
             // ── Ctrl+Y (redo) ──
             0x19 => {
                 self.redo();
+                self.ensure_cursor_visible();
+                return true;
+            }
+            
+            // ── Ctrl+G (go to line) ──
+            0x07 => {
+                self.goto_line_input = Some(String::new());
+                return true;
+            }
+            
+            // ── Ctrl+/ (toggle comment) ──
+            KEY_CTRL_SLASH => {
+                self.toggle_comment();
+                return true;
+            }
+            
+            // ── Ctrl+Shift+K (delete line) ──
+            KEY_CTRL_SHIFT_K => {
+                self.delete_current_line();
+                return true;
+            }
+            
+            // ── Ctrl+Shift+D (duplicate line) ──
+            KEY_CTRL_SHIFT_D => {
+                self.duplicate_line();
+                return true;
+            }
+            
+            // ── Alt+Up (move line up) ──
+            KEY_ALT_UP => {
+                self.move_line_up();
+                return true;
+            }
+            
+            // ── Alt+Down (move line down) ──
+            KEY_ALT_DOWN => {
+                self.move_line_down();
+                return true;
+            }
+            
+            // ── Ctrl+Left (word left) ──
+            KEY_CTRL_LEFT => {
+                if shift_held && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !shift_held {
+                    self.selection_anchor = None;
+                }
+                self.word_left();
+                self.ensure_cursor_visible();
+                return true;
+            }
+            
+            // ── Ctrl+Right (word right) ──
+            KEY_CTRL_RIGHT => {
+                if shift_held && self.selection_anchor.is_none() {
+                    self.selection_anchor = Some((self.cursor_line, self.cursor_col));
+                } else if !shift_held {
+                    self.selection_anchor = None;
+                }
+                self.word_right();
                 self.ensure_cursor_visible();
                 return true;
             }
@@ -811,16 +916,45 @@ impl EditorState {
                 return true;
             }
             
-            // ── Tab ──
+            // ── Tab / Shift+Tab (indent/outdent) ──
             0x09 => {
                 self.save_undo_state();
-                // Insert 4 spaces
-                if self.cursor_line < self.lines.len() {
-                    for _ in 0..4 {
-                        self.lines[self.cursor_line].insert(self.cursor_col, ' ');
-                        self.cursor_col += 1;
+                if let Some((sl, _sc, el, _ec)) = self.get_selection_range() {
+                    // Block indent/outdent: operate on all selected lines
+                    if shift_held {
+                        // Shift+Tab: outdent selected lines by up to 4 spaces
+                        for l in sl..=el.min(self.lines.len().saturating_sub(1)) {
+                            let spaces = self.lines[l].chars().take(4).take_while(|c| *c == ' ').count();
+                            if spaces > 0 {
+                                self.lines[l] = String::from(&self.lines[l][spaces..]);
+                            }
+                        }
+                    } else {
+                        // Tab: indent selected lines by 4 spaces
+                        for l in sl..=el.min(self.lines.len().saturating_sub(1)) {
+                            self.lines[l] = format!("    {}", self.lines[l]);
+                        }
                     }
                     self.dirty = true;
+                } else if shift_held {
+                    // Shift+Tab on single line: outdent
+                    if self.cursor_line < self.lines.len() {
+                        let spaces = self.lines[self.cursor_line].chars().take(4).take_while(|c| *c == ' ').count();
+                        if spaces > 0 {
+                            self.lines[self.cursor_line] = String::from(&self.lines[self.cursor_line][spaces..]);
+                            self.cursor_col = self.cursor_col.saturating_sub(spaces);
+                            self.dirty = true;
+                        }
+                    }
+                } else {
+                    // Plain Tab: insert 4 spaces
+                    if self.cursor_line < self.lines.len() {
+                        for _ in 0..4 {
+                            self.lines[self.cursor_line].insert(self.cursor_col, ' ');
+                            self.cursor_col += 1;
+                        }
+                        self.dirty = true;
+                    }
                 }
                 return true;
             }
@@ -871,6 +1005,220 @@ impl EditorState {
         let visible = 30usize;
         if self.cursor_line >= self.scroll_y + visible {
             self.scroll_y = self.cursor_line - visible + 1;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PHASE 1: EDITOR PRODUCTIVITY FEATURES
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /// Toggle line comment (Ctrl+/) — adds or removes "//" prefix
+    fn toggle_comment(&mut self) {
+        self.save_undo_state();
+        let comment_prefix = match self.language {
+            Language::Rust | Language::C | Language::JavaScript => "// ",
+            Language::Python => "# ",
+            Language::Toml => "# ",
+            _ => "// ",
+        };
+
+        // Determine range of lines to toggle
+        let (start, end) = if let Some((sl, _sc, el, _ec)) = self.get_selection_range() {
+            (sl, el)
+        } else {
+            (self.cursor_line, self.cursor_line)
+        };
+
+        // Check if ALL lines in range are already commented
+        let all_commented = (start..=end.min(self.lines.len().saturating_sub(1)))
+            .all(|l| self.lines[l].trim_start().starts_with(comment_prefix.trim_end()));
+
+        for l in start..=end.min(self.lines.len().saturating_sub(1)) {
+            if all_commented {
+                // Uncomment: remove first occurrence of comment prefix
+                let trimmed = &self.lines[l];
+                if let Some(pos) = trimmed.find(comment_prefix) {
+                    self.lines[l] = format!("{}{}", &trimmed[..pos], &trimmed[pos + comment_prefix.len()..]);
+                } else if let Some(pos) = trimmed.find(comment_prefix.trim_end()) {
+                    // Handle "//text" without space after
+                    let prefix_no_space = comment_prefix.trim_end();
+                    self.lines[l] = format!("{}{}", &trimmed[..pos], &trimmed[pos + prefix_no_space.len()..]);
+                }
+            } else {
+                // Comment: find indentation level and insert comment prefix after it
+                let indent_len = self.lines[l].chars().take_while(|c| *c == ' ' || *c == '\t').count();
+                self.lines[l] = format!("{}{}{}", &self.lines[l][..indent_len], comment_prefix, &self.lines[l][indent_len..]);
+            }
+        }
+        self.dirty = true;
+        self.status_message = Some(String::from(if all_commented { "Uncommented" } else { "Commented" }));
+    }
+
+    /// Delete current line (Ctrl+Shift+K)
+    fn delete_current_line(&mut self) {
+        if self.lines.len() <= 1 {
+            self.save_undo_state();
+            self.lines[0] = String::new();
+            self.cursor_col = 0;
+            self.dirty = true;
+            return;
+        }
+        self.save_undo_state();
+        self.lines.remove(self.cursor_line);
+        if self.cursor_line >= self.lines.len() {
+            self.cursor_line = self.lines.len().saturating_sub(1);
+        }
+        self.clamp_cursor_col();
+        self.dirty = true;
+        self.ensure_cursor_visible();
+    }
+
+    /// Duplicate current line (Ctrl+Shift+D)
+    fn duplicate_line(&mut self) {
+        if self.cursor_line < self.lines.len() {
+            self.save_undo_state();
+            let dup = self.lines[self.cursor_line].clone();
+            self.lines.insert(self.cursor_line + 1, dup);
+            self.cursor_line += 1;
+            self.dirty = true;
+            self.ensure_cursor_visible();
+        }
+    }
+
+    /// Move current line up (Alt+Up)
+    fn move_line_up(&mut self) {
+        if self.cursor_line > 0 && self.cursor_line < self.lines.len() {
+            self.save_undo_state();
+            self.lines.swap(self.cursor_line, self.cursor_line - 1);
+            self.cursor_line -= 1;
+            self.dirty = true;
+            self.ensure_cursor_visible();
+        }
+    }
+
+    /// Move current line down (Alt+Down)
+    fn move_line_down(&mut self) {
+        if self.cursor_line + 1 < self.lines.len() {
+            self.save_undo_state();
+            self.lines.swap(self.cursor_line, self.cursor_line + 1);
+            self.cursor_line += 1;
+            self.dirty = true;
+            self.ensure_cursor_visible();
+        }
+    }
+
+    /// Move cursor one word to the left (Ctrl+Left)
+    fn word_left(&mut self) {
+        if self.cursor_line >= self.lines.len() { return; }
+        if self.cursor_col == 0 {
+            // Jump to end of previous line
+            if self.cursor_line > 0 {
+                self.cursor_line -= 1;
+                self.cursor_col = self.lines[self.cursor_line].len();
+            }
+            return;
+        }
+        let line = &self.lines[self.cursor_line];
+        let bytes = line.as_bytes();
+        let mut pos = self.cursor_col.min(bytes.len());
+        // Skip whitespace backwards
+        while pos > 0 && bytes[pos - 1] == b' ' {
+            pos -= 1;
+        }
+        // Skip word characters backwards
+        while pos > 0 && bytes[pos - 1] != b' ' {
+            pos -= 1;
+        }
+        self.cursor_col = pos;
+    }
+
+    /// Move cursor one word to the right (Ctrl+Right)
+    fn word_right(&mut self) {
+        if self.cursor_line >= self.lines.len() { return; }
+        let line = &self.lines[self.cursor_line];
+        let bytes = line.as_bytes();
+        let len = bytes.len();
+        if self.cursor_col >= len {
+            // Jump to start of next line
+            if self.cursor_line + 1 < self.lines.len() {
+                self.cursor_line += 1;
+                self.cursor_col = 0;
+            }
+            return;
+        }
+        let mut pos = self.cursor_col;
+        // Skip word characters forward
+        while pos < len && bytes[pos] != b' ' {
+            pos += 1;
+        }
+        // Skip whitespace forward
+        while pos < len && bytes[pos] == b' ' {
+            pos += 1;
+        }
+        self.cursor_col = pos;
+    }
+
+    /// Find the matching bracket for the character at cursor position
+    pub fn update_matching_bracket(&mut self) {
+        self.matching_bracket = None;
+        if self.cursor_line >= self.lines.len() { return; }
+        let line = &self.lines[self.cursor_line];
+        if self.cursor_col >= line.len() { return; }
+        
+        let ch = line.as_bytes()[self.cursor_col];
+        let (target, forward) = match ch {
+            b'(' => (b')', true),
+            b')' => (b'(', false),
+            b'{' => (b'}', true),
+            b'}' => (b'{', false),
+            b'[' => (b']', true),
+            b']' => (b'[', false),
+            _ => return,
+        };
+        
+        let mut depth: i32 = 0;
+        if forward {
+            let mut l = self.cursor_line;
+            let mut c = self.cursor_col;
+            while l < self.lines.len() {
+                let bytes = self.lines[l].as_bytes();
+                while c < bytes.len() {
+                    if bytes[c] == ch { depth += 1; }
+                    else if bytes[c] == target {
+                        depth -= 1;
+                        if depth == 0 {
+                            self.matching_bracket = Some((l, c));
+                            return;
+                        }
+                    }
+                    c += 1;
+                }
+                l += 1;
+                c = 0;
+            }
+        } else {
+            let mut l = self.cursor_line;
+            let mut c = self.cursor_col as i32;
+            loop {
+                let bytes = self.lines[l].as_bytes();
+                while c >= 0 {
+                    let cu = c as usize;
+                    if cu < bytes.len() {
+                        if bytes[cu] == ch { depth += 1; }
+                        else if bytes[cu] == target {
+                            depth -= 1;
+                            if depth == 0 {
+                                self.matching_bracket = Some((l, cu));
+                                return;
+                            }
+                        }
+                    }
+                    c -= 1;
+                }
+                if l == 0 { break; }
+                l -= 1;
+                c = self.lines[l].len() as i32 - 1;
+            }
         }
     }
 }
@@ -1107,6 +1455,447 @@ pub fn token_color(kind: TokenKind) -> u32 {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// PYTHON TOKENIZER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const PYTHON_KEYWORDS: &[&str] = &[
+    "False", "None", "True", "and", "as", "assert", "async", "await",
+    "break", "class", "continue", "def", "del", "elif", "else", "except",
+    "finally", "for", "from", "global", "if", "import", "in", "is",
+    "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try",
+    "while", "with", "yield",
+];
+
+const PYTHON_BUILTINS: &[&str] = &[
+    "int", "float", "str", "bool", "list", "dict", "tuple", "set",
+    "frozenset", "bytes", "bytearray", "range", "type", "object",
+    "print", "len", "input", "open", "super", "self", "cls",
+    "Exception", "ValueError", "TypeError", "KeyError", "IndexError",
+    "RuntimeError", "StopIteration", "OSError", "IOError",
+];
+
+pub fn tokenize_python_line(line: &str) -> Vec<ColorSpan> {
+    let mut spans = Vec::new();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    
+    while i < len {
+        let ch = bytes[i];
+        
+        // Comment
+        if ch == b'#' {
+            spans.push(ColorSpan { start: i, end: len, kind: TokenKind::Comment });
+            break;
+        }
+        
+        // Decorator
+        if ch == b'@' {
+            let start = i;
+            i += 1;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') { i += 1; }
+            spans.push(ColorSpan { start, end: i, kind: TokenKind::Attribute });
+            continue;
+        }
+        
+        // String (single, double, triple-quoted)
+        if ch == b'"' || ch == b'\'' {
+            let start = i;
+            let quote = ch;
+            // Check for triple quote
+            if i + 2 < len && bytes[i+1] == quote && bytes[i+2] == quote {
+                i += 3;
+                while i + 2 < len {
+                    if bytes[i] == quote && bytes[i+1] == quote && bytes[i+2] == quote {
+                        i += 3;
+                        break;
+                    }
+                    if bytes[i] == b'\\' { i += 1; }
+                    i += 1;
+                }
+                if i >= len { i = len; }
+            } else {
+                i += 1;
+                while i < len {
+                    if bytes[i] == b'\\' && i + 1 < len { i += 2; continue; }
+                    if bytes[i] == quote { i += 1; break; }
+                    i += 1;
+                }
+            }
+            spans.push(ColorSpan { start, end: i, kind: TokenKind::String });
+            continue;
+        }
+        
+        // Number
+        if ch.is_ascii_digit() {
+            let start = i;
+            i += 1;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') { i += 1; }
+            spans.push(ColorSpan { start, end: i, kind: TokenKind::Number });
+            continue;
+        }
+        
+        // Identifier / keyword
+        if ch.is_ascii_alphabetic() || ch == b'_' {
+            let start = i;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') { i += 1; }
+            let word = &line[start..i];
+            let is_fn = i < len && bytes[i] == b'(';
+            let kind = if PYTHON_KEYWORDS.contains(&word) {
+                TokenKind::Keyword
+            } else if PYTHON_BUILTINS.contains(&word) {
+                TokenKind::Type
+            } else if is_fn {
+                TokenKind::Function
+            } else {
+                TokenKind::Normal
+            };
+            spans.push(ColorSpan { start, end: i, kind });
+            continue;
+        }
+        
+        // Brackets
+        if ch == b'(' || ch == b')' || ch == b'{' || ch == b'}' || ch == b'[' || ch == b']' {
+            spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Bracket });
+            i += 1;
+            continue;
+        }
+        
+        // Operators
+        if ch == b'+' || ch == b'-' || ch == b'*' || ch == b'/' || ch == b'=' || ch == b'!'
+            || ch == b'<' || ch == b'>' || ch == b'&' || ch == b'|' || ch == b'^'
+            || ch == b':' || ch == b';' || ch == b',' || ch == b'.' || ch == b'%' {
+            spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Operator });
+            i += 1;
+            continue;
+        }
+        
+        i += 1;
+    }
+    spans
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// JAVASCRIPT / C / C++ TOKENIZER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const JS_KEYWORDS: &[&str] = &[
+    "break", "case", "catch", "class", "const", "continue", "debugger",
+    "default", "delete", "do", "else", "export", "extends", "finally",
+    "for", "function", "if", "import", "in", "instanceof", "let", "new",
+    "of", "return", "super", "switch", "this", "throw", "try", "typeof",
+    "var", "void", "while", "with", "yield", "async", "await", "from",
+    "static", "get", "set",
+];
+
+const JS_TYPES: &[&str] = &[
+    "Array", "Boolean", "Date", "Error", "Function", "JSON", "Map", "Math",
+    "Number", "Object", "Promise", "Proxy", "RegExp", "Set", "String",
+    "Symbol", "WeakMap", "WeakSet", "console", "document", "window",
+    "null", "undefined", "true", "false", "NaN", "Infinity",
+];
+
+const C_KEYWORDS: &[&str] = &[
+    "auto", "break", "case", "char", "const", "continue", "default", "do",
+    "double", "else", "enum", "extern", "float", "for", "goto", "if",
+    "inline", "int", "long", "register", "restrict", "return", "short",
+    "signed", "sizeof", "static", "struct", "switch", "typedef", "union",
+    "unsigned", "void", "volatile", "while",
+    // C++ extras
+    "bool", "catch", "class", "constexpr", "delete", "dynamic_cast",
+    "explicit", "false", "friend", "mutable", "namespace", "new",
+    "noexcept", "nullptr", "operator", "override", "private", "protected",
+    "public", "reinterpret_cast", "static_assert", "static_cast",
+    "template", "this", "throw", "true", "try", "typeid", "typename",
+    "using", "virtual",
+];
+
+const C_TYPES: &[&str] = &[
+    "int8_t", "int16_t", "int32_t", "int64_t", "uint8_t", "uint16_t",
+    "uint32_t", "uint64_t", "size_t", "ssize_t", "ptrdiff_t", "intptr_t",
+    "uintptr_t", "FILE", "NULL", "EOF", "string", "vector", "map",
+    "set", "pair", "shared_ptr", "unique_ptr", "weak_ptr",
+];
+
+pub fn tokenize_js_c_line(line: &str, is_c: bool) -> Vec<ColorSpan> {
+    let mut spans = Vec::new();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    let keywords: &[&str] = if is_c { C_KEYWORDS } else { JS_KEYWORDS };
+    let types: &[&str] = if is_c { C_TYPES } else { JS_TYPES };
+    
+    while i < len {
+        let ch = bytes[i];
+        
+        // Line comment
+        if ch == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
+            spans.push(ColorSpan { start: i, end: len, kind: TokenKind::Comment });
+            break;
+        }
+        
+        // Block comment (single-line portion)
+        if ch == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
+            let start = i;
+            i += 2;
+            while i + 1 < len {
+                if bytes[i] == b'*' && bytes[i+1] == b'/' { i += 2; break; }
+                i += 1;
+            }
+            if i >= len { i = len; }
+            spans.push(ColorSpan { start, end: i, kind: TokenKind::Comment });
+            continue;
+        }
+        
+        // Preprocessor directives (C/C++)
+        if is_c && ch == b'#' {
+            spans.push(ColorSpan { start: i, end: len, kind: TokenKind::Macro });
+            break;
+        }
+        
+        // String
+        if ch == b'"' || ch == b'\'' || ch == b'`' {
+            let start = i;
+            let quote = ch;
+            i += 1;
+            while i < len {
+                if bytes[i] == b'\\' && i + 1 < len { i += 2; continue; }
+                if bytes[i] == quote { i += 1; break; }
+                i += 1;
+            }
+            spans.push(ColorSpan { start, end: i, kind: TokenKind::String });
+            continue;
+        }
+        
+        // Number
+        if ch.is_ascii_digit() || (ch == b'.' && i + 1 < len && bytes[i+1].is_ascii_digit()) {
+            let start = i;
+            i += 1;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'.') { i += 1; }
+            spans.push(ColorSpan { start, end: i, kind: TokenKind::Number });
+            continue;
+        }
+        
+        // Identifier / keyword
+        if ch.is_ascii_alphabetic() || ch == b'_' || ch == b'$' {
+            let start = i;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_' || bytes[i] == b'$') { i += 1; }
+            let word = &line[start..i];
+            let is_fn = i < len && bytes[i] == b'(';
+            let kind = if keywords.contains(&word) {
+                TokenKind::Keyword
+            } else if types.contains(&word) {
+                TokenKind::Type
+            } else if is_fn {
+                TokenKind::Function
+            } else {
+                TokenKind::Normal
+            };
+            spans.push(ColorSpan { start, end: i, kind });
+            continue;
+        }
+        
+        // Brackets
+        if ch == b'(' || ch == b')' || ch == b'{' || ch == b'}' || ch == b'[' || ch == b']' {
+            spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Bracket });
+            i += 1;
+            continue;
+        }
+        
+        // Operators
+        if ch == b'+' || ch == b'-' || ch == b'*' || ch == b'/' || ch == b'=' || ch == b'!'
+            || ch == b'<' || ch == b'>' || ch == b'&' || ch == b'|' || ch == b'^'
+            || ch == b':' || ch == b';' || ch == b',' || ch == b'.' || ch == b'?' || ch == b'%' {
+            spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Operator });
+            i += 1;
+            continue;
+        }
+        
+        i += 1;
+    }
+    spans
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TOML TOKENIZER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub fn tokenize_toml_line(line: &str) -> Vec<ColorSpan> {
+    let mut spans = Vec::new();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let trimmed = line.trim_start();
+    
+    // Comment lines
+    if trimmed.starts_with('#') {
+        spans.push(ColorSpan { start: 0, end: len, kind: TokenKind::Comment });
+        return spans;
+    }
+    
+    // Section headers [section] or [[array]]
+    if trimmed.starts_with('[') {
+        let offset = len - trimmed.len();
+        spans.push(ColorSpan { start: offset, end: len, kind: TokenKind::Attribute });
+        return spans;
+    }
+    
+    // Key = Value
+    let mut i = 0;
+    // Key part (before =)
+    while i < len && bytes[i] != b'=' {
+        i += 1;
+    }
+    if i < len {
+        // Key
+        spans.push(ColorSpan { start: 0, end: i, kind: TokenKind::Type });
+        // Equals sign
+        spans.push(ColorSpan { start: i, end: i + 1, kind: TokenKind::Operator });
+        i += 1;
+        // Skip whitespace
+        while i < len && bytes[i] == b' ' { i += 1; }
+        
+        if i < len {
+            let val_start = i;
+            let vch = bytes[i];
+            if vch == b'"' || vch == b'\'' {
+                // String value
+                spans.push(ColorSpan { start: val_start, end: len, kind: TokenKind::String });
+            } else if vch == b't' || vch == b'f' {
+                // Boolean
+                spans.push(ColorSpan { start: val_start, end: len, kind: TokenKind::Keyword });
+            } else if vch.is_ascii_digit() || vch == b'-' || vch == b'+' {
+                // Number
+                spans.push(ColorSpan { start: val_start, end: len, kind: TokenKind::Number });
+            } else if vch == b'[' {
+                // Array
+                spans.push(ColorSpan { start: val_start, end: len, kind: TokenKind::Bracket });
+            } else {
+                spans.push(ColorSpan { start: val_start, end: len, kind: TokenKind::Normal });
+            }
+            // Inline comment
+            if let Some(hash_pos) = line[val_start..].find('#') {
+                let abs_pos = val_start + hash_pos;
+                spans.push(ColorSpan { start: abs_pos, end: len, kind: TokenKind::Comment });
+            }
+        }
+    } else {
+        // No '=' — just content
+        spans.push(ColorSpan { start: 0, end: len, kind: TokenKind::Normal });
+    }
+    spans
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MARKDOWN TOKENIZER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub const COLOR_MD_HEADING: u32 = 0xFF569CD6;  // Blue headings
+pub const COLOR_MD_BOLD: u32    = 0xFFD7BA7D;   // Gold bold
+pub const COLOR_MD_CODE: u32    = 0xFFCE9178;    // Orange inline code
+pub const COLOR_MD_LINK: u32    = 0xFF4EC9B0;    // Teal links
+pub const COLOR_MD_LIST: u32    = 0xFF569CD6;    // Blue list markers
+
+pub fn tokenize_markdown_line(line: &str) -> Vec<ColorSpan> {
+    let mut spans = Vec::new();
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let trimmed = line.trim_start();
+    
+    // Headings: # ## ### etc
+    if trimmed.starts_with('#') {
+        spans.push(ColorSpan { start: 0, end: len, kind: TokenKind::Keyword });
+        return spans;
+    }
+    
+    // Code block fence ```
+    if trimmed.starts_with("```") {
+        spans.push(ColorSpan { start: 0, end: len, kind: TokenKind::String });
+        return spans;
+    }
+    
+    // List items: - * + or 1.
+    if trimmed.starts_with("- ") || trimmed.starts_with("* ") || trimmed.starts_with("+ ") {
+        let offset = len - trimmed.len();
+        spans.push(ColorSpan { start: offset, end: offset + 2, kind: TokenKind::Macro });
+        // Rest is normal
+        if offset + 2 < len {
+            spans.push(ColorSpan { start: offset + 2, end: len, kind: TokenKind::Normal });
+        }
+        return spans;
+    }
+    
+    // Scan for inline elements
+    let mut i = 0;
+    let mut last_end = 0;
+    
+    while i < len {
+        // Inline code `...`
+        if bytes[i] == b'`' {
+            if last_end < i {
+                spans.push(ColorSpan { start: last_end, end: i, kind: TokenKind::Normal });
+            }
+            let start = i;
+            i += 1;
+            while i < len && bytes[i] != b'`' { i += 1; }
+            if i < len { i += 1; }
+            spans.push(ColorSpan { start, end: i, kind: TokenKind::String });
+            last_end = i;
+            continue;
+        }
+        
+        // Bold **...**
+        if bytes[i] == b'*' && i + 1 < len && bytes[i+1] == b'*' {
+            if last_end < i {
+                spans.push(ColorSpan { start: last_end, end: i, kind: TokenKind::Normal });
+            }
+            let start = i;
+            i += 2;
+            while i + 1 < len {
+                if bytes[i] == b'*' && bytes[i+1] == b'*' { i += 2; break; }
+                i += 1;
+            }
+            spans.push(ColorSpan { start, end: i, kind: TokenKind::Attribute });
+            last_end = i;
+            continue;
+        }
+        
+        // Link [text](url)
+        if bytes[i] == b'[' {
+            if last_end < i {
+                spans.push(ColorSpan { start: last_end, end: i, kind: TokenKind::Normal });
+            }
+            let start = i;
+            while i < len && bytes[i] != b')' { i += 1; }
+            if i < len { i += 1; }
+            spans.push(ColorSpan { start, end: i, kind: TokenKind::Type });
+            last_end = i;
+            continue;
+        }
+        
+        i += 1;
+    }
+    
+    if last_end < len {
+        spans.push(ColorSpan { start: last_end, end: len, kind: TokenKind::Normal });
+    }
+    
+    spans
+}
+
+/// Dispatch tokenizer based on language mode
+pub fn tokenize_line(line: &str, lang: Language) -> Vec<ColorSpan> {
+    match lang {
+        Language::Rust => tokenize_rust_line(line),
+        Language::Python => tokenize_python_line(line),
+        Language::JavaScript => tokenize_js_c_line(line, false),
+        Language::C => tokenize_js_c_line(line, true),
+        Language::Toml => tokenize_toml_line(line),
+        Language::Markdown => tokenize_markdown_line(line),
+        Language::Plain => Vec::new(),
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // EDITOR RENDERING (called from desktop.rs draw_window_content)
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1120,61 +1909,126 @@ pub fn render_editor(
 ) {
     let char_w: i32 = 8;
     let line_h: i32 = 16;
-    let gutter_chars = 5; // "nnnn " — 4 digits + 1 space
-    let gutter_w = gutter_chars * char_w;
-    let status_h: i32 = 20;
-    let tab_bar_h: i32 = 24;
+    let status_h: i32 = 22;
+    let menu_bar_h: i32 = 22;
+    let tab_bar_h: i32 = 28;
+    let breadcrumb_h: i32 = 18;
+    let total_header = menu_bar_h + tab_bar_h + breadcrumb_h;
+    
+    // Dynamic gutter width based on line count
+    let digit_count = if state.lines.len() >= 10000 { 5 }
+        else if state.lines.len() >= 1000 { 4 }
+        else if state.lines.len() >= 100 { 3 }
+        else { 2 };
+    let gutter_w = (digit_count + 2) * char_w;
     
     let code_x = x + gutter_w;
-    let code_y = y + tab_bar_h;
+    let code_y = y + total_header;
     let code_w = w as i32 - gutter_w;
-    let code_h = h as i32 - tab_bar_h - status_h;
+    let code_h = h as i32 - total_header - status_h;
     let visible_lines = (code_h / line_h).max(1) as usize;
     
-    // Update scroll based on actual visible lines
+    // Update scroll + bracket matching
     if state.cursor_line < state.scroll_y {
         state.scroll_y = state.cursor_line;
     }
     if state.cursor_line >= state.scroll_y + visible_lines {
         state.scroll_y = state.cursor_line - visible_lines + 1;
     }
-    
     state.blink_counter += 1;
+    state.update_matching_bracket();
+    
+    // ── Menu bar (File Edit Selection View Go ...) ──
+    let menu_y = y;
+    crate::framebuffer::fill_rect(x as u32, menu_y as u32, w, menu_bar_h as u32, 0xFF333333);
+    // Bottom border
+    crate::framebuffer::fill_rect(x as u32, (menu_y + menu_bar_h - 1) as u32, w, 1, 0xFF252526);
+    let menus = ["File", "Edit", "Selection", "View", "Go", "Run", "Terminal", "Help"];
+    let mut mx = x + 8;
+    for label in &menus {
+        draw_text_fn(mx, menu_y + 4, label, 0xFFCCCCCC);
+        mx += (label.len() as i32 + 2) * char_w;
+    }
     
     // ── Tab bar ──
-    crate::framebuffer::fill_rect(x as u32, y as u32, w, tab_bar_h as u32, COLOR_BREADCRUMB_BG);
+    let tab_y = y + menu_bar_h;
+    crate::framebuffer::fill_rect(x as u32, tab_y as u32, w, tab_bar_h as u32, 0xFF252526);
     // Active tab
     let tab_name = state.file_path.as_ref().map(|p| {
-        // Extract filename from path
         p.rsplit('/').next().unwrap_or(p.as_str())
     }).unwrap_or("untitled");
-    let dirty_marker = if state.dirty { " ●" } else { "" };
-    let tab_label = format!("  {}{}  ", tab_name, dirty_marker);
-    crate::framebuffer::fill_rect(x as u32, y as u32, (tab_label.len() as u32 * 8).min(w), tab_bar_h as u32, COLOR_TAB_ACTIVE);
-    // Tab bottom border (accent)
-    crate::framebuffer::fill_rect(x as u32, (y + tab_bar_h - 2) as u32, (tab_label.len() as u32 * 8).min(w), 2, COLOR_STATUS_BG);
-    draw_text_fn(x + 4, y + 4, &tab_label, COLOR_NORMAL);
+    let dirty_marker = if state.dirty { " *" } else { "" };
+    // Language icon (ASCII only)
+    let lang_prefix = match state.language {
+        Language::Rust => "RS",
+        Language::Python => "PY",
+        Language::JavaScript => "JS",
+        Language::C => " C",
+        Language::Toml => "TL",
+        Language::Markdown => "MD",
+        Language::Plain => "  ",
+    };
+    let tab_label = format!(" {} {} {}  x", lang_prefix, tab_name, dirty_marker);
+    let tab_w = ((tab_label.len() as u32) * 8 + 4).min(w);
+    // Active tab background (editor bg color = looks connected to editor)
+    crate::framebuffer::fill_rect(x as u32, tab_y as u32, tab_w, tab_bar_h as u32, COLOR_BG);
+    // Top accent line (blue)
+    crate::framebuffer::fill_rect(x as u32, tab_y as u32, tab_w, 2, 0xFF007ACC);
+    // Tab text
+    draw_text_fn(x + 4, tab_y + 8, &tab_label, COLOR_NORMAL);
+    
+    // ── Breadcrumb bar ──
+    let bc_y = tab_y + tab_bar_h;
+    crate::framebuffer::fill_rect(x as u32, bc_y as u32, w, breadcrumb_h as u32, 0xFF1E1E1E);
+    if let Some(ref path) = state.file_path {
+        // Build breadcrumb with " > " separators, no allocations for Vec
+        let mut bx = x + gutter_w + 4;
+        let mut start = 0;
+        let bytes = path.as_bytes();
+        for i in 0..=bytes.len() {
+            if i == bytes.len() || bytes[i] == b'/' {
+                if i > start {
+                    let part = &path[start..i];
+                    if start > 0 {
+                        draw_text_fn(bx, bc_y + 2, " > ", 0xFF666666);
+                        bx += 3 * char_w;
+                    }
+                    draw_text_fn(bx, bc_y + 2, part, 0xFF858585);
+                    bx += part.len() as i32 * char_w;
+                }
+                start = i + 1;
+            }
+        }
+    } else {
+        draw_text_fn(x + gutter_w + 4, bc_y + 2, "untitled", 0xFF858585);
+    }
+    // Separator line
+    crate::framebuffer::fill_rect(x as u32, (bc_y + breadcrumb_h - 1) as u32, w, 1, 0xFF333333);
     
     // ── Editor background ──
-    crate::framebuffer::fill_rect(x as u32, (y + tab_bar_h) as u32, w, code_h as u32, COLOR_BG);
+    crate::framebuffer::fill_rect(x as u32, code_y as u32, w, code_h as u32, COLOR_BG);
     
     // ── Gutter background ──
-    crate::framebuffer::fill_rect(x as u32, (y + tab_bar_h) as u32, gutter_w as u32, code_h as u32, COLOR_GUTTER_BG);
-    // Gutter right border
-    crate::framebuffer::fill_rect((x + gutter_w - 1) as u32, (y + tab_bar_h) as u32, 1, code_h as u32, 0xFF333333);
+    crate::framebuffer::fill_rect(x as u32, code_y as u32, gutter_w as u32, code_h as u32, COLOR_GUTTER_BG);
+    crate::framebuffer::fill_rect((x + gutter_w - 1) as u32, code_y as u32, 1, code_h as u32, 0xFF333333);
     
-    // ── Render lines ──
+    // ── Render visible lines ──
     for vi in 0..visible_lines {
         let line_idx = state.scroll_y + vi;
         if line_idx >= state.lines.len() { break; }
         
         let ly = code_y + (vi as i32 * line_h);
-        if ly + line_h > y + tab_bar_h + code_h { break; }
+        if ly + line_h > code_y + code_h { break; }
         
         let is_current_line = line_idx == state.cursor_line;
         
         // ── Current line highlight ──
         if is_current_line {
+            crate::framebuffer::fill_rect(
+                x as u32, ly as u32,
+                gutter_w as u32, line_h as u32,
+                0xFF1A1D26,
+            );
             crate::framebuffer::fill_rect(
                 code_x as u32, ly as u32,
                 code_w as u32, line_h as u32,
@@ -1192,24 +2046,59 @@ pub fn render_editor(
                     let sx = code_x + 4 + (sel_start as i32 * char_w);
                     let sw = ((sel_end - sel_start) as i32 * char_w) as u32;
                     crate::framebuffer::fill_rect(
-                        sx as u32, ly as u32,
-                        sw, line_h as u32,
-                        0xFF264F78, // VSCode-style selection blue
+                        sx as u32, ly as u32, sw, line_h as u32, 0xFF264F78,
                     );
                 }
             }
         }
         
+        // ── Indent guides ──
+        let line_ref = &state.lines[line_idx];
+        let mut indent_spaces = 0usize;
+        for b in line_ref.bytes() {
+            if b == b' ' { indent_spaces += 1; } else { break; }
+        }
+        let indent_levels = indent_spaces / 4;
+        for level in 0..indent_levels {
+            let guide_x = code_x + 4 + (level as i32 * 4 * char_w);
+            if guide_x < x + w as i32 {
+                let guide_color = if is_current_line { 0xFF505050 } else { 0xFF404040 };
+                crate::framebuffer::fill_rect(guide_x as u32, ly as u32, 1, line_h as u32, guide_color);
+            }
+        }
+        
+        // ── Bracket matching highlight ──
+        if let Some((ml, mc)) = state.matching_bracket {
+            if line_idx == ml {
+                let bx = code_x + 4 + (mc as i32 * char_w);
+                crate::framebuffer::fill_rect(bx as u32, ly as u32, char_w as u32, line_h as u32, 0xFF3A3D41);
+                crate::framebuffer::fill_rect(bx as u32, ly as u32, char_w as u32, 1, 0xFF888888);
+                crate::framebuffer::fill_rect(bx as u32, (ly + line_h - 1) as u32, char_w as u32, 1, 0xFF888888);
+                crate::framebuffer::fill_rect(bx as u32, ly as u32, 1, line_h as u32, 0xFF888888);
+                crate::framebuffer::fill_rect((bx + char_w - 1) as u32, ly as u32, 1, line_h as u32, 0xFF888888);
+            }
+            if line_idx == state.cursor_line && state.cursor_col < state.lines[line_idx].len() {
+                let cb = state.lines[line_idx].as_bytes()[state.cursor_col];
+                if matches!(cb, b'(' | b')' | b'{' | b'}' | b'[' | b']') {
+                    let cbx = code_x + 4 + (state.cursor_col as i32 * char_w);
+                    crate::framebuffer::fill_rect(cbx as u32, ly as u32, char_w as u32, line_h as u32, 0xFF3A3D41);
+                    crate::framebuffer::fill_rect(cbx as u32, ly as u32, char_w as u32, 1, 0xFF888888);
+                    crate::framebuffer::fill_rect(cbx as u32, (ly + line_h - 1) as u32, char_w as u32, 1, 0xFF888888);
+                    crate::framebuffer::fill_rect(cbx as u32, ly as u32, 1, line_h as u32, 0xFF888888);
+                    crate::framebuffer::fill_rect((cbx + char_w - 1) as u32, ly as u32, 1, line_h as u32, 0xFF888888);
+                }
+            }
+        }
+        
         // ── Line number ──
-        let line_num_str = format!("{:>4} ", line_idx + 1);
-        let num_color = if is_current_line { COLOR_ACTIVE_LINE } else { COLOR_LINE_NUM };
+        let line_num_str = format!("{:>width$} ", line_idx + 1, width = digit_count as usize);
+        let num_color = if is_current_line { 0xFFC6C6C6 } else { COLOR_LINE_NUM };
         draw_text_fn(x + 2, ly, &line_num_str, num_color);
         
-        // ── Code with syntax highlighting ──
+        // ── Code with syntax highlighting (all languages) ──
         let line = &state.lines[line_idx];
-        
-        if state.language == Language::Rust {
-            let tokens = tokenize_rust_line(line);
+        let tokens = tokenize_line(line, state.language);
+        if !tokens.is_empty() {
             for span in &tokens {
                 let color = token_color(span.kind);
                 let text_segment = &line[span.start..span.end];
@@ -1218,12 +2107,7 @@ pub fn render_editor(
                     draw_text_fn(sx, ly, text_segment, color);
                 }
             }
-            // If no tokens, draw empty
-            if tokens.is_empty() && !line.is_empty() {
-                draw_text_fn(code_x + 4, ly, line, COLOR_NORMAL);
-            }
-        } else {
-            // Plain text — no highlighting
+        } else if !line.is_empty() {
             draw_text_fn(code_x + 4, ly, line, COLOR_NORMAL);
         }
         
@@ -1232,86 +2116,137 @@ pub fn render_editor(
             let blink_on = (state.blink_counter / 30) % 2 == 0;
             if blink_on {
                 let cx = code_x + 4 + (state.cursor_col as i32 * char_w);
-                // Draw thin cursor line (2px wide)
-                crate::framebuffer::fill_rect(
-                    cx as u32, ly as u32,
-                    2, line_h as u32,
-                    COLOR_CURSOR,
-                );
+                crate::framebuffer::fill_rect(cx as u32, ly as u32, 2, line_h as u32, COLOR_CURSOR);
             }
         }
     }
     
     // ── Scrollbar ──
     if state.lines.len() > visible_lines {
-        let sb_x = (x + w as i32 - 8) as u32;
+        let sb_x = (x + w as i32 - 10) as u32;
         let sb_h = code_h as u32;
         let thumb_h = ((visible_lines as u32 * sb_h) / state.lines.len() as u32).max(20);
         let thumb_y = (state.scroll_y as u32 * (sb_h - thumb_h)) / state.lines.len().saturating_sub(visible_lines) as u32;
-        // Track
-        crate::framebuffer::fill_rect(sb_x, code_y as u32, 8, sb_h, 0xFF252526);
-        // Thumb
-        crate::framebuffer::fill_rounded_rect(sb_x + 1, code_y as u32 + thumb_y, 6, thumb_h, 3, 0xFF555555);
+        crate::framebuffer::fill_rect(sb_x + 3, code_y as u32, 7, sb_h, 0xFF252526);
+        crate::framebuffer::fill_rounded_rect(sb_x + 3, code_y as u32 + thumb_y, 7, thumb_h, 3, 0xFF6A6A6A);
     }
     
-    // ── Find/Replace bar ──
+    // ── Find/Replace bar (floating, VSCode-style) ──
     if state.find_query.is_some() {
-        let find_bar_h: i32 = if state.replace_text.is_some() { 44 } else { 22 };
-        let find_y = code_y; // Draw at top of code area
-        crate::framebuffer::fill_rect(code_x as u32, find_y as u32, code_w as u32, find_bar_h as u32, 0xFF252526);
-        // Find field
-        let find_label = "Find: ";
+        let find_bar_h: i32 = if state.replace_text.is_some() { 56 } else { 32 };
+        let find_w: i32 = 370.min(code_w);
+        let find_x = x + w as i32 - find_w - 20;
+        let find_y = code_y + 4;
+        // Shadow + background
+        crate::framebuffer::fill_rect((find_x + 2) as u32, (find_y + 2) as u32, find_w as u32, find_bar_h as u32, 0xFF0A0A0A);
+        crate::framebuffer::fill_rect(find_x as u32, find_y as u32, find_w as u32, find_bar_h as u32, 0xFF252526);
+        crate::framebuffer::fill_rect(find_x as u32, find_y as u32, find_w as u32, 1, 0xFF007ACC);
+        
         let query = state.find_query.as_deref().unwrap_or("");
         let match_info = if state.find_matches.is_empty() {
-            if query.is_empty() { String::new() } else { String::from(" (0 results)") }
+            if query.is_empty() { String::new() } else { String::from(" No results") }
         } else {
-            format!(" ({}/{})", state.find_match_idx + 1, state.find_matches.len())
+            format!(" {}/{}", state.find_match_idx + 1, state.find_matches.len())
         };
-        let find_indicator = if !state.find_replace_mode { ">" } else { " " };
-        let find_text = format!("{}{}{}{}", find_indicator, find_label, query, match_info);
-        draw_text_fn(code_x + 4, find_y + 3, &find_text, 0xFFCCCCCC);
-        // Replace field
-        if let Some(ref replace) = state.replace_text {
-            let rep_indicator = if state.find_replace_mode { ">" } else { " " };
-            let rep_text = format!("{}Replace: {}  [Enter]=Replace [Ctrl+A]=All", rep_indicator, replace);
-            draw_text_fn(code_x + 4, find_y + 22 + 3, &rep_text, 0xFFCCCCCC);
+        let find_active = !state.find_replace_mode;
+        let ff_x = find_x + 8;
+        let ff_y = find_y + 6;
+        let ff_w = find_w - 100;
+        crate::framebuffer::fill_rect(ff_x as u32, ff_y as u32, ff_w as u32, 18, if find_active { 0xFF3C3C3C } else { 0xFF333333 });
+        if find_active {
+            crate::framebuffer::fill_rect(ff_x as u32, (ff_y + 17) as u32, ff_w as u32, 1, 0xFF007ACC);
         }
-        // Highlight find matches in code area
-        for &(ml, mc) in &state.find_matches {
-            if ml >= state.scroll_y && ml < state.scroll_y + visible_lines {
-                let vi = ml - state.scroll_y;
-                let mly = code_y + find_bar_h + (vi as i32 * line_h);
-                let q_len = state.find_query.as_ref().map(|q| q.len()).unwrap_or(0);
-                if q_len > 0 {
-                    let mx = code_x + 4 + (mc as i32 * char_w);
+        draw_text_fn(ff_x + 4, ff_y + 2, query, 0xFFCCCCCC);
+        draw_text_fn(find_x + find_w - 90, ff_y + 2, &match_info, 0xFF858585);
+        
+        if let Some(ref replace) = state.replace_text {
+            let rf_y = find_y + 30;
+            let rep_active = state.find_replace_mode;
+            crate::framebuffer::fill_rect(ff_x as u32, rf_y as u32, ff_w as u32, 18, if rep_active { 0xFF3C3C3C } else { 0xFF333333 });
+            if rep_active {
+                crate::framebuffer::fill_rect(ff_x as u32, (rf_y + 17) as u32, ff_w as u32, 1, 0xFF007ACC);
+            }
+            draw_text_fn(ff_x + 4, rf_y + 2, replace, 0xFFCCCCCC);
+        }
+        
+        // Highlight find matches
+        let q_len = query.len();
+        if q_len > 0 {
+            for &(ml, mc) in &state.find_matches {
+                if ml >= state.scroll_y && ml < state.scroll_y + visible_lines {
+                    let vi = ml - state.scroll_y;
+                    let mly = code_y + (vi as i32 * line_h);
+                    let mmx = code_x + 4 + (mc as i32 * char_w);
                     let mw = (q_len as i32 * char_w) as u32;
-                    crate::framebuffer::fill_rect(mx as u32, mly as u32, mw, line_h as u32, 0xFF613214);
+                    crate::framebuffer::fill_rect(mmx as u32, mly as u32, mw, line_h as u32, 0xFF613214);
+                    if state.find_match_idx < state.find_matches.len() && state.find_matches[state.find_match_idx] == (ml, mc) {
+                        crate::framebuffer::fill_rect(mmx as u32, mly as u32, mw, 1, 0xFFE8AB53);
+                        crate::framebuffer::fill_rect(mmx as u32, (mly + line_h - 1) as u32, mw, 1, 0xFFE8AB53);
+                    }
                 }
             }
         }
     }
     
-    // ── Status bar ──
-    let status_y = y + tab_bar_h + code_h;
+    // ── Go-to-line dialog ──
+    if let Some(ref input) = state.goto_line_input {
+        let dialog_w: i32 = 320.min(w as i32 - 40);
+        let dialog_h: i32 = 32;
+        let dialog_x = x + (w as i32 - dialog_w) / 2;
+        let dialog_y = y + total_header + 2;
+        crate::framebuffer::fill_rect((dialog_x + 2) as u32, (dialog_y + 2) as u32, dialog_w as u32, dialog_h as u32, 0xFF0A0A0A);
+        crate::framebuffer::fill_rect(dialog_x as u32, dialog_y as u32, dialog_w as u32, dialog_h as u32, 0xFF252526);
+        crate::framebuffer::fill_rect(dialog_x as u32, dialog_y as u32, dialog_w as u32, 2, 0xFF007ACC);
+        let input_y = dialog_y + 6;
+        crate::framebuffer::fill_rect((dialog_x + 8) as u32, input_y as u32, (dialog_w - 16) as u32, 18, 0xFF3C3C3C);
+        crate::framebuffer::fill_rect((dialog_x + 8) as u32, (input_y + 17) as u32, (dialog_w - 16) as u32, 1, 0xFF007ACC);
+        let goto_text = format!(":{}", input);
+        draw_text_fn(dialog_x + 12, input_y + 2, &goto_text, 0xFFCCCCCC);
+        let hint = format!("Go to Line (1-{})", state.lines.len());
+        let hint_x = dialog_x + dialog_w - (hint.len() as i32 * char_w) - 12;
+        draw_text_fn(hint_x, input_y + 2, &hint, 0xFF666666);
+    }
+
+    // ── Status bar (VSCode-style, blue background) ──
+    let status_y = y + total_header + code_h;
     crate::framebuffer::fill_rect(x as u32, status_y as u32, w, status_h as u32, COLOR_STATUS_BG);
     
-    // Left: file info
-    let status_left = if let Some(ref msg) = state.status_message {
-        format!("  {}", msg)
+    // Left: branch + saved/modified
+    let mut slx = x + 8;
+    draw_text_fn(slx, status_y + 4, "@ main", COLOR_STATUS_FG);
+    slx += 7 * char_w;
+    crate::framebuffer::fill_rect(slx as u32, (status_y + 4) as u32, 1, 14, 0xFF1A6DAA);
+    slx += 6;
+    if state.dirty {
+        draw_text_fn(slx, status_y + 4, "* Modified", 0xFFFFD166);
     } else {
-        let dirty_str = if state.dirty { " [Modified]" } else { "" };
-        let fname = state.file_path.as_deref().unwrap_or("untitled");
-        format!("  {}{}", fname, dirty_str)
-    };
-    draw_text_fn(x + 4, status_y + 2, &status_left, COLOR_STATUS_FG);
+        draw_text_fn(slx, status_y + 4, "Saved", COLOR_STATUS_FG);
+    }
     
-    // Right: position and language
-    let status_right = format!(
-        "Ln {}, Col {}   {}   UTF-8   TrustCode  ",
-        state.cursor_line + 1,
-        state.cursor_col + 1,
-        state.language.name(),
-    );
-    let right_x = x + w as i32 - (status_right.len() as i32 * char_w) - 4;
-    draw_text_fn(right_x, status_y + 2, &status_right, COLOR_STATUS_FG);
+    // Right: Spaces, Encoding, Language, Ln/Col
+    let pos_str = format!("Ln {}, Col {}", state.cursor_line + 1, state.cursor_col + 1);
+    let lang_name = state.language.name();
+    // Draw from right to left
+    let mut srx = x + w as i32 - 8;
+    // Position
+    srx -= pos_str.len() as i32 * char_w;
+    draw_text_fn(srx, status_y + 4, &pos_str, COLOR_STATUS_FG);
+    srx -= 10;
+    crate::framebuffer::fill_rect(srx as u32, (status_y + 4) as u32, 1, 14, 0xFF1A6DAA);
+    srx -= 6;
+    // Language
+    srx -= lang_name.len() as i32 * char_w;
+    draw_text_fn(srx, status_y + 4, lang_name, COLOR_STATUS_FG);
+    srx -= 10;
+    crate::framebuffer::fill_rect(srx as u32, (status_y + 4) as u32, 1, 14, 0xFF1A6DAA);
+    srx -= 6;
+    // Encoding
+    srx -= 5 * char_w;
+    draw_text_fn(srx, status_y + 4, "UTF-8", COLOR_STATUS_FG);
+    srx -= 10;
+    crate::framebuffer::fill_rect(srx as u32, (status_y + 4) as u32, 1, 14, 0xFF1A6DAA);
+    srx -= 6;
+    // Spaces
+    srx -= 9 * char_w;
+    draw_text_fn(srx, status_y + 4, "Spaces: 4", COLOR_STATUS_FG);
 }

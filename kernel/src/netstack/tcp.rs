@@ -50,11 +50,32 @@ struct TcpConnection {
     // Delayed ACK: count packets since last ACK
     pending_acks: u8,
     last_ack_time: u64,
-    // Retransmission: store last sent segment for retransmit on timeout
+    // Retransmission tracking
     last_sent_seq: u32,
     last_sent_time: u64,
     retransmit_count: u8,
+    /// Oldest unacknowledged sequence number
+    snd_una: u32,
 }
+
+/// Unacknowledged segment awaiting retransmission
+#[derive(Clone)]
+struct UnackedSegment {
+    conn_id: ConnectionId,
+    seq: u32,
+    data: Vec<u8>,       // raw TCP payload (not full segment)
+    dest_ip: [u8; 4],
+    dest_port: u16,
+    src_port: u16,
+    sent_time: u64,
+    retries: u8,
+}
+
+/// Sliding window of unacked segments for retransmission.
+/// Bounded to MAX_RETRANSMIT_QUEUE entries to limit memory usage.
+static RETRANSMIT_QUEUE: Mutex<VecDeque<UnackedSegment>> = Mutex::new(VecDeque::new());
+/// Max segments kept for retransmission (bounded memory: ~32 * 1400 = ~44KB)
+const MAX_RETRANSMIT_QUEUE: usize = 32;
 
 static CONNECTIONS: Mutex<BTreeMap<ConnectionId, TcpConnection>> = Mutex::new(BTreeMap::new());
 static RX_DATA: Mutex<BTreeMap<ConnectionId, VecDeque<Vec<u8>>>> = Mutex::new(BTreeMap::new());
@@ -311,6 +332,17 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
 
             // ── Data transfer ──
             TcpState::Established => {
+                // Process ACK: advance snd_una and purge retransmit queue
+                if ack && ack_num > conn.snd_una {
+                    conn.snd_una = ack_num;
+                    conn.retransmit_count = 0;
+                    // Purge acknowledged segments from retransmit queue
+                    let mut rtx = RETRANSMIT_QUEUE.lock();
+                    rtx.retain(|seg| {
+                        seg.conn_id != conn_id || seg.seq.wrapping_add(seg.data.len() as u32) > ack_num
+                    });
+                }
+
                 // Store payload
                 if !payload.is_empty() {
                     let new_ack = seq.wrapping_add(payload_len);
@@ -451,6 +483,7 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4], dst_ip: [u8; 4]) {
                         last_sent_seq: init_seq,
                         last_sent_time: crate::logger::get_ticks(),
                         retransmit_count: 0,
+                        snd_una: init_seq.wrapping_add(1),
                     };
                     drop(listeners);
                     conns.insert(conn_id, new_conn);
@@ -505,6 +538,7 @@ pub fn send_syn(dest_ip: [u8; 4], dest_port: u16) -> Result<u16, &'static str> {
         last_sent_seq: seq,
         last_sent_time: crate::logger::get_ticks(),
         retransmit_count: 0,
+        snd_una: seq.wrapping_add(1),
     });
 
     // (SYN direction log removed)
@@ -603,10 +637,31 @@ pub fn send_payload(dest_ip: [u8; 4], dest_port: u16, src_port: u16, payload: &[
 
     crate::netstack::ip::send_packet(dest_ip, 6, &segment)?;
 
+    let now = crate::time::uptime_ms();
     let mut conns = CONNECTIONS.lock();
     if let Some(conn) = conns.get_mut(&conn_id) {
+        conn.last_sent_seq = seq;
+        conn.last_sent_time = now;
         conn.seq = conn.seq.wrapping_add(payload.len() as u32);
     }
+    drop(conns);
+
+    // Queue for retransmission (bounded sliding window)
+    let mut rtx = RETRANSMIT_QUEUE.lock();
+    if rtx.len() >= MAX_RETRANSMIT_QUEUE {
+        rtx.pop_front(); // drop oldest — it's either ACKed or too old
+    }
+    rtx.push_back(UnackedSegment {
+        conn_id,
+        seq,
+        data: payload.to_vec(),
+        dest_ip,
+        dest_port,
+        src_port,
+        sent_time: now,
+        retries: 0,
+    });
+
     Ok(())
 }
 
@@ -646,6 +701,9 @@ pub fn send_fin(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> Result<(), &
     segment[17] = (csum & 0xFF) as u8;
 
     crate::netstack::ip::send_packet(dest_ip, 6, &segment)?;
+
+    // Clear retransmit queue for this connection
+    RETRANSMIT_QUEUE.lock().retain(|seg| seg.conn_id != conn_id);
 
     let mut conns = CONNECTIONS.lock();
     if let Some(conn) = conns.get_mut(&conn_id) {
@@ -832,16 +890,46 @@ pub fn is_connected(dest_ip: [u8; 4], dest_port: u16) -> bool {
 
 /// Send data on an established connection (for socket API)
 pub fn send_data(dest_ip: [u8; 4], dest_port: u16, src_port: u16, data: &[u8]) -> Result<(), &'static str> {
-    // Just wrap send_payload with bounds checking
     if data.is_empty() {
         return Ok(());
     }
     
     // Fragment large data into TCP segments (MSS ~1460 bytes)
     const MSS: usize = 1400;
+    // Small batch size to avoid overwhelming receiver (no flow control)
+    const BATCH: usize = 4;
     
-    for chunk in data.chunks(MSS) {
-        send_payload(dest_ip, dest_port, src_port, chunk)?;
+    let total_segments = (data.len() + MSS - 1) / MSS;
+    
+    for (i, chunk) in data.chunks(MSS).enumerate() {
+        // Retry on TX queue full instead of aborting
+        let mut retries = 0u32;
+        loop {
+            match send_payload(dest_ip, dest_port, src_port, chunk) {
+                Ok(()) => break,
+                Err(e) if retries < 200 => {
+                    // TX queue full or transient error — poll and retry
+                    crate::netstack::poll();
+                    for _ in 0..2000 { core::hint::spin_loop(); }
+                    retries += 1;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        
+        // Poll and pace between batches to let receiver process
+        if (i + 1) % BATCH == 0 {
+            crate::netstack::poll();
+            // Wait ~1ms real time to avoid overwhelming receiver
+            let wait_start = crate::time::uptime_ms();
+            loop {
+                core::hint::spin_loop();
+                if crate::time::uptime_ms().wrapping_sub(wait_start) >= 1 {
+                    break;
+                }
+            }
+        }
+        
     }
     
     Ok(())
@@ -863,4 +951,75 @@ pub fn get_connection_state(dest_ip: [u8; 4], dest_port: u16, src_port: u16) -> 
     };
     
     CONNECTIONS.lock().get(&conn_id).map(|c| c.state)
+}
+
+/// Check for timed-out unacknowledged segments and retransmit them.
+/// Called periodically from the network poll loop.
+pub fn check_retransmits() {
+    let now = crate::time::uptime_ms();
+    let mut rtx = RETRANSMIT_QUEUE.lock();
+
+    for seg in rtx.iter_mut() {
+        if now.wrapping_sub(seg.sent_time) < RETRANSMIT_TIMEOUT_MS {
+            continue;
+        }
+        if seg.retries >= MAX_RETRANSMITS {
+            continue; // give up on this segment
+        }
+
+        // Check connection is still Established
+        let conn_id = seg.conn_id;
+        let conns = CONNECTIONS.lock();
+        let still_active = conns.get(&conn_id)
+            .map(|c| c.state == TcpState::Established && c.snd_una <= seg.seq)
+            .unwrap_or(false);
+        drop(conns);
+
+        if !still_active {
+            continue;
+        }
+
+        // Rebuild and resend the segment
+        let src_ip = get_source_ip();
+        let dest_ip = seg.dest_ip;
+        let ack_val = {
+            let conns = CONNECTIONS.lock();
+            conns.get(&conn_id).map(|c| c.ack).unwrap_or(0)
+        };
+
+        let mut tcp_seg = Vec::with_capacity(20 + seg.data.len());
+        tcp_seg.extend_from_slice(&seg.src_port.to_be_bytes());
+        tcp_seg.extend_from_slice(&seg.dest_port.to_be_bytes());
+        tcp_seg.extend_from_slice(&seg.seq.to_be_bytes());
+        tcp_seg.extend_from_slice(&ack_val.to_be_bytes());
+        tcp_seg.push(0x50);
+        tcp_seg.push(flags::PSH | flags::ACK);
+        tcp_seg.extend_from_slice(&TCP_WINDOW_SIZE.to_be_bytes());
+        tcp_seg.extend_from_slice(&0u16.to_be_bytes());
+        tcp_seg.extend_from_slice(&0u16.to_be_bytes());
+        tcp_seg.extend_from_slice(&seg.data);
+
+        let csum = tcp_checksum(src_ip, dest_ip, &tcp_seg);
+        tcp_seg[16] = (csum >> 8) as u8;
+        tcp_seg[17] = (csum & 0xFF) as u8;
+
+        let _ = crate::netstack::ip::send_packet(dest_ip, 6, &tcp_seg);
+        seg.retries += 1;
+        seg.sent_time = now; // reset timer with exponential backoff would be nice, but simple is fine
+    }
+
+    // Purge segments that exhausted retries
+    rtx.retain(|seg| seg.retries < MAX_RETRANSMITS);
+}
+
+/// Clear retransmit queue entries for a specific connection (called on close)
+pub fn clear_retransmit_queue(dest_ip: [u8; 4], dest_port: u16, src_port: u16) {
+    let src_ip = get_source_ip();
+    let conn_id = ConnectionId {
+        src_ip: ip_to_u32(src_ip),
+        dst_ip: ip_to_u32(dest_ip),
+        src_port,
+        dst_port: dest_port,
+    };
+    RETRANSMIT_QUEUE.lock().retain(|seg| seg.conn_id != conn_id);
 }

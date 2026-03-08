@@ -396,7 +396,6 @@ $qemuArgs = @(
     "-drive", "file=`"$PSScriptRoot\trustos_nvme.img`",format=raw,if=none,id=nvme0",
     "-device", "nvme,serial=TRUSTNVME001,drive=nvme0",
     "-device", "qemu-xhci,id=xhci",
-    "-device", "usb-kbd,bus=xhci.0",
     "-device", "usb-mouse,bus=xhci.0",
     "-serial", $serialArg,
     "-no-reboot"
@@ -642,4 +641,29 @@ $reportLines += "  End of report"
 $reportLines -join "`r`n" | Out-File -FilePath $ReportFile -Encoding UTF8
 Write-Host ""
 Write-Host ("Report saved to: {0}" -f $ReportFile) -ForegroundColor White
+Write-Host ""
+
+# ---------------------------------------------------------------
+#  PROPAGATION TEST (2-node mesh brain transfer)
+# ---------------------------------------------------------------
+
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host "  PROPAGATION TEST (2-node JARVIS brain transfer)" -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Cyan
+Write-Host ""
+
+$propScript = Join-Path $PSScriptRoot "test-propagation.ps1"
+if (Test-Path $propScript) {
+    Write-Host "Running test-propagation.ps1 ..." -ForegroundColor Yellow
+    & powershell -ExecutionPolicy Bypass -File $propScript
+    $propExit = $LASTEXITCODE
+    Write-Host ""
+    if ($propExit -eq 0) {
+        Write-Host "  PROPAGATION: ALL PASSED (12/12)" -ForegroundColor Green
+    } else {
+        Write-Host ("  PROPAGATION: {0} test(s) failed" -f $propExit) -ForegroundColor Red
+    }
+} else {
+    Write-Host "  SKIPPED: test-propagation.ps1 not found" -ForegroundColor Yellow
+}
 Write-Host ""

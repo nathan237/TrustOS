@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>@ApImg4Ticket</key>
+	<true/>
+	<key>@BBTicket</key>
+	<true/>
+	<key>@HostPlatformInfo</key>
+	<string>mac</string>
+	<key>@UUID</key>
+	<string>F977AB8D-1A93-4634-B1C4-173D46F70562</string>
+	<key>@VersionInfo</key>
+	<string>libauthinstall-1104.0.9</string>
+	<key>Ap,OSLongVersion</key>
+	<string>22.8.311.0.0,0</string>
+	<key>Ap,ProductMarketingVersion</key>
+	<string>18.7.5</string>
+	<key>Ap,ProductType</key>
+	<string>iPhone11,8</string>
+	<key>Ap,SDKPlatform</key>
+	<string>iphoneos</string>
+	<key>Ap,Target</key>
+	<string>N841AP</string>
+	<key>Ap,TargetType</key>
+	<string>n841</string>
+	<key>ApBoardID</key>
+	<integer>12</integer>
+	<key>ApChipID</key>
+	<integer>32800</integer>
+	<key>ApECID</key>
+	<integer>7905300633911342</integer>
+	<key>ApNonce</key>
+	<data>
+	AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+	</data>
+	<key>ApProductionMode</key>
+	<true/>
+	<key>ApSecurityDomain</key>
+	<integer>1</integer>
+	<key>ApSecurityMode</key>
+	<true/>
+	<key>PearlCertificationRootPub</key>
+	<data>
+	BEBGXhKwc7q3iFvkUoGDP6j2drpxSCxsSCODaDQIqGwd53wZJ0xIJIv0RTf2TS7+/u4K
+	zhrANzb19r+TQzwqFJMphp3mI3yY4pukIFc/kWS7DLQAx/ftWBXX6vl4ig3wEg==
+	</data>
+	<key>UniqueBuildID</key>
+	<data>
+	aLDfDIl722ovZRicPPPdZBq192g=
+	</data>
+</dict>
+</plist>

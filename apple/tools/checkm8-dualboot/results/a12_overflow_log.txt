@@ -1,0 +1,52 @@
+[15:48:08.478] [INFO] ============================================================
+[15:48:08.478] [INFO] A12 (T8020) OVERFLOW PROBE
+[15:48:08.478] [INFO] Date: 2026-03-02T15:48:08.478561
+[15:48:08.478] [INFO] ============================================================
+[15:48:08.519] [INFO] Connected: CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C208
+[15:48:08.519] [INFO] 
+============================================================
+[15:48:08.519] [INFO] >>> TEST 1: State Trace
+[15:48:08.519] [INFO] ============================================================
+[15:48:08.519] [INFO] TEST 1: DFU State Machine Full Trace
+[15:48:08.519] [INFO] ============================================================
+[15:48:08.540] [INFO]   [1] Initial: dfuIDLE (OK) poll=50ms raw=003200000200
+[15:48:08.541] [INFO]   [2] DNLOAD 256B block=0: ok=True err=None
+[15:48:08.541] [INFO]   [3.0] GET_STATUS: dfuDNLOAD-IDLE (OK) poll=50ms raw=003200000500
+[15:48:08.542] [INFO]   [4] DNLOAD 256B block=1: ok=True err=None
+[15:48:08.542] [INFO]   [4.0] GET_STATUS: dfuDNLOAD-IDLE (OK) poll=50ms raw=003200000500
+[15:48:08.542] [INFO]   [5] Zero-length DNLOAD (manifest trigger)...
+[15:48:08.542] [INFO]   [5] Zero-len DNLOAD: ok=True err=None
+[15:48:08.543] [INFO]   [5.0] GET_STATUS: dfuMANIFEST-SYNC (OK) poll=50ms raw=003200000600
+[15:48:08.604] [INFO]   [5.1] GET_STATUS: dfuMANIFEST (OK) poll=3000ms raw=00b80b000700
+[15:48:11.615] [INFO]   [5.2] GET_STATUS: dfuMANIFEST-WAIT-RESET (OK) poll=50ms raw=003200000800
+[15:48:11.615] [FIND] *** FINDING [CRITICAL]: Manifest accepted! — SecureROM accepted manifest of garbage data! State=dfuMANIFEST-WAIT-RESET
+[15:48:12.780] [INFO]   [6] Final: None
+[15:48:13.995] [INFO] 
+============================================================
+[15:48:13.995] [INFO] >>> TEST 2: Multi-Block Overflow
+[15:48:13.995] [INFO] ============================================================
+[15:48:13.995] [INFO] TEST 2: Multi-Block DNLOAD Accumulation
+[15:48:13.995] [INFO] ============================================================
+[15:48:13.995] [INFO]   Hypothesis: wValue is block# → data writes to buffer + block*size
+[15:48:13.995] [INFO]   If buffer is 4KB and we send block 0 (4KB) + block 1 (4KB), total 8KB
+[15:48:13.995] [INFO]   This could overflow the DFU buffer into adjacent memory
+[15:48:13.995] [INFO] 
+[15:48:15.209] [ERR ] Cannot reach dfuIDLE!
+[15:48:16.426] [INFO] 
+============================================================
+[15:48:16.426] [INFO] >>> TEST 3: Rapid Burst
+[15:48:16.426] [INFO] ============================================================
+[15:48:16.426] [INFO] TEST 3: Rapid-Fire DNLOAD Burst (Race Condition)
+[15:48:16.426] [INFO] ============================================================
+[15:48:18.855] [INFO] 
+============================================================
+[15:48:18.855] [INFO] >>> TEST 5: Upload Leak
+[15:48:18.855] [INFO] ============================================================
+[15:48:18.855] [INFO] TEST 5: UPLOAD After Proper DNLOAD Flow (Data Leak)
+[15:48:18.855] [INFO] ============================================================
+[15:48:21.286] [INFO] 
+============================================================
+[15:48:21.286] [INFO] SUMMARY
+[15:48:21.286] [INFO] ============================================================
+[15:48:21.286] [INFO] Total: 1 findings — 1 CRITICAL, 0 HIGH, 0 MEDIUM
+[15:48:21.286] [INFO]   [CRITICAL] Manifest accepted!: SecureROM accepted manifest of garbage data! State=dfuMANIFEST-WAIT-RESET

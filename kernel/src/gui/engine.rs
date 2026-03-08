@@ -20,8 +20,8 @@ use spin::Mutex;
 // FRAME TIMING - True 60 FPS with CPU sleep
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Target frame time in microseconds (32ms ≈ 31 FPS — sweet spot for hardware)
-const TARGET_FRAME_US: u64 = 32_000;
+/// Target frame time in microseconds (16.6ms ≈ 60 FPS)
+const TARGET_FRAME_US: u64 = 16_666;
 
 /// TSC frequency in Hz (set during init)
 static TSC_FREQ_HZ: AtomicU64 = AtomicU64::new(3_000_000_000); // Default 3 GHz

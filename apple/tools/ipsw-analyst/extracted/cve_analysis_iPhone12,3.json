@@ -1,0 +1,281 @@
+{
+  "cves": [
+    {
+      "cve": "CVE-2024-44309",
+      "component": "WebKit",
+      "type": "cookie management",
+      "ios_fixed": "18.1.1",
+      "severity": "HIGH",
+      "note": "Actively exploited. Cross-site scripting via malicious web content."
+    },
+    {
+      "cve": "CVE-2024-44308",
+      "component": "JavaScriptCore",
+      "type": "type confusion",
+      "ios_fixed": "18.1.1",
+      "severity": "CRITICAL",
+      "note": "Actively exploited. Arbitrary code execution via crafted web content."
+    },
+    {
+      "cve": "CVE-2024-44131",
+      "component": "TCC",
+      "type": "symlink bypass",
+      "ios_fixed": "18.0",
+      "severity": "HIGH",
+      "note": "App could access sensitive user data by exploiting symlinks in file provider."
+    },
+    {
+      "cve": "CVE-2024-27804",
+      "component": "Kernel",
+      "type": "memory corruption",
+      "ios_fixed": "17.5",
+      "severity": "CRITICAL",
+      "note": "Attacker with arbitrary kernel read/write could bypass PAC."
+    },
+    {
+      "cve": "CVE-2024-23296",
+      "component": "Kernel (RTKit)",
+      "type": "memory corruption",
+      "ios_fixed": "17.4",
+      "severity": "CRITICAL",
+      "note": "Actively exploited. RTKit coprocessor memory corruption."
+    },
+    {
+      "cve": "CVE-2024-23225",
+      "component": "Kernel",
+      "type": "memory corruption",
+      "ios_fixed": "17.4",
+      "severity": "CRITICAL",
+      "note": "Actively exploited. Kernel memory corruption via crafted input."
+    },
+    {
+      "cve": "CVE-2023-42824",
+      "component": "Kernel",
+      "type": "privilege escalation",
+      "ios_fixed": "17.0.3",
+      "severity": "CRITICAL",
+      "note": "Actively exploited on iOS 16.6 and earlier."
+    },
+    {
+      "cve": "CVE-2023-41991",
+      "component": "CoreTrust",
+      "type": "certificate validation",
+      "ios_fixed": "16.7",
+      "severity": "CRITICAL",
+      "note": "Actively exploited. Predator spyware chain. Bypass code signing."
+    },
+    {
+      "cve": "CVE-2023-41992",
+      "component": "Kernel",
+      "type": "privilege escalation",
+      "ios_fixed": "16.7",
+      "severity": "CRITICAL",
+      "note": "Actively exploited. Predator chain. Local attacker \u2192 kernel."
+    },
+    {
+      "cve": "CVE-2023-41993",
+      "component": "WebKit",
+      "type": "arbitrary code execution",
+      "ios_fixed": "16.7",
+      "severity": "CRITICAL",
+      "note": "Actively exploited. Predator chain. Entry point."
+    },
+    {
+      "cve": "CVE-2023-32434",
+      "component": "Kernel",
+      "type": "integer overflow",
+      "ios_fixed": "16.5.1",
+      "severity": "CRITICAL",
+      "note": "TRIANGULATION. Integer overflow in XNU. Actively exploited since 2019."
+    },
+    {
+      "cve": "CVE-2023-32435",
+      "component": "WebKit",
+      "type": "memory corruption",
+      "ios_fixed": "16.5.1",
+      "severity": "CRITICAL",
+      "note": "TRIANGULATION. WebKit entry point for the chain."
+    },
+    {
+      "cve": "CVE-2023-38606",
+      "component": "Kernel",
+      "type": "MMIO register abuse",
+      "ios_fixed": "16.6",
+      "severity": "CRITICAL",
+      "note": "TRIANGULATION. Used UNDOCUMENTED MMIO registers to bypass hardware security."
+    },
+    {
+      "cve": "CVE-2023-41990",
+      "component": "FontParser",
+      "type": "TrueType instruction",
+      "ios_fixed": "16.6",
+      "severity": "HIGH",
+      "note": "TRIANGULATION. Font exploit for initial code execution."
+    },
+    {
+      "cve": "CVE-2022-46689",
+      "component": "Kernel (vm_map)",
+      "type": "race condition",
+      "ios_fixed": "16.2",
+      "severity": "HIGH",
+      "note": "MacDirtyCow. Race in copy-on-write. Write to read-only files without kernel exploit."
+    },
+    {
+      "cve": "checkm8",
+      "component": "SecureROM (USB)",
+      "type": "use-after-free",
+      "ios_fixed": "UNFIXABLE (A5-A11)",
+      "severity": "CRITICAL",
+      "note": "BootROM USB UAF. Unpatchable. A5-A11 only. Not applicable to A13."
+    },
+    {
+      "cve": "checkra1n",
+      "component": "SecureROM",
+      "type": "checkm8 implementation",
+      "ios_fixed": "UNFIXABLE (A5-A11)",
+      "severity": "CRITICAL",
+      "note": "Jailbreak tool implementing checkm8. A5-A11 only."
+    }
+  ],
+  "patterns": {
+    "by_component": {
+      "WebKit": [
+        "CVE-2024-44309",
+        "CVE-2023-41993",
+        "CVE-2023-32435"
+      ],
+      "JavaScriptCore": [
+        "CVE-2024-44308"
+      ],
+      "TCC": [
+        "CVE-2024-44131"
+      ],
+      "Kernel": [
+        "CVE-2024-27804",
+        "CVE-2024-23225",
+        "CVE-2023-42824",
+        "CVE-2023-41992",
+        "CVE-2023-32434",
+        "CVE-2023-38606"
+      ],
+      "Kernel (RTKit)": [
+        "CVE-2024-23296"
+      ],
+      "CoreTrust": [
+        "CVE-2023-41991"
+      ],
+      "FontParser": [
+        "CVE-2023-41990"
+      ],
+      "Kernel (vm_map)": [
+        "CVE-2022-46689"
+      ],
+      "SecureROM (USB)": [
+        "checkm8"
+      ],
+      "SecureROM": [
+        "checkra1n"
+      ]
+    },
+    "by_type": {
+      "cookie management": 1,
+      "type confusion": 1,
+      "symlink bypass": 1,
+      "memory corruption": 4,
+      "privilege escalation": 2,
+      "certificate validation": 1,
+      "arbitrary code execution": 1,
+      "integer overflow": 1,
+      "MMIO register abuse": 1,
+      "TrueType instruction": 1,
+      "race condition": 1,
+      "use-after-free": 1,
+      "checkm8 implementation": 1
+    },
+    "actively_exploited": 9,
+    "memory_corruption": 6,
+    "logic_bugs": 3
+  },
+  "predictions": [
+    {
+      "component": "Kernel",
+      "score": 200,
+      "historical_cves": 6,
+      "actively_exploited": 4,
+      "jailbreak_relevance": "CRITICAL",
+      "reason": "Direct kernel code execution"
+    },
+    {
+      "component": "WebKit",
+      "score": 100,
+      "historical_cves": 3,
+      "actively_exploited": 2,
+      "jailbreak_relevance": "HIGH",
+      "reason": "Remote entry point, JIT bugs"
+    },
+    {
+      "component": "Kernel (RTKit)",
+      "score": 75,
+      "historical_cves": 1,
+      "actively_exploited": 1,
+      "jailbreak_relevance": "CRITICAL",
+      "reason": "Direct kernel code execution"
+    },
+    {
+      "component": "JavaScriptCore",
+      "score": 55,
+      "historical_cves": 1,
+      "actively_exploited": 1,
+      "jailbreak_relevance": "HIGH",
+      "reason": "JIT compiler bugs"
+    },
+    {
+      "component": "CoreTrust",
+      "score": 55,
+      "historical_cves": 1,
+      "actively_exploited": 1,
+      "jailbreak_relevance": "HIGH",
+      "reason": "Trust cache / code signing"
+    },
+    {
+      "component": "Kernel (vm_map)",
+      "score": 50,
+      "historical_cves": 1,
+      "actively_exploited": 0,
+      "jailbreak_relevance": "CRITICAL",
+      "reason": "Direct kernel code execution"
+    },
+    {
+      "component": "TCC",
+      "score": 30,
+      "historical_cves": 1,
+      "actively_exploited": 0,
+      "jailbreak_relevance": "HIGH",
+      "reason": "Permission bypass"
+    },
+    {
+      "component": "SecureROM (USB)",
+      "score": 20,
+      "historical_cves": 1,
+      "actively_exploited": 0,
+      "jailbreak_relevance": "MEDIUM",
+      "reason": "Physical attack vector"
+    },
+    {
+      "component": "FontParser",
+      "score": 10,
+      "historical_cves": 1,
+      "actively_exploited": 0,
+      "jailbreak_relevance": "UNKNOWN",
+      "reason": ""
+    },
+    {
+      "component": "SecureROM",
+      "score": 10,
+      "historical_cves": 1,
+      "actively_exploited": 0,
+      "jailbreak_relevance": "UNKNOWN",
+      "reason": ""
+    }
+  ]
+}

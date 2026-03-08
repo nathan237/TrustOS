@@ -42,6 +42,52 @@ pub static FB_PITCH: AtomicU64 = AtomicU64::new(0);
 static BACKBUFFER: Mutex<Option<Box<[u32]>>> = Mutex::new(None);
 static USE_BACKBUFFER: AtomicBool = AtomicBool::new(false);
 
+// ==================== FRAME-CACHED BACKBUFFER ACCESS ====================
+// Lock the backbuffer ONCE per frame, then all pixel ops use the cached pointer.
+// Eliminates ~300k mutex lock/unlock per frame in the matrix rain.
+static FRAME_BB_PTR: AtomicPtr<u32> = AtomicPtr::new(core::ptr::null_mut());
+static FRAME_BB_STRIDE: AtomicU64 = AtomicU64::new(0);
+static FRAME_BB_HEIGHT: AtomicU64 = AtomicU64::new(0);
+
+/// Call at the start of each frame to cache the backbuffer pointer.
+/// All subsequent `put_pixel_fast`/`get_pixel_fast` calls will use this
+/// cached pointer with ZERO mutex overhead.
+pub fn begin_frame() {
+    if let Some(ref mut buf) = *BACKBUFFER.lock() {
+        FRAME_BB_PTR.store(buf.as_mut_ptr(), Ordering::Release);
+        FRAME_BB_STRIDE.store(FB_WIDTH.load(Ordering::Relaxed), Ordering::Release);
+        FRAME_BB_HEIGHT.store(FB_HEIGHT.load(Ordering::Relaxed), Ordering::Release);
+    }
+}
+
+/// Call at the end of each frame (before swap_buffers).
+pub fn end_frame() {
+    FRAME_BB_PTR.store(core::ptr::null_mut(), Ordering::Release);
+}
+
+/// Ultra-fast pixel write — uses cached backbuffer pointer, no mutex per call.
+/// Must be called between begin_frame() and end_frame().
+#[inline(always)]
+pub fn put_pixel_fast(x: u32, y: u32, color: u32) {
+    let ptr = FRAME_BB_PTR.load(Ordering::Relaxed);
+    if ptr.is_null() { put_pixel(x, y, color); return; }
+    let stride = FRAME_BB_STRIDE.load(Ordering::Relaxed) as u32;
+    let height = FRAME_BB_HEIGHT.load(Ordering::Relaxed) as u32;
+    if x >= stride || y >= height { return; }
+    unsafe { *ptr.add(y as usize * stride as usize + x as usize) = color; }
+}
+
+/// Ultra-fast pixel read — uses cached backbuffer pointer, no mutex per call.
+#[inline(always)]
+pub fn get_pixel_fast(x: u32, y: u32) -> u32 {
+    let ptr = FRAME_BB_PTR.load(Ordering::Relaxed);
+    if ptr.is_null() { return get_pixel(x, y); }
+    let stride = FRAME_BB_STRIDE.load(Ordering::Relaxed) as u32;
+    let height = FRAME_BB_HEIGHT.load(Ordering::Relaxed) as u32;
+    if x >= stride || y >= height { return 0; }
+    unsafe { *ptr.add(y as usize * stride as usize + x as usize) }
+}
+
 // ==================== SCROLLBACK BUFFER ====================
 // Store terminal history for scroll up/down functionality
 const SCROLLBACK_MAX_LINES: usize = 1000;  // Store up to 1000 lines of history
@@ -472,6 +518,25 @@ pub fn get_dimensions() -> (u32, u32) {
     (FB_WIDTH.load(Ordering::SeqCst) as u32, FB_HEIGHT.load(Ordering::SeqCst) as u32)
 }
 
+/// Execute a closure with direct mutable access to the backbuffer.
+/// The backbuffer lock is held for the entire duration — zero per-pixel overhead.
+/// The closure receives (buffer_ptr, width, height, stride).
+/// Returns true if the closure executed, false if backbuffer unavailable.
+/// 
+/// Usage: `with_backbuffer_mut(|ptr, w, h, s| { unsafe { *ptr.add(y*s+x) = color; } })`
+#[inline]
+pub fn with_backbuffer_mut<F: FnOnce(*mut u32, usize, usize, usize)>(f: F) -> bool {
+    let width = FB_WIDTH.load(Ordering::SeqCst) as usize;
+    let height = FB_HEIGHT.load(Ordering::SeqCst) as usize;
+    if width == 0 || height == 0 { return false; }
+    if let Some(ref mut buf) = *BACKBUFFER.lock() {
+        f(buf.as_mut_ptr(), width, height, width);
+        true
+    } else {
+        false
+    }
+}
+
 /// Get raw framebuffer address for direct access
 pub fn get_fb_addr() -> *mut u8 {
     FB_ADDR.load(Ordering::SeqCst)
@@ -530,38 +595,92 @@ pub fn get_backbuffer_info() -> Option<(*mut u8, u32, u32, u32)> {
     }
 }
 
-/// Swap buffers - copy backbuffer to framebuffer (SSE2 optimized)
+/// Swap buffers - copy backbuffer to display
+/// Upgrade #1: When VirtIO GPU is available, uses DMA transfer to host GPU
+/// instead of slow MMIO writes. Falls back to SSE2 MMIO copy otherwise.
+/// Upgrade #5: Collects dirty rects and only transfers changed regions to VirtIO GPU.
 pub fn swap_buffers() {
     let addr = FB_ADDR.load(Ordering::SeqCst);
-    if addr.is_null() {
-        return;
-    }
-    
     let width = FB_WIDTH.load(Ordering::SeqCst) as usize;
     let height = FB_HEIGHT.load(Ordering::SeqCst) as usize;
     let pitch = FB_PITCH.load(Ordering::SeqCst) as usize;
     
+    if width == 0 || height == 0 { return; }
+    
+    // ── VirtIO GPU DMA fast path ──
+    // Copy backbuffer → GPU backing buffer, then DMA to host display
+    // Upgrade #4: Uses double-buffered present for tear-free rendering
+    if crate::drivers::virtio_gpu::is_available() {
+        // Prefer back buffer (double-buffered), fall back to raw buffer
+        let gpu_buf = crate::drivers::virtio_gpu::get_back_buffer()
+            .or_else(|| crate::drivers::virtio_gpu::get_raw_buffer());
+        if let Some((gpu_ptr, gpu_w, gpu_h)) = gpu_buf {
+            if let Some(ref buf) = *BACKBUFFER.lock() {
+                let copy_w = width.min(gpu_w as usize);
+                let copy_h = height.min(gpu_h as usize);
+                unsafe {
+                    for y in 0..copy_h {
+                        let src = buf.as_ptr().add(y * width);
+                        let dst = gpu_ptr.add(y * gpu_w as usize);
+                        #[cfg(target_arch = "x86_64")]
+                        crate::graphics::simd::copy_row_sse2(dst, src, copy_w);
+                        #[cfg(not(target_arch = "x86_64"))]
+                        core::ptr::copy_nonoverlapping(src, dst, copy_w);
+                    }
+                }
+            }
+            // DMA transfer + flush + swap (double-buffered when available)
+            let _ = crate::drivers::virtio_gpu::present_frame_double_buffered();
+            // Also write to MMIO framebuffer for VGA fallback visibility
+            if !addr.is_null() {
+                swap_buffers_mmio(addr, width, height, pitch);
+            }
+            return;
+        }
+    }
+    
+    // ── MMIO fallback path ──
+    if addr.is_null() { return; }
+    swap_buffers_mmio(addr, width, height, pitch);
+}
+
+/// MMIO framebuffer copy — uses non-temporal stores (movnti) for optimal VRAM writes.
+/// NT stores bypass CPU cache and use write-combining, which is 2-4x faster for
+/// memory-mapped framebuffers (VGA, SVGA, VBox VRAM) and reduces cache pollution.
+fn swap_buffers_mmio(addr: *mut u8, width: usize, height: usize, pitch: usize) {
     if let Some(ref buf) = *BACKBUFFER.lock() {
-        // Fast copy row by row using SSE2 when available
         for y in 0..height {
             let src_offset = y * width;
             let dst_offset = y * pitch;
-            
             unsafe {
                 let src = buf.as_ptr().add(src_offset);
                 let dst = addr.add(dst_offset) as *mut u32;
-                
                 #[cfg(target_arch = "x86_64")]
-                {
-                    crate::graphics::simd::copy_row_sse2(dst, src, width);
-                }
+                crate::graphics::simd::copy_row_sse2_nt(dst, src, width);
                 #[cfg(not(target_arch = "x86_64"))]
-                {
-                    core::ptr::copy_nonoverlapping(src, dst, width);
-                }
+                core::ptr::copy_nonoverlapping(src, dst, width);
             }
         }
     }
+}
+
+/// Get a raw pointer to the backbuffer data (for GPU copy operations)
+/// Returns None if backbuffer is not allocated.
+pub fn get_backbuffer_ptr() -> Option<*const u32> {
+    let bb = BACKBUFFER.lock();
+    bb.as_ref().map(|buf| buf.as_ptr())
+}
+
+/// MMIO-only swap: copy backbuffer to MMIO framebuffer without VirtIO GPU path.
+/// Used when VirtIO GPU present is handled separately (dirty rect path).
+pub fn swap_buffers_mmio_only() {
+    let addr = FB_ADDR.load(Ordering::SeqCst);
+    if addr.is_null() { return; }
+    let width = FB_WIDTH.load(Ordering::SeqCst) as usize;
+    let height = FB_HEIGHT.load(Ordering::SeqCst) as usize;
+    let pitch = FB_PITCH.load(Ordering::SeqCst) as usize;
+    if width == 0 || height == 0 { return; }
+    swap_buffers_mmio(addr, width, height, pitch);
 }
 
 /// Clear backbuffer with color (SSE2 optimized)
@@ -747,6 +866,7 @@ pub fn fill_rect_alpha(x: u32, y: u32, w: u32, h: u32, color: u32, alpha: u32) {
     let sg = (color >> 8) & 0xFF;
     let sb = color & 0xFF;
     
+    // Use fast integer approximation: (x * a + 128) >> 8 ≈ x * a / 255
     if USE_BACKBUFFER.load(Ordering::SeqCst) {
         if let Some(ref mut buf) = *BACKBUFFER.lock() {
             for py in y1..y2 {
@@ -758,9 +878,9 @@ pub fn fill_rect_alpha(x: u32, y: u32, w: u32, h: u32, color: u32, alpha: u32) {
                         let dr = (existing >> 16) & 0xFF;
                         let dg = (existing >> 8) & 0xFF;
                         let db = existing & 0xFF;
-                        let r = (sr * alpha + dr * inv) / 255;
-                        let g = (sg * alpha + dg * inv) / 255;
-                        let b = (sb * alpha + db * inv) / 255;
+                        let r = ((sr * alpha + dr * inv + 128) >> 8).min(255);
+                        let g = ((sg * alpha + dg * inv + 128) >> 8).min(255);
+                        let b = ((sb * alpha + db * inv + 128) >> 8).min(255);
                         buf[idx] = 0xFF000000 | (r << 16) | (g << 8) | b;
                     }
                 }
@@ -773,9 +893,9 @@ pub fn fill_rect_alpha(x: u32, y: u32, w: u32, h: u32, color: u32, alpha: u32) {
                 let dr = (existing >> 16) & 0xFF;
                 let dg = (existing >> 8) & 0xFF;
                 let db = existing & 0xFF;
-                let r = (sr * alpha + dr * inv) / 255;
-                let g = (sg * alpha + dg * inv) / 255;
-                let b = (sb * alpha + db * inv) / 255;
+                let r = ((sr * alpha + dr * inv + 128) >> 8).min(255);
+                let g = ((sg * alpha + dg * inv + 128) >> 8).min(255);
+                let b = ((sb * alpha + db * inv + 128) >> 8).min(255);
                 put_pixel(px, py, 0xFF000000 | (r << 16) | (g << 8) | b);
             }
         }

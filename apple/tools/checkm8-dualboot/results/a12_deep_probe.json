@@ -1,0 +1,784 @@
+{
+  "device": {
+    "cpid": "0x8020",
+    "serial": "CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C20802E IBFL:3C SRTG:[iBoot-3865.0.0.4.7]",
+    "timestamp": "2026-03-02T15:44:30.404589"
+  },
+  "state_machine": [
+    {
+      "test": "initial_state",
+      "status": {
+        "bStatus": 0,
+        "status_name": "OK",
+        "bwPollTimeout": 50,
+        "bState": 2,
+        "state_name": "dfuIDLE",
+        "iString": 0,
+        "raw": "003200000200",
+        "time_ms": 0.46,
+        "ok": true
+      }
+    },
+    {
+      "test": "dnload_flow",
+      "dnload": {
+        "data": null,
+        "length": 256,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.424
+      },
+      "states": [
+        {
+          "bStatus": 0,
+          "status_name": "OK",
+          "bwPollTimeout": 50,
+          "bState": 5,
+          "state_name": "dfuDNLOAD-IDLE",
+          "iString": 0,
+          "raw": "003200000500",
+          "time_ms": 0.494,
+          "ok": true
+        },
+        {
+          "bStatus": 0,
+          "status_name": "OK",
+          "bwPollTimeout": 50,
+          "bState": 5,
+          "state_name": "dfuDNLOAD-IDLE",
+          "iString": 0,
+          "raw": "003200000500",
+          "time_ms": 0.492,
+          "ok": true
+        },
+        {
+          "bStatus": 0,
+          "status_name": "OK",
+          "bwPollTimeout": 50,
+          "bState": 5,
+          "state_name": "dfuDNLOAD-IDLE",
+          "iString": 0,
+          "raw": "003200000500",
+          "time_ms": 0.49,
+          "ok": true
+        },
+        {
+          "bStatus": 0,
+          "status_name": "OK",
+          "bwPollTimeout": 50,
+          "bState": 5,
+          "state_name": "dfuDNLOAD-IDLE",
+          "iString": 0,
+          "raw": "003200000500",
+          "time_ms": 0.46,
+          "ok": true
+        },
+        {
+          "bStatus": 0,
+          "status_name": "OK",
+          "bwPollTimeout": 50,
+          "bState": 5,
+          "state_name": "dfuDNLOAD-IDLE",
+          "iString": 0,
+          "raw": "003200000500",
+          "time_ms": 0.577,
+          "ok": true
+        },
+        {
+          "bStatus": 0,
+          "status_name": "OK",
+          "bwPollTimeout": 50,
+          "bState": 5,
+          "state_name": "dfuDNLOAD-IDLE",
+          "iString": 0,
+          "raw": "003200000500",
+          "time_ms": 0.68,
+          "ok": true
+        }
+      ]
+    },
+    {
+      "test": "manifest_trigger",
+      "skip": true,
+      "state": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.055
+      }
+    },
+    {
+      "test": "clr_from_idle",
+      "before": {
+        "ok": false,
+        "stall": false
+      },
+      "clr": {
+        "data": null,
+        "length": 0,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.074
+      },
+      "after": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.058
+      }
+    },
+    {
+      "test": "detach",
+      "det": {
+        "data": null,
+        "length": 0,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.107
+      },
+      "after": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.11
+      }
+    }
+  ],
+  "multiblock": [
+    {
+      "test": "seq_blocks_01",
+      "block0": {
+        "data": null,
+        "length": 256,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.27
+      },
+      "st0": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.228
+      },
+      "note": "not_in_dnload_idle"
+    },
+    {
+      "test": "high_block_0",
+      "dnload": {
+        "data": null,
+        "length": 64,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.089
+      },
+      "status": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.104
+      }
+    },
+    {
+      "test": "high_block_1",
+      "dnload": {
+        "data": null,
+        "length": 64,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.07
+      },
+      "status": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.061
+      }
+    },
+    {
+      "test": "high_block_16",
+      "dnload": {
+        "data": null,
+        "length": 64,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.066
+      },
+      "status": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.05
+      }
+    },
+    {
+      "test": "high_block_256",
+      "dnload": {
+        "data": null,
+        "length": 64,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.091
+      },
+      "status": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.063
+      }
+    },
+    {
+      "test": "high_block_4095",
+      "dnload": {
+        "data": null,
+        "length": 64,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.089
+      },
+      "status": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.062
+      }
+    },
+    {
+      "test": "high_block_65535",
+      "dnload": {
+        "data": null,
+        "length": 64,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.067
+      },
+      "status": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.056
+      }
+    },
+    {
+      "test": "rapid_burst",
+      "blocks": [
+        {
+          "block": 0,
+          "error": null,
+          "stall": false
+        },
+        {
+          "block": 1,
+          "error": null,
+          "stall": false
+        },
+        {
+          "block": 2,
+          "error": null,
+          "stall": false
+        },
+        {
+          "block": 3,
+          "error": null,
+          "stall": false
+        },
+        {
+          "block": 4,
+          "error": null,
+          "stall": false
+        },
+        {
+          "block": 5,
+          "error": null,
+          "stall": false
+        },
+        {
+          "block": 6,
+          "error": null,
+          "stall": false
+        },
+        {
+          "block": 7,
+          "error": null,
+          "stall": false
+        },
+        {
+          "block": 8,
+          "error": null,
+          "stall": false
+        },
+        {
+          "block": 9,
+          "error": null,
+          "stall": false
+        }
+      ],
+      "final": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.085
+      }
+    },
+    {
+      "test": "maxsize_2blocks",
+      "st0": {
+        "ok": false,
+        "stall": false,
+        "timeout": false,
+        "error": null,
+        "time_ms": 0.071
+      },
+      "note": "block0_failed"
+    }
+  ],
+  "upload": [
+    {
+      "test": "idle_upload",
+      "req_size": 1,
+      "got": 0,
+      "nonzero": false
+    },
+    {
+      "test": "idle_upload",
+      "req_size": 64,
+      "got": 0,
+      "nonzero": false
+    },
+    {
+      "test": "idle_upload",
+      "req_size": 256,
+      "got": 0,
+      "nonzero": false
+    },
+    {
+      "test": "idle_upload",
+      "req_size": 512,
+      "got": 0,
+      "nonzero": false
+    },
+    {
+      "test": "idle_upload",
+      "req_size": 1024,
+      "got": 0,
+      "nonzero": false
+    },
+    {
+      "test": "idle_upload",
+      "req_size": 2048,
+      "got": 0,
+      "nonzero": false
+    },
+    {
+      "test": "idle_upload",
+      "req_size": 4096,
+      "got": 0,
+      "nonzero": false
+    },
+    {
+      "test": "post_dnload_upload",
+      "wValue": 0,
+      "got": 0,
+      "nonzero": false,
+      "has_marker": false
+    },
+    {
+      "test": "post_dnload_upload",
+      "wValue": 1,
+      "got": 0,
+      "nonzero": false,
+      "has_marker": false
+    }
+  ],
+  "state_chains": [
+    {
+      "chain": "DNLOAD\u2192CLR\u2192DNLOAD",
+      "log": [
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "get_status",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.061
+          }
+        },
+        {
+          "op": "clr_status",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "get_status",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.052
+          }
+        },
+        {
+          "op": "final_state",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.082
+          }
+        }
+      ]
+    },
+    {
+      "chain": "CLR\u2192CLR\u2192CLR\u2192DNLOAD",
+      "log": [
+        {
+          "op": "clr_status",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "clr_status",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "clr_status",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "get_status",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.048
+          }
+        },
+        {
+          "op": "final_state",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.074
+          }
+        }
+      ]
+    },
+    {
+      "chain": "ABORT\u2192DNLOAD\u2192ABORT\u2192UPLOAD",
+      "log": [
+        {
+          "op": "abort",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "abort",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "upload",
+          "len": 0,
+          "nonzero": false
+        },
+        {
+          "op": "get_status",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.063
+          }
+        },
+        {
+          "op": "final_state",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.065
+          }
+        }
+      ]
+    },
+    {
+      "chain": "DNLOAD\u2192ABORT\u2192DNLOAD(diff_block)\u2192STATUS",
+      "log": [
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "get_status",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.063
+          }
+        },
+        {
+          "op": "abort",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "get_status",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.054
+          }
+        },
+        {
+          "op": "final_state",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.059
+          }
+        }
+      ]
+    },
+    {
+      "chain": "DETACH\u2192DNLOAD\u2192STATUS",
+      "log": [
+        {
+          "op": "detach",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "get_status",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.061
+          }
+        },
+        {
+          "op": "final_state",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.05
+          }
+        }
+      ]
+    },
+    {
+      "chain": "DNLOAD_4KB\u2192STATUS\u2192DNLOAD_4KB_BLK1\u2192STATUS",
+      "log": [
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "get_status",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.105
+          }
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "get_status",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.071
+          }
+        },
+        {
+          "op": "final_state",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.105
+          }
+        }
+      ]
+    },
+    {
+      "chain": "10x_DNLOAD_no_status",
+      "log": [
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "dnload",
+          "error": null,
+          "stall": false
+        },
+        {
+          "op": "get_status",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.053
+          }
+        },
+        {
+          "op": "final_state",
+          "status": {
+            "ok": false,
+            "stall": false,
+            "timeout": false,
+            "error": null,
+            "time_ms": 0.058
+          }
+        }
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "category": "state_machine",
+      "title": "CLR_STATUS accepted from dfuIDLE",
+      "detail": "Before=? After=?",
+      "severity": "high",
+      "timestamp": "2026-03-02T15:44:30.820080"
+    },
+    {
+      "category": "state_machine",
+      "title": "DETACH accepted from dfuIDLE",
+      "detail": "SecureROM accepted DETACH \u2014 may trigger reset/re-enumeration",
+      "severity": "high",
+      "timestamp": "2026-03-02T15:44:30.874054"
+    },
+    {
+      "category": "multiblock",
+      "title": "Rapid burst: 10/10 blocks accepted",
+      "detail": "Device accepted multiple rapid DNLOADs without status checks \u2014 state machine does not enforce GET_STATUS between blocks",
+      "severity": "high",
+      "timestamp": "2026-03-02T15:44:31.459747"
+    }
+  ],
+  "total_findings": 3
+}

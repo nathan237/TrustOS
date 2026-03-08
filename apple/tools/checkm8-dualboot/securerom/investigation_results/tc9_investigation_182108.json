@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-03-04T18:21:00.415260",
+  "device": "CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C20802E IBFL:3C SRTG:[iBoot-3865.0.0.4.7]",
+  "exp2_chain_payload": [
+    {
+      "phase": "baseline_manifest",
+      "time_ms": 71.3,
+      "state": "{'error': '[Errno 5] Input/Output Error'}"
+    }
+  ]
+}

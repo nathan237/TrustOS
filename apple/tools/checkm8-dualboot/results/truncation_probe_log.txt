@@ -1,0 +1,101 @@
+[17:42:54.776] [INFO] 
+############################################################
+[17:42:54.776] [INFO] DER TRUNCATED SEQUENCE PROBE — A12 SecureROM
+[17:42:54.776] [INFO] Tests: 31/31 (starting at 0)
+[17:42:54.776] [INFO] ############################################################
+
+[17:42:54.812] [INFO] DFU connected: CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C208
+[17:42:54.812] [INFO] 
+--- Test 1/31: REPRO_exact_10B (10B) ---
+[17:42:55.491] [FIND] *** [HIGH] CRASH in manifest: REPRO_exact_10B: device gone @ 73ms
+[17:42:55.491] [INFO]   [CRASH] REPRO_exact_10B                               |    10B |   586.1ms | state=?
+[17:42:55.491] [INFO] 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:42:55.491] [INFO] DEVICE CRASHED on 'REPRO_exact_10B'!
+[17:42:55.492] [INFO] Re-enter DFU and run with --start 1
+[17:42:55.492] [INFO] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:49:08.002] [INFO] 
+############################################################
+[17:49:08.002] [INFO] DER TRUNCATED SEQUENCE PROBE — A12 SecureROM
+[17:49:08.002] [INFO] Tests: 30/31 (starting at 1)
+[17:49:08.002] [INFO] ############################################################
+
+[17:49:08.039] [INFO] DFU connected: CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C208
+[17:49:08.039] [INFO] 
+--- Test 2/31: magic_zeroes_10B (10B) ---
+[17:49:08.719] [FIND] *** [HIGH] CRASH in manifest: magic_zeroes_10B: device gone @ 73ms
+[17:49:08.720] [INFO]   [CRASH] magic_zeroes_10B                              |    10B |   587.4ms | state=?
+[17:49:08.720] [INFO] 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:49:08.720] [INFO] DEVICE CRASHED on 'magic_zeroes_10B'!
+[17:49:08.720] [INFO] Re-enter DFU and run with --start 2
+[17:49:08.720] [INFO] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:51:38.385] [INFO] 
+############################################################
+[17:51:38.385] [INFO] DER TRUNCATED SEQUENCE PROBE — A12 SecureROM
+[17:51:38.385] [INFO] Tests: 29/31 (starting at 2)
+[17:51:38.385] [INFO] ############################################################
+
+[17:51:38.428] [INFO] DFU connected: CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C208
+[17:51:38.428] [INFO] 
+--- Test 3/31: magic_random_10B (10B) ---
+[17:51:39.107] [FIND] *** [HIGH] CRASH in manifest: magic_random_10B: device gone @ 73ms
+[17:51:39.108] [INFO]   [CRASH] magic_random_10B                              |    10B |   586.5ms | state=?
+[17:51:39.108] [INFO] 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:51:39.108] [INFO] DEVICE CRASHED on 'magic_random_10B'!
+[17:51:39.108] [INFO] Re-enter DFU and run with --start 3
+[17:51:39.108] [INFO] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:53:29.258] [INFO] 
+############################################################
+[17:53:29.258] [INFO] DER TRUNCATED SEQUENCE PROBE — A12 SecureROM
+[17:53:29.259] [INFO] Tests: 4/31 (starting at 27)
+[17:53:29.259] [INFO] ############################################################
+
+[17:53:29.296] [INFO] DFU connected: CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C208
+[17:53:29.296] [INFO] 
+--- Test 28/31: correct_len_0B (2B) ---
+[17:53:29.976] [FIND] *** [HIGH] CRASH in manifest: correct_len_0B: device gone @ 73ms
+[17:53:29.976] [INFO]   [CRASH] correct_len_0B                                |     2B |   586.5ms | state=?
+[17:53:29.976] [INFO] 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:53:29.976] [INFO] DEVICE CRASHED on 'correct_len_0B'!
+[17:53:29.976] [INFO] Re-enter DFU and run with --start 28
+[17:53:29.976] [INFO] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:55:29.174] [INFO] 
+############################################################
+[17:55:29.174] [INFO] DER TRUNCATED SEQUENCE PROBE — A12 SecureROM
+[17:55:29.174] [INFO] Tests: 11/31 (starting at 20)
+[17:55:29.174] [INFO] ############################################################
+
+[17:55:29.211] [INFO] DFU connected: CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C208
+[17:55:29.211] [INFO] 
+--- Test 21/31: padded_512B (512B) ---
+[17:55:32.867] [INFO]   [OK   ] padded_512B                                   |   512B |  3562.4ms | state=8
+[17:55:33.382] [INFO] 
+--- Test 22/31: padded_4096B (4096B) ---
+[17:55:33.413] [INFO]     _reconnect: ABORT + USB reset cycle...
+[17:55:36.330] [INFO]     _reconnect: attempt 0: state=2
+[17:55:38.283] [FIND] *** [HIGH] CRASH in manifest: padded_4096B: device gone @ 73ms
+[17:55:38.283] [INFO]   [CRASH] padded_4096B                                  |  4096B |   585.7ms | state=?
+[17:55:38.283] [INFO] 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:55:38.283] [INFO] DEVICE CRASHED on 'padded_4096B'!
+[17:55:38.284] [INFO] Re-enter DFU and run with --start 22
+[17:55:38.284] [INFO] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:57:03.363] [INFO] 
+############################################################
+[17:57:03.363] [INFO] DER TRUNCATED SEQUENCE PROBE — A12 SecureROM
+[17:57:03.364] [INFO] Tests: 9/31 (starting at 22)
+[17:57:03.364] [INFO] ############################################################
+
+[17:57:03.400] [INFO] DFU connected: CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C208
+[17:57:03.400] [INFO] 
+--- Test 23/31: trunc_SEQUENCE_alone (4B) ---
+[17:57:04.079] [FIND] *** [HIGH] CRASH in manifest: trunc_SEQUENCE_alone: device gone @ 73ms
+[17:57:04.080] [INFO]   [CRASH] trunc_SEQUENCE_alone                          |     4B |   586.2ms | state=?
+[17:57:04.080] [INFO] 
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+[17:57:04.080] [INFO] DEVICE CRASHED on 'trunc_SEQUENCE_alone'!
+[17:57:04.080] [INFO] Re-enter DFU and run with --start 23
+[17:57:04.080] [INFO] !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

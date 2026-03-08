@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-03-02T18:28:40.275975",
+  "dnload_transfer": {
+    "test": "dnload_transfer_time",
+    "sizes": [
+      {
+        "size": 16,
+        "mean_us": 477.58,
+        "median_us": 482.45000000000005,
+        "stdev_us": 23.641150564217465,
+        "min_us": 415.3,
+        "max_us": 504.5,
+        "samples": 10,
+        "all_us": [
+          489.7,
+          478.8,
+          504.5,
+          478.8,
+          415.3,
+          476.3,
+          472.4,
+          486.7,
+          486.1,
+          487.2
+        ]
+      }
+    ],
+    "slope_us_per_byte": null,
+    "intercept_us": null,
+    "throughput_MBs": null
+  }
+}

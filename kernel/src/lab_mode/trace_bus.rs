@@ -11,7 +11,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 use spin::Mutex;
 
 /// Maximum events in the ring buffer
-const EVENT_RING_SIZE: usize = 512;
+const EVENT_RING_SIZE: usize = 128;
 
 /// Event categories (colored differently in UI)
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

@@ -130,6 +130,9 @@ mod wayland;
 // Binary-to-Rust transpiler (analyze and convert Linux binaries)
 mod transpiler;
 
+// Universal RISC-V Translation Layer (run ANY architecture's binaries via RISC-V IR)
+mod riscv_translator;
+
 // TrustView — binary analysis engine (ELF parser, disassembler, xrefs)
 mod binary_analysis;
 
@@ -224,12 +227,15 @@ mod usercopy;
 // Jarvis Neural Brain — self-hosted tiny transformer for on-device AI
 mod jarvis;
 
+// Jarvis Hardware Intelligence — AI-driven hardware awareness and self-optimization
+mod jarvis_hw;
+
 use core::panic::PanicInfo;
 use core::alloc::Layout;
 use limine::request::{
     FramebufferRequest, MemoryMapRequest, HhdmRequest,
     RequestsStartMarker, RequestsEndMarker, ModuleRequest,
-    RsdpRequest, SmpRequest, KernelAddressRequest
+    RsdpRequest, SmpRequest, KernelAddressRequest, KernelFileRequest
 };
 use limine::BaseRevision;
 
@@ -267,6 +273,9 @@ static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
 #[unsafe(link_section = ".requests")]
 static MODULE_REQUEST: ModuleRequest = ModuleRequest::new();
 
+/// Deferred JARVIS brain module data (saved during module scan, written to RamFS after Phase 16)
+static mut JARVIS_BRAIN_MODULE: Option<&'static [u8]> = None;
+
 /// Request RSDP (ACPI tables) from Limine
 #[used]
 #[unsafe(link_section = ".requests")]
@@ -281,6 +290,11 @@ static SMP_REQUEST: SmpRequest = SmpRequest::new();
 #[used]
 #[unsafe(link_section = ".requests")]
 static KERNEL_ADDRESS_REQUEST: KernelAddressRequest = KernelAddressRequest::new();
+
+/// Request kernel file data (for PXE self-replication — serve our own binary)
+#[used]
+#[unsafe(link_section = ".requests")]
+static KERNEL_FILE_REQUEST: KernelFileRequest = KernelFileRequest::new();
 
 /// Limine requests end marker
 #[used]
@@ -324,6 +338,16 @@ pub unsafe extern "C" fn kmain() -> ! {
             );
         }
         // UART_BASE stays at 0x09000000 (identity-mapped with Device attributes)
+    }
+
+    // Phase 0.9: Register kernel file for PXE self-replication
+    if let Some(kf_resp) = KERNEL_FILE_REQUEST.get_response() {
+        let file = kf_resp.file();
+        let ptr = file.addr();
+        let size = file.size() as usize;
+        if size > 0 {
+            unsafe { jarvis::pxe_replicator::register_kernel_file(ptr, size); }
+        }
     }
 
     // Phase 1: Early init - serial port for debug output
@@ -953,6 +977,10 @@ pub unsafe extern "C" fn kmain() -> ! {
                 } else if cmdline.contains("linux-initramfs") || path.contains("initramfs") {
                     initramfs_data = Some(data);
                     serial_println!("[TSL] Initramfs loaded: {} bytes", size);
+                } else if cmdline.contains("jarvis-brain") || path.contains("jarvis_pretrained") {
+                    // Save pointer — RamFS not yet initialized, will copy after Phase 16
+                    serial_println!("[JARVIS] Boot module: {} bytes brain weights (deferred to RamFS)", size);
+                    unsafe { JARVIS_BRAIN_MODULE = Some(data); }
                 }
             }
             
@@ -1018,6 +1046,22 @@ pub unsafe extern "C" fn kmain() -> ! {
         let _ = fs.mkdir("/usr");
         let _ = fs.mkdir("/etc");
     });
+
+    // Copy deferred JARVIS brain module into RamFS (saved during Phase 12a)
+    if let Some(brain_data) = unsafe { JARVIS_BRAIN_MODULE.take() } {
+        serial_println!("[JARVIS] Copying {} KB brain weights to RamFS...", brain_data.len() / 1024);
+        ramfs::with_fs(|fs| {
+            let _ = fs.mkdir("/jarvis");
+        });
+        ramfs::with_fs(|fs| {
+            let _ = fs.touch("/jarvis/weights.bin");
+            match fs.write_file("/jarvis/weights.bin", brain_data) {
+                Ok(_) => serial_println!("[JARVIS] Brain weights cached to /jarvis/weights.bin ({} KB)", brain_data.len() / 1024),
+                Err(_) => serial_println!("[JARVIS] WARNING: Failed to cache brain to RamFS"),
+            }
+        });
+    }
+
     framebuffer::print_boot_status("RAM filesystem ready", BootStatus::Ok);
 
     // Load user/group data from /etc files (if persisted from previous boot)

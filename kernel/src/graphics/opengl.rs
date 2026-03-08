@@ -470,8 +470,8 @@ pub fn gl_end() {
     let polygon_mode = state.polygon_mode;
     let shade_model = state.shade_model;
     
-    // Clone vertices to process
-    let vertices = state.vertices.clone();
+    // Take vertices instead of cloning (avoids heap allocation + copy)
+    let vertices = core::mem::take(&mut state.vertices);
     let prim_type = state.primitive_type;
     
     // We need to drop state before calling framebuffer functions
@@ -697,7 +697,7 @@ pub fn gl_tex_coord2f(s: f32, t: f32) {
     state.current_texcoord = (s, t);
 }
 
-/// Add a vertex
+/// Add a vertex — batched: copies current state without extra lock overhead
 pub fn gl_vertex3f(x: f32, y: f32, z: f32) {
     let mut state = GL_STATE.lock();
     if !state.in_begin_end {
@@ -705,11 +705,10 @@ pub fn gl_vertex3f(x: f32, y: f32, z: f32) {
         return;
     }
     
-    // Copy state values first to avoid borrow conflicts
+    // Copy fields first to avoid simultaneous mutable + immutable borrow
     let color = state.current_color;
     let normal = state.current_normal;
     let texcoord = state.current_texcoord;
-    
     state.vertices.push(ImmediateVertex {
         position: Vec3::new(x, y, z),
         color,
@@ -719,8 +718,31 @@ pub fn gl_vertex3f(x: f32, y: f32, z: f32) {
 }
 
 /// Add a vertex (2D, z=0)
+#[inline]
 pub fn gl_vertex2f(x: f32, y: f32) {
     gl_vertex3f(x, y, 0.0);
+}
+
+/// Batch-add multiple vertices at once (avoids per-vertex lock/unlock)
+/// Each vertex is (x, y, z). Uses current color/normal/texcoord for all.
+pub fn gl_vertices_batch(verts: &[(f32, f32, f32)]) {
+    let mut state = GL_STATE.lock();
+    if !state.in_begin_end {
+        state.last_error = GL_INVALID_OPERATION;
+        return;
+    }
+    let color = state.current_color;
+    let normal = state.current_normal;
+    let texcoord = state.current_texcoord;
+    state.vertices.reserve(verts.len());
+    for &(x, y, z) in verts {
+        state.vertices.push(ImmediateVertex {
+            position: Vec3::new(x, y, z),
+            color,
+            normal,
+            texcoord,
+        });
+    }
 }
 
 /// Flush rendering (no-op for immediate mode, kept for API compatibility)

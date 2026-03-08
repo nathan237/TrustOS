@@ -1,0 +1,497 @@
+═══════════════════════════════════════════════════════════════════════
+ iOS 18.5 (22F76) IOSurface CHAIN B — FINAL INTELLIGENCE REPORT v2
+ iPhone 11 Pro (iPhone12,3) / A13 Bionic (T8030) / PAC v1
+═══════════════════════════════════════════════════════════════════════
+
+ Generated: 2026-03-02 (updated with Phase 10-11 corrections)
+ Kernelcache: 60,473,344 bytes, SHA256 prefix: 79b92c7dc5b0568b
+ KC_BASE: 0xfffffff007004000
+ MH_FILESET: 236 fileset entries, 247 load commands
+
+═══════════════════════════════════════════════════════════════════════
+ 1. KERNELCACHE ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════
+
+ Format:       MH_FILESET (filetype=12) Kernel Collection
+ CPU:          ARM64 (cputype=0x100000c)
+ Compression:  LZFSE (bvx2)
+ IM4P FourCC:  krnl
+ 
+ IOSurface kext: com.apple.iokit.IOSurface
+   VA:           0xfffffff007729b20
+   FileOff:      0x725b20
+   __TEXT:        0xfffffff007729b20 (size 0x6196)
+   __TEXT_EXEC:   0xfffffff009e676d0 - 0xfffffff009e954c8 (187,896 bytes)
+   __DATA:        0xfffffff00a8dce48 (size 0x598)
+   __DATA_CONST:  0xfffffff007e543b0 (size 0x5ac8)
+
+═══════════════════════════════════════════════════════════════════════
+ 2. DISPATCH TABLE — 63 SELECTORS
+═══════════════════════════════════════════════════════════════════════
+
+ Location: 0xfffffff007e56618 (24-byte stride)
+ 
+ Key selectors:
+ 
+ Sel  Name                     Target VA              PAC       Lock Status
+ ───  ─────────────────────    ──────────────────     ────────  ──────────
+  0   s_create_surface         0xfffffff009e86024     IA/0x3771  NO LOCK
+  1   s_delete_surface         0xfffffff0084ff664     IA/0x3607  (unknown)
+  2   s_lookup_surface         0xfffffff0084ff418     IA/0x89a9  (unknown)
+  3   s_lock_surface           0xfffffff0084ff390     IA/0x5635  (unknown)
+  4   s_unlock_surface         0xfffffff0085630e8     IA/0x9209  NO LOCK
+  5   s_get_value              0xfffffff00857f3a4     IA/0x5c68  *** NO LOCK ***
+  6   s_set_value              0xfffffff00857ee7c     IA/0xaf75  LOCKED ✓
+  7   s_increment_use_count    0xfffffff00861c8d0     IA/0x43aa  NO LOCK
+  8   s_decrement_use_count    0xfffffff00857e464     IA/0x4275  NO LOCK
+  9   s_set_value_xml          0xfffffff00857e1ac     IA/0x122e  NO LOCK
+  10  s_get_value_xml          0xfffffff00857dde8     IA/0xacb1  NO LOCK
+  11  s_bulk_set_value         0xfffffff00857dba0     IA/0x82eb  NO LOCK
+  12  s_bulk_get_value         0xfffffff00857d83c     IA/0xb659  NO LOCK
+
+═══════════════════════════════════════════════════════════════════════
+ 3. PAC DIVERSITY MAP
+═══════════════════════════════════════════════════════════════════════
+
+ Vtable pointer auth:   0xcda1 (DA key)
+ Vtable+0x20 retain:    0x2e4a (IA key)
+ Vtable+0x28 release:   0x3a87 (IA key)
+ 
+ s_get_value dispatches (6 total, ALL UNLOCKED):
+   vtable+0x148:        0x5a20 (property getter)
+   vtable+0x68:         0x4a6a (helper)
+   vtable+0x20:         0x2e4a (retain)
+   vtable+0x???:        0x1ac8 (allocation helper)
+   vtable+0x148:        0x5a20 (second getter call)
+   vtable+0x28:         0x3a87 (release)
+ 
+ s_set_value dispatches (3 total, ALL UNDER LOCK):
+   vtable+0x128:        0x5837 (property container)
+   vtable+0x118:        0x8453 (property setter)
+   vtable+0x20:         0x2e4a (retain)
+ 
+ s_set_value_xml dispatches (3 total, UNLOCKED):
+   vtable+0x???:        0x4578 (xml handler — DIFFERENT div from binary!)
+   vtable+0x28:         0x3a87 (release × 2)
+
+═══════════════════════════════════════════════════════════════════════
+ 4. OVERFLOW PROTECTION ANALYSIS
+═══════════════════════════════════════════════════════════════════════
+
+ Total MUL-family instructions in IOSurface: 96
+ 
+ Protection breakdown:
+   UMULH+CBNZ (strong):   24  (25.0%)
+   CMP+branch (bounds):   61  (63.5%)
+   CBNZ (conditional):    10  (10.4%)
+   "Unprotected":          1  (1.0%) ← FALSE POSITIVE
+ 
+ The single "unprotected" MUL at 0xfffffff009e76790:
+   UMULL x8, w9, w8  where w8 = 0xD1B71759
+   Followed by:  LSR x8, x8, #0x2d
+   This is compiler division-by-10 optimization.
+   UMULL 32×32→64 inherently safe. CEA-861 display info function.
+   
+ VERDICT: ALL integer overflows PROTECTED. NOT exploitable.
+
+═══════════════════════════════════════════════════════════════════════
+ 5. PHASE 10 — LOCK SCOPE ANALYSIS (CORRECTED)
+═══════════════════════════════════════════════════════════════════════
+
+ *** CRITICAL CORRECTION FROM PHASE 9 ***
+ 
+ Phase 9 only searched for INLINE atomics (CASA/LDXR/MRS) within
+ each function body. This MISSED lock acquisition via BL (function call).
+ 
+ Phase 10 deep trace discovered that s_set_value calls a DEDICATED
+ lock function via BL instruction. The lock function (0x7f4bc20)
+ internally uses CASA/LDXR/MRS for spinlock implementation.
+ 
+ CORRECTED LOCK ANALYSIS:
+ ┌──────────────────────────────┬────────┬───────┬─────────────────┐
+ │ Function                     │ Size   │ Lock  │ VT dispatches   │
+ ├──────────────────────────────┼────────┼───────┼─────────────────┤
+ │ s_set_value @ 0x857ee7c      │ 240 B  │ YES ✓ │ 3 (all locked)  │
+ │ s_get_value @ 0x857f3a4      │ 540 B  │ NO  ✗ │ 6 (UNPROTECTED) │
+ │ s_set_value_xml @ 0x857e1ac  │ 276 B  │ NO  ✗ │ 3 (UNPROTECTED) │
+ │ s_get_value_xml @ 0x857dde8  │ 212 B  │ NO  ✗ │ 1 (UNPROTECTED) │
+ │ s_bulk_set_value @ 0x857dba0 │ 212 B  │ NO  ✗ │ 1 (UNPROTECTED) │
+ │ s_bulk_get_value @ 0x857d83c │ 540 B  │ NO  ✗ │ 6 (UNPROTECTED) │
+ │ s_decrement_use @ 0x857e464  │ 172 B  │ NO  ✗ │ 2 (UNPROTECTED) │
+ │ s_increment_use @ 0x861c8d0  │ 400 B  │ NO  ✗ │ 2 (UNPROTECTED) │
+ │ s_create_surface @ 0x9e86024 │ 320 B  │ NO  ✗ │ 5 (UNPROTECTED) │
+ └──────────────────────────────┴────────┴───────┴─────────────────┘
+ 
+ Lock details for s_set_value:
+   Lock acquire: BL 0xfffffff007f4bc20 at offset +0x20 (0x857ee9c)
+   Lock release: BL 0xfffffff007f4c894 at offset +0xdc (0x857ef58)
+   Lock object:  0xfffffff00a651770 (global IOSurface lock)
+   
+   Lock function internals (0x7f4bc20):
+     MRS x17, TPIDR_EL1     ← get current thread
+     LDXR w9, [x0]          ← load lock word (atomic)
+     CASA w9, w8, [x0]      ← compare-and-swap acquire
+     → Standard kernel spinlock implementation
+   
+   Unlock function (0x7f4c894):
+     Reverse of above, STR/STLR release semantics
+
+ *** LOCK ASYMMETRY BUG ***
+
+ s_set_value (selector 6) is the ONLY dispatch handler that acquires
+ the lock at 0xa651770 before touching the property dictionary.
+ 
+ ALL other handlers — including s_get_value which reads the SAME
+ property dictionary — operate with ZERO locking.
+ 
+ This creates a classic TOCTOU race:
+   Thread A: s_set_value → holds lock → replaces property X
+   Thread B: s_get_value → NO lock    → reads property X mid-replacement
+   Result:   Thread B observes partially-written state (stale pointer, 
+             freed object, or length/type desync)
+
+═══════════════════════════════════════════════════════════════════════
+ 6. ATTACK VECTORS (priority order, UPDATED)
+═══════════════════════════════════════════════════════════════════════
+
+ VECTOR 1: LOCK ASYMMETRY RACE — s_set_value vs s_get_value [CRITICAL]
+ ──────────────────────────────────────────────────────────────────────
+ s_set_value holds lock. s_get_value DOES NOT.
+ 
+ The setter modifies the property dictionary under lock protection,
+ but the getter reads from it without any synchronization.
+ 
+ Race pattern:
+   Thread A: s_set_value(surface, key, OSData_A) → locked write
+   Thread B: s_get_value(surface, key)           → unlocked read
+ 
+ s_get_value executes 6 vtable dispatches on the result:
+   1. vtable+0x148(self, key)  ← property lookup (div 0x5a20)
+   2. vtable+0x68(result)      ← helper dispatch (div 0x4a6a)
+   3. vtable+0x20(result)      ← retain (div 0x2e4a)
+   ...
+ 
+ If the setter replaces the property between getter's dispatches
+ 1 and 2, the getter operates on a stale/freed object.
+ 
+ VECTOR 2: TYPE CONFUSION — binary set + XML set → getter [HIGH]
+ ──────────────────────────────────────────────────────────────────
+ s_set_value and s_set_value_xml use DIFFERENT vtable dispatches:
+   Binary path: vtable+0x128, diversity 0x5837 (property container)
+   XML path:    vtable+0x???, diversity 0x4578 (xml handler)
+ 
+ These create different backing objects (OSData vs OSDictionary).
+ s_get_value always reads via vtable+0x148 (div 0x5a20):
+   - Reads OSDictionary as if it were OSData → length confusion
+   - OSDictionary internal pointers leak as "property data"
+ 
+ Both s_set_value_xml AND s_get_value are UNLOCKED, so this 
+ race has an even wider window than Vector 1.
+ 
+ VECTOR 3: UAF via unlocked refcount race [MEDIUM]
+ ─────────────────────────────────────────────────
+ s_decrement_use_count (sel 8) has NO LOCK:
+   Thread A: decrement → refcount hits 0 → surface freed
+   Thread B: get_value → reads freed surface memory → info leak
+ 
+ VECTOR 4: s_bulk_get_value iteration race [MEDIUM]
+ ──────────────────────────────────────────────────
+ 540 bytes, 6 vtable dispatches, NO LOCK.
+ Iterates over multiple properties. If another thread modifies
+ during iteration → OOB read on resized property array.
+
+═══════════════════════════════════════════════════════════════════════
+ 7. PHASE 11 — KERNEL PHYSICAL MEMORY PRIMITIVES
+═══════════════════════════════════════════════════════════════════════
+
+ *** NEW: ml_phys_read/write family resolved ***
+ 
+ Discovery method: String xref approach.
+   "ml_phys_read_data" string @ 0xfffffff0070586f2
+   "ml_phys_write_data" string @ 0xfffffff007058731
+   Strings are referenced as panic handler arguments in the wrappers.
+
+ READ FUNCTIONS:
+ ┌────────────────────────────┬─────────────────────┬──────┬────────┐
+ │ Function                   │ Address             │ Size │ Width  │
+ ├────────────────────────────┼─────────────────────┼──────┼────────┤
+ │ ml_phys_read_core          │ 0xfffffff00807b4f8  │ 452B │ w1=*   │
+ │ ml_phys_read_data          │ 0xfffffff00807b738  │  28B │ w1=4   │
+ │ ml_phys_read_half          │ 0xfffffff00807b754  │  28B │ w1=2   │
+ │ ml_phys_read_byte          │ 0xfffffff00807b770  │  28B │ w1=1   │
+ │ ml_phys_read_double        │ 0xfffffff00807b78c  │  28B │ w1=8   │
+ └────────────────────────────┴─────────────────────┴──────┴────────┘
+
+ WRITE FUNCTIONS:
+ ┌────────────────────────────┬─────────────────────┬──────┬────────┐
+ │ Function                   │ Address             │ Size │ Width  │
+ ├────────────────────────────┼─────────────────────┼──────┼────────┤
+ │ ml_phys_write_core         │ 0xfffffff00807b7a8  │ 444B │ w3=*   │
+ └────────────────────────────┴─────────────────────┴──────┴────────┘
+
+ ml_phys_read_core IMPLEMENTATION (0x807b4f8):
+   - MRS TPIDR_EL1            → get current thread pointer
+   - LDR x9, [thread, #0x158] → load preemption_count
+   - ADD/STR preempt++         → disable preemption
+   - LDP gPhysBase, gPhysSize → from [0x7a6c000+0xbb8], [0x7a6c000+0xbc0]
+   - SUB x0, x0, gPhysBase    → compute physical offset
+   - CMP x0, gPhysSize        → bounds check!
+   - B.HS panic                → panics if out of range
+   - physmap_base construction:
+       MOV x9, #0xffd00000
+       MOVK x9, #0xfffb, LSL#32
+       MOVK x9, #0xffff, LSL#48
+       → physmap_base = 0xfffffffbffd00000
+   - ADD x9, x9, x0           → virtual = physmap_base + phys_offset
+   - Size dispatch (w1):
+       1 → LDRB w0, [x9]
+       2 → LDRH w0, [x9]
+       4 → LDR  w0, [x9]
+       8 → LDR  x0, [x9]
+      16 → LDP  x0, x1, [x9]
+   - STR preempt--             → re-enable preemption
+   - RET
+
+ GLOBAL VARIABLES:
+ ┌─────────────────────┬─────────────────────┬────────────────────┐
+ │ Symbol              │ Address             │ Description        │
+ ├─────────────────────┼─────────────────────┼────────────────────┤
+ │ gPhysBase           │ 0xfffffff007a6cbb8  │ Physical mem base  │
+ │ gPhysSize           │ 0xfffffff007a6cbc0  │ Physical mem size  │
+ │ pv_head_table       │ 0xfffffff007a46d28  │ Page→virt map table│
+ │ physmap_base (const)│ 0xfffffffbffd00000  │ VA of physmap      │
+ └─────────────────────┴─────────────────────┴────────────────────┘
+
+ IMPORTANT NOTE: ml_phys_read_core performs a bounds check:
+   if (paddr - gPhysBase >= gPhysSize) → panic!
+   
+ For BootROM dump at 0x100000000, we need:
+   gPhysBase <= 0x100000000 < gPhysBase + gPhysSize
+   
+ On A13 (T8030): gPhysBase is typically ~0x800000000 (DRAM base).
+ BootROM at 0x100000000 is BELOW gPhysBase → ml_phys_read will PANIC.
+ 
+ ALTERNATIVE APPROACHES:
+   1. Use ml_io_map() + ml_io_unmap() to get MMIO mapping of ROM range
+   2. Patch gPhysBase/gPhysSize in kernel DATA to extend range
+   3. Direct physmap access: if KASLR slide known, compute:
+      physmap_va = 0xfffffffbffd00000 + slide
+      BUT physmap only covers DRAM range, not ROM
+   4. Walk IOMMU/DART tables for memory-mapped SecureROM access
+   5. Use kernel execute primitive to call ml_phys_read_core directly,
+      bypassing the wrapper's bounds check (needs PAC forge)
+
+═══════════════════════════════════════════════════════════════════════
+ 8. EXPLOITATION CHAIN: IOSurface → Kernel R/W → BootROM
+═══════════════════════════════════════════════════════════════════════
+
+ Phase A: Achieve Type Confusion (Lock Asymmetry Race)
+ ────────────────────────────────────────────────────────
+   1. Create target IOSurface
+   2. Set initial property (key=0x1337) via s_set_value (OSData, 64 bytes)
+   3. Thread A: tight loop calling s_set_value and s_set_value_xml
+      - Alternates between OSData and OSDictionary on same key
+      - s_set_value is LOCKED, s_set_value_xml is NOT
+   4. Thread B+C: tight loops calling s_get_value (UNLOCKED)
+      - Reads property without synchronization
+      - Checks output for kernel pointer patterns (0xfffffff0...)
+   5. Race window: getter sees OSDictionary misinterpreted as OSData
+      → Length field confusion: reads past intended buffer
+      → Stale pointer: reads after setter freed old object
+
+ Phase B: KASLR Slide Resolution
+ ────────────────────────────────
+   6. From leaked kernel pointers:
+      - Compare with known pre-KASLR addresses (vtable at 0x7e56618)
+      - KASLR slide = leaked_va - known_va (aligned to 0x4000 boundary)
+      - Verify slide by checking multiple leaked pointers
+
+ Phase C: Build Kernel R/W Primitive
+ ────────────────────────────────────
+   7. Heap Feng Shui:
+      a. Spray IOSurface properties to fill kalloc zones
+      b. Create holes by selectively freeing properties
+      c. Race decrement_use_count to free target surface
+      d. Reclaim freed slot with crafted fake object:
+         - Fake vtable pointer (PAC-signed with known div 0xcda1)
+         - Fake property backing pointer → arbitrary read target
+      e. s_get_value on reclaimed object reads from fake pointer
+   
+   8. PAC considerations (ARM8.3-A, 7-bit context):
+      a. Diversity values are KNOWN (extracted in Phase 9):
+         - vtable: DA key, div 0xcda1
+         - retain: IA key, div 0x2e4a
+         - release: IA key, div 0x3a87
+      b. PAC v1 on A13 has reduced entropy (7-bit TBI context)
+      c. With known diversity, can attempt PAC forgery via:
+         - PACDA with controlled context
+         - Or brute-force 7-bit PAC (~128 attempts avg)
+
+ Phase D: BootROM Dump
+ ─────────────────────
+   9a. Via ml_phys_read (if gPhysSize covers 0x100000000):
+       - Read gPhysBase at 0x7a6cbb8 + slide → get physical base
+       - Read gPhysSize at 0x7a6cbc0 + slide → get physical range
+       - If BootROM (0x100000000) is in range:
+           call ml_phys_read_double(0x100000000) for 512KB
+       - Kernel computes: physmap_base + (0x100000000 - gPhysBase)
+         → reads via direct virtual address
+   
+   9b. Via custom MMIO map (if BootROM outside gPhysSize):
+       - Use kernel execute to call ml_io_map(0x100000000, 0x80000)
+       - Returns virtual address mapped to BootROM physical range
+       - Read 512KB from returned VA
+       - Call ml_io_unmap() to clean up
+   
+   9c. Via patched globals:
+       - With kernel write, overwrite gPhysBase to 0x0
+       - Overwrite gPhysSize to 0x200000000
+       - Now ml_phys_read accepts any physical address
+       - Read BootROM at 0x100000000 via wrappers
+       - Restore original gPhysBase/gPhysSize
+
+   Target: A13 (T8030) BootROM at physical 0x100000000, size 512KB
+
+═══════════════════════════════════════════════════════════════════════
+ 9. COMPLETE ADDRESS REFERENCE (iOS 18.5 / 22F76)
+═══════════════════════════════════════════════════════════════════════
+
+ KERNEL:
+   KC_BASE:                     0xfffffff007004000
+
+ IOSURFACE:
+   vtable VA:                   0xfffffff007e56618    (777 entries)
+   dispatch table:              0xfffffff007e56618    (63 entries, 24-byte stride)
+   global lock object:          0xfffffff00a651770
+   lock acquire func:           0xfffffff007f4bc20
+   lock release func:           0xfffffff007f4c894
+
+ DISPATCH HANDLERS:
+   s_create_surface (sel 0):    0xfffffff009e86024    [NO LOCK, 320B, 5 vt]
+   s_delete_surface (sel 1):    0xfffffff0084ff664
+   s_lookup_surface (sel 2):    0xfffffff0084ff418
+   s_lock_surface (sel 3):      0xfffffff0084ff390
+   s_unlock_surface (sel 4):    0xfffffff0085630e8    [NO LOCK]
+   s_get_value (sel 5):         0xfffffff00857f3a4    [NO LOCK, 540B, 6 vt]
+   s_set_value (sel 6):         0xfffffff00857ee7c    [LOCKED, 240B, 3 vt]
+   s_increment_use (sel 7):     0xfffffff00861c8d0    [NO LOCK, 400B, 2 vt]
+   s_decrement_use (sel 8):     0xfffffff00857e464    [NO LOCK, 172B, 2 vt]
+   s_set_value_xml (sel 9):     0xfffffff00857e1ac    [NO LOCK, 276B, 3 vt]
+   s_get_value_xml (sel 10):    0xfffffff00857dde8    [NO LOCK, 212B, 1 vt]
+   s_bulk_set_value (sel 11):   0xfffffff00857dba0    [NO LOCK, 212B, 1 vt]
+   s_bulk_get_value (sel 12):   0xfffffff00857d83c    [NO LOCK, 540B, 6 vt]
+
+ PHYSICAL MEMORY:
+   ml_phys_read_core:           0xfffffff00807b4f8    (452 bytes)
+   ml_phys_read_data:           0xfffffff00807b738    (w1=4, 28 bytes)
+   ml_phys_read_half:           0xfffffff00807b754    (w1=2, 28 bytes)
+   ml_phys_read_byte:           0xfffffff00807b770    (w1=1, 28 bytes)
+   ml_phys_read_double:         0xfffffff00807b78c    (w1=8, 28 bytes)
+   ml_phys_write_core:          0xfffffff00807b7a8    (444 bytes)
+   gPhysBase:                   0xfffffff007a6cbb8
+   gPhysSize:                   0xfffffff007a6cbc0
+   pv_head_table:               0xfffffff007a46d28
+   physmap_base (constant):     0xfffffffbffd00000
+
+ PAC DIVERSITIES:
+   vtable auth:                 0xcda1 (DA key)
+   vtable+0x20 retain:          0x2e4a (IA key)
+   vtable+0x28 release:         0x3a87 (IA key)
+   s_set_value vtable+0x128:    0x5837 (property container)
+   s_set_value vtable+0x118:    0x8453 (property setter)
+   s_get_value vtable+0x148:    0x5a20 (property getter)
+   s_get_value vtable+0x68:     0x4a6a (helper)
+   s_get_value allocation:      0x1ac8 (allocation helper)
+   s_set_value_xml:             0x4578 (xml handler — DIFFERENT!)
+
+ TARGET:
+   BootROM physical:            0x100000000           (A13/T8030)
+   BootROM size:                0x80000               (512 KB)
+
+═══════════════════════════════════════════════════════════════════════
+ 10. KEY STRINGS (for xref/symbol resolution)
+═══════════════════════════════════════════════════════════════════════
+
+ IOSurface-related strings → function VA mappings:
+ 
+   IOSurfaceBufferTileFormat  → 0xfffffff009e6dd08
+   IOSurfaceWidth             → 0xfffffff009e6de6c, 0xfffffff009e893a0
+   IOSurfaceHeight            → 0xfffffff009e6de98, 0xfffffff009e893a8
+   IOSurfaceBytesPerRow       → 0xfffffff009e6df5c, 0xfffffff009e893c8
+   IOSurfaceBytesPerElement   → 0xfffffff009e6de44, 0xfffffff009e893bc
+   IOSurfaceAllocSize         → 0xfffffff009e6e3e8, 0xfffffff009e893d0
+   IOSurfaceElementWidth      → 0xfffffff009e6ded0
+   IOSurfaceElementHeight     → 0xfffffff009e6def8
+   IOSurfacePlaneWidth        → 0xfffffff009e6caac
+   IOSurfacePlaneHeight       → 0xfffffff009e6cab4
+   IOSurfacePlaneBytesPerRow  → 0xfffffff009e6ce3c
+   CEA-861:Type1              → 0xfffffff00772d8e6
+   ml_phys_read_data (string) → 0xfffffff0070586f2
+   ml_phys_write_data (string)→ 0xfffffff007058731
+
+═══════════════════════════════════════════════════════════════════════
+ 11. TOOL & OUTPUT INVENTORY
+═══════════════════════════════════════════════════════════════════════
+
+ Analysis Scripts (tools/ipsw-analyst/):
+   ios185_full_pipeline.py         KC download + full analysis
+   ios185_unprotected_mul.py       MUL false positive deep dive
+   ios185_phase9_typeconfusion.py  Type confusion + race scan
+   ios185_phase10_deep_trace.py    Deep function trace (13,197 lines)
+   ios185_lock_scope.py            Lock scope analysis (CORRECTED)
+   ios185_phase11_physread.py      ml_phys_read string scan
+   ios185_phase11b_xref.py         String→function xref
+   ios185_phase11c_core.py         ml_phys_read_core disassembly
+
+ PoC (extracted/poc_skeletons/):
+   chain_b_ios185_poc.m            Original PoC (Phase 9)
+   chain_b_ios185_v2.m             Updated PoC (Phase 12, current)
+
+ Output Files:
+   extracted/ios185_full_analysis.json      Complete address database
+   extracted/ios185_phase9_results.json     Type confusion findings
+   extracted/kernelcache_iPhone12,3_18_5.raw  Decompressed KC (57.7 MB)
+   extracted/IOS185_CHAIN_B_REPORT.txt      v1 report (Phase 9)
+   extracted/IOS185_CHAIN_B_REPORT_v2.txt   v2 report (THIS FILE)
+   phase10_out.txt                          Phase 10 output (13,197 lines)
+   lock_scope_out.txt                       Lock scope results
+   phase11_out.txt                          String scan results
+   phase11b_out.txt                         Xref results
+   phase11c_out.txt                         Core disassembly
+
+═══════════════════════════════════════════════════════════════════════
+ 12. NEXT STEPS
+═══════════════════════════════════════════════════════════════════════
+
+ ■ Phase 13: gPhysBase/gPhysSize Value Resolution
+   - Read the ACTUAL runtime values of gPhysBase and gPhysSize
+   - Determine if 0x100000000 (BootROM) falls within the valid range
+   - If not: plan ml_io_map or global patching approach
+   
+ ■ Phase 14: On-Device Race Fuzzing
+   - Deploy chain_b_ios185_v2.m to jailbroken device
+   - Run lock asymmetry race (setter vs getter)
+   - Monitor for kernel pointer leaks in get_value output
+   - Tune thread count and timing for optimal race window
+
+ ■ Phase 15: Heap Feng Shui Framework
+   - IOSurface property spray for controlled heap layout
+   - kalloc zone targeting (kalloc.48, kalloc.80, kalloc.128)
+   - Slot reclamation after surface destruction
+   - Build deterministic fake-object-on-heap primitive
+
+ ■ Phase 16: PAC Forgery / Bypass
+   - Extract signed pointers from type confusion leak
+   - Test PAC v1 brute-force (7-bit, ~128 attempts)
+   - Forge vtable pointer with known diversity 0xcda1
+   - Build arbitrary kernel call primitive
+
+ ■ Phase 17: BootROM Dump
+   - Approach depends on gPhysSize range (Phase 13)
+   - Read 512KB from physical 0x100000000
+   - Validate against known T8030 BootROM signatures
+   - Extract SecureROM entry point and DFU handler
+
+═══════════════════════════════════════════════════════════════════════
+ END OF iOS 18.5 FINAL INTELLIGENCE REPORT v2
+═══════════════════════════════════════════════════════════════════════

@@ -55,7 +55,7 @@ impl McfgEntry {
         
         // PCIe configuration space: 4KB per function
         // Address = Base + ((bus - start_bus) << 20 | device << 15 | function << 12)
-        let offset = ((bus - self.start_bus) as u64) << 20 
+        let offset = ((bus.saturating_sub(self.start_bus)) as u64) << 20 
                    | (device as u64) << 15 
                    | (function as u64) << 12;
         
@@ -64,7 +64,7 @@ impl McfgEntry {
     
     /// Size of this segment's configuration space
     pub fn size(&self) -> u64 {
-        let buses = (self.end_bus - self.start_bus + 1) as u64;
+        let buses = (self.end_bus.saturating_sub(self.start_bus) as u64).saturating_add(1);
         buses << 20  // 1MB per bus (32 devices * 8 functions * 4KB)
     }
 }

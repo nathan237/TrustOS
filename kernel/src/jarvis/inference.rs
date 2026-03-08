@@ -117,7 +117,7 @@ impl InferenceEngine {
 
         // Generate new tokens
         let mut next_token = if !prompt.is_empty() {
-            self.sample_token()
+            self.sample_token_with_penalty(&output)
         } else {
             tokenizer::BOS_TOKEN
         };
@@ -127,7 +127,7 @@ impl InferenceEngine {
             output.push(next_token);
 
             self.forward_one(model, next_token);
-            next_token = self.sample_token();
+            next_token = self.sample_token_with_penalty(&output);
         }
 
         output
@@ -246,8 +246,13 @@ impl InferenceEngine {
         self.kv_cache.len = pos + 1;
     }
 
-    /// Sample a token from the logit distribution
+    /// Sample a token from the logit distribution (no penalty)
     fn sample_token(&mut self) -> u8 {
+        self.sample_token_with_penalty(&[])
+    }
+
+    /// Sample a token with repetition penalty based on recent output
+    fn sample_token_with_penalty(&mut self, recent_tokens: &[u8]) -> u8 {
         let temp = self.config.temperature;
 
         if temp <= 0.01 {
@@ -259,6 +264,23 @@ impl InferenceEngine {
         let mut logits = self.buf_logits.clone();
         for l in logits.iter_mut() {
             *l /= temp;
+        }
+
+        // Repetition penalty: penalize tokens seen in the last 32 generated tokens
+        let penalty_window = recent_tokens.len().min(32);
+        if penalty_window > 0 {
+            let start = recent_tokens.len() - penalty_window;
+            for &tok in &recent_tokens[start..] {
+                let idx = tok as usize;
+                if idx < VOCAB_SIZE {
+                    // Multiplicative penalty: if logit > 0 divide, if < 0 multiply
+                    if logits[idx] > 0.0 {
+                        logits[idx] /= 1.3;
+                    } else {
+                        logits[idx] *= 1.3;
+                    }
+                }
+            }
         }
 
         // Top-k filtering

@@ -1,0 +1,523 @@
+{
+  "dispatch_table": {
+    "va": "0xfffffff007f238e8",
+    "file": "0xf1f8e8",
+    "entry_count": 26,
+    "entries": [
+      {
+        "selector": 0,
+        "func_va": "0xfffffff00a1e91e0",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 1,
+        "func_va": "0xfffffff00a1e91e8",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 2,
+        "func_va": "0xfffffff00a1e91f0",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 3,
+        "func_va": "0xfffffff00a1e91f8",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 4,
+        "func_va": "0xfffffff00a1e9200",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 5,
+        "func_va": "0xfffffff00a1e9208",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 6,
+        "func_va": "0xfffffff00a1e9210",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 7,
+        "func_va": "0xfffffff00a1e9218",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 8,
+        "func_va": "0xfffffff00a1e9220",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 9,
+        "func_va": "0xfffffff00a1e926c",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 10,
+        "func_va": "0xfffffff00a1e9278",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 11,
+        "func_va": "0xfffffff00a1e9280",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 12,
+        "func_va": "0xfffffff00a1e9290",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 13,
+        "func_va": "0xfffffff00a1e91e0",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 14,
+        "func_va": "0xfffffff00a1e91e8",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 15,
+        "func_va": "0xfffffff00a1e91f0",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 16,
+        "func_va": "0xfffffff00a1e91f8",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 17,
+        "func_va": "0xfffffff00a1e9200",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 18,
+        "func_va": "0xfffffff00a1e9208",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 19,
+        "func_va": "0xfffffff00a1e9210",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 20,
+        "func_va": "0xfffffff00a1e9218",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 21,
+        "func_va": "0xfffffff00a1e9220",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 22,
+        "func_va": "0xfffffff00a1e926c",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 23,
+        "func_va": "0xfffffff00a1e9278",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 24,
+        "func_va": "0xfffffff00a1e9280",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      },
+      {
+        "selector": 25,
+        "func_va": "0xfffffff00a1e9290",
+        "pac_key": "IA",
+        "pac_diversity": "0x705d",
+        "scalar_in": 0,
+        "struct_in": 0,
+        "scalar_out": 0,
+        "struct_out": 0
+      }
+    ]
+  },
+  "vtable": {
+    "va": "0xfffffff007f20af0",
+    "file": "0xf1caf0",
+    "total_entries": 104,
+    "code_pointers": 0,
+    "string_pointers": 99
+  },
+  "selector_analysis": [
+    {
+      "selector": 0,
+      "name": "s_create_surface",
+      "func_va": "0xfffffff00a1e91e0",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 1,
+      "name": "s_release_surface",
+      "func_va": "0xfffffff00a1e91e8",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 2,
+      "name": "s_lock",
+      "func_va": "0xfffffff00a1e91f0",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 3,
+      "name": "s_unlock",
+      "func_va": "0xfffffff00a1e91f8",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 4,
+      "name": "s_set_value",
+      "func_va": "0xfffffff00a1e9200",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 5,
+      "name": "s_get_value",
+      "func_va": "0xfffffff00a1e9208",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 6,
+      "name": "s_increment_use_count",
+      "func_va": "0xfffffff00a1e9210",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 7,
+      "name": "s_decrement_use_count",
+      "func_va": "0xfffffff00a1e9218",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 8,
+      "name": "s_lookup",
+      "func_va": "0xfffffff00a1e9220",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 9,
+      "name": "s_lookup_by_name",
+      "func_va": "0xfffffff00a1e926c",
+      "instructions": 100,
+      "calls": 11
+    },
+    {
+      "selector": 10,
+      "name": "selector_10",
+      "func_va": "0xfffffff00a1e9278",
+      "instructions": 100,
+      "calls": 12
+    },
+    {
+      "selector": 11,
+      "name": "selector_11",
+      "func_va": "0xfffffff00a1e9280",
+      "instructions": 100,
+      "calls": 12
+    },
+    {
+      "selector": 12,
+      "name": "selector_12",
+      "func_va": "0xfffffff00a1e9290",
+      "instructions": 100,
+      "calls": 13
+    },
+    {
+      "selector": 13,
+      "name": "selector_13",
+      "func_va": "0xfffffff00a1e91e0",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 14,
+      "name": "selector_14",
+      "func_va": "0xfffffff00a1e91e8",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 15,
+      "name": "selector_15",
+      "func_va": "0xfffffff00a1e91f0",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 16,
+      "name": "selector_16",
+      "func_va": "0xfffffff00a1e91f8",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 17,
+      "name": "selector_17",
+      "func_va": "0xfffffff00a1e9200",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 18,
+      "name": "selector_18",
+      "func_va": "0xfffffff00a1e9208",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 19,
+      "name": "selector_19",
+      "func_va": "0xfffffff00a1e9210",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 20,
+      "name": "selector_20",
+      "func_va": "0xfffffff00a1e9218",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 21,
+      "name": "selector_21",
+      "func_va": "0xfffffff00a1e9220",
+      "instructions": 100,
+      "calls": 2
+    },
+    {
+      "selector": 22,
+      "name": "selector_22",
+      "func_va": "0xfffffff00a1e926c",
+      "instructions": 100,
+      "calls": 11
+    },
+    {
+      "selector": 23,
+      "name": "selector_23",
+      "func_va": "0xfffffff00a1e9278",
+      "instructions": 100,
+      "calls": 12
+    },
+    {
+      "selector": 24,
+      "name": "selector_24",
+      "func_va": "0xfffffff00a1e9280",
+      "instructions": 100,
+      "calls": 12
+    },
+    {
+      "selector": 25,
+      "name": "selector_25",
+      "func_va": "0xfffffff00a1e9290",
+      "instructions": 100,
+      "calls": 13
+    }
+  ],
+  "ml_phys_read_function": {
+    "va": "0xfffffff00814f740",
+    "file": "0x114b740",
+    "instructions": 113,
+    "bl_targets": [
+      "0xfffffff00814b3b8",
+      "0xfffffff0081450e4",
+      "0xfffffff007fc308c",
+      "0xfffffff007fc3104"
+    ]
+  },
+  "ml_phys_write_function": {
+    "va": "0xfffffff00814f9f0",
+    "file": "0x114b9f0",
+    "instructions": 111,
+    "bl_targets": [
+      "0xfffffff00814b3b8",
+      "0xfffffff0081450e4",
+      "0xfffffff007fc308c",
+      "0xfffffff007fc3104"
+    ]
+  },
+  "s_create_surface": {
+    "va": "0xfffffff00a1e789c",
+    "file": "0x31e389c",
+    "instructions": 128,
+    "bl_targets": [
+      "0xfffffff008670688",
+      "0xfffffff008670688",
+      "0xfffffff00a1e9b04",
+      "0xfffffff008670688"
+    ]
+  },
+  "IOSurface_max_check": {
+    "va": "0xfffffff00a1d02d0",
+    "file": "0x31cc2d0",
+    "instructions": 32,
+    "bl_targets": [
+      "0xfffffff00a1d0384",
+      "0xfffffff008670688"
+    ]
+  },
+  "IOSurface_allocate_caller": {
+    "va": "0xfffffff00a1cece8",
+    "file": "0x31cace8",
+    "instructions": 93,
+    "bl_targets": [
+      "0xfffffff00a1d2098",
+      "0xfffffff008670688",
+      "0xfffffff008693724",
+      "0xfffffff00a1dd038",
+      "0xfffffff008716280"
+    ]
+  },
+  "IOSurfaceRootUserClient_vtable": {
+    "base": "0xfffffff007f22598",
+    "methods_start": "0xfffffff007f225a8",
+    "file": "0xf1e5a8"
+  },
+  "IOSurface_vtable": {
+    "base": "0xfffffff007f21fa0",
+    "methods_start": "0xfffffff007f21fb0"
+  }
+}

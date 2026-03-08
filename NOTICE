@@ -1,0 +1,24 @@
+TrustOS
+Copyright 2025-2026 Nathan (nathan237 / Nated0ge)
+
+This product includes the following original works:
+
+  JARVIS — Kernel-Resident Self-Propagating Neural Network
+  First conceived and implemented: February 2026
+  Original author: Nathan (nathan237)
+
+  Concepts originated by this project:
+  - Kernel-resident transformer neural network (ring 0, no_std)
+  - Self-propagating AI brain via bare-metal custom TCP/RPC mesh
+  - Two-tier brain architecture (micro sentinel + full brain)
+  - Guardian Pact: AI safety enforced at kernel privilege level
+  - Federated learning over custom no_std TCP/IP stack
+  - Byte-level transformer operating directly in kernel address space
+
+  TrustOS — Bare-Metal Operating System
+  First commit: February 3, 2026
+  Original author: Nathan (nathan237)
+  240,000+ lines of pure Rust, #![no_std], zero external OS dependencies
+
+This NOTICE file must be included in all copies or substantial portions
+of TrustOS and its derivative works, per Apache License 2.0 Section 4(d).

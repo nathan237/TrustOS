@@ -1105,85 +1105,188 @@ impl MusicPlayerState {
             self.state = PlaybackState::Stopped;
         }
 
-        // Try loading WAV from data disk first (saves ~29 MB in kernel binary)
-        // Fall back to embedded WAV if disk loading fails
-        let wav_data_owned;
-        let wav_data: &[u8] = match crate::trustdaw::disk_audio::load_wav_from_disk() {
-            Ok(data) => {
-                crate::serial_println!("[MUSIC] Loaded WAV from data disk ({} bytes)", data.len());
-                wav_data_owned = data;
-                &wav_data_owned
-            }
-            Err(e) => {
-                crate::serial_println!("[MUSIC] Disk load failed ({}), using embedded WAV", e);
+        // Try loading WAV: VFS → raw disk → embedded → procedural (priority order)
+        let (audio, title) = 'decode: {
+            // Try VFS paths, disk, and embedded WAV first
+            let wav_data_owned;
+            let wav_data: &[u8] = 'load: {
+                // 1) VFS paths (external storage / filesystem)
+                for path in crate::trustdaw::audio_viz::UNTITLED2_VFS_PATHS {
+                    if crate::vfs::stat(path).is_ok() {
+                        if let Ok(data) = crate::vfs::read_file(path) {
+                            if !data.is_empty() {
+                                crate::serial_println!("[MUSIC] Loaded WAV from VFS: {} ({} bytes)", path, data.len());
+                                wav_data_owned = data;
+                                break 'load &wav_data_owned;
+                            }
+                        }
+                    }
+                }
+                // 2) Raw disk (AHCI sector approach)
+                match crate::trustdaw::disk_audio::load_wav_from_disk() {
+                    Ok(data) => {
+                        crate::serial_println!("[MUSIC] Loaded WAV from data disk ({} bytes)", data.len());
+                        wav_data_owned = data;
+                        break 'load &wav_data_owned;
+                    }
+                    Err(e) => {
+                        crate::serial_println!("[MUSIC] Disk load failed: {}", e);
+                    }
+                }
+                // 3) Embedded WAV (only with --features daw)
                 crate::trustdaw::audio_viz::UNTITLED2_WAV
+            };
+
+            // Try decoding WAV data
+            if !wav_data.is_empty() {
+                if let Ok(audio) = crate::trustdaw::audio_viz::decode_wav_to_pcm(wav_data) {
+                    break 'decode (audio, "Untitled (2) \u{2014} Lo-Fi");
+                }
             }
+
+            // 4) FALLBACK: Generate procedural lo-fi beat (48kHz stereo, ~30s)
+            crate::serial_println!("[MUSIC] No WAV available, generating procedural lo-fi beat");
+            (Self::generate_procedural_audio(), "Procedural Lo-Fi Beat")
         };
-        match crate::trustdaw::audio_viz::decode_wav_to_pcm(wav_data) {
-            Ok(audio) => {
-                self.song_title = String::from("Untitled (2) — Lo-Fi");
-                let total_frames = audio.len() / 2;
-                self.total_ms = (total_frames as u64 * 1000) / 48000;
 
-                // Init HDA audio (idempotent)
-                crate::audio::init().ok();
+        self.start_playback_with_audio(audio, title);
+    }
 
-                // Get DMA buffer capacity
-                let dma_cap = crate::drivers::hda::get_dma_buffer_info()
-                    .map(|(_, c)| c)
-                    .unwrap_or(0);
-                if dma_cap == 0 {
-                    crate::serial_println!("[MUSIC] No DMA buffer available");
-                    return;
-                }
+    /// Generate a procedural lo-fi beat: 48kHz stereo i16 PCM, ~30 seconds.
+    /// Layered sub-bass kick + hi-hat + warm pad chord + vinyl crackle.
+    fn generate_procedural_audio() -> Vec<i16> {
+        use core::f32::consts::PI;
+        const RATE: f32 = 48000.0;
+        const DURATION_S: f32 = 30.0;
+        const TOTAL_FRAMES: usize = (48000.0 * 30.0) as usize;
+        // BPM 75 lo-fi feel
+        const BPM: f32 = 75.0;
+        let beat_samples = (RATE * 60.0 / BPM) as usize;
 
-                // Reset stream fully: stop, SRST (clears LPIB), reconfigure
-                let _ = crate::drivers::hda::stop();
-                crate::drivers::hda::reset_stream();
+        let mut out = Vec::with_capacity(TOTAL_FRAMES * 2);
+        let mut noise_state: u32 = 0xDEADBEEF;
 
-                // Fill initial DMA buffer and start playback
-                let initial = audio.len().min(dma_cap);
-                if let Ok(()) = crate::drivers::hda::start_looped_playback(&audio[0..initial]) {
-                    self.write_cursor = initial;
-                    self.dma_cap = dma_cap;
-                    self.audio = Some(audio);
-                    self.state = PlaybackState::Playing;
-                    self.audio_exhausted = false;
-                    self.consumed_samples = 0;
-                    self.seek_base_ms = 0;
-                    self.vis_frame = 0;
-                    self.elapsed_ms = 0;
+        for frame in 0..TOTAL_FRAMES {
+            let t = frame as f32 / RATE;
+            let beat_pos = frame % beat_samples;
+            let beat_t = beat_pos as f32 / beat_samples as f32;
 
-                    // Read actual LPIB to sync half-buffer tracking
-                    let lpib = crate::drivers::hda::get_playback_position();
-                    let full_bytes = (dma_cap * 2) as u32;
-                    let half_bytes = full_bytes / 2;
-                    let lpib_clamped = if lpib >= full_bytes { 0 } else { lpib };
-                    self.last_half = if lpib_clamped < half_bytes { 0 } else { 1 };
+            // ── Sub-bass kick (60Hz sine, decaying envelope on each beat) ──
+            let kick_env = if beat_t < 0.15 {
+                let e = beat_t / 0.15;
+                (1.0 - e) * (1.0 - e)
+            } else { 0.0 };
+            let kick_freq = 60.0 + 80.0 * kick_env; // pitch sweep down
+            let kick = libm::sinf(2.0 * PI * kick_freq * t) * kick_env * 0.6;
 
-                    // Apply saved volume
-                    let _ = crate::drivers::hda::set_volume(self.volume.min(100) as u8);
+            // ── Hi-hat (noise burst on off-beats) ──
+            let half_beat = beat_samples / 2;
+            let off_beat_pos = (frame + half_beat) % beat_samples;
+            let hat_t = off_beat_pos as f32 / beat_samples as f32;
+            let hat_env = if hat_t < 0.04 { (1.0 - hat_t / 0.04) } else { 0.0 };
+            // Simple LFSR noise
+            noise_state ^= noise_state << 13;
+            noise_state ^= noise_state >> 17;
+            noise_state ^= noise_state << 5;
+            let noise_val = (noise_state as i32 as f32) / (i32::MAX as f32);
+            let hat = noise_val * hat_env * 0.15;
 
-                    // Reset FFT / beat state
-                    self.peak_rms = 1.0;
-                    self.sub_bass = 0.0;
-                    self.bass = 0.0;
-                    self.mid = 0.0;
-                    self.treble = 0.0;
-                    self.beat = 0.0;
-                    self.energy = 0.0;
-                    self.prev_energy = 0.0;
-                    self.energy_hist = [0.0; 43];
-                    self.hist_idx = 0;
-                    self.hist_count = 0;
-                    self.waveform = [0.0; 128];
-                    self.wave_idx = 0;
-                    crate::serial_println!("[MUSIC] Playing Untitled (2), {}ms, DMA={}", self.total_ms, dma_cap);
-                } else {
-                    crate::serial_println!("[MUSIC] start_looped_playback failed");
-                }
-            }
-            Err(e) => crate::serial_println!("[MUSIC] Decode error: {}", e),
+            // ── Warm pad (minor 7th chord: root + m3 + p5 + m7) ──
+            // Chord changes every 4 beats
+            let chord_beat = (frame / (beat_samples * 4)) % 4;
+            let root_freq = match chord_beat {
+                0 => 130.81, // C3
+                1 => 146.83, // D3
+                2 => 110.00, // A2
+                3 => 123.47, // B2
+                _ => 130.81,
+            };
+            let pad_env = 0.12f32; // gentle constant volume
+            let p1 = libm::sinf(2.0 * PI * root_freq as f32 * t) * pad_env;
+            let p2 = libm::sinf(2.0 * PI * (root_freq * 1.1892) as f32 * t) * pad_env * 0.8; // minor 3rd
+            let p3 = libm::sinf(2.0 * PI * (root_freq * 1.4983) as f32 * t) * pad_env * 0.7; // perfect 5th
+            let p4 = libm::sinf(2.0 * PI * (root_freq * 1.7818) as f32 * t) * pad_env * 0.5; // minor 7th
+            let pad = p1 + p2 + p3 + p4;
+
+            // ── Vinyl crackle (very sparse random pops) ──
+            noise_state ^= noise_state << 13;
+            noise_state ^= noise_state >> 17;
+            noise_state ^= noise_state << 5;
+            let crackle = if (noise_state % 997) == 0 {
+                (noise_state as i32 as f32) / (i32::MAX as f32) * 0.08
+            } else { 0.0 };
+
+            // ── Lo-fi filter: slight warmth (simple low-pass approximation) ──
+            let mix = kick + hat + pad + crackle;
+            let sample = (mix * 24000.0).max(-32000.0).min(32000.0) as i16;
+            out.push(sample); // Left
+            out.push(sample); // Right (mono mix)
+        }
+        out
+    }
+
+    /// Shared playback setup for both WAV-decoded and procedural audio.
+    fn start_playback_with_audio(&mut self, audio: Vec<i16>, title: &str) {
+        self.song_title = String::from(title);
+        let total_frames = audio.len() / 2;
+        self.total_ms = (total_frames as u64 * 1000) / 48000;
+
+        // Init HDA audio (idempotent)
+        crate::audio::init().ok();
+
+        // Get DMA buffer capacity
+        let dma_cap = crate::drivers::hda::get_dma_buffer_info()
+            .map(|(_, c)| c)
+            .unwrap_or(0);
+        if dma_cap == 0 {
+            crate::serial_println!("[MUSIC] No DMA buffer available");
+            return;
+        }
+
+        // Reset stream fully: stop, SRST (clears LPIB), reconfigure
+        let _ = crate::drivers::hda::stop();
+        crate::drivers::hda::reset_stream();
+
+        // Fill initial DMA buffer and start playback
+        let initial = audio.len().min(dma_cap);
+        if let Ok(()) = crate::drivers::hda::start_looped_playback(&audio[0..initial]) {
+            self.write_cursor = initial;
+            self.dma_cap = dma_cap;
+            self.audio = Some(audio);
+            self.state = PlaybackState::Playing;
+            self.audio_exhausted = false;
+            self.consumed_samples = 0;
+            self.seek_base_ms = 0;
+            self.vis_frame = 0;
+            self.elapsed_ms = 0;
+
+            // Read actual LPIB to sync half-buffer tracking
+            let lpib = crate::drivers::hda::get_playback_position();
+            let full_bytes = (dma_cap * 2) as u32;
+            let half_bytes = full_bytes / 2;
+            let lpib_clamped = if lpib >= full_bytes { 0 } else { lpib };
+            self.last_half = if lpib_clamped < half_bytes { 0 } else { 1 };
+
+            // Apply saved volume
+            let _ = crate::drivers::hda::set_volume(self.volume.min(100) as u8);
+
+            // Reset FFT / beat state
+            self.peak_rms = 1.0;
+            self.sub_bass = 0.0;
+            self.bass = 0.0;
+            self.mid = 0.0;
+            self.treble = 0.0;
+            self.beat = 0.0;
+            self.energy = 0.0;
+            self.prev_energy = 0.0;
+            self.energy_hist = [0.0; 43];
+            self.hist_idx = 0;
+            self.hist_count = 0;
+            self.waveform = [0.0; 128];
+            self.wave_idx = 0;
+            crate::serial_println!("[MUSIC] Playing '{}', {}ms, DMA={}", self.song_title, self.total_ms, dma_cap);
+        } else {
+            crate::serial_println!("[MUSIC] start_looped_playback failed");
         }
     }
 
@@ -1482,10 +1585,12 @@ impl MusicPlayerState {
         self.prev_energy = be;
 
         // Update waveform ring buffer (sample every few frames for smooth viz)
-        let idx = audio_pos.min(audio.len().saturating_sub(1));
-        let sample = audio[idx & !1] as f32 / 32768.0;
-        self.waveform[self.wave_idx % 128] = sample;
-        self.wave_idx += 1;
+        if !audio.is_empty() {
+            let idx = audio_pos.min(audio.len() - 1) & !1;
+            let sample = audio[idx] as f32 / 32768.0;
+            self.waveform[self.wave_idx % 128] = sample;
+            self.wave_idx += 1;
+        }
     }
 }
 
@@ -1500,6 +1605,9 @@ pub enum RenderMode {
     Classic,
     /// OpenGL compositor with effects (modern, customizable)
     OpenGL,
+    /// GPU-accelerated classic: same rendering pipeline but with dirty-rect
+    /// tracking and VirtIO GPU partial flush for 2-5x speedup on idle frames
+    GpuAccelerated,
 }
 
 pub struct Desktop {
@@ -1531,6 +1639,10 @@ pub struct Desktop {
     // OpenGL compositor
     pub render_mode: RenderMode,
     pub compositor_theme: CompositorTheme,
+    // GPU-accelerated dirty rect tracking (Upgrade #3)
+    dirty_rects: [(u32, u32, u32, u32); 32], // (x, y, w, h) — max 32 regions
+    dirty_rect_count: usize,
+    gpu_frame_skip: u32,  // frames since last full redraw
     // Browser state
     pub browser: Option<crate::browser::Browser>,
     pub browser_url_input: String,
@@ -1650,6 +1762,15 @@ pub struct Desktop {
     pub touch_mode: bool,
     /// Mobile UI state (portrait mode, same style as desktop)
     pub mobile_state: crate::mobile::MobileState,
+    // ══════ FPS TRACKING ══════
+    /// Tick value at last FPS measurement
+    fps_last_tick: u64,
+    /// Frames rendered since last FPS measurement
+    fps_frame_accum: u32,
+    /// Current measured FPS
+    pub fps_current: u32,
+    /// Show FPS overlay on desktop
+    pub fps_display: bool,
 }
 
 /// Calculator state for interactive calculator windows
@@ -2177,6 +2298,9 @@ impl Desktop {
             last_context_menu_visible: false,
             render_mode: RenderMode::Classic,
             compositor_theme: CompositorTheme::Modern,
+            dirty_rects: [(0, 0, 0, 0); 32],
+            dirty_rect_count: 0,
+            gpu_frame_skip: 0,
             browser: None,
             browser_url_input: String::new(),
             browser_url_cursor: 0,
@@ -2207,7 +2331,7 @@ impl Desktop {
             matrix_initialized: false,
             matrix_beat_count: 0,
             matrix_last_beat: false,
-            matrix_rain_preset: 1, // default = mid
+            matrix_rain_preset: 0, // default = slow
             matrix_overrides: BTreeMap::new(),
             matrix_projection: MatrixProjection::empty(),
             visualizer: crate::visualizer::VisualizerState::new(),
@@ -2251,6 +2375,11 @@ impl Desktop {
             touch_mode: false,
             // Mobile UI
             mobile_state: crate::mobile::MobileState::new(),
+            // FPS tracking
+            fps_last_tick: 0,
+            fps_frame_accum: 0,
+            fps_current: 0,
+            fps_display: true,
         }
     }
     
@@ -2260,6 +2389,8 @@ impl Desktop {
             width, height, self.windows.len(), self.icons.len());
         
         // ===== FULL STATE RESET (prevents duplication on re-entry) =====
+        // Reset mobile state so "desktop" command always boots in desktop mode
+        self.mobile_state = crate::mobile::MobileState::new();
         // Data collections
         self.windows.clear();
         self.icons.clear();
@@ -2350,16 +2481,7 @@ impl Desktop {
         // Initialize matrix rain
         self.init_matrix_rain();
         
-        // Auto-open music player widget in bottom-right corner
-        {
-            let mp_x = width.saturating_sub(320) as i32;
-            let mp_y = height.saturating_sub(TASKBAR_HEIGHT + 415) as i32;
-            let wid = self.create_window("Music Player", mp_x, mp_y.max(20), 300, 395, WindowType::MusicPlayer);
-            // Auto-play on desktop launch for showcase
-            if let Some(mp_state) = self.music_player_states.get_mut(&wid) {
-                mp_state.play_untitled2();
-            }
-        }
+        // Music player is available from the Start menu — not auto-opened
         
         crate::serial_println!("[Desktop] init complete");
     }
@@ -2393,7 +2515,7 @@ impl Desktop {
                 // Stagger start positions so layers don't overlap initially
                 let spread = height / 2 + (layer as u32) * height / 6;
                 self.matrix_heads[idx] = -((seed % spread.max(1)) as i32);
-                self.matrix_speeds[idx] = 1 + (seed % 3);
+                self.matrix_speeds[idx] = 2 + (seed % 4);
                 self.matrix_seeds[idx] = seed;
             }
         }
@@ -2898,7 +3020,9 @@ struct AppConfig {
                 self.gamelab_states.insert(window.id, crate::game_lab::GameLabState::new());
             },
             WindowType::MusicPlayer => {
+                crate::serial_println!("[Desktop] Creating MusicPlayer state for window {}", window.id);
                 self.music_player_states.insert(window.id, MusicPlayerState::new());
+                crate::serial_println!("[Desktop] MusicPlayer state created OK");
             },
             _ => {}
         }
@@ -3654,6 +3778,32 @@ struct AppConfig {
                                     crate::visualizer::MODE_NAMES[self.visualizer.mode as usize % crate::visualizer::NUM_MODES as usize]);
                             }
                         }
+
+                        // Rain speed preset buttons
+                        let rain_y = viz_mode_y + vm_btn_h + 8;
+                        let rain_btn_w = 20u32;
+                        let rain_btn_h = 16u32;
+                        let rain_prev_x = inner_x + 30;
+                        if click_y >= rain_y && click_y < rain_y + rain_btn_h {
+                            if click_x >= rain_prev_x && click_x < rain_prev_x + rain_btn_w {
+                                // "<" previous preset
+                                let p = self.matrix_rain_preset;
+                                self.matrix_rain_preset = if p == 0 { 2 } else { p - 1 };
+                                crate::serial_println!("[RAIN] Preset: {}", self.matrix_rain_preset);
+                            }
+                            let rain_name_len = match self.matrix_rain_preset {
+                                0 => 4u32, // "Slow"
+                                1 => 3u32, // "Mid"
+                                _ => 4u32, // "Fast"
+                            };
+                            let rain_name_x = rain_prev_x + rain_btn_w + 6;
+                            let rain_next_x = rain_name_x + rain_name_len * cw + 6;
+                            if click_x >= rain_next_x && click_x < rain_next_x + rain_btn_w {
+                                // ">" next preset
+                                self.matrix_rain_preset = (self.matrix_rain_preset + 1) % 3;
+                                crate::serial_println!("[RAIN] Preset: {}", self.matrix_rain_preset);
+                            }
+                        }
                     }
                     
                     self.focus_window(id);
@@ -4262,9 +4412,12 @@ struct AppConfig {
                 self.open_lab_mode();
             },
             13 => { // Music Player
+                crate::serial_println!("[GUI] Opening Music Player...");
                 let mp_x = self.width.saturating_sub(320) as i32;
                 let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 385) as i32;
+                crate::serial_println!("[GUI] Music Player pos: {}x{}", mp_x, mp_y.max(20));
                 self.create_window("Music Player", mp_x, mp_y.max(20), 300, 395, WindowType::MusicPlayer);
+                crate::serial_println!("[GUI] Music Player window created OK");
             },
             14 => { // Settings
                 self.open_settings_panel();
@@ -5789,6 +5942,9 @@ struct AppConfig {
             "exit" | "quit" => {
                 output.push(String::from("\x01MUse the X button to close the terminal"));
             },
+            "desktop" | "gui" | "mobile" => {
+                output.push(String::from("\x01MAlready in desktop mode."));
+            },
             "chess" => {
                 output.push(String::from("\x01G\u{265A} TrustChess \x01M— Opening chess window..."));
                 output.push(String::from("\x01MPlay vs AI (Black). Arrow keys, Enter, Esc."));
@@ -5821,8 +5977,18 @@ struct AppConfig {
                 }
             },
             _ => {
-                output.push(format!("\x01Rbash: \x01Wcommand not found: \x01G{}", cmd));
-                output.push(String::from("\x01MType '\x01Ghelp\x01M' for available commands"));
+                // Route through the real shell engine so ALL commands are available
+                // Clear captured output, enable capture, run command, collect output
+                crate::shell::take_captured(); // clear any stale data
+                crate::shell::CAPTURE_MODE.store(true, core::sync::atomic::Ordering::SeqCst);
+                crate::shell::execute_command(cmd);
+                crate::shell::CAPTURE_MODE.store(false, core::sync::atomic::Ordering::SeqCst);
+                let captured = crate::shell::take_captured();
+                if !captured.is_empty() {
+                    for line in captured.lines() {
+                        output.push(String::from(line));
+                    }
+                }
             },
         }
         
@@ -6159,6 +6325,18 @@ struct AppConfig {
     pub fn draw(&mut self) {
         self.frame_count += 1;
         
+        // ── FPS measurement (tick-based, updated every ~1 second) ──
+        self.fps_frame_accum += 1;
+        let now_tick = crate::logger::get_ticks();
+        if self.fps_last_tick == 0 { self.fps_last_tick = now_tick; }
+        let elapsed = now_tick.saturating_sub(self.fps_last_tick);
+        // Timer interrupt fires at ~100 Hz (1 tick = ~10ms), so 100 ticks ≈ 1 sec
+        if elapsed >= 100 {
+            self.fps_current = ((self.fps_frame_accum as u64 * 100) / elapsed.max(1)) as u32;
+            self.fps_frame_accum = 0;
+            self.fps_last_tick = now_tick;
+        }
+        
         // Update animations each frame
         self.update_animations();
         
@@ -6381,6 +6559,12 @@ struct AppConfig {
             return;
         }
         
+        // Use GPU-accelerated mode with dirty rect tracking
+        if self.render_mode == RenderMode::GpuAccelerated {
+            self.draw_gpu_accelerated();
+            return;
+        }
+        
         // === CLASSIC RENDERING MODE ===
         
         // Detect state changes that require taskbar/background recache
@@ -6404,6 +6588,7 @@ struct AppConfig {
         // Only draw background once, then cache it
         // Matrix rain is animated — redraw background every frame
         framebuffer::clear_backbuffer(0xFF000000);
+        framebuffer::begin_frame(); // Cache BB pointer — all put_pixel_fast calls are zero-lock
         self.draw_background();
         self.draw_desktop_icons();
         
@@ -6454,6 +6639,49 @@ struct AppConfig {
             self.draw_lock_screen();
         }
         
+        // ── FPS overlay (top-right, above everything except cursor) ──
+        if self.fps_display {
+            let fps_val = self.fps_current;
+            let label = format!("{} FPS", fps_val);
+            let badge_w = (label.len() as u32) * 9 + 16;
+            let badge_h = 22u32;
+            let bx = self.width.saturating_sub(badge_w + 8);
+            let by = 6u32;
+            // Background pill
+            let bg_color = if fps_val >= 55 { 0xC0001A0A } else if fps_val >= 30 { 0xC01A1A00 } else { 0xC01A0000 };
+            let bg_r = (bg_color >> 16) & 0xFF;
+            let bg_g = (bg_color >> 8) & 0xFF;
+            let bg_b = bg_color & 0xFF;
+            let bg_a = ((bg_color >> 24) & 0xFF) as u32;
+            for py in by..by + badge_h {
+                for px in bx..bx + badge_w {
+                    if px < self.width && py < self.height {
+                        let existing = framebuffer::get_pixel_fast(px, py);
+                        let er = (existing >> 16) & 0xFF;
+                        let eg = (existing >> 8) & 0xFF;
+                        let eb = existing & 0xFF;
+                        let nr = (bg_r * bg_a + er * (255 - bg_a)) / 255;
+                        let ng = (bg_g * bg_a + eg * (255 - bg_a)) / 255;
+                        let nb = (bg_b * bg_a + eb * (255 - bg_a)) / 255;
+                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
+                    }
+                }
+            }
+            // Border
+            let border_c = if fps_val >= 55 { GREEN_PRIMARY } else if fps_val >= 30 { ACCENT_AMBER } else { ACCENT_RED };
+            framebuffer::draw_hline(bx, by, badge_w, border_c);
+            framebuffer::draw_hline(bx, by + badge_h - 1, badge_w, border_c);
+            for py in by..by + badge_h {
+                framebuffer::put_pixel_fast(bx, py, border_c);
+                if bx + badge_w - 1 < self.width {
+                    framebuffer::put_pixel_fast(bx + badge_w - 1, py, border_c);
+                }
+            }
+            // Text
+            let text_c = if fps_val >= 55 { GREEN_PRIMARY } else if fps_val >= 30 { ACCENT_AMBER } else { ACCENT_RED };
+            self.draw_text_smooth((bx + 8) as i32, (by + 5) as i32, &label, text_c);
+        }
+
         // Draw cursor last
         self.draw_cursor();
         
@@ -6464,7 +6692,8 @@ struct AppConfig {
         self.last_start_menu_open = self.start_menu_open;
         self.last_context_menu_visible = self.context_menu.visible;
         
-        // Swap buffers for flicker-free display
+        // End frame caching and swap buffers
+        framebuffer::end_frame();
         framebuffer::swap_buffers();
     }
     
@@ -6521,6 +6750,113 @@ struct AppConfig {
         
         // Swap buffers
         framebuffer::swap_buffers();
+    }
+    
+    // ════════════════════════════════════════════════════════════════════════
+    // GPU-ACCELERATED RENDERING (Upgrade #2 + #3)
+    // Same classic pipeline but with dirty-rect tracking and VirtIO partial flush
+    // ════════════════════════════════════════════════════════════════════════
+    
+    /// Add a dirty rectangle for GPU-accelerated partial flush
+    fn add_dirty_rect(&mut self, x: u32, y: u32, w: u32, h: u32) {
+        if self.dirty_rect_count < 32 {
+            self.dirty_rects[self.dirty_rect_count] = (x, y, w, h);
+            self.dirty_rect_count += 1;
+        }
+    }
+    
+    /// GPU-accelerated draw: classic rendering + dirty rect tracking + VirtIO partial flush
+    fn draw_gpu_accelerated(&mut self) {
+        let mouse = crate::mouse::get_state();
+        let windows_changed = self.windows.len() != self.last_window_count;
+        let menu_changed = self.start_menu_open != self.last_start_menu_open
+                        || self.context_menu.visible != self.last_context_menu_visible;
+        let cursor_moved = mouse.x != self.last_cursor_x || mouse.y != self.last_cursor_y;
+        
+        // Reset dirty rects for this frame
+        self.dirty_rect_count = 0;
+        
+        // Track what's dirty this frame
+        if windows_changed || menu_changed || self.needs_full_redraw {
+            // Full redraw needed — mark entire screen dirty
+            self.add_dirty_rect(0, 0, self.width, self.height);
+            self.needs_full_redraw = false;
+        } else {
+            // Partial: only mark changed regions
+            if cursor_moved {
+                // Old cursor position
+                let old_x = (self.last_cursor_x.max(0) as u32).saturating_sub(2);
+                let old_y = (self.last_cursor_y.max(0) as u32).saturating_sub(2);
+                self.add_dirty_rect(old_x, old_y, 24, 24);
+                // New cursor position
+                let new_x = (mouse.x.max(0) as u32).saturating_sub(2);
+                let new_y = (mouse.y.max(0) as u32).saturating_sub(2);
+                self.add_dirty_rect(new_x, new_y, 24, 24);
+            }
+            // Mark dirty rects for each visible window (content may animate)
+            // Collect window rects first to avoid borrow conflict
+            let win_rects: Vec<(u32, u32, u32, u32)> = self.windows.iter()
+                .filter(|w| w.visible && !w.minimized)
+                .map(|w| (w.x.max(0) as u32, w.y.max(0) as u32, w.width, w.height))
+                .collect();
+            for (wx, wy, ww, wh) in win_rects {
+                self.add_dirty_rect(wx, wy, ww, wh);
+            }
+            // Taskbar is always dirty (clock updates)
+            if self.frame_count % 60 == 0 {
+                self.add_dirty_rect(0, self.height.saturating_sub(40), self.width, 40);
+            }
+        }
+        
+        // Render using the classic pipeline (draws to backbuffer)
+        if self.mobile_state.active {
+            self.draw_mobile_mode();
+        } else {
+            framebuffer::clear_backbuffer(0xFF000000);
+            self.draw_background();
+            self.draw_desktop_icons();
+            
+            for window in &self.windows {
+                if window.visible && !window.minimized {
+                    self.draw_window(window);
+                }
+            }
+            self.draw_editor_windows();
+            self.draw_model_editor_windows();
+            self.draw_game3d_windows();
+            self.draw_chess3d_windows();
+            #[cfg(feature = "emulators")]
+            self.draw_nes_windows();
+            #[cfg(feature = "emulators")]
+            self.draw_gameboy_windows();
+            self.draw_taskbar();
+            if self.start_menu_open { self.draw_start_menu(); }
+            if self.context_menu.visible { self.draw_context_menu(); }
+            self.draw_drag_ghost();
+            if self.lock_screen_active { self.draw_lock_screen(); }
+            self.draw_cursor();
+        }
+        
+        // Update tracking
+        self.last_cursor_x = mouse.x;
+        self.last_cursor_y = mouse.y;
+        self.last_window_count = self.windows.len();
+        self.last_start_menu_open = self.start_menu_open;
+        self.last_context_menu_visible = self.context_menu.visible;
+        
+        // Use VirtIO GPU partial flush if available (Upgrade #3)
+        if crate::drivers::virtio_gpu::is_available() && self.dirty_rect_count > 0 && self.dirty_rect_count < 32 {
+            // Copy backbuffer to GPU, then partial flush only dirty regions
+            crate::drivers::virtio_gpu::present_dirty_rects(
+                &self.dirty_rects[..self.dirty_rect_count]
+            );
+            // Also MMIO fallback for VGA
+            framebuffer::swap_buffers_mmio_only();
+        } else {
+            framebuffer::swap_buffers();
+        }
+        
+        self.gpu_frame_skip = self.gpu_frame_skip.wrapping_add(1);
     }
     
     /// Draw context menu - Windows 11 style with rounded corners and glass
@@ -6842,20 +7178,46 @@ struct AppConfig {
         match view {
             crate::mobile::MobileView::Home => {
                 crate::mobile::draw_home_screen(vx, vy, vw, vh, hl, frame);
+                // Music widget above dock
+                let audio_info = crate::mobile::MobileAudioInfo {
+                    playing: self.global_audio_active,
+                    beat: self.global_beat,
+                    energy: self.global_energy,
+                    sub_bass: self.global_sub_bass,
+                    bass: self.global_bass,
+                    mid: self.global_mid,
+                    treble: self.global_treble,
+                    frame: self.frame_count,
+                };
+                crate::mobile::draw_mobile_music_widget(vx, vy, vw, vh, &audio_info,
+                    self.mobile_state.music_dropdown_open,
+                    self.mobile_state.music_viz_mode);
                 crate::mobile::draw_dock(vx, vy, vw, vh, -1, frame);
                 crate::mobile::draw_gesture_bar(vx, vy, vw, vh);
             }
             crate::mobile::MobileView::AppFullscreen => {
-                // Draw app content area
+                // Draw app content area with real app UI
                 let app_idx = self.mobile_state.active_app_id.unwrap_or(0);
                 let app_name = if (app_idx as usize) < crate::mobile::app_count() {
                     crate::mobile::app_name(app_idx as usize)
                 } else { "App" };
                 crate::mobile::draw_app_bar(vx, vy, vw, app_name, frame);
-                // App content placeholder
-                let cy = vy + crate::mobile::APP_BAR_H as i32;
-                let ch = vh.saturating_sub(crate::mobile::APP_BAR_H + 20);
-                framebuffer::fill_rect_alpha(vx.max(0) as u32, cy.max(0) as u32, vw, ch, 0x050A06, 200);
+                // Render actual app content
+                let audio_info_app = crate::mobile::MobileAudioInfo {
+                    playing: self.global_audio_active,
+                    beat: self.global_beat,
+                    energy: self.global_energy,
+                    sub_bass: self.global_sub_bass,
+                    bass: self.global_bass,
+                    mid: self.global_mid,
+                    treble: self.global_treble,
+                    frame: self.frame_count,
+                };
+                crate::mobile::draw_mobile_app_content(
+                    vx, vy, vw, vh,
+                    app_idx, self.frame_count, &audio_info_app,
+                    &self.mobile_state,
+                );
                 // Draw gesture bar at bottom
                 crate::mobile::draw_gesture_bar(vx, vy, vw, vh);
             }
@@ -6912,6 +7274,206 @@ struct AppConfig {
             MobileAction::CloseSwitcherCard(id) => {
                 self.mobile_state.closing_cards.push((id, 255));
             }
+            MobileAction::MusicTogglePlay => {
+                // Use a dedicated key for mobile music player
+                const MOBILE_MP_KEY: u32 = 0xFFFF_FFFE;
+                if !self.music_player_states.contains_key(&MOBILE_MP_KEY) {
+                    self.music_player_states.insert(MOBILE_MP_KEY, MusicPlayerState::new());
+                }
+                if let Some(mp) = self.music_player_states.get_mut(&MOBILE_MP_KEY) {
+                    match mp.state {
+                        PlaybackState::Stopped => mp.play_untitled2(),
+                        PlaybackState::Playing | PlaybackState::Paused => mp.toggle_pause(),
+                    }
+                }
+            }
+            MobileAction::MusicStop => {
+                const MOBILE_MP_KEY: u32 = 0xFFFF_FFFE;
+                if let Some(mp) = self.music_player_states.get_mut(&MOBILE_MP_KEY) {
+                    mp.stop();
+                }
+            }
+            MobileAction::MusicToggleDropdown => {
+                self.mobile_state.music_dropdown_open = !self.mobile_state.music_dropdown_open;
+            }
+            MobileAction::MusicSetVizMode(mode) => {
+                self.mobile_state.music_viz_mode = mode;
+                self.mobile_state.music_dropdown_open = false;
+                // Apply to the actual desktop visualizer
+                self.visualizer.mode = mode;
+                crate::serial_println!("[Mobile] Viz mode set to {} ({})", mode,
+                    crate::visualizer::MODE_NAMES[mode as usize % crate::visualizer::NUM_MODES as usize]);
+            }
+            MobileAction::CalcButton(btn) => {
+                // Full calculator logic
+                let ms = &mut self.mobile_state;
+                match btn {
+                    16 => { // C (clear)
+                        ms.calc_display.clear();
+                        ms.calc_op = 0;
+                        ms.calc_operand = 0;
+                        ms.calc_fresh = false;
+                    }
+                    17 => { // +/- (negate)
+                        if !ms.calc_display.is_empty() && ms.calc_display != "0" {
+                            if ms.calc_display.starts_with('-') {
+                                ms.calc_display.remove(0);
+                            } else {
+                                ms.calc_display.insert(0, '-');
+                            }
+                        }
+                    }
+                    18 => { // %
+                        if let Ok(v) = ms.calc_display.parse::<i64>() {
+                            let result = v / 100;
+                            ms.calc_display.clear();
+                            use core::fmt::Write;
+                            let _ = core::write!(ms.calc_display, "{}", result);
+                        }
+                    }
+                    10 => { // . (dot)
+                        if ms.calc_fresh { ms.calc_display.clear(); ms.calc_fresh = false; }
+                        if !ms.calc_display.contains('.') {
+                            if ms.calc_display.is_empty() { ms.calc_display.push('0'); }
+                            ms.calc_display.push('.');
+                        }
+                    }
+                    15 => { // = (equals)
+                        let current = ms.calc_display.parse::<i64>().unwrap_or(0);
+                        let result = match ms.calc_op {
+                            1 => ms.calc_operand + current,
+                            2 => ms.calc_operand - current,
+                            3 => ms.calc_operand * current,
+                            4 => if current != 0 { ms.calc_operand / current } else { 0 },
+                            _ => current,
+                        };
+                        ms.calc_display.clear();
+                        use core::fmt::Write;
+                        let _ = core::write!(ms.calc_display, "{}", result);
+                        ms.calc_op = 0;
+                        ms.calc_operand = 0;
+                        ms.calc_fresh = true;
+                    }
+                    11 | 12 | 13 | 14 => { // +, -, *, /
+                        let current = ms.calc_display.parse::<i64>().unwrap_or(0);
+                        // Chain operations
+                        if ms.calc_op > 0 && !ms.calc_fresh {
+                            let result = match ms.calc_op {
+                                1 => ms.calc_operand + current,
+                                2 => ms.calc_operand - current,
+                                3 => ms.calc_operand * current,
+                                4 => if current != 0 { ms.calc_operand / current } else { 0 },
+                                _ => current,
+                            };
+                            ms.calc_operand = result;
+                            ms.calc_display.clear();
+                            use core::fmt::Write;
+                            let _ = core::write!(ms.calc_display, "{}", result);
+                        } else {
+                            ms.calc_operand = current;
+                        }
+                        ms.calc_op = btn - 10; // 1=+, 2=-, 3=*, 4=/
+                        ms.calc_fresh = true;
+                    }
+                    0..=9 => { // Digits
+                        if ms.calc_fresh {
+                            ms.calc_display.clear();
+                            ms.calc_fresh = false;
+                        }
+                        if ms.calc_display == "0" { ms.calc_display.clear(); }
+                        if ms.calc_display.len() < 15 {
+                            ms.calc_display.push((b'0' + btn) as char);
+                        }
+                    }
+                    _ => {}
+                }
+                crate::serial_println!("[Mobile] Calc: display={}", ms.calc_display);
+            }
+            MobileAction::FilesTap(idx) => {
+                let ms = &mut self.mobile_state;
+                ms.files_selected = idx as i32;
+                // If it's a directory (first 4 entries), go deeper
+                if idx < 4 && ms.files_depth == 0 {
+                    ms.files_depth = 1;
+                    ms.files_selected = -1;
+                }
+                crate::serial_println!("[Mobile] Files: tap idx={} depth={}", idx, ms.files_depth);
+            }
+            MobileAction::FilesBack => {
+                self.mobile_state.files_depth = self.mobile_state.files_depth.saturating_sub(1);
+                self.mobile_state.files_selected = -1;
+            }
+            MobileAction::SettingsTap(idx) => {
+                let ms = &mut self.mobile_state;
+                ms.settings_selected = idx as i32;
+                if (idx as usize) < ms.settings_toggles.len() {
+                    ms.settings_toggles[idx as usize] = !ms.settings_toggles[idx as usize];
+                }
+                crate::serial_println!("[Mobile] Settings: toggled idx={}", idx);
+            }
+            MobileAction::GamesTap(idx) => {
+                self.mobile_state.games_selected = idx as i32;
+                crate::serial_println!("[Mobile] Games: selected idx={}", idx);
+            }
+            MobileAction::BrowserNav(page) => {
+                self.mobile_state.browser_page = page;
+                crate::serial_println!("[Mobile] Browser: page={}", page);
+            }
+            MobileAction::EditorTap(line) => {
+                self.mobile_state.editor_cursor_line = line as u32;
+            }
+            MobileAction::EditorSwitchTab(tab) => {
+                self.mobile_state.editor_tab = tab;
+            }
+            MobileAction::ChessTap(sq) => {
+                let ms = &mut self.mobile_state;
+                if ms.chess_selected == sq as i32 {
+                    ms.chess_selected = -1; // Deselect
+                } else if ms.chess_selected >= 0 {
+                    // "Move" piece: toggle turn, deselect
+                    ms.chess_turn = 1 - ms.chess_turn;
+                    ms.chess_selected = -1;
+                    crate::serial_println!("[Mobile] Chess: move to sq={}", sq);
+                } else {
+                    ms.chess_selected = sq as i32;
+                }
+            }
+            MobileAction::MusicAppToggle => {
+                const MOBILE_MP_KEY: u32 = 0xFFFF_FFFE;
+                if !self.music_player_states.contains_key(&MOBILE_MP_KEY) {
+                    self.music_player_states.insert(MOBILE_MP_KEY, MusicPlayerState::new());
+                }
+                if let Some(mp) = self.music_player_states.get_mut(&MOBILE_MP_KEY) {
+                    match mp.state {
+                        PlaybackState::Stopped => mp.play_untitled2(),
+                        PlaybackState::Playing | PlaybackState::Paused => mp.toggle_pause(),
+                    }
+                }
+            }
+            MobileAction::TermSubmit => {
+                let ms = &mut self.mobile_state;
+                // Since there's no keyboard on mobile, cycle through demo commands
+                let commands = ["help", "uname", "ls", "pwd", "whoami", "date", "free -h", "uptime"];
+                let cmd_idx = ms.term_lines.len() / 2; // every 2 lines = 1 command+response
+                let cmd = commands[cmd_idx % commands.len()];
+                ms.term_lines.push(alloc::format!("$ {}", cmd));
+                let response = match cmd {
+                    "help" => "Available: help, ls, pwd, date, uname, whoami, free, uptime",
+                    "ls" => "Documents  Downloads  Music  Pictures  config.toml",
+                    "pwd" => "/home/user",
+                    "uname" => "TrustOS 2.0 aarch64 #1 SMP",
+                    "date" => "2026-03-05 12:00:00 UTC",
+                    "whoami" => "user@trustos",
+                    "free -h" => "  total: 8.0G  used: 2.1G  free: 5.9G",
+                    "uptime" => "up 4h 23m, 1 user, load: 0.12",
+                    _ => "command not found",
+                };
+                ms.term_lines.push(alloc::string::String::from(response));
+                // Keep history manageable
+                if ms.term_lines.len() > 40 {
+                    ms.term_lines.drain(0..2);
+                }
+            }
         }
     }
 
@@ -6932,20 +7494,18 @@ struct AppConfig {
         // Layer 4 = NEAR         (faster, bright, vivid colors)
         // Layer 5 = FOREGROUND   (fastest, brightest, sparse)
         // Trail length: far=long, near=short (shadow effect)
-        const LAYER_TRAIL: [usize; 6]  = [18, 15, 12, 10, 7, 5];
-        // Char height (pixel spacing): far=small/tight, near=large/spaced
-        const LAYER_CHAR_H: [u32; 6]   = [10, 11, 13, 15, 17, 20];
+        const LAYER_TRAIL: [usize; 6]  = [32, 26, 22, 16, 12, 8];
         // Brightness: far=very dim, near=full
-        const LAYER_DIM: [f32; 6]       = [0.15, 0.25, 0.38, 0.55, 0.78, 1.0];
+        const LAYER_DIM: [f32; 6]       = [0.22, 0.32, 0.42, 0.58, 0.80, 1.0];
         // Speed multipliers per preset: [slow, mid, fast] for each layer
         // Far layers always slow, near layers scale with preset
         const LAYER_SPEED_PRESETS: [[f32; 6]; 3] = [
-            // slow:  gentle drift everywhere
-            [0.3, 0.4, 0.6, 0.9, 1.3, 1.8],
-            // mid:   balanced cinematic rain
-            [0.5, 0.7, 1.0, 1.5, 2.2, 3.0],
-            // fast:  intense downpour
-            [0.8, 1.1, 1.6, 2.4, 3.5, 5.0],
+            // slow:  gentle drift everywhere (+25%)
+            [0.38, 0.50, 0.75, 1.12, 1.62, 2.25],
+            // mid:   balanced cinematic rain (+25%)
+            [0.62, 0.88, 1.25, 1.88, 2.75, 3.75],
+            // fast:  intense downpour (+25%)
+            [1.0, 1.38, 2.0, 3.0, 4.38, 6.25],
         ];
         let preset = (self.matrix_rain_preset as usize).min(2);
         let layer_speed: [f32; 6] = LAYER_SPEED_PRESETS[preset];
@@ -6953,11 +7513,24 @@ struct AppConfig {
         const LAYER_SWAY: [f32; 6]      = [0.0, 0.0, 0.3, 0.6, 1.2, 2.0];
         // Column density: far=every col (dense shadow), near=sparse (rain streams)
         // skip=1 → all cols, 2 → half, 3 → third, 4 → quarter
-        const LAYER_COL_SKIP: [usize; 6] = [1, 1, 2, 2, 3, 4];
-        // Atmospheric color shift: far=dimmer green, near=vivid green (NO blue)
-        const LAYER_ATMO_R: [i16; 6]    = [-8, -5, -3,  0,  2,  4];
-        const LAYER_ATMO_G: [i16; 6]    = [-4, -2,  0,  0,  3,  6];
+        const LAYER_COL_SKIP: [usize; 6] = [1, 2, 2, 3, 4, 5];
+        // Atmospheric color shift: far=dimmer green, near=vivid green (NO red/blue)
+        const LAYER_ATMO_R: [i16; 6]    = [ 0,  0,  0,  0,  0,  0];
+        const LAYER_ATMO_G: [i16; 6]    = [-6, -3,  0,  0,  4,  8];
         const LAYER_ATMO_B: [i16; 6]    = [ 0,  0,  0,  0,  0,  0];
+        // ── Flow field: organic horizontal drift (per layer intensity) ──
+        // Far layers barely move, near layers curve more visibly
+        const LAYER_FLOW: [f32; 6]       = [0.0, 0.5, 1.2, 2.5, 4.0, 6.0];
+        // ── Glyph scale: pixel size of each rendered character ──
+        // Far = tiny (4×8), near = large (14×28) → depth illusion
+        // (scale_w, scale_h) in pixels — glyph bitmap is stretched from 8×16
+        const LAYER_GLYPH_W: [u32; 6]    = [4, 5, 7, 8, 10, 14];
+        const LAYER_GLYPH_H: [u32; 6]    = [8, 10, 14, 16, 20, 28];
+        // Mobile overrides: smaller glyphs + sparser near-layers for 498px viewport
+        const MOBILE_GLYPH_W: [u32; 6]   = [3, 3, 4, 5, 6, 7];
+        const MOBILE_GLYPH_H: [u32; 6]   = [6, 6, 8, 10, 12, 14];
+        const MOBILE_COL_SKIP: [usize; 6] = [1, 2, 3, 4, 6, 8];
+        let is_mobile = self.mobile_state.active;
         
         let height = self.height.saturating_sub(TASKBAR_HEIGHT);
         let width = self.width;
@@ -6989,9 +7562,46 @@ struct AppConfig {
             framebuffer::fill_rect(0, refl_start, width, height - refl_start, 0xFF020300);
         }
         
+        // ── Star field: sparse single white pixels ──
+        // Deterministic grid with hash-based selection — ~0.15% of pixels twinkle
+        // Stars are fixed positions but brightness gently oscillates per frame
+        {
+            let star_phase = self.frame_count as f32 * 0.02;
+            let step = 12u32; // check every 12th pixel in both axes
+            let mut sy = 0u32;
+            while sy < height {
+                let mut sx = 0u32;
+                while sx < width {
+                    // Fast integer hash to decide if this grid cell has a star
+                    let h = (sx.wrapping_mul(2654435761)).wrapping_add(sy.wrapping_mul(340573321));
+                    let h = h ^ (h >> 16);
+                    if h % 97 == 0 {
+                        // Sub-pixel offset within the cell (deterministic)
+                        let ox = (h >> 8) % step;
+                        let oy = (h >> 14) % step;
+                        let px = sx + ox;
+                        let py = sy + oy;
+                        if px < width && py < height && py < refl_start {
+                            // Twinkle: gentle brightness oscillation unique per star
+                            let twinkle_phase = (h & 0xFF) as f32 * 0.025 + star_phase;
+                            let twinkle = 0.4 + 0.6 * ((libm::sinf(twinkle_phase) + 1.0) * 0.5);
+                            let lum = (40.0 + twinkle * 60.0) as u32; // 40..100 brightness
+                            let c = 0xFF000000 | (lum << 16) | (lum << 8) | lum;
+                            framebuffer::put_pixel_fast(px, py, c);
+                        }
+                    }
+                    sx += step;
+                }
+                sy += step;
+            }
+        }
+        
         if !self.matrix_initialized {
             return;
         }
+        
+        // Desktop oscilloscope removed — waveform is shown inside the music player widget
+        
         if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} start", self.frame_count); }
         
         // ── Visualizer: update multi-mode 3D shape projection ──
@@ -7011,10 +7621,16 @@ struct AppConfig {
         
         // Logo centered vertically in the available space
         let logo_center_y = height / 2;
+        let logo_center_x = width / 2;
+        // Flow field radius: strongest within ~250px of logo, fades to zero at ~500px
+        let flow_radius = 300.0f32;
+        let flow_fade = 250.0f32; // fade zone beyond radius
         
         // ── Render matrix rain with color variety ──
         let col_width = width / MATRIX_COLS as u32;
         let half_cols = MATRIX_COLS as f32 / 2.0;
+        // Flow field phase: slow scrolling offset so the field evolves
+        let flow_time = self.frame_count as f32 * 0.008;
         
         if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} rain start", self.frame_count); }
         for layer in 0..NUM_LAYERS {
@@ -7029,10 +7645,15 @@ struct AppConfig {
             let s2 = libm::sinf(phase * 1.7 + 2.0) * 0.4;
             ((s1 + s2) * sway_amp) as i32
         } else { 0i32 };
-        let col_skip = LAYER_COL_SKIP[layer];
+        let col_skip = if is_mobile { MOBILE_COL_SKIP[layer] } else { LAYER_COL_SKIP[layer] };
         let atmo_r = LAYER_ATMO_R[layer];
         let atmo_g = LAYER_ATMO_G[layer];
         let atmo_b = LAYER_ATMO_B[layer];
+        let flow_amp_base = LAYER_FLOW[layer];
+        // FlowField visualizer mode (7): amplify flow field by 2.5×
+        let flow_amp = if self.visualizer.mode == 7 { flow_amp_base * 2.5 } else { flow_amp_base };
+        let glyph_w = if is_mobile { MOBILE_GLYPH_W[layer] } else { LAYER_GLYPH_W[layer] };
+        let glyph_h = if is_mobile { MOBILE_GLYPH_H[layer] } else { LAYER_GLYPH_H[layer] };
         
         for col in 0..MATRIX_COLS.min(self.matrix_heads.len() / NUM_LAYERS) {
             // Column density: skip columns based on layer
@@ -7047,7 +7668,6 @@ struct AppConfig {
             
             // ── Per-layer depth parameters ──
             let layer_trail = LAYER_TRAIL[layer];
-            let layer_base_h = LAYER_CHAR_H[layer];
             let layer_dim: f32 = LAYER_DIM[layer];
             let layer_spd: f32 = layer_speed[layer];
             
@@ -7055,9 +7675,9 @@ struct AppConfig {
             // fov_t: 0.0 at center, 1.0 at extreme edges (quadratic)
             let from_center = ((col as f32) - half_cols).abs() / half_cols;
             let fov_t = (from_center * from_center).min(1.0);
-            // Char spacing: layer base + minimal FOV expansion at edges
-            let fov_extra = (fov_t * (layer_base_h as f32 * 0.15)) as u32;
-            let eff_char_h: u32 = layer_base_h + fov_extra;
+            // Char spacing: use glyph_h as base + minimal FOV expansion at edges
+            let fov_extra = (fov_t * (glyph_h as f32 * 0.15)) as u32;
+            let eff_char_h: u32 = glyph_h + fov_extra;
             // Speed reduction: edges ~12% slower (subtle convergence)
             let fov_speed_pct: i32 = (100.0 - fov_t * 12.0) as i32;
             // Minimal dim at periphery (preserve density at edges)
@@ -7069,13 +7689,13 @@ struct AppConfig {
             // Get the amplitude for this column's band (0.0 - 1.0+)
             let (band_amp, band_r_base, band_g_base, band_b_base) = if m_playing {
                 match freq_band {
-                    0 => (m_sub_bass,  60u8, 200u8, 10u8),   // Sub-bass → deep green
-                    1 => (m_bass,      70u8, 210u8, 8u8),    // Bass → warm green
-                    2 => (m_mid,       40u8, 220u8, 12u8),   // Mid → pure green
-                    _ => (m_treble,    50u8, 190u8, 15u8),   // Treble → bright green
+                    0 => (m_sub_bass,  0u8, 180u8, 0u8),   // Sub-bass → dark green
+                    1 => (m_bass,      0u8, 200u8, 0u8),   // Bass → medium green
+                    2 => (m_mid,       0u8, 220u8, 0u8),   // Mid → pure green
+                    _ => (m_treble,    0u8, 210u8, 0u8),   // Treble → bright green
                 }
             } else {
-                (0.0, 30u8, 200u8, 10u8) // No music → pure green
+                (0.0, 0u8, 200u8, 0u8) // No music → pure green
             };
             // Intensity multiplier from band amplitude (0.3 = idle, up to 1.5 at max)
             let freq_intensity = if m_playing {
@@ -7136,9 +7756,12 @@ struct AppConfig {
                 bmin >= 0 && bmax > bmin
             };
             
-            // Speed-dependent effective trail: fast drops get full trail, slow drops get shorter
-            let speed_trail = ((layer_trail as f32) * (0.4 + speed_norm * 0.6)) as usize;
-            let eff_trail = speed_trail.max(3).min(layer_trail);
+            // Per-column trail variation: each column gets a unique trail multiplier
+            // so rain drops have different lengths (short splashes vs long streaks)
+            let col_hash = ((col as u32).wrapping_mul(2654435761u32)) >> 20; // Knuth hash
+            let col_trail_mult = 0.55 + (col_hash % 100) as f32 / 110.0; // 0.55..1.46
+            let speed_trail = ((layer_trail as f32) * (0.5 + speed_norm * 0.5) * col_trail_mult) as usize;
+            let eff_trail = speed_trail.max(4).min(MAX_TRAIL);
             
             for i in 0..eff_trail {
                 
@@ -7164,30 +7787,34 @@ struct AppConfig {
                 // Faster drops → brighter, whiter, longer visible trail
                 // Each layer progressively reduces intensity
                 let (r, g, b) = if i == 0 {
-                    // HEAD: fast = near white, slow = dim green
-                    let white_mix = (0.25 + speed_norm * 0.55).min(0.80); // 0.25..0.80 based on speed
+                    // HEAD: bright white-green (Matrix palette: white → green → black)
+                    let white_mix = (0.50 + speed_norm * 0.45).min(0.95);
                     let band_mix = 1.0 - white_mix;
-                    let hr = ((band_r_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as i16;
+                    // White in Matrix = equal R/G/B, green-biased
+                    let hr = ((band_r_base as f32 * band_mix + 180.0 * white_mix) * brightness_mult).min(190.0) as i16;
                     let hg = ((band_g_base as f32 * band_mix + 255.0 * white_mix) * brightness_mult).min(255.0) as i16;
-                    let hb = ((band_b_base as f32 * band_mix * 0.15) * brightness_mult).min(40.0) as i16; // crush blue
-                    let beat_w = if m_playing { (m_beat * 18.0).min(35.0) as i16 } else { 0 };
-                    // Atmospheric shift
-                    let fr = (hr + beat_w + atmo_r).max(0).min(255) as u8;
+                    let hb = ((180.0 * white_mix) * brightness_mult).min(190.0) as i16;
+                    let beat_w = if m_playing { (m_beat * 8.0).min(15.0) as i16 } else { 0 };
+                    // Ensure R never exceeds G (prevents yellow)
+                    let fr = (hr + beat_w / 4 + atmo_r).max(0).min(190) as u8;
                     let fg = (hg + beat_w + atmo_g).max(0).min(255) as u8;
-                    let fb = (hb + atmo_b).max(0).min(40) as u8; // hard cap blue
+                    let fb = (hb + beat_w / 4 + atmo_b).max(0).min(190) as u8;
+                    // Clamp: R must be ≤ G to prevent any yellow tint
+                    let fr = fr.min(fg);
+                    let fb = fb.min(fg);
                     (fr, fg, fb)
                 } else {
                     // TRAIL: speed drives brightness floor + green purity
                     let fade = brightness as f32 / 255.0;
                     let fi = freq_intensity;
                     let speed_green = 0.8 + speed_norm * 0.4; // faster = greener
-                    let tr = ((band_r_base as f32 * fi * fade * (1.0 - speed_norm * 0.3)).min(255.0)) as i16;
+                    let tr = 0i16; // Zero red in trail — pure green only
                     let tg = ((band_g_base as f32 * fi * fade * speed_green).min(255.0)) as i16;
-                    let tb = ((band_b_base as f32 * fi * fade * 0.15).min(30.0)) as i16; // crush blue in trail
+                    let tb = 0i16; // No blue in trail
                     // Atmospheric shift
-                    let fr = (tr + atmo_r).max(0).min(255) as u8;
+                    let fr = 0u8; // Absolutely no red in trail
                     let fg = (tg + atmo_g).max(0).min(255) as u8;
-                    let fb = (tb + atmo_b).max(0).min(30) as u8; // hard cap blue
+                    let fb = 0u8; // Absolutely no blue in trail
                     (fr, fg, fb)
                 };
                 
@@ -7237,7 +7864,30 @@ struct AppConfig {
                     b = (b as f32 * boost).min(255.0) as u8;
                 }
                 
-                let x_flow = x;
+                // ── Flow field: organic horizontal displacement ──
+                // Radial: strongest near the TrustOS logo, fades to zero far away
+                let flow_offset = if flow_amp > 0.0 {
+                    let dx = x as f32 - logo_center_x as f32;
+                    let dy = char_y as f32 - logo_center_y as f32;
+                    let dist = libm::sqrtf(dx * dx + dy * dy);
+                    // Radial falloff: 1.0 inside flow_radius, fades to 0 over flow_fade
+                    let radial = if dist < flow_radius {
+                        1.0
+                    } else if dist < flow_radius + flow_fade {
+                        1.0 - (dist - flow_radius) / flow_fade
+                    } else {
+                        0.0
+                    };
+                    if radial > 0.01 {
+                        let cy = char_y as f32;
+                        let cx = col as f32;
+                        let o1 = libm::sinf(cy * 0.0045 + cx * 0.13 + flow_time);
+                        let o2 = libm::sinf(cy * 0.012 + cx * 0.07 + flow_time * 1.6 + 3.0) * 0.4;
+                        let o3 = libm::sinf(cy * 0.028 + cx * 0.21 + flow_time * 2.3 + 1.5) * 0.15;
+                        ((o1 + o2 + o3) * flow_amp * radial) as i32
+                    } else { 0 }
+                } else { 0 };
+                let x_flow = (x as i32 + flow_offset).max(0).min(width as i32 - 1) as u32;
                 
                 // ── Drone Swarm: holographic wireframe formations ──
                 let drone_fx = crate::drone_swarm::query(
@@ -7277,12 +7927,12 @@ struct AppConfig {
                 let c = chars[(char_seed as usize) % chars.len()] as char;
                 let glyph = crate::framebuffer::font::get_glyph(c);
                 
-                // ── Standard 8×16 glyph rendering + CRT scanline ──
+                // ── Scaled glyph rendering + CRT scanline ──
                 // Check for screen-space projection zone overlap
                 let in_proj = self.matrix_projection.active
-                    && x_flow + 8 > self.matrix_projection.x
+                    && x_flow + glyph_w > self.matrix_projection.x
                     && x_flow < self.matrix_projection.x + self.matrix_projection.width
-                    && (char_y as u32) + 16 > self.matrix_projection.y
+                    && (char_y as u32) + glyph_h > self.matrix_projection.y
                     && (char_y as u32) < self.matrix_projection.y + self.matrix_projection.height;
 
                 // Check for per-cell pixel override (skip if projection takes priority)
@@ -7293,6 +7943,7 @@ struct AppConfig {
                 let cg = ((color >> 8) & 0xFF) as u8;
                 let cb = (color & 0xFF) as u8;
                 let overlap_boost: u8 = if layer > 0 { 30u8 } else { 0 };
+                // Note: overlap_boost only applied to GREEN channel to prevent yellow
                 
                 if in_proj {
                     // ── PROJECTION MODE: reveal image pixels through rain ──
@@ -7301,14 +7952,14 @@ struct AppConfig {
                     // Rain head = full brightness, trail = fading reveal.
                     let proj = &self.matrix_projection;
                     let intensity = brightness as f32 / 255.0;
-                    for gr in 0..16usize {
+                    for gr in 0..glyph_h as usize {
                         let py = char_y as u32 + gr as u32;
                         if py >= height { continue; }
                         if py < proj.y || py >= proj.y + proj.height { continue; }
                         let scanline: f32 = if py & 1 == 0 { 1.0 } else { 0.96 };
                         let in_reflection = py > height * 88 / 100;
                         let img_y = (py - proj.y) as usize;
-                        for bit in 0..8u32 {
+                        for bit in 0..glyph_w {
                             let px = x_flow + bit;
                             if px >= width { continue; }
                             if px < proj.x || px >= proj.x + proj.width { continue; }
@@ -7328,7 +7979,7 @@ struct AppConfig {
                                 fg = (fg as u16 + 10).min(255) as u8;
                             }
                             let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
-                            framebuffer::put_pixel(px, py, fc);
+                            framebuffer::put_pixel_fast(px, py, fc);
                         }
                     }
                 } else if has_override {
@@ -7355,9 +8006,8 @@ struct AppConfig {
                             let mut fg = (pg * intensity).min(255.0) as u8;
                             let mut fb = (pb * intensity).min(255.0) as u8;
                             if overlap_boost > 0 {
-                                fr = (fr as u16 + overlap_boost as u16).min(255) as u8;
+                                // Only boost green channel (R/B boost causes yellow)
                                 fg = (fg as u16 + overlap_boost as u16).min(255) as u8;
-                                fb = (fb as u16 + overlap_boost as u16).min(255) as u8;
                             }
                             fr = ((fr as f32 * scanline).min(255.0)) as u8;
                             fg = ((fg as f32 * scanline).min(255.0)) as u8;
@@ -7366,27 +8016,36 @@ struct AppConfig {
                                 fg = (fg as u16 + 10).min(255) as u8;
                             }
                             let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
-                            framebuffer::put_pixel(px, py, fc);
+                            framebuffer::put_pixel_fast(px, py, fc);
                         }
                     }
                 } else {
-                    // ── NORMAL MODE: standard glyph rendering ──
-                    for (gr, &bits) in glyph.iter().enumerate() {
-                        let py = char_y as u32 + gr as u32;
-                        if py >= height || bits == 0 { continue; }
+                    // ── NORMAL MODE: scaled glyph rendering + flow field ──
+                    // Each layer has its own glyph size (glyph_w × glyph_h).
+                    // We sample the 8×16 source bitmap with nearest-neighbor scaling.
+                    for sy in 0..glyph_h {
+                        let py = char_y as u32 + sy;
+                        if py >= height { continue; }
+                        // Map scaled row → source row (0..15)
+                        let src_row = ((sy * 16) / glyph_h).min(15) as usize;
+                        let bits = glyph[src_row];
+                        if bits == 0 { continue; }
                         let scanline: f32 = if py & 1 == 0 { 1.0 } else { 0.96 };
                         let in_reflection = py > height * 88 / 100;
-                        for bit in 0..8u32 {
-                            if bits & (0x80 >> bit) != 0 {
-                                let px = x_flow + bit;
+                        // Use pre-computed per-character flow offset (no per-row sinf)
+                        let row_x = x_flow;
+                        for sx in 0..glyph_w {
+                            // Map scaled col → source col (0..7)
+                            let src_col = ((sx * 8) / glyph_w).min(7);
+                            if bits & (0x80 >> src_col) != 0 {
+                                let px = row_x + sx;
                                 if px < width {
                                     let mut fr = cr;
                                     let mut fg = cg;
                                     let mut fb = cb;
                                     if overlap_boost > 0 {
-                                        fr = (fr as u16 + overlap_boost as u16).min(255) as u8;
+                                        // Only boost green channel (R/B boost causes yellow)
                                         fg = (fg as u16 + overlap_boost as u16).min(255) as u8;
-                                        fb = (fb as u16 + overlap_boost as u16).min(255) as u8;
                                     }
                                     fr = ((fr as f32 * scanline).min(255.0)) as u8;
                                     fg = ((fg as f32 * scanline).min(255.0)) as u8;
@@ -7395,7 +8054,7 @@ struct AppConfig {
                                         fg = (fg as u16 + 10).min(255) as u8;
                                     }
                                     let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
-                                    framebuffer::put_pixel(px, py, fc);
+                                    framebuffer::put_pixel_fast(px, py, fc);
                                 }
                             }
                         }
@@ -7408,8 +8067,9 @@ struct AppConfig {
         // ═════════════════════════════════════════════════════════════
         // GHOST FILL LAYERS — invisible rain that only renders inside
         // the 3D shape, filling gaps for a much denser silhouette
+        // (skip on mobile — too heavy for small viewport)
         // ═════════════════════════════════════════════════════════════
-        if m_playing {
+        if m_playing && !is_mobile {
             const NUM_FILL: usize = 5;
             const FILL_TRAIL: usize = 20;
             const FILL_CH: u32 = 16;  // Fill layers use standard 8×16 glyphs
@@ -7492,7 +8152,7 @@ struct AppConfig {
                                 if bits & (0x80 >> bit) != 0 {
                                     let px = x + bit;
                                     if px < width {
-                                        framebuffer::put_pixel(px, py, color);
+                                        framebuffer::put_pixel_fast(px, py, color);
                                     }
                                 }
                             }
@@ -7508,36 +8168,70 @@ struct AppConfig {
         // ═══════════════════════════════════════════════════════════════
         if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} logo start", self.frame_count); }
         // LOGO — Faithful chrome/silver rendering from bitmap
-        // Dark interior pixels → matrix rain shows through
-        // Bright chrome/silver pixels → alpha blended over matrix rain
+        // Skip on mobile — covers app grid
         // ═══════════════════════════════════════════════════════════════
-        {
+        if !is_mobile {
             let logo_w = crate::logo_bitmap::LOGO_W as u32;
             let logo_h = crate::logo_bitmap::LOGO_H as u32;
             let logo_x = (width / 2).saturating_sub(logo_w / 2);
             let logo_y = logo_center_y.saturating_sub(logo_h / 2);
             
-            // Subtle green glow behind the chrome edges (drawn first, behind the logo)
+            // ── Dark radial vignette behind logo for contrast ──
+            // Dim the matrix rain behind the logo so chrome stands out
+            {
+                let pad = 30u32; // extra darkening margin around logo
+                let cx = logo_x + logo_w / 2;
+                let cy = logo_y + logo_h / 2;
+                let max_r = ((logo_w / 2 + pad) as f32).max((logo_h / 2 + pad) as f32);
+                let y_start = logo_y.saturating_sub(pad);
+                let y_end = (logo_y + logo_h + pad).min(height);
+                let x_start = logo_x.saturating_sub(pad);
+                let x_end = (logo_x + logo_w + pad).min(width);
+                // Darken every 2nd pixel for performance (checkerboard)
+                let phase = (self.frame_count & 1) as u32;
+                for py in y_start..y_end {
+                    for px in x_start..x_end {
+                        if ((px + py) & 1) != phase { continue; }
+                        let dx = (px as f32 - cx as f32) / max_r;
+                        let dy = (py as f32 - cy as f32) / max_r;
+                        let dist = libm::sqrtf(dx * dx + dy * dy);
+                        if dist > 1.0 { continue; }
+                        // Stronger darkening in center (80%), fading at edge (0%)
+                        let darken = ((1.0 - dist) * 0.80) as f32;
+                        let existing = framebuffer::get_pixel_fast(px, py);
+                        let er = ((existing >> 16) & 0xFF) as f32;
+                        let eg = ((existing >> 8) & 0xFF) as f32;
+                        let eb = (existing & 0xFF) as f32;
+                        let keep = 1.0 - darken;
+                        let nr = (er * keep) as u32;
+                        let ng = (eg * keep) as u32;
+                        let nb = (eb * keep) as u32;
+                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
+                    }
+                }
+            }
+            
+            // Green glow behind chrome edges — every frame for visibility
             for ly in 0..logo_h {
                 for lx in 0..logo_w {
                     if !crate::logo_bitmap::logo_edge_pixel(lx as usize, ly as usize) { continue; }
                     let px = logo_x + lx;
                     let py = logo_y + ly;
                     if px >= width || py >= height { continue; }
-                    // 3px green glow halo
-                    let glow_g: u32 = if m_playing { 30 + (m_beat * 40.0) as u32 } else { 25 };
-                    for gdy in 0..5u32 {
-                        for gdx in 0..5u32 {
-                            let gx = px as i32 + gdx as i32 - 2;
-                            let gy = py as i32 + gdy as i32 - 2;
+                    let glow_g: u32 = if m_playing { 35 + (m_beat * 50.0) as u32 } else { 30 };
+                    // 3x3 glow
+                    for gdy in 0..3u32 {
+                        for gdx in 0..3u32 {
+                            let gx = px as i32 + gdx as i32 - 1;
+                            let gy = py as i32 + gdy as i32 - 1;
                             if gx >= 0 && gy >= 0 && (gx as u32) < width && (gy as u32) < height {
-                                let dist = ((gdx as i32 - 2).unsigned_abs() + (gdy as i32 - 2).unsigned_abs()) as u32;
+                                let dist = ((gdx as i32 - 1).unsigned_abs() + (gdy as i32 - 1).unsigned_abs()) as u32;
                                 if dist > 0 && dist <= 2 {
-                                    let existing = framebuffer::get_pixel(gx as u32, gy as u32);
+                                    let existing = framebuffer::get_pixel_fast(gx as u32, gy as u32);
                                     let eg = (existing >> 8) & 0xFF;
-                                    if eg < 40 {
+                                    if eg < 60 {
                                         let fade = glow_g / (dist + 1);
-                                        framebuffer::put_pixel(gx as u32, gy as u32,
+                                        framebuffer::put_pixel_fast(gx as u32, gy as u32,
                                             0xFF000000 | (fade.min(255) << 8));
                                     }
                                 }
@@ -7558,7 +8252,6 @@ struct AppConfig {
                     
                     if a < 20 { continue; }
                     let luminance = (r * 77 + g * 150 + b * 29) >> 8;
-                    // Skip dark pixels — matrix rain shows through
                     if luminance < 18 { continue; }
                     
                     let px = logo_x + lx;
@@ -7566,21 +8259,19 @@ struct AppConfig {
                     if px >= width || py >= height { continue; }
                     
                     if luminance >= 60 {
-                        // Bright chrome/silver: draw faithfully with slight beat shimmer
                         let beat_add = if m_playing { (m_beat * 20.0).min(30.0) as u32 } else { 0 };
                         let pr = (r + beat_add).min(255);
                         let pg = (g + beat_add).min(255);
                         let pb = (b + beat_add).min(255);
-                        framebuffer::put_pixel(px, py, 0xFF000000 | (pr << 16) | (pg << 8) | pb);
+                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (pr << 16) | (pg << 8) | pb);
                     } else {
-                        // Semi-dark: alpha blend over matrix rain so both are visible
                         let alpha = ((luminance as u32) * 255 / 60).min(255);
-                        let bg = framebuffer::get_pixel(px, py);
+                        let bg = framebuffer::get_pixel_fast(px, py);
                         let inv = 255 - alpha;
                         let nr = (r * alpha + ((bg >> 16) & 0xFF) * inv) / 255;
                         let ng = (g * alpha + ((bg >> 8) & 0xFF) * inv) / 255;
                         let nb = (b * alpha + (bg & 0xFF) * inv) / 255;
-                        framebuffer::put_pixel(px, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
+                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
                     }
                 }
             }
@@ -7642,7 +8333,7 @@ struct AppConfig {
                                     + (c01 & 0xFF) * ifx * fy
                                     + (c11 & 0xFF) * fx * fy ) >> 16;
                             
-                            framebuffer::put_pixel(sx, sy, 0xFF000000 | (r << 16) | (g << 8) | b);
+                            framebuffer::put_pixel_fast(sx, sy, 0xFF000000 | (r << 16) | (g << 8) | b);
                         }
                     }
                 }
@@ -7659,7 +8350,7 @@ struct AppConfig {
                     for x in 0..wp_data.width.min(self.width) {
                         let idx = (y * wp_data.width + x) as usize;
                         if idx < wp_data.pixels.len() {
-                            framebuffer::put_pixel(offset_x + x, offset_y + y, wp_data.pixels[idx]);
+                            framebuffer::put_pixel_fast(offset_x + x, offset_y + y, wp_data.pixels[idx]);
                         }
                     }
                 }
@@ -7676,7 +8367,7 @@ struct AppConfig {
                                 if dx + x >= self.width { break; }
                                 let idx = (y * wp_data.width + x) as usize;
                                 if idx < wp_data.pixels.len() {
-                                    framebuffer::put_pixel(dx + x, dy + y, wp_data.pixels[idx]);
+                                    framebuffer::put_pixel_fast(dx + x, dy + y, wp_data.pixels[idx]);
                                 }
                             }
                         }
@@ -7735,13 +8426,13 @@ struct AppConfig {
                 let local_x = x_off + dx;
                 let diagonal = (local_x as f32 / shield_w as f32) + (ratio * 0.2);
                 let fill = if diagonal < 0.5 { black_fill } else { green_dark };
-                framebuffer::put_pixel(px, py, fill);
+                framebuffer::put_pixel_fast(px, py, fill);
             }
             
             // Shield outline (both edges)
             if w > 2 {
-                framebuffer::put_pixel(sx + x_off, sy + y, outline_green);
-                framebuffer::put_pixel(sx + x_off + w - 1, sy + y, outline_green);
+                framebuffer::put_pixel_fast(sx + x_off, sy + y, outline_green);
+                framebuffer::put_pixel_fast(sx + x_off + w - 1, sy + y, outline_green);
             }
         }
         // Top edge
@@ -7759,7 +8450,7 @@ struct AppConfig {
                 let r_inner = 6i32;
                 if ddy <= r_outer && (ddx * ddx + (ddy - r_outer) * (ddy - r_outer)) <= r_outer * r_outer
                    && (ddx * ddx + (ddy - r_outer) * (ddy - r_outer)) >= r_inner * r_inner {
-                    framebuffer::put_pixel(lock_cx - 10 + dx, lock_cy - 14 + dy, yellow_green);
+                    framebuffer::put_pixel_fast(lock_cx - 10 + dx, lock_cy - 14 + dy, yellow_green);
                 }
             }
         }
@@ -7771,7 +8462,7 @@ struct AppConfig {
                 let ddx = dx as i32 - 3;
                 let ddy = dy as i32 - 3;
                 if ddx * ddx + ddy * ddy <= 9 {
-                    framebuffer::put_pixel(lock_cx - 3 + dx, lock_cy + 4 + dy, black_fill);
+                    framebuffer::put_pixel_fast(lock_cx - 3 + dx, lock_cy + 4 + dy, black_fill);
                 }
             }
         }
@@ -7784,9 +8475,9 @@ struct AppConfig {
         
         // Main vertical stem
         for ky in key_start_y..key_end_y {
-            framebuffer::put_pixel(lock_cx - 1, ky, circuit_green);
-            framebuffer::put_pixel(lock_cx, ky, circuit_green);
-            framebuffer::put_pixel(lock_cx + 1, ky, circuit_green);
+            framebuffer::put_pixel_fast(lock_cx - 1, ky, circuit_green);
+            framebuffer::put_pixel_fast(lock_cx, ky, circuit_green);
+            framebuffer::put_pixel_fast(lock_cx + 1, ky, circuit_green);
         }
         
         // Branch connections at regular intervals
@@ -7807,8 +8498,8 @@ struct AppConfig {
             for dx in 0..abs_off {
                 let px = (lock_cx as i32 + sign * dx) as u32;
                 if px < self.width {
-                    framebuffer::put_pixel(px, by, circuit_green);
-                    framebuffer::put_pixel(px, by + 1, circuit_green);
+                    framebuffer::put_pixel_fast(px, by, circuit_green);
+                    framebuffer::put_pixel_fast(px, by + 1, circuit_green);
                 }
             }
             // Node dot at end of branch
@@ -7821,7 +8512,7 @@ struct AppConfig {
                         let px = node_x + ndx;
                         let py = by + ndy;
                         if px < self.width && py < self.height.saturating_sub(TASKBAR_HEIGHT) {
-                            framebuffer::put_pixel(px, py, node_color);
+                            framebuffer::put_pixel_fast(px, py, node_color);
                         }
                     }
                 }
@@ -7835,7 +8526,7 @@ struct AppConfig {
                     let ddx = dx as i32 - 4;
                     let ddy = dy as i32 - 4;
                     if ddx * ddx + ddy * ddy <= 16 {
-                        framebuffer::put_pixel(lock_cx - 4 + dx, key_end_y + dy, node_color);
+                        framebuffer::put_pixel_fast(lock_cx - 4 + dx, key_end_y + dy, node_color);
                     }
                 }
             }
@@ -7854,7 +8545,7 @@ struct AppConfig {
         // Draw column by column with opacity blending over matrix rain
         for dy in 0..dock_h {
             for dx in 0..(DOCK_WIDTH + 10) {
-                let existing = framebuffer::get_pixel(dx, dy);
+                let existing = framebuffer::get_pixel_fast(dx, dy);
                 let er = ((existing >> 16) & 0xFF) as u32;
                 let eg = ((existing >> 8) & 0xFF) as u32;
                 let eb = (existing & 0xFF) as u32;
@@ -7862,7 +8553,7 @@ struct AppConfig {
                 let nr = (er * 25 / 100 + 4 * 75 / 100).min(255);
                 let ng = (eg * 25 / 100 + 8 * 75 / 100).min(255);
                 let nb = (eb * 25 / 100 + 4 * 75 / 100).min(255);
-                framebuffer::put_pixel(dx, dy, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
+                framebuffer::put_pixel_fast(dx, dy, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
             }
         }
         // Right edge: chrome separator
@@ -7912,11 +8603,11 @@ struct AppConfig {
                         if dist > 0 {
                             let intensity = (20u32.saturating_sub(dist * 4)).min(20) as u8;
                             if intensity > 0 {
-                                let existing = framebuffer::get_pixel(px, py);
+                                let existing = framebuffer::get_pixel_fast(px, py);
                                 let eg = ((existing >> 8) & 0xFF) as u8;
                                 let new_g = eg.saturating_add(intensity);
                                 let blended = (existing & 0xFFFF00FF) | ((new_g as u32) << 8);
-                                framebuffer::put_pixel(px, py, blended);
+                                framebuffer::put_pixel_fast(px, py, blended);
                             }
                         }
                     }
@@ -8033,7 +8724,7 @@ struct AppConfig {
                                         let fade = if ring == 0 { draw_color } 
                                             else if ring == 1 { if is_hovered { draw_color } else { GREEN_GHOST } }
                                             else { GREEN_GHOST };
-                                        framebuffer::put_pixel(px, py, fade);
+                                        framebuffer::put_pixel_fast(px, py, fade);
                                     }
                                 }
                             }
@@ -8068,11 +8759,11 @@ struct AppConfig {
                             let dist_sq = ddx * ddx + ddy * ddy;
                             // Outer ring
                             if dist_sq >= 30 && dist_sq <= 64 {
-                                framebuffer::put_pixel(cx - 9 + dx, cy - 9 + dy, draw_color);
+                                framebuffer::put_pixel_fast(cx - 9 + dx, cy - 9 + dy, draw_color);
                             }
                             // Inner circle
                             if dist_sq <= 9 {
-                                framebuffer::put_pixel(cx - 9 + dx, cy - 9 + dy, draw_color);
+                                framebuffer::put_pixel_fast(cx - 9 + dx, cy - 9 + dy, draw_color);
                             }
                         }
                     }
@@ -8093,7 +8784,7 @@ struct AppConfig {
                             let dist_sq = ddx * ddx + ddy * ddy;
                             // Outer circle
                             if dist_sq >= 72 && dist_sq <= 100 {
-                                framebuffer::put_pixel(cx - 10 + dx, cy - 10 + dy, draw_color);
+                                framebuffer::put_pixel_fast(cx - 10 + dx, cy - 10 + dy, draw_color);
                             }
                         }
                     }
@@ -8110,10 +8801,10 @@ struct AppConfig {
                             let px1 = cx + curve_x;
                             let px2 = cx.saturating_sub(curve_x);
                             if px1 > ix && px1 < ix + icon_size {
-                                framebuffer::put_pixel(px1, cy - 10 + dy, draw_color);
+                                framebuffer::put_pixel_fast(px1, cy - 10 + dy, draw_color);
                             }
                             if px2 > ix && px2 < ix + icon_size {
-                                framebuffer::put_pixel(px2, cy - 10 + dy, draw_color);
+                                framebuffer::put_pixel_fast(px2, cy - 10 + dy, draw_color);
                             }
                         }
                     }
@@ -8188,16 +8879,16 @@ struct AppConfig {
                 let left_x = radius - horiz;
                 let right_x = w - radius + horiz;
                 if left_x < w {
-                    framebuffer::put_pixel(left_x, y + row, CHROME_DIM);
+                    framebuffer::put_pixel_fast(left_x, y + row, CHROME_DIM);
                 }
                 if right_x > 0 && right_x - 1 < w {
-                    framebuffer::put_pixel(right_x - 1, y + row, CHROME_DIM);
+                    framebuffer::put_pixel_fast(right_x - 1, y + row, CHROME_DIM);
                 }
             }
             // Straight top border between corners
             if w > radius * 2 {
                 for px in radius..(w - radius) {
-                    framebuffer::put_pixel(px, y, CHROME_DIM);
+                    framebuffer::put_pixel_fast(px, y, CHROME_DIM);
                 }
             }
         }
@@ -8261,9 +8952,10 @@ struct AppConfig {
         }
         
         // ── System tray (right side) ──
-        // FPS counter (dimmed)
-        let fps_str = format!("{}fps", (60u64).min(self.frame_count.max(1)));
-        self.draw_text_smooth((self.width - 200) as i32, (y + 14) as i32, &fps_str, GREEN_GHOST);
+        // FPS counter (real measured value)
+        let fps_str = format!("{}fps", self.fps_current);
+        let fps_color = if self.fps_current >= 55 { GREEN_SECONDARY } else if self.fps_current >= 30 { ACCENT_AMBER } else { ACCENT_RED };
+        self.draw_text_smooth((self.width - 200) as i32, (y + 14) as i32, &fps_str, fps_color);
         
         // Clock (anti-aliased, bright)
         let time = self.get_time_string();
@@ -8327,11 +9019,11 @@ struct AppConfig {
                 let dist_sq = ddx * ddx + ddy * ddy;
                 // Outer ring
                 if dist_sq >= 25 && dist_sq <= 56 {
-                    framebuffer::put_pixel(gear_x + dx, gear_y + dy, gear_color);
+                    framebuffer::put_pixel_fast(gear_x + dx, gear_y + dy, gear_color);
                 }
                 // Inner dot
                 if dist_sq <= 6 {
-                    framebuffer::put_pixel(gear_x + dx, gear_y + dy, gear_color);
+                    framebuffer::put_pixel_fast(gear_x + dx, gear_y + dy, gear_color);
                 }
             }
         }
@@ -8423,7 +9115,7 @@ struct AppConfig {
                 let ddy = dy as i32 - 5;
                 let dist = ddx * ddx + ddy * ddy;
                 if dist >= 12 && dist <= 25 {
-                    framebuffer::put_pixel((mag_x + dx as i32) as u32, (mag_y + dy as i32) as u32, GREEN_TERTIARY);
+                    framebuffer::put_pixel_fast((mag_x + dx as i32) as u32, (mag_y + dy as i32) as u32, GREEN_TERTIARY);
                 }
             }
         }
@@ -8718,11 +9410,11 @@ struct AppConfig {
         let cy = btn_y_center;
         let x_color = if close_hover { 0xFFFFFFFF } else { if window.focused { GREEN_SECONDARY } else { GREEN_GHOST } };
         for i in -3..=3i32 {
-            framebuffer::put_pixel((cx + i) as u32, (cy + i) as u32, x_color);
-            framebuffer::put_pixel((cx + i) as u32, (cy - i) as u32, x_color);
+            framebuffer::put_pixel_fast((cx + i) as u32, (cy + i) as u32, x_color);
+            framebuffer::put_pixel_fast((cx + i) as u32, (cy - i) as u32, x_color);
             // Thicken
-            framebuffer::put_pixel((cx + i + 1) as u32, (cy + i) as u32, x_color);
-            framebuffer::put_pixel((cx + i + 1) as u32, (cy - i) as u32, x_color);
+            framebuffer::put_pixel_fast((cx + i + 1) as u32, (cy + i) as u32, x_color);
+            framebuffer::put_pixel_fast((cx + i + 1) as u32, (cy - i) as u32, x_color);
         }
         
         // Maximize button (middle)
@@ -9104,7 +9796,7 @@ struct AppConfig {
                         let color = buf[py * buf_w + px];
                         let sx = content_x + px as u32;
                         let sy = content_y + py as u32;
-                        framebuffer::put_pixel(sx, sy, color);
+                        framebuffer::put_pixel_fast(sx, sy, color);
                     }
                 }
             }
@@ -9139,7 +9831,7 @@ struct AppConfig {
                         let color = buf[py * buf_w + px];
                         let sx = content_x + px as u32;
                         let sy = content_y + py as u32;
-                        framebuffer::put_pixel(sx, sy, color);
+                        framebuffer::put_pixel_fast(sx, sy, color);
                     }
                 }
             }
@@ -9176,7 +9868,7 @@ struct AppConfig {
                         let color = buf[py * buf_w + px];
                         let sx = content_x + px as u32;
                         let sy = content_y + py as u32;
-                        framebuffer::put_pixel(sx, sy, color);
+                        framebuffer::put_pixel_fast(sx, sy, color);
                     }
                 }
             }
@@ -9211,7 +9903,7 @@ struct AppConfig {
                         let color = buf[py * buf_w + px];
                         let sx = content_x + px as u32;
                         let sy = content_y + py as u32;
-                        framebuffer::put_pixel(sx, sy, color);
+                        framebuffer::put_pixel_fast(sx, sy, color);
                     }
                 }
             }
@@ -9310,7 +10002,7 @@ struct AppConfig {
                         let color = buf[py * buf_w + px];
                         let sx = content_x + px as u32;
                         let sy = game_y + py as u32;
-                        framebuffer::put_pixel(sx, sy, color);
+                        framebuffer::put_pixel_fast(sx, sy, color);
                     }
                 }
             }
@@ -9502,7 +10194,7 @@ struct AppConfig {
         
         loop {
             if x >= 0 && y >= 0 && (x as u32) < self.width && (y as u32) < self.height {
-                framebuffer::put_pixel(x as u32, y as u32, color);
+                framebuffer::put_pixel_fast(x as u32, y as u32, color);
             }
             if x == x1 && y == y1 { break; }
             let e2 = 2 * err;
@@ -9533,12 +10225,12 @@ struct AppConfig {
         
         // Draw border
         for i in 0..game_w {
-            framebuffer::put_pixel(game_x + i, game_y, GREEN_MUTED);
-            framebuffer::put_pixel(game_x + i, game_y + game_h - 1, GREEN_MUTED);
+            framebuffer::put_pixel_fast(game_x + i, game_y, GREEN_MUTED);
+            framebuffer::put_pixel_fast(game_x + i, game_y + game_h - 1, GREEN_MUTED);
         }
         for i in 0..game_h {
-            framebuffer::put_pixel(game_x, game_y + i, GREEN_MUTED);
-            framebuffer::put_pixel(game_x + game_w - 1, game_y + i, GREEN_MUTED);
+            framebuffer::put_pixel_fast(game_x, game_y + i, GREEN_MUTED);
+            framebuffer::put_pixel_fast(game_x + game_w - 1, game_y + i, GREEN_MUTED);
         }
         
         // Get snake state
@@ -9580,8 +10272,8 @@ struct AppConfig {
                             (0, -1) => (3, 2, cell_size-5, 2),                     // Up
                             _ => (3, cell_size-4, cell_size-5, cell_size-4),       // Down
                         };
-                        framebuffer::put_pixel(px + ex1, py + ey1, 0xFF000000);
-                        framebuffer::put_pixel(px + ex2, py + ey2, 0xFF000000);
+                        framebuffer::put_pixel_fast(px + ex1, py + ey1, 0xFF000000);
+                        framebuffer::put_pixel_fast(px + ex2, py + ey2, 0xFF000000);
                     }
                 }
             }
@@ -9591,7 +10283,7 @@ struct AppConfig {
             let fy = grid_offset_y + snake.food.1 as u32 * cell_size;
             if fx + cell_size < game_x + game_w && fy + cell_size < game_y + game_h {
                 framebuffer::fill_rect(fx + 2, fy + 2, cell_size - 4, cell_size - 4, 0xFFFF4444);
-                framebuffer::put_pixel(fx + cell_size/2, fy + 1, 0xFF00AA00); // stem
+                framebuffer::put_pixel_fast(fx + cell_size/2, fy + 1, 0xFF00AA00); // stem
             }
             
             // Title
@@ -9834,14 +10526,14 @@ struct AppConfig {
                     if chess.valid_moves.contains(&sq) && piece != 0 && !is_being_dragged {
                         // Draw corner triangles to indicate capturable
                         for dx in 0..4u32 {
-                            framebuffer::put_pixel(px + dx, py, 0xFF00FF66);
-                            framebuffer::put_pixel(px, py + dx, 0xFF00FF66);
-                            framebuffer::put_pixel(px + cell_size - 1 - dx, py, 0xFF00FF66);
-                            framebuffer::put_pixel(px + cell_size - 1, py + dx, 0xFF00FF66);
-                            framebuffer::put_pixel(px + dx, py + cell_size - 1, 0xFF00FF66);
-                            framebuffer::put_pixel(px, py + cell_size - 1 - dx, 0xFF00FF66);
-                            framebuffer::put_pixel(px + cell_size - 1 - dx, py + cell_size - 1, 0xFF00FF66);
-                            framebuffer::put_pixel(px + cell_size - 1, py + cell_size - 1 - dx, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + dx, py, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px, py + dx, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + cell_size - 1 - dx, py, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + cell_size - 1, py + dx, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + dx, py + cell_size - 1, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px, py + cell_size - 1 - dx, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + cell_size - 1 - dx, py + cell_size - 1, 0xFF00FF66);
+                            framebuffer::put_pixel_fast(px + cell_size - 1, py + cell_size - 1 - dx, 0xFF00FF66);
                         }
                     }
                 }
@@ -9858,12 +10550,12 @@ struct AppConfig {
             
             // ── Board border ──
             for i in 0..board_size {
-                framebuffer::put_pixel(board_x + i, board_y, GREEN_MUTED);
-                framebuffer::put_pixel(board_x + i, board_y + board_size, GREEN_MUTED);
+                framebuffer::put_pixel_fast(board_x + i, board_y, GREEN_MUTED);
+                framebuffer::put_pixel_fast(board_x + i, board_y + board_size, GREEN_MUTED);
             }
             for i in 0..board_size + 1 {
-                framebuffer::put_pixel(board_x, board_y + i, GREEN_MUTED);
-                framebuffer::put_pixel(board_x + board_size, board_y + i, GREEN_MUTED);
+                framebuffer::put_pixel_fast(board_x, board_y + i, GREEN_MUTED);
+                framebuffer::put_pixel_fast(board_x + board_size, board_y + i, GREEN_MUTED);
             }
             
             // ── File labels (a-h) ──
@@ -10038,7 +10730,7 @@ struct AppConfig {
                         let pixel = state.pixels[(src_y * state.img_width + src_x) as usize];
                         // Skip fully transparent pixels
                         if (pixel >> 24) == 0 { continue; }
-                        framebuffer::put_pixel(screen_x as u32, screen_y as u32, pixel | 0xFF000000);
+                        framebuffer::put_pixel_fast(screen_x as u32, screen_y as u32, pixel | 0xFF000000);
                     }
                 }
                 
@@ -10713,10 +11405,10 @@ struct AppConfig {
                 let px = cx + dx;
                 let py = cy.saturating_sub(dy);
                 if px > 0 && py > 0 {
-                    framebuffer::put_pixel(px, py, wifi_color);
+                    framebuffer::put_pixel_fast(px, py, wifi_color);
                     // Mirror to left
                     if cx >= dx {
-                        framebuffer::put_pixel(cx - dx, py, wifi_color);
+                        framebuffer::put_pixel_fast(cx - dx, py, wifi_color);
                     }
                 }
             }
@@ -11064,6 +11756,13 @@ struct AppConfig {
 
         if ww < 80 || wh < 80 { return; }
 
+        // Debug: track first few draw calls
+        static DRAW_COUNT: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
+        let cnt = DRAW_COUNT.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+        if cnt < 3 {
+            crate::serial_println!("[MP-DRAW] #{} wx={} wy={} ww={} wh={}", cnt, wx, wy, ww, wh);
+        }
+
         // ── Glass background ──
         // Dark frosted glass with subtle green tint
         framebuffer::fill_rect_alpha(wx, wy, ww, wh, 0x050E08, 200);
@@ -11099,7 +11798,7 @@ struct AppConfig {
         };
         let status_color = match state.state {
             PlaybackState::Playing => 0xFF00CC66,
-            PlaybackState::Paused => 0xFFFFAA00,
+            PlaybackState::Paused => 0xFF00AA88,
             PlaybackState::Stopped => 0xFF888888,
         };
         self.draw_text(inner_x as i32, status_y as i32, status, status_color);
@@ -11182,7 +11881,7 @@ struct AppConfig {
                         let b = ((b_shift as f32 * fade) as u32).min(0xFF);
                         let r = ((r_shift as f32 * fade) as u32).min(0xFF);
                         let c = 0xFF000000 | (r << 16) | (g << 8) | b;
-                        framebuffer::put_pixel(px, yy, c);
+                        framebuffer::put_pixel_fast(px, yy, c);
                     }
                 } else {
                     for yy in center..=py {
@@ -11191,12 +11890,12 @@ struct AppConfig {
                         let b = ((b_shift as f32 * fade) as u32).min(0xFF);
                         let r = ((r_shift as f32 * fade) as u32).min(0xFF);
                         let c = 0xFF000000 | (r << 16) | (g << 8) | b;
-                        framebuffer::put_pixel(px, yy, c);
+                        framebuffer::put_pixel_fast(px, yy, c);
                     }
                 }
 
                 // Bright tip pixel
-                framebuffer::put_pixel(px, py, 0xFF00FFCC);
+                framebuffer::put_pixel_fast(px, py, 0xFF00FFCC);
             }
 
             // Beat flash overlay
@@ -11337,6 +12036,27 @@ struct AppConfig {
         let vm_next_x = name_x + (mode_name.len() as u32 * cw) + 6;
         framebuffer::fill_rect_alpha(vm_next_x, viz_mode_y, vm_btn_w, vm_btn_h, 0x224444, 180);
         self.draw_text(vm_next_x as i32 + 5, viz_mode_y as i32 + 2, ">", 0xFF88FFCC);
+
+        // ── Rain speed preset selector (bounds-checked) ──
+        let rain_y = viz_mode_y + vm_btn_h + 8;
+        let rain_btn_w = 20u32;
+        let rain_btn_h = 16u32;
+        if rain_y + rain_btn_h + 4 < wy + wh {
+            self.draw_text(inner_x as i32, rain_y as i32 + 2, "RAIN", 0xFF668877);
+            let rain_prev_x = inner_x + 30;
+            framebuffer::fill_rect_alpha(rain_prev_x, rain_y, rain_btn_w, rain_btn_h, 0x224422, 180);
+            self.draw_text(rain_prev_x as i32 + 5, rain_y as i32 + 2, "<", 0xFF88FF88);
+            let rain_name = match self.matrix_rain_preset {
+                0 => "Slow",
+                1 => "Mid",
+                _ => "Fast",
+            };
+            let rain_name_x = rain_prev_x + rain_btn_w + 6;
+            self.draw_text(rain_name_x as i32, rain_y as i32 + 2, rain_name, 0xFF00FF88);
+            let rain_next_x = rain_name_x + (rain_name.len() as u32 * cw) + 6;
+            framebuffer::fill_rect_alpha(rain_next_x, rain_y, rain_btn_w, rain_btn_h, 0x224422, 180);
+            self.draw_text(rain_next_x as i32 + 5, rain_y as i32 + 2, ">", 0xFF88FF88);
+        }
     }
 
     /// Draw interactive Calculator
@@ -11794,7 +12514,7 @@ struct AppConfig {
                     let py = (sy + dy) as u32;
                     let px = sx as u32;
                     if py < self.height && px < self.width {
-                        framebuffer::put_pixel(px, py, shadow_color);
+                        framebuffer::put_pixel_fast(px, py, shadow_color);
                     }
                 }
             }
@@ -11838,7 +12558,7 @@ struct AppConfig {
                         let px = (self.cursor_x + cx as i32 * cs as i32 + sx as i32) as u32;
                         let py = (self.cursor_y + cy as i32 * cs as i32 + sy as i32) as u32;
                         if px < self.width && py < self.height {
-                            framebuffer::put_pixel(px, py, color);
+                            framebuffer::put_pixel_fast(px, py, color);
                         }
                     }
                 }
@@ -11856,9 +12576,9 @@ struct AppConfig {
             let px = (mx - 7 + i) as u32;
             let py = my as u32;
             if px < self.width && py < self.height {
-                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
-                if py > 0 { framebuffer::put_pixel(px, py - 1, GREEN_MUTED); }
-                if py + 1 < self.height { framebuffer::put_pixel(px, py + 1, GREEN_MUTED); }
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if py > 0 { framebuffer::put_pixel_fast(px, py - 1, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel_fast(px, py + 1, GREEN_MUTED); }
             }
         }
         // Right arrow  
@@ -11866,30 +12586,30 @@ struct AppConfig {
             let px = (mx + 1 + i) as u32;
             let py = my as u32;
             if px < self.width && py < self.height {
-                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
-                if py > 0 { framebuffer::put_pixel(px, py - 1, GREEN_MUTED); }
-                if py + 1 < self.height { framebuffer::put_pixel(px, py + 1, GREEN_MUTED); }
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if py > 0 { framebuffer::put_pixel_fast(px, py - 1, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel_fast(px, py + 1, GREEN_MUTED); }
             }
         }
         // Left arrowhead
         for d in 1..=4i32 {
             let px = (mx - 7 + d) as u32;
             if px < self.width {
-                if (my - d) >= 0 { framebuffer::put_pixel(px, (my - d) as u32, GREEN_PRIMARY); }
-                if (my + d) < self.height as i32 { framebuffer::put_pixel(px, (my + d) as u32, GREEN_PRIMARY); }
+                if (my - d) >= 0 { framebuffer::put_pixel_fast(px, (my - d) as u32, GREEN_PRIMARY); }
+                if (my + d) < self.height as i32 { framebuffer::put_pixel_fast(px, (my + d) as u32, GREEN_PRIMARY); }
             }
         }
         // Right arrowhead
         for d in 1..=4i32 {
             let px = (mx + 7 - d) as u32;
             if px < self.width {
-                if (my - d) >= 0 { framebuffer::put_pixel(px, (my - d) as u32, GREEN_PRIMARY); }
-                if (my + d) < self.height as i32 { framebuffer::put_pixel(px, (my + d) as u32, GREEN_PRIMARY); }
+                if (my - d) >= 0 { framebuffer::put_pixel_fast(px, (my - d) as u32, GREEN_PRIMARY); }
+                if (my + d) < self.height as i32 { framebuffer::put_pixel_fast(px, (my + d) as u32, GREEN_PRIMARY); }
             }
         }
         // Center dot
         if mx >= 0 && my >= 0 && (mx as u32) < self.width && (my as u32) < self.height {
-            framebuffer::put_pixel(mx as u32, my as u32, 0xFFFFFFFF);
+            framebuffer::put_pixel_fast(mx as u32, my as u32, 0xFFFFFFFF);
         }
     }
     
@@ -11902,38 +12622,38 @@ struct AppConfig {
             let px = mx as u32;
             let py = (my - 7 + i) as u32;
             if px < self.width && py < self.height {
-                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
-                if px > 0 { framebuffer::put_pixel(px - 1, py, GREEN_MUTED); }
-                if px + 1 < self.width { framebuffer::put_pixel(px + 1, py, GREEN_MUTED); }
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if px > 0 { framebuffer::put_pixel_fast(px - 1, py, GREEN_MUTED); }
+                if px + 1 < self.width { framebuffer::put_pixel_fast(px + 1, py, GREEN_MUTED); }
             }
         }
         for i in 0..7i32 {
             let px = mx as u32;
             let py = (my + 1 + i) as u32;
             if px < self.width && py < self.height {
-                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
-                if px > 0 { framebuffer::put_pixel(px - 1, py, GREEN_MUTED); }
-                if px + 1 < self.width { framebuffer::put_pixel(px + 1, py, GREEN_MUTED); }
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if px > 0 { framebuffer::put_pixel_fast(px - 1, py, GREEN_MUTED); }
+                if px + 1 < self.width { framebuffer::put_pixel_fast(px + 1, py, GREEN_MUTED); }
             }
         }
         // Top arrowhead
         for d in 1..=4i32 {
             let py = (my - 7 + d) as u32;
             if py < self.height {
-                if (mx - d) >= 0 { framebuffer::put_pixel((mx - d) as u32, py, GREEN_PRIMARY); }
-                if (mx + d) < self.width as i32 { framebuffer::put_pixel((mx + d) as u32, py, GREEN_PRIMARY); }
+                if (mx - d) >= 0 { framebuffer::put_pixel_fast((mx - d) as u32, py, GREEN_PRIMARY); }
+                if (mx + d) < self.width as i32 { framebuffer::put_pixel_fast((mx + d) as u32, py, GREEN_PRIMARY); }
             }
         }
         // Bottom arrowhead
         for d in 1..=4i32 {
             let py = (my + 7 - d) as u32;
             if py < self.height {
-                if (mx - d) >= 0 { framebuffer::put_pixel((mx - d) as u32, py, GREEN_PRIMARY); }
-                if (mx + d) < self.width as i32 { framebuffer::put_pixel((mx + d) as u32, py, GREEN_PRIMARY); }
+                if (mx - d) >= 0 { framebuffer::put_pixel_fast((mx - d) as u32, py, GREEN_PRIMARY); }
+                if (mx + d) < self.width as i32 { framebuffer::put_pixel_fast((mx + d) as u32, py, GREEN_PRIMARY); }
             }
         }
         if mx >= 0 && my >= 0 && (mx as u32) < self.width && (my as u32) < self.height {
-            framebuffer::put_pixel(mx as u32, my as u32, 0xFFFFFFFF);
+            framebuffer::put_pixel_fast(mx as u32, my as u32, 0xFFFFFFFF);
         }
     }
     
@@ -11946,28 +12666,28 @@ struct AppConfig {
             let px = (mx + i) as u32;
             let py = (my + i) as u32;
             if px < self.width && py < self.height {
-                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
-                if px + 1 < self.width { framebuffer::put_pixel(px + 1, py, GREEN_MUTED); }
-                if py + 1 < self.height { framebuffer::put_pixel(px, py + 1, GREEN_MUTED); }
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if px + 1 < self.width { framebuffer::put_pixel_fast(px + 1, py, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel_fast(px, py + 1, GREEN_MUTED); }
             }
         }
         // NW arrowhead
         for d in 1..=3i32 {
             let bx = mx - 6 + d;
             let by = my - 6;
-            if bx >= 0 && (by as u32) < self.height { framebuffer::put_pixel(bx as u32, by as u32, GREEN_PRIMARY); }
+            if bx >= 0 && (by as u32) < self.height { framebuffer::put_pixel_fast(bx as u32, by as u32, GREEN_PRIMARY); }
             let bx2 = mx - 6;
             let by2 = my - 6 + d;
-            if bx2 >= 0 && by2 >= 0 { framebuffer::put_pixel(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
+            if bx2 >= 0 && by2 >= 0 { framebuffer::put_pixel_fast(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
         }
         // SE arrowhead
         for d in 1..=3i32 {
             let bx = mx + 6 - d;
             let by = my + 6;
-            if (bx as u32) < self.width && (by as u32) < self.height { framebuffer::put_pixel(bx as u32, by as u32, GREEN_PRIMARY); }
+            if (bx as u32) < self.width && (by as u32) < self.height { framebuffer::put_pixel_fast(bx as u32, by as u32, GREEN_PRIMARY); }
             let bx2 = mx + 6;
             let by2 = my + 6 - d;
-            if (bx2 as u32) < self.width && (by2 as u32) < self.height { framebuffer::put_pixel(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
+            if (bx2 as u32) < self.width && (by2 as u32) < self.height { framebuffer::put_pixel_fast(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
         }
     }
     
@@ -11980,28 +12700,28 @@ struct AppConfig {
             let px = (mx + i) as u32;
             let py = (my - i) as u32;
             if px < self.width && py < self.height {
-                framebuffer::put_pixel(px, py, GREEN_PRIMARY);
-                if px > 0 { framebuffer::put_pixel(px - 1, py, GREEN_MUTED); }
-                if py + 1 < self.height { framebuffer::put_pixel(px, py + 1, GREEN_MUTED); }
+                framebuffer::put_pixel_fast(px, py, GREEN_PRIMARY);
+                if px > 0 { framebuffer::put_pixel_fast(px - 1, py, GREEN_MUTED); }
+                if py + 1 < self.height { framebuffer::put_pixel_fast(px, py + 1, GREEN_MUTED); }
             }
         }
         // NE arrowhead
         for d in 1..=3i32 {
             let bx = mx + 6 - d;
             let by = my - 6;
-            if (bx as u32) < self.width && by >= 0 { framebuffer::put_pixel(bx as u32, by as u32, GREEN_PRIMARY); }
+            if (bx as u32) < self.width && by >= 0 { framebuffer::put_pixel_fast(bx as u32, by as u32, GREEN_PRIMARY); }
             let bx2 = mx + 6;
             let by2 = my - 6 + d;
-            if (bx2 as u32) < self.width && by2 >= 0 { framebuffer::put_pixel(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
+            if (bx2 as u32) < self.width && by2 >= 0 { framebuffer::put_pixel_fast(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
         }
         // SW arrowhead
         for d in 1..=3i32 {
             let bx = mx - 6 + d;
             let by = my + 6;
-            if bx >= 0 && (by as u32) < self.height { framebuffer::put_pixel(bx as u32, by as u32, GREEN_PRIMARY); }
+            if bx >= 0 && (by as u32) < self.height { framebuffer::put_pixel_fast(bx as u32, by as u32, GREEN_PRIMARY); }
             let bx2 = mx - 6;
             let by2 = my + 6 - d;
-            if bx2 >= 0 && (by2 as u32) < self.height { framebuffer::put_pixel(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
+            if bx2 >= 0 && (by2 as u32) < self.height { framebuffer::put_pixel_fast(bx2 as u32, by2 as u32, GREEN_PRIMARY); }
         }
     }
     
@@ -12061,7 +12781,7 @@ struct AppConfig {
                                 let px = cx as u32 + col * factor + sx;
                                 let py = y as u32 + row * factor + sy;
                                 if px < fb_w && py < fb_h {
-                                    framebuffer::put_pixel(px, py, color);
+                                    framebuffer::put_pixel_fast(px, py, color);
                                 }
                             }
                         }
@@ -12094,14 +12814,14 @@ struct AppConfig {
                                     let px = cx as u32 + col * factor + sx;
                                     let py = y as u32 + row * factor + sy;
                                     if px < fb_w && py < fb_h {
-                                        let bg = framebuffer::get_pixel(px, py);
+                                        let bg = framebuffer::get_pixel_fast(px, py);
                                         let bg_r = (bg >> 16) & 0xFF;
                                         let bg_g = (bg >> 8) & 0xFF;
                                         let bg_b = bg & 0xFF;
                                         let r = (fg_r * alpha + bg_r * inv) / 255;
                                         let g = (fg_g * alpha + bg_g * inv) / 255;
                                         let b = (fg_b * alpha + bg_b * inv) / 255;
-                                        framebuffer::put_pixel(px, py, 0xFF000000 | (r << 16) | (g << 8) | b);
+                                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (r << 16) | (g << 8) | b);
                                     }
                                 }
                             }
@@ -12249,8 +12969,9 @@ pub fn run() {
     use crate::gui::engine::{self, HotkeyAction};
     EXIT_DESKTOP_FLAG.store(false, Ordering::SeqCst);
     
-    // Initialize GUI timing
+    // Initialize GUI timing + vsync
     engine::init_timing();
+    crate::gui::vsync::init();
     
     // Reset mouse button edge-detection state so stale state
     // from a previous session doesn't trigger false clicks
@@ -12267,7 +12988,7 @@ pub fn run() {
     
     crate::serial_println!("[GUI] Starting desktop environment...");
     crate::serial_println!("[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start");
-    crate::serial_println!("[GUI] Target: ~31 FPS (32ms) with HLT-based frame limiting");
+    crate::serial_println!("[GUI] Target: ~60 FPS (16.6ms) with HLT-based frame limiting");
     
     loop {
         // Check exit flag
@@ -12302,12 +13023,40 @@ pub fn run() {
                 crate::serial_println!("[GUI] ESC pressed");
                 // Try-lock to avoid blocking the render loop; skip if locked
                 if let Some(mut d) = DESKTOP.try_lock() {
+                    // In mobile mode, ESC always exits back to shell
+                    if d.mobile_state.active {
+                        crate::serial_println!("[GUI] ESC: mobile mode, exiting to shell");
+                        drop(d);
+                        EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
+                        continue;
+                    }
                     // If start menu is open, close it
                     if d.start_menu_open {
                         d.start_menu_open = false;
                         d.start_menu_search.clear();
                         d.start_menu_selected = -1;
                         crate::serial_println!("[GUI] ESC: closed start menu");
+                        drop(d);
+                        continue;
+                    }
+                    // If focused window is TextEditor with active dialog, route ESC to editor
+                    let editor_needs_esc = {
+                        let focused = d.windows.iter().find(|w| w.focused && !w.minimized);
+                        if let Some(w) = focused {
+                            if w.window_type == WindowType::TextEditor {
+                                if let Some(editor) = d.editor_states.get(&w.id) {
+                                    editor.find_query.is_some() || editor.goto_line_input.is_some()
+                                } else { false }
+                            } else { false }
+                        } else { false }
+                    };
+                    if editor_needs_esc {
+                        let wid = d.windows.iter().find(|w| w.focused && !w.minimized).map(|w| w.id);
+                        if let Some(id) = wid {
+                            if let Some(editor) = d.editor_states.get_mut(&id) {
+                                editor.handle_key(27);
+                            }
+                        }
                         drop(d);
                         continue;
                     }
@@ -12560,15 +13309,23 @@ pub fn run() {
         }
         
         // ═══════════════════════════════════════════════════════════════
-        // Frame Limiting with HLT (saves CPU!)
+        // VSync frame pacing (adaptive HLT sleep + spin for precision)
         // ═══════════════════════════════════════════════════════════════
-        engine::wait_for_next_frame(frame_start);
+        crate::gui::vsync::frame_end(frame_start);
     }
     
     // ═══════════════════════════════════════════════════════════════
     // Cleanup before returning to shell
     // ═══════════════════════════════════════════════════════════════
     crate::serial_println!("[GUI] Desktop exiting, cleaning up...");
+    // Stop all music playback to prevent HDA DMA writing to freed memory
+    {
+        let mut d = DESKTOP.lock();
+        for (_id, mp) in d.music_player_states.iter_mut() {
+            mp.stop();
+        }
+        crate::serial_println!("[GUI] All music players stopped");
+    }
     crate::framebuffer::set_double_buffer_mode(false);
     crate::framebuffer::clear();
     crate::serial_println!("[GUI] Desktop exited cleanly");
@@ -12888,6 +13645,7 @@ pub fn set_render_mode(mode: RenderMode) {
     let mode_name = match mode {
         RenderMode::Classic => "Classic",
         RenderMode::OpenGL => "OpenGL Compositor",
+        RenderMode::GpuAccelerated => "GPU Accelerated",
     };
     crate::serial_println!("[GUI] Render mode: {}", mode_name);
 }

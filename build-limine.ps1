@@ -64,6 +64,13 @@ Copy-Item "limine\limine-uefi-cd.bin" "$isoDir\boot\limine\"
 Copy-Item "limine\BOOTX64.EFI" "$isoDir\EFI\BOOT\"
 Copy-Item "limine\BOOTIA32.EFI" "$isoDir\EFI\BOOT\"
 
+# Copy JARVIS pretrained brain if available
+$brainPath = "jarvis-bench\jarvis_pretrained.bin"
+if (Test-Path $brainPath) {
+    Copy-Item $brainPath "$isoDir\jarvis_pretrained.bin"
+    Write-Host "JARVIS brain weights included ($([math]::Round((Get-Item $brainPath).Length / 1MB, 1)) MB)" -ForegroundColor Cyan
+}
+
 Write-Host "ISO structure created" -ForegroundColor Green
 
 # Create ISO using xorriso

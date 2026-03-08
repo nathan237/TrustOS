@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-03-05T01:40:04.142152",
+  "results": [
+    {
+      "stall_count": 5,
+      "sent": 5,
+      "result": "upload_error: [Errno 5] Input/Output Error"
+    },
+    {
+      "stall_count": 10,
+      "sent": 10,
+      "result": "upload_error: [Errno 5] Input/Output Error"
+    },
+    {
+      "stall_count": 20,
+      "sent": 20,
+      "result": "upload_error: [Errno 5] Input/Output Error"
+    },
+    {
+      "stall_count": 50,
+      "sent": 50,
+      "result": "upload_error: [Errno 5] Input/Output Error"
+    }
+  ]
+}

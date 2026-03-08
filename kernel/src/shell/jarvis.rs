@@ -845,6 +845,63 @@ pub(super) fn cmd_jarvis(args: &[&str]) {
         cmd_brain(&args[1..]);
         return;
     }
+
+    // Hardware Intelligence subcommands: "jarvis boot/hw/analyze/..."
+    if !args.is_empty() {
+        match args[0] {
+            "boot" | "scan" | "wake" => {
+                crate::print!("{}", crate::jarvis_hw::boot());
+                return;
+            }
+            "hw" | "hardware" | "profile" => {
+                crate::print!("{}", crate::jarvis_hw::show_profile());
+                return;
+            }
+            "insights" | "insight" => {
+                crate::print!("{}", crate::jarvis_hw::show_insights());
+                return;
+            }
+            "plan" | "strategy" => {
+                crate::print!("{}", crate::jarvis_hw::show_plan());
+                return;
+            }
+            "optimize" | "opt" | "tune" => {
+                crate::print!("{}", crate::jarvis_hw::optimize_once());
+                return;
+            }
+            "status" | "stat" => {
+                crate::print!("{}", crate::jarvis_hw::show_status());
+                return;
+            }
+            "analyze" | "analyse" | "inspect" => {
+                if args.len() < 2 {
+                    crate::println!("Usage: jarvis analyze <file>");
+                    return;
+                }
+                let path = args[1..].join(" ");
+                match crate::ramfs::with_fs(|fs| fs.read_file(&path).map(|d| d.to_vec())) {
+                    Ok(data) => {
+                        crate::print!("{}", crate::jarvis_hw::analyze_data(&data));
+                    }
+                    Err(_) => {
+                        crate::println!("Cannot read file: {}", path);
+                    }
+                }
+                return;
+            }
+            "query" | "ask" | "q" => {
+                if args.len() < 2 {
+                    crate::println!("Usage: jarvis query <question>");
+                    crate::println!("  e.g. jarvis query can you access the encrypted data on this disk?");
+                    return;
+                }
+                let question = args[1..].join(" ");
+                crate::print!("{}", crate::jarvis_hw::hw_query(&question));
+                return;
+            }
+            _ => {} // Fall through to one-shot query
+        }
+    }
     
     // One-shot mode: "jarvis what time is it"
     if !args.is_empty() {
@@ -1004,11 +1061,17 @@ fn cmd_brain(args: &[&str]) {
         crate::println!("    hardware      Show available hardware for inference");
         crate::println!("    mentor        Start serial mentoring listener");
         crate::println!("    save          Save weights to /jarvis/weights.bin");
-        crate::println!("    load          Load weights from /jarvis/weights.bin");
+        crate::println!("    load          Load weights from RamFS");
+        crate::println!("    load fat32    Load from FAT32 disk (/mnt/fat32/)");
+        crate::println!("    load vfs <p>  Load from any VFS path");
+        crate::println!("    load http <u> Download brain from HTTP URL");
         crate::println!("    reset         Reset weights to random");
         crate::println!("    pretrain [N]  Pre-train on embedded corpus (N epochs)");
         crate::println!("    eval          Evaluate loss across entire corpus");
         crate::println!("    chat <text>   Chat with neural brain directly");
+        crate::println!("    swarm [N]     Init + mesh + federate + pretrain (N epochs)");
+        crate::println!("    propagate     Auto-propagation: mesh + pull brain + federate");
+        crate::println!("    propagate pxe Same + enable PXE to replicate further");
         crate::println!();
         crate::println!("  The neural brain is a 4-layer transformer (4.4M params)");
         crate::println!("  that learns from text, generates responses, and self-improves.");
@@ -1178,10 +1241,66 @@ fn cmd_brain(args: &[&str]) {
         }
 
         "load" => {
-            crate::println_color!(JARVIS_BRAIN, "  Loading weights from /jarvis/weights.bin...");
-            match crate::jarvis::load_weights() {
-                Ok(bytes) => crate::println_color!(COLOR_GREEN, "  Loaded {} KB", bytes / 1024),
-                Err(e) => crate::println_color!(COLOR_RED, "  Load failed: {}", e),
+            if args.len() > 1 {
+                match args[1] {
+                    "fat32" => {
+                        let filename = if args.len() > 2 { Some(args[2]) } else { None };
+                        let display_name = filename.unwrap_or("jarvis_weights.bin");
+                        crate::println_color!(JARVIS_BRAIN, "  Loading brain from FAT32: /mnt/fat32/{}", display_name);
+                        match crate::jarvis::load_brain_from_fat32(filename) {
+                            Ok(bytes) => {
+                                crate::println_color!(COLOR_GREEN, "  Loaded {} KB from FAT32", bytes / 1024);
+                                crate::println_color!(COLOR_GRAY, "  Caching to RamFS...");
+                                let _ = crate::jarvis::cache_brain_to_ramfs();
+                            }
+                            Err(e) => crate::println_color!(COLOR_RED, "  FAT32 load failed: {}", e),
+                        }
+                    }
+                    "vfs" => {
+                        if args.len() < 3 {
+                            crate::println_color!(COLOR_YELLOW, "  Usage: jarvis brain load vfs <path>");
+                            crate::println_color!(COLOR_GRAY, "  Example: jarvis brain load vfs /mnt/fat32/brain.bin");
+                            return;
+                        }
+                        crate::println_color!(JARVIS_BRAIN, "  Loading brain from VFS: {}", args[2]);
+                        match crate::jarvis::load_brain_from_vfs(args[2]) {
+                            Ok(bytes) => {
+                                crate::println_color!(COLOR_GREEN, "  Loaded {} KB from {}", bytes / 1024, args[2]);
+                                crate::println_color!(COLOR_GRAY, "  Caching to RamFS...");
+                                let _ = crate::jarvis::cache_brain_to_ramfs();
+                            }
+                            Err(e) => crate::println_color!(COLOR_RED, "  VFS load failed: {}", e),
+                        }
+                    }
+                    "http" => {
+                        if args.len() < 3 {
+                            crate::println_color!(COLOR_YELLOW, "  Usage: jarvis brain load http <url>");
+                            crate::println_color!(COLOR_GRAY, "  Example: jarvis brain load http 192.168.1.10/jarvis_weights.bin");
+                            return;
+                        }
+                        crate::println_color!(JARVIS_BRAIN, "  Downloading brain from: {}", args[2]);
+                        crate::println_color!(COLOR_GRAY, "  This may take a moment (~17 MB)...");
+                        match crate::jarvis::load_brain_from_http(args[2]) {
+                            Ok(bytes) => {
+                                crate::println_color!(COLOR_GREEN, "  Downloaded & loaded {} KB", bytes / 1024);
+                                crate::println_color!(COLOR_GRAY, "  Caching to RamFS...");
+                                let _ = crate::jarvis::cache_brain_to_ramfs();
+                            }
+                            Err(e) => crate::println_color!(COLOR_RED, "  HTTP load failed: {}", e),
+                        }
+                    }
+                    _ => {
+                        crate::println_color!(COLOR_YELLOW, "  Unknown source: {}", args[1]);
+                        crate::println_color!(COLOR_GRAY, "  Usage: jarvis brain load [fat32|vfs|http]");
+                    }
+                }
+            } else {
+                // Default: load from RamFS
+                crate::println_color!(JARVIS_BRAIN, "  Loading weights from /jarvis/weights.bin...");
+                match crate::jarvis::load_weights() {
+                    Ok(bytes) => crate::println_color!(COLOR_GREEN, "  Loaded {} KB", bytes / 1024),
+                    Err(e) => crate::println_color!(COLOR_RED, "  Load failed: {}", e),
+                }
             }
         }
 
@@ -1196,8 +1315,8 @@ fn cmd_brain(args: &[&str]) {
                 crate::jarvis::corpus::num_phases(), crate::jarvis::corpus::total_sequences());
             crate::println!();
 
-            // Show loss before
-            let loss_before = crate::jarvis::eval_corpus();
+            // Show loss before (quick eval — 1 sample per phase)
+            let loss_before = crate::jarvis::eval_quick();
             crate::println_color!(COLOR_GRAY, "  Loss before: {:.3}", loss_before);
             crate::println!();
 
@@ -1209,8 +1328,8 @@ fn cmd_brain(args: &[&str]) {
                 steps, avg_loss, elapsed, elapsed as f64 / 1000.0);
             crate::println!();
 
-            // Show loss after
-            let loss_after = crate::jarvis::eval_corpus();
+            // Show loss after (quick eval)
+            let loss_after = crate::jarvis::eval_quick();
             crate::print_color!(COLOR_GRAY, "  Loss after:  {:.3}", loss_after);
             if loss_after < loss_before {
                 crate::println_color!(COLOR_GREEN, " (improved by {:.3})", loss_before - loss_after);
@@ -1224,43 +1343,55 @@ fn cmd_brain(args: &[&str]) {
 
         "eval" => {
             if !ensure_brain() { return; }
-            crate::println_color!(JARVIS_BRAIN, "  Evaluating on embedded corpus...");
-            let avg_loss = crate::jarvis::eval_corpus();
-            crate::println!();
+            // Check for "eval full" vs quick eval
+            let full_eval = args.len() >= 2 && args[1] == "full";
+            if full_eval {
+                crate::println_color!(JARVIS_BRAIN, "  Evaluating FULL corpus (this may take a while)...");
+                let avg_loss = crate::jarvis::eval_corpus();
+                crate::println!();
 
-            // Per-phase breakdown
-            let model_guard_unavailable = !crate::jarvis::is_ready();
-            if !model_guard_unavailable {
-                for phase in 0..crate::jarvis::corpus::num_phases() {
-                    let name = crate::jarvis::corpus::phase_name(phase);
-                    // Quick eval of this phase
-                    let mut phase_loss = 0.0f32;
-                    let mut count = 0u32;
-                    for &text in crate::jarvis::corpus::CORPUS[phase] {
-                        let tokens = crate::jarvis::tokenizer::encode(text);
-                        if tokens.len() >= 2 {
-                            // We can't easily call compute_loss without the model guard
-                            // So just report the total
-                            count += 1;
+                // Per-phase breakdown
+                let model_guard_unavailable = !crate::jarvis::is_ready();
+                if !model_guard_unavailable {
+                    for phase in 0..crate::jarvis::corpus::num_phases() {
+                        let name = crate::jarvis::corpus::phase_name(phase);
+                        let mut count = 0u32;
+                        for &text in crate::jarvis::corpus::CORPUS[phase] {
+                            let tokens = crate::jarvis::tokenizer::encode(text);
+                            if tokens.len() >= 2 {
+                                count += 1;
+                            }
                         }
+                        crate::print_color!(JARVIS_BRAIN, "  Phase {} ", phase);
+                        crate::print_color!(COLOR_WHITE, "({}) ", name);
+                        crate::println_color!(COLOR_GRAY, "{} sequences", count);
                     }
-                    crate::print_color!(JARVIS_BRAIN, "  Phase {} ", phase);
-                    crate::print_color!(COLOR_WHITE, "({}) ", name);
-                    crate::println_color!(COLOR_GRAY, "{} sequences", count);
                 }
-            }
 
-            crate::println!();
-            crate::print_color!(COLOR_WHITE, "  Average loss: ");
-            if avg_loss < 4.0 {
-                crate::println_color!(COLOR_GREEN, "{:.3} (learning!)", avg_loss);
-            } else if avg_loss < 5.5 {
-                crate::println_color!(COLOR_YELLOW, "{:.3} (early stage)", avg_loss);
+                crate::println!();
+                crate::print_color!(COLOR_WHITE, "  Average loss: ");
+                if avg_loss < 4.0 {
+                    crate::println_color!(COLOR_GREEN, "{:.3} (learning!)", avg_loss);
+                } else if avg_loss < 5.5 {
+                    crate::println_color!(COLOR_YELLOW, "{:.3} (early stage)", avg_loss);
+                } else {
+                    crate::println_color!(COLOR_RED, "{:.3} (random/untrained)", avg_loss);
+                }
+                crate::println_color!(COLOR_GRAY, "  (Random baseline: ~5.5, Good: <3.0, Memorized: <1.0)");
             } else {
-                crate::println_color!(COLOR_RED, "{:.3} (random/untrained)", avg_loss);
+                crate::println_color!(JARVIS_BRAIN, "  Quick eval (1 sample/phase)...");
+                let avg_loss = crate::jarvis::eval_quick();
+                crate::println!();
+                crate::print_color!(COLOR_WHITE, "  Average loss: ");
+                if avg_loss < 4.0 {
+                    crate::println_color!(COLOR_GREEN, "{:.3} (learning!)", avg_loss);
+                } else if avg_loss < 5.5 {
+                    crate::println_color!(COLOR_YELLOW, "{:.3} (early stage)", avg_loss);
+                } else {
+                    crate::println_color!(COLOR_RED, "{:.3} (random/untrained)", avg_loss);
+                }
+                crate::println_color!(COLOR_GRAY, "  (Quick: 1/phase. Use 'eval full' for complete corpus)");
             }
-
-            crate::println_color!(COLOR_GRAY, "  (Random baseline: ~5.5, Good: <3.0, Memorized: <1.0)");
         }
 
         "chat" => {
@@ -1292,6 +1423,192 @@ fn cmd_brain(args: &[&str]) {
             }
             crate::println!();
             crate::println_color!(COLOR_GRAY, "  ({} ms, {} chars)", elapsed, output.len());
+        }
+
+        "task" => {
+            // Distributed task execution across the mesh cluster
+            // Usage: jarvis brain task [math]
+            if !crate::jarvis::mesh::is_active() {
+                crate::println_color!(COLOR_RED, "  Mesh not active. Run 'jarvis brain swarm' first.");
+                return;
+            }
+
+            crate::println_color!(JARVIS_BRAIN, "  === JARVIS Distributed Task Verification ===");
+            crate::println!();
+
+            let peers = crate::jarvis::mesh::get_peers();
+            let total = peers.len() + 1;
+            crate::println_color!(COLOR_GRAY, "  Cluster: {} node(s) ({} peers + self)", total, peers.len());
+            crate::println!();
+
+            crate::println_color!(JARVIS_BRAIN, "  Generating unique math tasks per node...");
+            let start = crate::time::uptime_ms();
+            let results = crate::jarvis::task::run_distributed_math();
+            let elapsed = crate::time::uptime_ms().wrapping_sub(start);
+
+            crate::println!();
+            crate::println_color!(JARVIS_BRAIN, "  Results:");
+            crate::println!();
+
+            let mut all_correct = true;
+            for r in &results {
+                let status_str = if r.correct { "OK" } else { "FAIL" };
+                let status_color = if r.correct { COLOR_GREEN } else { COLOR_RED };
+                let file_str = if r.file_written { "file written" } else { "no file" };
+
+                crate::print!("    ");
+                crate::print_color!(status_color, "[{}]", status_str);
+                crate::print!(" {} ", r.node_name);
+                crate::print_color!(COLOR_GRAY, "| {} = ", r.expression);
+                if r.correct {
+                    crate::print_color!(COLOR_GREEN, "{}", r.got);
+                } else {
+                    crate::print_color!(COLOR_RED, "{}", r.got);
+                    crate::print_color!(COLOR_GRAY, " (expected {})", r.expected);
+                    all_correct = false;
+                }
+                crate::println_color!(COLOR_GRAY, " | {}", file_str);
+            }
+
+            crate::println!();
+            if all_correct {
+                crate::println_color!(COLOR_GREEN,
+                    "  All {} nodes returned correct answers in {} ms", results.len(), elapsed);
+                crate::println_color!(COLOR_GREEN,
+                    "  Distributed verification: PASSED");
+            } else {
+                let correct_count = results.iter().filter(|r| r.correct).count();
+                crate::println_color!(COLOR_RED,
+                    "  {}/{} correct — verification FAILED ({} ms)", correct_count, results.len(), elapsed);
+            }
+        }
+
+        "propagate" | "autoprop" | "spread" => {
+            let enable_pxe = args.len() > 1 && (args[1] == "pxe" || args[1] == "replicate");
+            crate::println_color!(JARVIS_BRAIN, "  === JARVIS Auto-Propagation ===");
+            crate::println!();
+            if enable_pxe {
+                crate::println_color!(COLOR_GRAY, "  Mode: FULL (mesh + brain pull + federated + PXE)");
+            } else {
+                crate::println_color!(COLOR_GRAY, "  Mode: JOIN (mesh + brain pull + federated)");
+            }
+            crate::println!();
+
+            let report = crate::jarvis::auto_propagate(enable_pxe);
+            for line in report.lines() {
+                if line.contains("FAIL") || line.contains("failed") {
+                    crate::println_color!(COLOR_RED, "  {}", line);
+                } else if line.contains("OK") || line.contains("active") || line.contains("DOWNLOADED") || line.contains("enabled") || line.contains("FULL") {
+                    crate::println_color!(COLOR_GREEN, "  {}", line);
+                } else {
+                    crate::println_color!(COLOR_GRAY, "  {}", line);
+                }
+            }
+
+            // Show live network state
+            crate::println!();
+            let peers = crate::jarvis::mesh::get_peers();
+            if !peers.is_empty() {
+                crate::println_color!(JARVIS_BRAIN, "  Connected nodes:");
+                for peer in &peers {
+                    let role = match peer.role {
+                        crate::jarvis::mesh::NodeRole::Leader => "LEADER",
+                        crate::jarvis::mesh::NodeRole::Candidate => "CAND",
+                        crate::jarvis::mesh::NodeRole::Worker => "WORKER",
+                    };
+                    crate::println!("    {}.{}.{}.{} [{}] {} params, {} steps",
+                        peer.ip[0], peer.ip[1], peer.ip[2], peer.ip[3],
+                        role, peer.param_count, peer.training_steps);
+                }
+            }
+
+            crate::println!();
+            if crate::jarvis::has_full_brain() {
+                crate::println_color!(COLOR_GREEN, "  JARVIS is fully operational and connected.");
+            } else {
+                crate::println_color!(COLOR_YELLOW, "  JARVIS running in micro mode. Full brain will download when a peer joins.");
+            }
+        }
+
+        "swarm" => {
+            // All-in-one: init brain + start mesh + enable federated + pretrain
+            let epochs: usize = if args.len() > 1 {
+                args[1].parse().unwrap_or(3)
+            } else { 3 };
+
+            crate::println_color!(JARVIS_BRAIN, "  === JARVIS Swarm Training Mode ===");
+            crate::println!();
+
+            // Step 1: Init brain
+            if !crate::jarvis::is_ready() {
+                crate::println_color!(JARVIS_BRAIN, "  [1/4] Initializing neural brain...");
+                crate::jarvis::init();
+                if !crate::jarvis::is_ready() {
+                    crate::println_color!(COLOR_RED, "  Brain init failed");
+                    return;
+                }
+            } else {
+                crate::println_color!(COLOR_GREEN, "  [1/4] Brain already initialized");
+            }
+
+            // Step 2: Start mesh
+            crate::println_color!(JARVIS_BRAIN, "  [2/4] Starting mesh network...");
+            crate::jarvis::mesh_start();
+            crate::println_color!(COLOR_GREEN, "  Mesh active on UDP 7700 / TCP 7701");
+
+            // Scan local subnet for peers (broadcast ARP may fail on virtual networks)
+            if let Some((my_ip, _, _)) = crate::network::get_ipv4_config() {
+                crate::println_color!(COLOR_GRAY, "  Scanning subnet for peers...");
+                let rpc_port = crate::jarvis::mesh::MESH_RPC_PORT;
+                let my_bytes = my_ip.as_bytes();
+                let mut found = 0u32;
+                for host in 1u8..=10 {
+                    if host == my_bytes[3] { continue; }
+                    let peer_ip = [my_bytes[0], my_bytes[1], my_bytes[2], host];
+                    if let Ok(true) = crate::jarvis::rpc::ping(peer_ip, rpc_port) {
+                        crate::println_color!(COLOR_GREEN, "    Found peer: {}.{}.{}.{}",
+                            peer_ip[0], peer_ip[1], peer_ip[2], peer_ip[3]);
+                        found += 1;
+                    }
+                }
+                if found == 0 {
+                    crate::println_color!(COLOR_YELLOW, "    No peers found (training solo)");
+                } else {
+                    crate::println_color!(COLOR_GREEN, "    {} peer(s) discovered", found);
+                }
+            }
+
+            // Step 3: Enable federated learning
+            crate::println_color!(JARVIS_BRAIN, "  [3/4] Enabling federated learning...");
+            crate::jarvis::federated::enable();
+            crate::println_color!(COLOR_GREEN, "  Federated gradient exchange enabled (30s sync)");
+
+            // Step 4: Pretrain
+            crate::println_color!(JARVIS_BRAIN, "  [4/4] Pre-training {} epoch(s)...", epochs);
+            crate::println!();
+
+            let loss_before = crate::jarvis::eval_corpus();
+            crate::println_color!(COLOR_GRAY, "  Loss before: {:.3}", loss_before);
+
+            let (steps, avg_loss, elapsed) = crate::jarvis::pretrain(epochs, 0.001);
+
+            crate::println!();
+            crate::println_color!(JARVIS_BRAIN, "  Swarm training complete!");
+            crate::println_color!(COLOR_GRAY, "  {} steps, avg loss={:.3}, {:.1}s",
+                steps, avg_loss, elapsed as f64 / 1000.0);
+
+            let loss_after = crate::jarvis::eval_corpus();
+            crate::print_color!(COLOR_GRAY, "  Loss after:  {:.3}", loss_after);
+            if loss_after < loss_before {
+                crate::println_color!(COLOR_GREEN, " (improved by {:.3})", loss_before - loss_after);
+            } else {
+                crate::println_color!(COLOR_YELLOW, " (no improvement)");
+            }
+
+            // Show mesh peers
+            let peers = crate::jarvis::mesh::get_peers();
+            crate::println_color!(COLOR_GRAY, "  Mesh peers: {}", peers.len());
+            crate::println_color!(COLOR_GRAY, "  Pre-training done");
         }
 
         _ => {

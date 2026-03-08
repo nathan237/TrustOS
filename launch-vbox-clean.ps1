@@ -1,0 +1,95 @@
+$ErrorActionPreference = "Continue"
+$VBM = "C:\Program Files\Oracle\VirtualBox\VBoxManage.exe"
+$VMName = "TRustOs"
+$ISOPath = "C:\Users\nathan\Documents\Scripts\OSrust\trustos.iso"
+$SerialLog = "C:\Users\nathan\Documents\Scripts\OSrust\serial.log"
+$LogFile = "C:\Users\nathan\Documents\Scripts\OSrust\vbox_launch_log.txt"
+
+# Log everything
+Start-Transcript -Path $LogFile -Force
+
+Write-Output "=== Starting VBox Launch $(Get-Date) ==="
+
+# Step 1: Kill any running TRustOs
+Write-Output "Step 1: Cleanup..."
+& $VBM controlvm $VMName poweroff 2>&1
+Start-Sleep -Seconds 3
+& $VBM unregistervm $VMName --delete 2>&1
+Start-Sleep -Seconds 2
+
+# Also clean up inaccessible VMs that might block
+Write-Output "Cleaning inaccessible VMs..."
+$vms = & $VBM list vms 2>&1
+foreach ($line in $vms) {
+    if ($line -match '"<inaccessible>" \{([^}]+)\}') {
+        $uuid = $matches[1]
+        Write-Output "Removing inaccessible VM: $uuid"
+        & $VBM unregistervm $uuid --delete 2>&1
+    }
+}
+Start-Sleep -Seconds 1
+
+# Step 2: Verify ISO
+Write-Output "Step 2: Check ISO..."
+if (-not (Test-Path $ISOPath)) {
+    Write-Output "ERROR: ISO not found at $ISOPath"
+    Stop-Transcript
+    exit 1
+}
+Write-Output "ISO found: $((Get-Item $ISOPath).Length / 1MB) MB"
+
+# Step 3: Create VM
+Write-Output "Step 3: Create VM..."
+$result = & $VBM createvm --name $VMName --ostype "Other_64" --register 2>&1
+Write-Output "createvm result: $result"
+if ($LASTEXITCODE -ne 0) {
+    Write-Output "FAILED createvm (exit code $LASTEXITCODE)"
+    Stop-Transcript
+    exit 1
+}
+
+# Step 4: Configure VM
+Write-Output "Step 4: Configure VM..."
+& $VBM modifyvm $VMName --memory 1024 --vram 128 --cpus 4 2>&1
+& $VBM modifyvm $VMName --firmware efi64 2>&1
+& $VBM modifyvm $VMName --graphicscontroller vboxsvga 2>&1
+& $VBM modifyvm $VMName --boot1 dvd --boot2 disk --boot3 none --boot4 none 2>&1
+& $VBM modifyvm $VMName --audio-driver default --audio-controller hda --audio-enabled on --audio-out on 2>&1
+& $VBM modifyvm $VMName --nic1 nat --nictype1 82540EM --cableconnected1 on 2>&1
+
+# Storage
+& $VBM storagectl $VMName --name "SATA" --add sata --controller IntelAhci --portcount 4 2>&1
+& $VBM storageattach $VMName --storagectl "SATA" --port 0 --device 0 --type dvddrive --medium $ISOPath 2>&1
+
+# Serial
+Remove-Item $SerialLog -ErrorAction SilentlyContinue
+& $VBM modifyvm $VMName --uart1 0x3F8 4 --uartmode1 file $SerialLog 2>&1
+& $VBM setextradata $VMName "GUI/AutoresizeGuest" "false" 2>&1
+
+Write-Output "VM configured successfully"
+
+# Step 5: Start VM
+Write-Output "Step 5: Starting VM..."
+$startResult = & $VBM startvm $VMName 2>&1
+Write-Output "startvm result: $startResult"
+Write-Output "startvm exit code: $LASTEXITCODE"
+
+# Step 6: Wait for boot
+Write-Output "Step 6: Waiting 20s for boot..."
+Start-Sleep -Seconds 20
+
+# Check serial log
+if (Test-Path $SerialLog) {
+    Write-Output "=== Serial Log (last 15 lines) ==="
+    Get-Content $SerialLog -Tail 15
+} else {
+    Write-Output "NO SERIAL LOG FOUND"
+}
+
+# Check if VM is running
+$running = & $VBM list runningvms 2>&1
+Write-Output "=== Running VMs ==="
+Write-Output $running
+
+Write-Output "=== Done ==="
+Stop-Transcript

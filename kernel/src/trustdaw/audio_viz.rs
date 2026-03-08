@@ -996,15 +996,15 @@ pub fn launch_visualizer(audio: &[i16], title: &str) -> Result<(), &'static str>
 pub fn play_file(path: &str) -> Result<(), &'static str> {
     crate::serial_println!("[VIZ] Loading file: {}", path);
 
-    // Read file bytes
-    let data: Vec<u8> = if path.starts_with("/mnt/") || path.starts_with("/dev/") || path.starts_with("/proc/") {
-        // VFS path
+    // Read file bytes — try VFS first, then ramfs
+    let data: Vec<u8> = if crate::vfs::stat(path).is_ok() {
+        // File exists on VFS (TrustFS, FAT32, ext4, devfs, procfs…)
         crate::vfs::read_file(path).map_err(|_| "Failed to read file from VFS")?
     } else {
-        // ramfs path
+        // ramfs fallback
         crate::ramfs::with_fs(|fs| {
             fs.read_file(path).map(|c| c.to_vec())
-        }).map_err(|_| "Failed to read file from ramfs")?
+        }).map_err(|_| "Failed to read file from VFS or ramfs")?
     };
 
     if data.is_empty() {
@@ -1042,17 +1042,49 @@ pub static UNTITLED2_WAV: &[u8] = include_bytes!("untitled2.wav");
 #[cfg(not(feature = "daw"))]
 pub static UNTITLED2_WAV: &[u8] = &[];
 
-/// Play the embedded "Untitled (2)" through the 3D holographic visualizer.
+/// Standard VFS paths where the built-in track may live.
+pub const UNTITLED2_VFS_PATHS: &[&str] = &[
+    "/music/untitled2.wav",
+    "/mnt/fat32/music/untitled2.wav",
+    "/mnt/sda1/music/untitled2.wav",
+    "/home/music/untitled2.wav",
+];
+
+/// Play "Untitled (2)" — tries VFS → disk → embedded (in that order).
 pub fn play_untitled2() -> Result<(), &'static str> {
-    if UNTITLED2_WAV.is_empty() {
-        return Err("Audio not available (slim build — daw feature disabled)");
+    // 1) Try loading from VFS (external storage / filesystem)
+    for path in UNTITLED2_VFS_PATHS {
+        if crate::vfs::stat(path).is_ok() {
+            crate::serial_println!("[VIZ] Found '{}' on VFS, loading...", path);
+            if let Ok(data) = crate::vfs::read_file(path) {
+                if !data.is_empty() {
+                    crate::serial_println!("[VIZ] Loaded {} bytes from VFS", data.len());
+                    let audio = decode_wav_to_pcm(&data)?;
+                    let duration_s = audio.len() as f64 / (48000.0 * 2.0);
+                    crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), duration_s);
+                    return launch_visualizer(&audio, "Untitled (2)");
+                }
+            }
+        }
     }
-    crate::serial_println!("[VIZ] Loading embedded 'Untitled (2)' ({} bytes)...", UNTITLED2_WAV.len());
 
-    let audio = decode_wav_to_pcm(UNTITLED2_WAV)?;
+    // 2) Try loading from raw disk (AHCI sector approach)
+    if let Ok(data) = crate::trustdaw::disk_audio::load_wav_from_disk() {
+        crate::serial_println!("[VIZ] Loaded {} bytes from data disk", data.len());
+        let audio = decode_wav_to_pcm(&data)?;
+        let duration_s = audio.len() as f64 / (48000.0 * 2.0);
+        crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), duration_s);
+        return launch_visualizer(&audio, "Untitled (2)");
+    }
 
-    let duration_s = audio.len() as f64 / (48000.0 * 2.0);
-    crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), duration_s);
+    // 3) Fall back to embedded WAV (only available with --features daw)
+    if !UNTITLED2_WAV.is_empty() {
+        crate::serial_println!("[VIZ] Using embedded WAV ({} bytes)", UNTITLED2_WAV.len());
+        let audio = decode_wav_to_pcm(UNTITLED2_WAV)?;
+        let duration_s = audio.len() as f64 / (48000.0 * 2.0);
+        crate::serial_println!("[VIZ] Decoded: {} samples, {:.1}s", audio.len(), duration_s);
+        return launch_visualizer(&audio, "Untitled (2)");
+    }
 
-    launch_visualizer(&audio, "Untitled (2)")
+    Err("Audio not found — place untitled2.wav in /music/ or build with --features daw")
 }

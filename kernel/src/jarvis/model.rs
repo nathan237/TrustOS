@@ -185,6 +185,36 @@ impl TransformerWeights {
         data
     }
 
+    /// Serialize weights directly to big-endian bytes (no intermediate Vec<f32>).
+    /// Saves ~17.6MB of peak memory vs serialize() + floats_to_bytes().
+    pub fn serialize_to_bytes(&self) -> Vec<u8> {
+        let byte_count = self.param_count() * 4;
+        let mut bytes = Vec::with_capacity(byte_count);
+
+        fn push_floats(bytes: &mut Vec<u8>, floats: &[f32]) {
+            for f in floats {
+                bytes.extend_from_slice(&f.to_be_bytes());
+            }
+        }
+
+        push_floats(&mut bytes, &self.token_embed);
+        push_floats(&mut bytes, &self.pos_embed);
+        for layer in &self.layers {
+            push_floats(&mut bytes, &layer.rms_attn);
+            push_floats(&mut bytes, &layer.w_q);
+            push_floats(&mut bytes, &layer.w_k);
+            push_floats(&mut bytes, &layer.w_v);
+            push_floats(&mut bytes, &layer.w_o);
+            push_floats(&mut bytes, &layer.rms_ffn);
+            push_floats(&mut bytes, &layer.w_gate);
+            push_floats(&mut bytes, &layer.w_up);
+            push_floats(&mut bytes, &layer.w_down);
+        }
+        push_floats(&mut bytes, &self.rms_final);
+        push_floats(&mut bytes, &self.w_output);
+        bytes
+    }
+
     /// Load weights from a flat array (deserialization)
     pub fn deserialize(data: &[f32]) -> Option<Self> {
         let mut pos = 0;

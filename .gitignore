@@ -89,6 +89,33 @@ OSrust_backup*.zip
 # SDK build artifacts
 sdk/examples/*/target/
 
+# Jarvis bench build artifacts
+jarvis-bench/target/
+
+# Apple firmware/ROM binaries (user must supply their own)
+apple/tools/checkm8-dualboot/cache/*.im4p
+apple/tools/checkm8-dualboot/cache/*.img4
+apple/tools/checkm8-dualboot/cache/*.der
+apple/tools/checkm8-dualboot/results/*.bin
+apple/tools/checkm8-dualboot/rom_*_out.txt
+apple/tools/checkm8-dualboot/securerom/*_out.txt
+apple/tools/ipsw-analyst/extracted/*.im4p
+apple/tools/ipsw-analyst/extracted/*_output.txt
+apple/tools/ipsw-analyst/phase*_out.txt
+**/__pycache__/
+
+# Compiled kernel binaries in build/iso dirs
+build/
+iso_root/
+iso_root_aarch64/
+pxe_tftp/*.sys
+pxe_tftp/trustos_kernel
+pxe_tftp/boot/trustos_kernel
+pxe_tftp/boot/limine-bios.sys
+
+# Pretrained brain binary (can be regenerated)
+jarvis-bench/jarvis_pretrained.bin
+
 # Server packages (can be re-downloaded)
 server/packages/*.tar.gz
 
@@ -126,6 +153,27 @@ film_release.md
 # Misc
 launch-trustos.bat
 launch-trustos.ps1
+
+# All loose debug/build/test log .txt files in repo root
+aarch64_serial.txt
+boot_test_output.txt
+build_aarch64*.txt
+build_mobile_check.txt
+build_x64_log.txt
+el2_*.txt
+jarvis_swarm_results.txt
+propagation_test_output.txt
+slim_*.txt
+task_test_results.txt
+ultimate_test_report.txt
+vbox_launch_log.txt
+desktop_test_report.txt
+inttest_*.txt
+mentor_test*.txt
+jarvis_demo*.txt
+jarvis_pretrain.txt
+jarvis_training_results.txt
+google_scan_report.txt
 
 # Debug & test output logs
 build_check*.txt

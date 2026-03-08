@@ -1,0 +1,458 @@
+[18:56:42.984] [INFO ] ======================================================================
+[18:56:42.984] [INFO ] T8020 B1 SecureROM -- DFU Payload Tester [MANIFEST mode]
+[18:56:42.984] [INFO ] ======================================================================
+[18:56:42.984] [INFO ] MANIFEST MODE: Full parser test, device will reset after each test!
+[18:56:42.986] [INFO ] Loaded 43 test cases from test_payloads_cert
+[18:56:42.986] [INFO ] Selected 39 test cases to run
+[18:56:43.034] [INFO ] Device: CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C20802E IBFL:3C SRTG:[iBoot-3865.0.0.4.7]
+[18:56:43.038] [INFO ] State: dfuMANIFEST-WAIT-RESET (bStatus=0)
+[18:56:46.579] [INFO ] Measuring baseline (DNLOAD+ABORT, no manifest)...
+[18:56:46.700] [INFO ]   GET_STATUS RTT: avg=3.6ms
+[18:56:46.714] [INFO ]   Baseline 1/5: 10.7ms (state after DNLOAD: dfuDNLOAD-IDLE)
+[18:56:47.645] [INFO ]   Baseline 2/5: 10.8ms (state after DNLOAD: dfuDNLOAD-IDLE)
+[18:56:48.578] [INFO ]   Baseline 3/5: 10.7ms (state after DNLOAD: dfuDNLOAD-IDLE)
+[18:56:49.510] [INFO ]   Baseline 4/5: 10.7ms (state after DNLOAD: dfuDNLOAD-IDLE)
+[18:56:50.441] [INFO ]   Baseline 5/5: 10.7ms (state after DNLOAD: dfuDNLOAD-IDLE)
+[18:56:50.541] [INFO ]   Cycle: avg=10.7ms  max=10.8ms  threshold=500.0ms
+[18:56:51.361] [INFO ] 
+--- Manifest Test 1/39 ---
+[18:56:51.362] [INFO ] 
+======================================================================
+[18:56:51.362] [INFO ] TC   0 | CRITICAL | cert_issuer_len64_wrap [MANIFEST MODE]
+[18:56:51.362] [INFO ]   WARNING: Device will likely reset after this test!
+[18:56:51.363] [INFO ]   Hex[0:32]: 308201e21604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:56:51.381] [INFO ]   Triggering manifest...
+[18:56:51.696] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:56:51.697] [INFO ]   Result: MANIFEST_ACCEPTED t=330.2ms
+[18:56:51.998] [INFO ] 
+--- Manifest Test 2/39 ---
+[18:56:51.998] [INFO ] 
+======================================================================
+[18:56:51.998] [INFO ] TC   1 | CRITICAL | cert_serial_len64_wrap [MANIFEST MODE]
+[18:56:51.998] [INFO ]   WARNING: Device will likely reset after this test!
+[18:56:51.999] [INFO ]   Hex[0:32]: 308201ed1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:56:55.556] [INFO ]   Triggering manifest...
+[18:56:55.872] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:56:55.872] [INFO ]   Result: MANIFEST_ACCEPTED t=331.2ms
+[18:56:56.174] [INFO ] 
+--- Manifest Test 3/39 ---
+[18:56:56.174] [INFO ] 
+======================================================================
+[18:56:56.174] [INFO ] TC   2 | CRITICAL | cert_subject_len5byte [MANIFEST MODE]
+[18:56:56.174] [INFO ]   WARNING: Device will likely reset after this test!
+[18:56:56.175] [INFO ]   Hex[0:32]: 308201e01604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:56:59.731] [INFO ]   Triggering manifest...
+[18:57:00.046] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:00.046] [INFO ]   Result: MANIFEST_ACCEPTED t=330.2ms
+[18:57:00.347] [INFO ] 
+--- Manifest Test 4/39 ---
+[18:57:00.348] [INFO ] 
+======================================================================
+[18:57:00.348] [INFO ] TC   3 | CRITICAL | cert_pubkey_overlen [MANIFEST MODE]
+[18:57:00.348] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:00.349] [INFO ]   Hex[0:32]: 308201da1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:03.905] [INFO ]   Triggering manifest...
+[18:57:04.220] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:04.220] [INFO ]   Result: MANIFEST_ACCEPTED t=330.2ms
+[18:57:04.521] [INFO ] 
+--- Manifest Test 5/39 ---
+[18:57:04.522] [INFO ] 
+======================================================================
+[18:57:04.522] [INFO ] TC   4 | CRITICAL | cert_sig_len64_wrap [MANIFEST MODE]
+[18:57:04.522] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:04.522] [INFO ]   Hex[0:32]: 308202b41604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:08.082] [INFO ]   Triggering manifest...
+[18:57:08.397] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:08.397] [INFO ]   Result: MANIFEST_ACCEPTED t=333.2ms
+[18:57:08.698] [INFO ] 
+--- Manifest Test 6/39 ---
+[18:57:08.699] [INFO ] 
+======================================================================
+[18:57:08.699] [INFO ] TC   5 | CRITICAL | cert_deep_issuer_50 [MANIFEST MODE]
+[18:57:08.699] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:08.700] [INFO ]   Hex[0:32]: 308204021604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:12.268] [INFO ]   Triggering manifest...
+[18:57:12.583] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:12.583] [INFO ]   Result: MANIFEST_ACCEPTED t=339.2ms
+[18:57:12.884] [INFO ] 
+--- Manifest Test 7/39 ---
+[18:57:12.885] [INFO ] 
+======================================================================
+[18:57:12.885] [INFO ] TC   6 | CRITICAL | cert_deep_extensions_30 [MANIFEST MODE]
+[18:57:12.885] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:12.885] [INFO ]   Hex[0:32]: 308203381604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:16.448] [INFO ]   Triggering manifest...
+[18:57:16.763] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:16.763] [INFO ]   Result: MANIFEST_ACCEPTED t=335.3ms
+[18:57:17.064] [INFO ] 
+--- Manifest Test 8/39 ---
+[18:57:17.064] [INFO ] 
+======================================================================
+[18:57:17.065] [INFO ] TC   7 | CRITICAL | cert_chain_10_deep [MANIFEST MODE]
+[18:57:17.065] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:17.065] [INFO ]   Hex[0:32]: 30820d5b1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:20.651] [INFO ]   Triggering manifest...
+[18:57:20.966] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:20.967] [INFO ]   Result: MANIFEST_ACCEPTED t=354.2ms
+[18:57:21.268] [INFO ] 
+--- Manifest Test 9/39 ---
+[18:57:21.269] [INFO ] 
+======================================================================
+[18:57:21.269] [INFO ] TC   8 | CRITICAL | cert_deep_pubkey_40 [MANIFEST MODE]
+[18:57:21.269] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:21.269] [INFO ]   Hex[0:32]: 3082048d1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:24.839] [INFO ]   Triggering manifest...
+[18:57:25.154] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:25.155] [INFO ]   Result: MANIFEST_ACCEPTED t=341.2ms
+[18:57:25.456] [INFO ] 
+--- Manifest Test 10/39 ---
+[18:57:25.456] [INFO ] 
+======================================================================
+[18:57:25.457] [INFO ] TC   9 | CRITICAL | cert_huge_issuer_cn [MANIFEST MODE]
+[18:57:25.457] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:25.457] [INFO ]   Hex[0:32]: 308204ec1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:29.025] [INFO ]   Triggering manifest...
+[18:57:29.340] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:29.340] [INFO ]   Result: MANIFEST_ACCEPTED t=342.2ms
+[18:57:29.642] [INFO ] 
+--- Manifest Test 11/39 ---
+[18:57:29.642] [INFO ] 
+======================================================================
+[18:57:29.642] [INFO ] TC  10 | CRITICAL | cert_huge_subject_cn [MANIFEST MODE]
+[18:57:29.642] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:29.643] [INFO ]   Hex[0:32]: 308204e41604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:33.222] [INFO ]   Triggering manifest...
+[18:57:33.537] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:33.537] [INFO ]   Result: MANIFEST_ACCEPTED t=342.2ms
+[18:57:33.839] [INFO ] 
+--- Manifest Test 12/39 ---
+[18:57:33.839] [INFO ] 
+======================================================================
+[18:57:33.839] [INFO ] TC  11 | CRITICAL | cert_huge_rsa_modulus [MANIFEST MODE]
+[18:57:33.839] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:33.840] [INFO ]   Hex[0:32]: 308205b51604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:37.412] [INFO ]   Triggering manifest...
+[18:57:37.727] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:37.727] [INFO ]   Result: MANIFEST_ACCEPTED t=345.2ms
+[18:57:38.029] [INFO ] 
+--- Manifest Test 13/39 ---
+[18:57:38.029] [INFO ] 
+======================================================================
+[18:57:38.029] [INFO ] TC  12 | CRITICAL | cert_huge_serial [MANIFEST MODE]
+[18:57:38.029] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:38.030] [INFO ]   Hex[0:32]: 3082026c1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:41.590] [INFO ]   Triggering manifest...
+[18:57:41.905] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:41.905] [INFO ]   Result: MANIFEST_ACCEPTED t=332.2ms
+[18:57:42.207] [INFO ] 
+--- Manifest Test 14/39 ---
+[18:57:42.207] [INFO ] 
+======================================================================
+[18:57:42.207] [INFO ] TC  13 | CRITICAL | cert_huge_signature [MANIFEST MODE]
+[18:57:42.207] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:42.208] [INFO ]   Hex[0:32]: 3082078a1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:45.792] [INFO ]   Triggering manifest...
+[18:57:46.107] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:46.107] [INFO ]   Result: MANIFEST_ACCEPTED t=353.2ms
+[18:57:46.409] [INFO ] 
+--- Manifest Test 15/39 ---
+[18:57:46.409] [INFO ] 
+======================================================================
+[18:57:46.409] [INFO ] TC  14 | CRITICAL | cert_ext_keyusage_overflow [MANIFEST MODE]
+[18:57:46.409] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:46.410] [INFO ]   Hex[0:32]: 308202011604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:49.970] [INFO ]   Triggering manifest...
+[18:57:50.285] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:50.285] [INFO ]   Result: MANIFEST_ACCEPTED t=331.2ms
+[18:57:50.586] [INFO ] 
+--- Manifest Test 16/39 ---
+[18:57:50.587] [INFO ] 
+======================================================================
+[18:57:50.587] [INFO ] TC  15 | CRITICAL | cert_ext_huge_oid [MANIFEST MODE]
+[18:57:50.587] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:50.587] [INFO ]   Hex[0:32]: 3082030d1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:54.150] [INFO ]   Triggering manifest...
+[18:57:54.465] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:54.466] [INFO ]   Result: MANIFEST_ACCEPTED t=335.2ms
+[18:57:54.767] [INFO ] 
+--- Manifest Test 17/39 ---
+[18:57:54.768] [INFO ] 
+======================================================================
+[18:57:54.768] [INFO ] TC  16 | CRITICAL | cert_ext_length_arith_overflow [MANIFEST MODE]
+[18:57:54.768] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:54.769] [INFO ]   Hex[0:32]: 308210ea1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:57:58.349] [INFO ]   Triggering manifest...
+[18:57:58.664] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:57:58.665] [INFO ]   Result: MANIFEST_ACCEPTED t=354.2ms
+[18:57:58.966] [INFO ] 
+--- Manifest Test 18/39 ---
+[18:57:58.966] [INFO ] 
+======================================================================
+[18:57:58.967] [INFO ] TC  17 | HIGH     | cert_ext_pathlen_max [MANIFEST MODE]
+[18:57:58.967] [INFO ]   WARNING: Device will likely reset after this test!
+[18:57:58.967] [INFO ]   Hex[0:32]: 308202091604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:02.524] [INFO ]   Triggering manifest...
+[18:58:02.839] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:02.839] [INFO ]   Result: MANIFEST_ACCEPTED t=331.2ms
+[18:58:03.141] [INFO ] 
+--- Manifest Test 19/39 ---
+[18:58:03.141] [INFO ] 
+======================================================================
+[18:58:03.141] [INFO ] TC  18 | HIGH     | cert_unknown_sig_algo [MANIFEST MODE]
+[18:58:03.141] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:03.142] [INFO ]   Hex[0:32]: 308201ea1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:06.698] [INFO ]   Triggering manifest...
+[18:58:07.013] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:07.013] [INFO ]   Result: MANIFEST_ACCEPTED t=330.2ms
+[18:58:07.315] [INFO ] 
+--- Manifest Test 20/39 ---
+[18:58:07.315] [INFO ] 
+======================================================================
+[18:58:07.316] [INFO ] TC  19 | HIGH     | cert_empty_oid_algo [MANIFEST MODE]
+[18:58:07.316] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:07.316] [INFO ]   Hex[0:32]: 308201da1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:10.873] [INFO ]   Triggering manifest...
+[18:58:11.189] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:11.189] [INFO ]   Result: MANIFEST_ACCEPTED t=331.2ms
+[18:58:11.491] [INFO ] 
+--- Manifest Test 21/39 ---
+[18:58:11.491] [INFO ] 
+======================================================================
+[18:58:11.491] [INFO ] TC  20 | HIGH     | cert_overlong_oid_component [MANIFEST MODE]
+[18:58:11.492] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:11.492] [INFO ]   Hex[0:32]: 308201f81604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:15.049] [INFO ]   Triggering manifest...
+[18:58:15.364] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:15.364] [INFO ]   Result: MANIFEST_ACCEPTED t=330.2ms
+[18:58:15.666] [INFO ] 
+--- Manifest Test 22/39 ---
+[18:58:15.666] [INFO ] 
+======================================================================
+[18:58:15.666] [INFO ] TC  21 | HIGH     | cert_apple_oid_fuzz [MANIFEST MODE]
+[18:58:15.667] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:15.667] [INFO ]   Hex[0:32]: 308202421604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:19.226] [INFO ]   Triggering manifest...
+[18:58:19.541] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:19.541] [INFO ]   Result: MANIFEST_ACCEPTED t=332.2ms
+[18:58:19.842] [INFO ] 
+--- Manifest Test 23/39 ---
+[18:58:19.843] [INFO ] 
+======================================================================
+[18:58:19.843] [INFO ] TC  22 | HIGH     | cert_raw_tbs [MANIFEST MODE]
+[18:58:19.843] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:19.843] [INFO ]   Hex[0:32]: 308201fa1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:23.400] [INFO ]   Triggering manifest...
+[18:58:23.715] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:23.715] [INFO ]   Result: MANIFEST_ACCEPTED t=330.3ms
+[18:58:24.017] [INFO ] 
+--- Manifest Test 24/39 ---
+[18:58:24.017] [INFO ] 
+======================================================================
+[18:58:24.017] [INFO ] TC  23 | HIGH     | cert_version_255 [MANIFEST MODE]
+[18:58:24.017] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:24.018] [INFO ]   Hex[0:32]: 308201ed1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:27.574] [INFO ]   Triggering manifest...
+[18:58:27.889] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:27.890] [INFO ]   Result: MANIFEST_ACCEPTED t=330.2ms
+[18:58:28.191] [INFO ] 
+--- Manifest Test 25/39 ---
+[18:58:28.192] [INFO ] 
+======================================================================
+[18:58:28.192] [INFO ] TC  24 | HIGH     | cert_empty_tbs [MANIFEST MODE]
+[18:58:28.192] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:28.192] [INFO ]   Hex[0:32]: 3081f81604494d473430251604494d34501604696c6c62160569426f6f740410
+[18:58:31.744] [INFO ]   Triggering manifest...
+[18:58:32.059] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:32.060] [INFO ]   Result: MANIFEST_ACCEPTED t=326.3ms
+[18:58:32.362] [INFO ] 
+--- Manifest Test 26/39 ---
+[18:58:32.362] [INFO ] 
+======================================================================
+[18:58:32.362] [INFO ] TC  25 | HIGH     | cert_truncated_1elem [MANIFEST MODE]
+[18:58:32.363] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:32.363] [INFO ]   Hex[0:32]: 308201991604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:35.919] [INFO ]   Triggering manifest...
+[18:58:36.234] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:36.234] [INFO ]   Result: MANIFEST_ACCEPTED t=329.2ms
+[18:58:36.536] [INFO ] 
+--- Manifest Test 27/39 ---
+[18:58:36.536] [INFO ] 
+======================================================================
+[18:58:36.537] [INFO ] TC  26 | HIGH     | cert_chain_set_not_seq [MANIFEST MODE]
+[18:58:36.537] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:36.537] [INFO ]   Hex[0:32]: 308201f01604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:40.094] [INFO ]   Triggering manifest...
+[18:58:40.409] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:40.409] [INFO ]   Result: MANIFEST_ACCEPTED t=330.3ms
+[18:58:40.711] [INFO ] 
+--- Manifest Test 28/39 ---
+[18:58:40.711] [INFO ] 
+======================================================================
+[18:58:40.711] [INFO ] TC  27 | HIGH     | cert_chain_neg_serial [MANIFEST MODE]
+[18:58:40.712] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:40.712] [INFO ]   Hex[0:32]: 308203361604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:44.274] [INFO ]   Triggering manifest...
+[18:58:44.589] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:44.589] [INFO ]   Result: MANIFEST_ACCEPTED t=335.3ms
+[18:58:44.891] [INFO ] 
+--- Manifest Test 29/39 ---
+[18:58:44.892] [INFO ] 
+======================================================================
+[18:58:44.892] [INFO ] TC  28 | CRITICAL | cert_rsa4096_bigexp [MANIFEST MODE]
+[18:58:44.892] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:44.892] [INFO ]   Hex[0:32]: 3082047d1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:48.463] [INFO ]   Triggering manifest...
+[18:58:48.778] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:48.778] [INFO ]   Result: MANIFEST_ACCEPTED t=341.4ms
+[18:58:49.081] [INFO ] 
+--- Manifest Test 30/39 ---
+[18:58:49.081] [INFO ] 
+======================================================================
+[18:58:49.081] [INFO ] TC  29 | CRITICAL | cert_algo_mismatch_ec_rsa [MANIFEST MODE]
+[18:58:49.081] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:49.082] [INFO ]   Hex[0:32]: 308201ea1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:52.638] [INFO ]   Triggering manifest...
+[18:58:52.953] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:52.953] [INFO ]   Result: MANIFEST_ACCEPTED t=330.2ms
+[18:58:53.255] [INFO ] 
+--- Manifest Test 31/39 ---
+[18:58:53.255] [INFO ] 
+======================================================================
+[18:58:53.255] [INFO ] TC  30 | CRITICAL | cert_ec_point_infinity [MANIFEST MODE]
+[18:58:53.255] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:53.256] [INFO ]   Hex[0:32]: 308201ec1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:58:56.813] [INFO ]   Triggering manifest...
+[18:58:57.128] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:58:57.128] [INFO ]   Result: MANIFEST_ACCEPTED t=330.2ms
+[18:58:57.429] [INFO ] 
+--- Manifest Test 32/39 ---
+[18:58:57.430] [INFO ] 
+======================================================================
+[18:58:57.430] [INFO ] TC  31 | CRITICAL | cert_empty_signature [MANIFEST MODE]
+[18:58:57.430] [INFO ]   WARNING: Device will likely reset after this test!
+[18:58:57.431] [INFO ]   Hex[0:32]: 308201ac1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:59:00.987] [INFO ]   Triggering manifest...
+[18:59:01.302] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:59:01.302] [INFO ]   Result: MANIFEST_ACCEPTED t=329.3ms
+[18:59:01.604] [INFO ] 
+--- Manifest Test 33/39 ---
+[18:59:01.604] [INFO ] 
+======================================================================
+[18:59:01.604] [INFO ] TC  32 | HIGH     | cert_issuer_cn_0x100 [MANIFEST MODE]
+[18:59:01.604] [INFO ]   WARNING: Device will likely reset after this test!
+[18:59:01.605] [INFO ]   Hex[0:32]: 308202f01604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:59:05.171] [INFO ]   Triggering manifest...
+[18:59:05.486] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:59:05.487] [INFO ]   Result: MANIFEST_ACCEPTED t=334.2ms
+[18:59:05.789] [INFO ] 
+--- Manifest Test 34/39 ---
+[18:59:05.789] [INFO ] 
+======================================================================
+[18:59:05.789] [INFO ] TC  33 | HIGH     | cert_len_boundary_0x7f [MANIFEST MODE]
+[18:59:05.789] [INFO ]   WARNING: Device will likely reset after this test!
+[18:59:05.790] [INFO ]   Hex[0:32]: 308202371604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:59:09.347] [INFO ]   Triggering manifest...
+[18:59:09.662] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:59:09.663] [INFO ]   Result: MANIFEST_ACCEPTED t=331.2ms
+[18:59:09.964] [INFO ] 
+--- Manifest Test 35/39 ---
+[18:59:09.965] [INFO ] 
+======================================================================
+[18:59:09.965] [INFO ] TC  34 | CRITICAL | cert_indef_length_ber [MANIFEST MODE]
+[18:59:09.965] [INFO ]   WARNING: Device will likely reset after this test!
+[18:59:09.965] [INFO ]   Hex[0:32]: 308201f51604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:59:13.525] [INFO ]   Triggering manifest...
+[18:59:13.840] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:59:13.840] [INFO ]   Result: MANIFEST_ACCEPTED t=330.2ms
+[18:59:14.142] [INFO ] 
+--- Manifest Test 36/39 ---
+[18:59:14.143] [INFO ] 
+======================================================================
+[18:59:14.143] [INFO ] TC  35 | CRITICAL | cert_combo_deep_and_big [MANIFEST MODE]
+[18:59:14.143] [INFO ]   WARNING: Device will likely reset after this test!
+[18:59:14.144] [INFO ]   Hex[0:32]: 3082048e1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:59:17.715] [INFO ]   Triggering manifest...
+[18:59:18.030] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:59:18.030] [INFO ]   Result: MANIFEST_ACCEPTED t=341.2ms
+[18:59:18.332] [INFO ] 
+--- Manifest Test 37/39 ---
+[18:59:18.332] [INFO ] 
+======================================================================
+[18:59:18.332] [INFO ] TC  36 | CRITICAL | cert_chain_progressive_depth [MANIFEST MODE]
+[18:59:18.333] [INFO ]   WARNING: Device will likely reset after this test!
+[18:59:18.333] [INFO ]   Hex[0:32]: 308205b11604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:59:21.905] [INFO ]   Triggering manifest...
+[18:59:22.220] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:59:22.220] [INFO ]   Result: MANIFEST_ACCEPTED t=345.2ms
+[18:59:22.522] [INFO ] 
+--- Manifest Test 38/39 ---
+[18:59:22.523] [INFO ] 
+======================================================================
+[18:59:22.523] [INFO ] TC  37 | CRITICAL | cert_ext_len64_wrap [MANIFEST MODE]
+[18:59:22.523] [INFO ]   WARNING: Device will likely reset after this test!
+[18:59:22.523] [INFO ]   Hex[0:32]: 308202351604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:59:26.081] [INFO ]   Triggering manifest...
+[18:59:26.396] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:59:26.396] [INFO ]   Result: MANIFEST_ACCEPTED t=331.3ms
+[18:59:26.698] [INFO ] 
+--- Manifest Test 39/39 ---
+[18:59:26.698] [INFO ] 
+======================================================================
+[18:59:26.698] [INFO ] TC  38 | CRITICAL | cert_plus_big_manifest_sig [MANIFEST MODE]
+[18:59:26.698] [INFO ]   WARNING: Device will likely reset after this test!
+[18:59:26.699] [INFO ]   Hex[0:32]: 308203ae1604494d473430251604494d34501604696c6c62160569426f6f7404
+[18:59:30.264] [INFO ]   Triggering manifest...
+[18:59:30.579] [CRIT ]   !!! dfuMANIFEST-WAIT-RESET !!! PAYLOAD ACCEPTED!
+[18:59:30.579] [INFO ]   Result: MANIFEST_ACCEPTED t=337.2ms
+[18:59:30.881] [INFO ] 
+
+======================================================================
+[18:59:30.881] [INFO ] RESULTS SUMMARY
+[18:59:30.881] [INFO ] ======================================================================
+[18:59:30.882] [INFO ]   MANIFEST_ACCEPTED        : 39
+[18:59:30.882] [WARN ] 
+  39 INTERESTING RESULTS:
+[18:59:30.882] [INFO ]     TC   0 (cert_issuer_len64_wrap): MANIFEST_ACCEPTED @ 330.2ms
+[18:59:30.882] [INFO ]     TC   1 (cert_serial_len64_wrap): MANIFEST_ACCEPTED @ 331.2ms
+[18:59:30.882] [INFO ]     TC   2 (cert_subject_len5byte): MANIFEST_ACCEPTED @ 330.2ms
+[18:59:30.882] [INFO ]     TC   3 (cert_pubkey_overlen): MANIFEST_ACCEPTED @ 330.2ms
+[18:59:30.882] [INFO ]     TC   4 (cert_sig_len64_wrap): MANIFEST_ACCEPTED @ 333.2ms
+[18:59:30.883] [INFO ]     TC   5 (cert_deep_issuer_50): MANIFEST_ACCEPTED @ 339.2ms
+[18:59:30.883] [INFO ]     TC   6 (cert_deep_extensions_30): MANIFEST_ACCEPTED @ 335.3ms
+[18:59:30.883] [INFO ]     TC   7 (cert_chain_10_deep): MANIFEST_ACCEPTED @ 354.2ms
+[18:59:30.883] [INFO ]     TC   8 (cert_deep_pubkey_40): MANIFEST_ACCEPTED @ 341.2ms
+[18:59:30.883] [INFO ]     TC   9 (cert_huge_issuer_cn): MANIFEST_ACCEPTED @ 342.2ms
+[18:59:30.883] [INFO ]     TC  10 (cert_huge_subject_cn): MANIFEST_ACCEPTED @ 342.2ms
+[18:59:30.883] [INFO ]     TC  11 (cert_huge_rsa_modulus): MANIFEST_ACCEPTED @ 345.2ms
+[18:59:30.883] [INFO ]     TC  12 (cert_huge_serial): MANIFEST_ACCEPTED @ 332.2ms
+[18:59:30.883] [INFO ]     TC  13 (cert_huge_signature): MANIFEST_ACCEPTED @ 353.2ms
+[18:59:30.884] [INFO ]     TC  14 (cert_ext_keyusage_overflow): MANIFEST_ACCEPTED @ 331.2ms
+[18:59:30.884] [INFO ]     TC  15 (cert_ext_huge_oid): MANIFEST_ACCEPTED @ 335.2ms
+[18:59:30.884] [INFO ]     TC  16 (cert_ext_length_arith_overflow): MANIFEST_ACCEPTED @ 354.2ms
+[18:59:30.884] [INFO ]     TC  17 (cert_ext_pathlen_max): MANIFEST_ACCEPTED @ 331.2ms
+[18:59:30.884] [INFO ]     TC  18 (cert_unknown_sig_algo): MANIFEST_ACCEPTED @ 330.2ms
+[18:59:30.884] [INFO ]     TC  19 (cert_empty_oid_algo): MANIFEST_ACCEPTED @ 331.2ms
+[18:59:30.884] [INFO ]     TC  20 (cert_overlong_oid_component): MANIFEST_ACCEPTED @ 330.2ms
+[18:59:30.884] [INFO ]     TC  21 (cert_apple_oid_fuzz): MANIFEST_ACCEPTED @ 332.2ms
+[18:59:30.884] [INFO ]     TC  22 (cert_raw_tbs): MANIFEST_ACCEPTED @ 330.3ms
+[18:59:30.884] [INFO ]     TC  23 (cert_version_255): MANIFEST_ACCEPTED @ 330.2ms
+[18:59:30.885] [INFO ]     TC  24 (cert_empty_tbs): MANIFEST_ACCEPTED @ 326.3ms
+[18:59:30.885] [INFO ]     TC  25 (cert_truncated_1elem): MANIFEST_ACCEPTED @ 329.2ms
+[18:59:30.885] [INFO ]     TC  26 (cert_chain_set_not_seq): MANIFEST_ACCEPTED @ 330.3ms
+[18:59:30.885] [INFO ]     TC  27 (cert_chain_neg_serial): MANIFEST_ACCEPTED @ 335.3ms
+[18:59:30.885] [INFO ]     TC  28 (cert_rsa4096_bigexp): MANIFEST_ACCEPTED @ 341.4ms
+[18:59:30.885] [INFO ]     TC  29 (cert_algo_mismatch_ec_rsa): MANIFEST_ACCEPTED @ 330.2ms
+[18:59:30.885] [INFO ]     TC  30 (cert_ec_point_infinity): MANIFEST_ACCEPTED @ 330.2ms
+[18:59:30.885] [INFO ]     TC  31 (cert_empty_signature): MANIFEST_ACCEPTED @ 329.3ms
+[18:59:30.885] [INFO ]     TC  32 (cert_issuer_cn_0x100): MANIFEST_ACCEPTED @ 334.2ms
+[18:59:30.885] [INFO ]     TC  33 (cert_len_boundary_0x7f): MANIFEST_ACCEPTED @ 331.2ms
+[18:59:30.886] [INFO ]     TC  34 (cert_indef_length_ber): MANIFEST_ACCEPTED @ 330.2ms
+[18:59:30.886] [INFO ]     TC  35 (cert_combo_deep_and_big): MANIFEST_ACCEPTED @ 341.2ms
+[18:59:30.886] [INFO ]     TC  36 (cert_chain_progressive_depth): MANIFEST_ACCEPTED @ 345.2ms
+[18:59:30.886] [INFO ]     TC  37 (cert_ext_len64_wrap): MANIFEST_ACCEPTED @ 331.3ms
+[18:59:30.886] [INFO ]     TC  38 (cert_plus_big_manifest_sig): MANIFEST_ACCEPTED @ 337.2ms
+[18:59:30.886] [INFO ] 
+  Timing: avg=335.4ms  min=326.3ms  max=354.2ms
+[18:59:30.887] [INFO ] 
+Results saved to: dfu_test_results_test_payloads_cert.json
+[18:59:30.888] [INFO ] Log saved to: C:\Users\nathan\Documents\Scripts\OSrust\tools\checkm8-dualboot\securerom\dfu_test_log.txt

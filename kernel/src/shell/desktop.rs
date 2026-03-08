@@ -327,6 +327,12 @@ pub(super) fn launch_desktop_env(initial_window: Option<(&str, crate::desktop::W
     let mut d = desktop::DESKTOP.lock();
     d.init(width, height);
     
+    // Auto-select GPU-accelerated mode when VirtIO GPU is available
+    if crate::drivers::virtio_gpu::is_available() {
+        d.render_mode = desktop::RenderMode::GpuAccelerated;
+        crate::serial_println!("[Desktop] GPU-accelerated rendering enabled (VirtIO GPU)");
+    }
+    
     // Open the requested window if any
     if let Some((title, wtype, x, y, w, h)) = initial_window {
         d.create_window(title, x, y, w, h, wtype);

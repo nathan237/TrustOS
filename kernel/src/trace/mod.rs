@@ -7,7 +7,7 @@ use spin::Mutex;
 use core::sync::atomic::{AtomicU64, AtomicBool, Ordering};
 
 /// Ring buffer size (power of 2 for efficient wrapping)
-const TRACE_BUFFER_SIZE: usize = 4096;
+const TRACE_BUFFER_SIZE: usize = 1024;
 
 /// Trace buffer
 static TRACE_BUFFER: Mutex<[TraceEvent; TRACE_BUFFER_SIZE]> = 

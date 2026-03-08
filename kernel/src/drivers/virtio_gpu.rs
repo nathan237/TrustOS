@@ -74,6 +74,16 @@ pub enum GpuCtrlType {
     CmdGetCapset = 0x0109,
     CmdGetEdid = 0x010a,
 
+    // 3D commands (VIRGL — Upgrade #5)
+    CmdCtxCreate = 0x0200,
+    CmdCtxDestroy = 0x0201,
+    CmdCtxAttachResource = 0x0202,
+    CmdCtxDetachResource = 0x0203,
+    CmdResourceCreate3d = 0x0204,
+    CmdTransferToHost3d = 0x0205,
+    CmdTransferFromHost3d = 0x0206,
+    CmdSubmit3d = 0x0207,
+
     // Cursor commands
     CmdUpdateCursor = 0x0300,
     CmdMoveCursor = 0x0301,
@@ -639,6 +649,12 @@ pub struct VirtioGpu {
     backing_phys: u64,
     initialized: bool,
     has_3d: bool,
+    // Upgrade #4: Double-buffer VirtIO GPU resources (eliminates tearing)
+    back_resource_id: u32,
+    back_buffer: Option<Box<[u32]>>,
+    back_phys: u64,
+    double_buffer_enabled: bool,
+    front_is_a: bool, // true = resource A is displayed, B is back; false = inverse
 }
 
 impl VirtioGpu {
@@ -661,6 +677,11 @@ impl VirtioGpu {
             backing_phys: 0,
             initialized: false,
             has_3d: false,
+            back_resource_id: 0,
+            back_buffer: None,
+            back_phys: 0,
+            double_buffer_enabled: false,
+            front_is_a: true,
         }
     }
     
@@ -1088,6 +1109,83 @@ impl VirtioGpu {
         Ok(())
     }
     
+    /// Upgrade #4: Setup double-buffered VirtIO GPU resources
+    /// Creates a second GPU resource (back buffer) for tear-free rendering.
+    /// CPU renders to back buffer, then swaps scanout to display it.
+    pub fn setup_double_buffer(&mut self) -> Result<(), &'static str> {
+        if !self.initialized { return Err("GPU not initialized"); }
+        if self.scanout_resource_id == 0 { return Err("No primary scanout"); }
+        
+        let w = self.display_width;
+        let h = self.display_height;
+        
+        // Create second resource
+        let back_id = self.create_resource_2d(w, h)?;
+        
+        // Allocate page-aligned backing buffer for back resource
+        let buf_size = (w * h) as usize;
+        let buf_bytes = buf_size * 4;
+        
+        use alloc::alloc::{alloc_zeroed, Layout};
+        let layout = Layout::from_size_align(buf_bytes, 4096)
+            .map_err(|_| "Layout error")?;
+        let ptr = unsafe { alloc_zeroed(layout) };
+        if ptr.is_null() { return Err("Back buffer allocation failed"); }
+        
+        let virt = ptr as u64;
+        let hhdm = memory::hhdm_offset();
+        let phys = if virt >= hhdm { virt - hhdm } else { virt };
+        
+        let buffer = unsafe {
+            let slice = core::slice::from_raw_parts_mut(ptr as *mut u32, buf_size);
+            Box::from_raw(slice as *mut [u32])
+        };
+        
+        self.attach_backing(back_id, phys, buf_bytes as u32)?;
+        
+        self.back_resource_id = back_id;
+        self.back_buffer = Some(buffer);
+        self.back_phys = phys;
+        self.double_buffer_enabled = true;
+        self.front_is_a = true;
+        
+        crate::serial_println!("[VIRTIO-GPU] Double buffer enabled: resource A={}, B={}", 
+            self.scanout_resource_id, back_id);
+        Ok(())
+    }
+    
+    /// Swap front/back GPU buffers: set scanout to the back buffer, make it front
+    pub fn swap_gpu_buffers(&mut self) -> Result<(), &'static str> {
+        if !self.double_buffer_enabled { return Ok(()); }
+        
+        let (w, h) = (self.display_width, self.display_height);
+        
+        if self.front_is_a {
+            // Back buffer (B) has new content, make it the displayed one
+            self.set_scanout(0, self.back_resource_id, w, h)?;
+        } else {
+            // Back buffer (A) has new content, make it the displayed one
+            self.set_scanout(0, self.scanout_resource_id, w, h)?;
+        }
+        
+        self.front_is_a = !self.front_is_a;
+        Ok(())
+    }
+    
+    /// Get the current back buffer (the one we render to)
+    pub fn get_back_buffer(&mut self) -> Option<&mut [u32]> {
+        if !self.double_buffer_enabled {
+            return self.backing_buffer.as_deref_mut();
+        }
+        if self.front_is_a {
+            // A is front (displayed), B is back (render target)
+            self.back_buffer.as_deref_mut()
+        } else {
+            // B is front, A is back
+            self.backing_buffer.as_deref_mut()
+        }
+    }
+    
     pub fn get_buffer(&mut self) -> Option<&mut [u32]> {
         self.backing_buffer.as_deref_mut()
     }
@@ -1193,6 +1291,89 @@ impl VirtioGpu {
         Ok(())
     }
     
+    /// Present a single dirty rectangle — partial transfer + flush
+    /// Only transfers the specified region instead of the full framebuffer.
+    /// Upgrade #3: VirtIO GPU supports per-rect transfer_to_host_2d + resource_flush.
+    pub fn present_rect(&mut self, x: u32, y: u32, w: u32, h: u32) -> Result<(), &'static str> {
+        let rid = self.scanout_resource_id;
+        if rid == 0 { return Err("No scanout"); }
+        
+        // Clamp to display bounds
+        let x = x.min(self.display_width);
+        let y = y.min(self.display_height);
+        let w = w.min(self.display_width.saturating_sub(x));
+        let h = h.min(self.display_height.saturating_sub(y));
+        if w == 0 || h == 0 { return Ok(()); }
+        
+        let dma = self.dma_buf.as_ref().ok_or("DMA not ready")?;
+        let dma_phys = dma.phys;
+        
+        // Calculate byte offset into backing buffer for this rect
+        let offset = ((y * self.display_width + x) as u64) * 4;
+        
+        let transfer_cmd = GpuTransferToHost2d {
+            hdr: GpuCtrlHdr { ctrl_type: GpuCtrlType::CmdTransferToHost2d as u32, ..Default::default() },
+            r: GpuRect { x, y, width: w, height: h },
+            offset,
+            resource_id: rid,
+            padding: 0,
+        };
+        unsafe { dma.write_at(0, &transfer_cmd); }
+        
+        let flush_cmd = GpuResourceFlush {
+            hdr: GpuCtrlHdr { ctrl_type: GpuCtrlType::CmdResourceFlush as u32, ..Default::default() },
+            r: GpuRect { x, y, width: w, height: h },
+            resource_id: rid,
+            padding: 0,
+        };
+        unsafe { dma.write_at(256, &flush_cmd); }
+        
+        let transfer_sz = core::mem::size_of::<GpuTransferToHost2d>() as u32;
+        let flush_sz = core::mem::size_of::<GpuResourceFlush>() as u32;
+        let resp_sz = core::mem::size_of::<GpuCtrlHdr>() as u32;
+        
+        let controlq = self.controlq.as_mut().ok_or("controlq not ready")?;
+        let d0 = controlq.alloc_desc().ok_or("No free desc")?;
+        let d1 = controlq.alloc_desc().ok_or("No free desc")?;
+        let d2 = controlq.alloc_desc().ok_or("No free desc")?;
+        let d3 = controlq.alloc_desc().ok_or("No free desc")?;
+        
+        controlq.set_desc(d0, dma_phys, transfer_sz, VIRTQ_DESC_F_NEXT, d1);
+        controlq.set_desc(d1, dma_phys + 512, resp_sz, VIRTQ_DESC_F_WRITE, 0);
+        controlq.set_desc(d2, dma_phys + 256, flush_sz, VIRTQ_DESC_F_NEXT, d3);
+        controlq.set_desc(d3, dma_phys + 768, resp_sz, VIRTQ_DESC_F_WRITE, 0);
+        
+        controlq.submit(d0);
+        controlq.submit(d2);
+        
+        if let Some(notify) = &self.notify_cfg {
+            notify.write16(0, 0);
+        }
+        
+        let mut completed = 0u8;
+        let mut timeout = 5_000_000u32;
+        while completed < 2 {
+            if let Some(_) = controlq.poll_used() { completed += 1; }
+            if completed < 2 {
+                timeout -= 1;
+                if timeout == 0 {
+                    controlq.free_desc(d3);
+                    controlq.free_desc(d2);
+                    controlq.free_desc(d1);
+                    controlq.free_desc(d0);
+                    return Err("Rect present timeout");
+                }
+                core::hint::spin_loop();
+            }
+        }
+        
+        controlq.free_desc(d3);
+        controlq.free_desc(d2);
+        controlq.free_desc(d1);
+        controlq.free_desc(d0);
+        Ok(())
+    }
+    
     pub fn is_initialized(&self) -> bool { self.initialized }
     pub fn has_3d_support(&self) -> bool { self.has_3d }
 }
@@ -1217,6 +1398,11 @@ pub fn init_from_pci() -> Result<(), &'static str> {
                         Ok(()) => {
                             GPU_AVAILABLE.store(true, Ordering::SeqCst);
                             crate::serial_println!("[VIRTIO-GPU] ✓ Ready for rendering!");
+                            // Upgrade #4: Setup double-buffered GPU resources
+                            match gpu.setup_double_buffer() {
+                                Ok(()) => crate::serial_println!("[VIRTIO-GPU] ✓ Double buffer enabled (tear-free)"),
+                                Err(e) => crate::serial_println!("[VIRTIO-GPU] Double buffer skipped: {}", e),
+                            }
                         }
                         Err(e) => crate::serial_println!("[VIRTIO-GPU] Scanout failed: {}", e),
                     }
@@ -1252,6 +1438,63 @@ pub fn render_frame<F: FnOnce(&mut [u32], u32, u32)>(render_fn: F) -> Result<(),
 /// Present the current backing buffer (after external rendering)
 pub fn present_frame() -> Result<(), &'static str> {
     GPU.lock().present()
+}
+
+/// Upgrade #4: Present using double-buffer swap for tear-free display
+/// Transfers the back buffer to host, then atomically swaps scanout resources.
+pub fn present_frame_double_buffered() -> Result<(), &'static str> {
+    let mut gpu = GPU.lock();
+    if !gpu.double_buffer_enabled {
+        return gpu.present();
+    }
+    // Present the current back buffer
+    gpu.present()?;
+    // Swap front ↔ back
+    gpu.swap_gpu_buffers()
+}
+
+/// Get back buffer pointer for double-buffered rendering
+pub fn get_back_buffer() -> Option<(*mut u32, u32, u32)> {
+    let mut gpu = GPU.lock();
+    if !gpu.initialized { return None; }
+    let (w, h) = (gpu.display_width, gpu.display_height);
+    gpu.get_back_buffer().map(|buf| (buf.as_mut_ptr(), w, h))
+}
+
+/// Present only dirty rectangles — Upgrade #3: partial VirtIO GPU flush
+/// Copies backbuffer to GPU backing buffer, then transfers + flushes only the
+/// specified dirty regions. Avoids transferring the full 8MB framebuffer.
+pub fn present_dirty_rects(rects: &[(u32, u32, u32, u32)]) {
+    if rects.is_empty() { return; }
+    
+    // First: copy the entire backbuffer to GPU backing buffer (fast SSE2 RAM-to-RAM)
+    let (fb_w, _fb_h) = crate::framebuffer::get_dimensions();
+    if let Some((gpu_ptr, gpu_w, gpu_h)) = get_raw_buffer() {
+        if let Some(bb) = crate::framebuffer::get_backbuffer_ptr() {
+            let copy_w = (fb_w as usize).min(gpu_w as usize);
+            let copy_h = gpu_h as usize;
+            unsafe {
+                for y in 0..copy_h {
+                    let src = bb.add(y * fb_w as usize);
+                    let dst = gpu_ptr.add(y * gpu_w as usize);
+                    #[cfg(target_arch = "x86_64")]
+                    crate::graphics::simd::copy_row_sse2(dst, src, copy_w);
+                    #[cfg(not(target_arch = "x86_64"))]
+                    core::ptr::copy_nonoverlapping(src, dst, copy_w);
+                }
+            }
+        }
+    }
+    
+    // Then: issue partial transfer + flush for each dirty region
+    let mut gpu = GPU.lock();
+    if !gpu.initialized { return; }
+    let rid = gpu.scanout_resource_id;
+    if rid == 0 { return; }
+    
+    for &(x, y, w, h) in rects {
+        let _ = gpu.present_rect(x, y, w, h);
+    }
 }
 
 /// Get raw buffer pointer for direct rendering
@@ -1304,6 +1547,283 @@ pub fn init() {
     crate::framebuffer::set_double_buffer_mode(true);
     crate::serial_println!("[GPU] Graphics ready (VirtIO: {})", 
         if is_available() { "ACTIVE" } else { "fallback" });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// VIRGL 3D Foundation (Upgrade #5)
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// VIRGL is the Gallium3D-based protocol that allows sending OpenGL commands
+// to the host GPU through VirtIO. This provides the foundation structures and
+// context management. Actual shader compilation and draw command submission
+// can be built on top of this infrastructure.
+
+/// VIRGL capability set info
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct VirglCapsetInfo {
+    pub capset_id: u32,
+    pub capset_max_version: u32,
+    pub capset_max_size: u32,
+    pub padding: u32,
+}
+
+/// VIRGL 3D context creation command
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct GpuCtxCreate {
+    pub hdr: GpuCtrlHdr,
+    pub nlen: u32,
+    pub context_init: u32,
+    pub debug_name: [u8; 64],
+}
+
+/// VIRGL 3D context destroy command
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct GpuCtxDestroy {
+    pub hdr: GpuCtrlHdr,
+}
+
+/// VIRGL 3D resource create command
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct GpuResourceCreate3d {
+    pub hdr: GpuCtrlHdr,
+    pub resource_id: u32,
+    pub target: u32,     // PIPE_TEXTURE_2D = 2, PIPE_BUFFER = 0
+    pub format: u32,     // VIRGL_FORMAT_*
+    pub bind: u32,       // VIRGL_BIND_*
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
+    pub array_size: u32,
+    pub last_level: u32,
+    pub nr_samples: u32,
+    pub flags: u32,
+    pub padding: u32,
+}
+
+/// VIRGL submit 3D command buffer
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct GpuSubmit3d {
+    pub hdr: GpuCtrlHdr,
+    pub size: u32,
+    pub padding: u32,
+    // followed by `size` bytes of Gallium command stream
+}
+
+/// VIRGL context attach resource
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct GpuCtxAttachResource {
+    pub hdr: GpuCtrlHdr,
+    pub resource_id: u32,
+    pub padding: u32,
+}
+
+/// VIRGL bind targets
+#[allow(dead_code)]
+pub mod virgl_bind {
+    pub const DEPTH_STENCIL: u32 = 1 << 0;
+    pub const RENDER_TARGET: u32 = 1 << 1;
+    pub const SAMPLER_VIEW: u32 = 1 << 3;
+    pub const VERTEX_BUFFER: u32 = 1 << 4;
+    pub const INDEX_BUFFER: u32 = 1 << 5;
+    pub const CONSTANT_BUFFER: u32 = 1 << 6;
+    pub const SHADER_BUFFER: u32 = 1 << 14;
+}
+
+/// VIRGL resource targets
+#[allow(dead_code)]
+pub mod virgl_target {
+    pub const BUFFER: u32 = 0;
+    pub const TEXTURE_1D: u32 = 1;
+    pub const TEXTURE_2D: u32 = 2;
+    pub const TEXTURE_3D: u32 = 3;
+    pub const TEXTURE_CUBE: u32 = 4;
+}
+
+/// VIRGL 3D context manager
+pub struct Virgl3dContext {
+    ctx_id: u32,
+    active: bool,
+    capset_version: u32,
+}
+
+static VIRGL_CTX: Mutex<Virgl3dContext> = Mutex::new(Virgl3dContext {
+    ctx_id: 0,
+    active: false,
+    capset_version: 0,
+});
+
+/// Check if VIRGL 3D is available (GPU supports it and context can be created)
+pub fn has_virgl() -> bool {
+    let gpu = GPU.lock();
+    gpu.has_3d
+}
+
+/// Query VIRGL capability set info
+pub fn query_virgl_capset() -> Option<VirglCapsetInfo> {
+    let mut gpu = GPU.lock();
+    if !gpu.has_3d || !gpu.initialized { return None; }
+    
+    let dma = gpu.dma_buf.as_ref()?;
+    
+    // GET_CAPSET_INFO for capset 0 (VIRGL)
+    let cmd = GpuCtrlHdr {
+        ctrl_type: GpuCtrlType::CmdGetCapsetInfo as u32,
+        ..Default::default()
+    };
+    unsafe { dma.write_at(0, &cmd); }
+    // capset_index = 0 at offset after header
+    unsafe { (dma.virt.add(core::mem::size_of::<GpuCtrlHdr>()) as *mut u32).write_volatile(0); }
+    
+    let cmd_sz = core::mem::size_of::<GpuCtrlHdr>() as u32 + 4;
+    let resp_sz = core::mem::size_of::<GpuCtrlHdr>() as u32 + core::mem::size_of::<VirglCapsetInfo>() as u32;
+    
+    let resp_type = gpu.send_command(cmd_sz, 512, resp_sz).ok()?;
+    if resp_type != GpuCtrlType::RespOkCapsetInfo as u32 { return None; }
+    
+    let dma = gpu.dma_buf.as_ref()?;
+    let info: VirglCapsetInfo = unsafe { dma.read_at(512 + core::mem::size_of::<GpuCtrlHdr>()) };
+    crate::serial_println!("[VIRGL] Capset: id={}, max_version={}, max_size={}", 
+        info.capset_id, info.capset_max_version, info.capset_max_size);
+    Some(info)
+}
+
+/// Create a VIRGL 3D rendering context
+pub fn create_virgl_context(name: &str) -> Result<u32, &'static str> {
+    let mut gpu = GPU.lock();
+    if !gpu.has_3d { return Err("No 3D support"); }
+    if !gpu.initialized { return Err("GPU not initialized"); }
+    
+    let ctx_id = 1u32; // Context ID 1 for primary rendering context
+    
+    let mut cmd = GpuCtxCreate {
+        hdr: GpuCtrlHdr {
+            ctrl_type: GpuCtrlType::CmdCtxCreate as u32,
+            ctx_id,
+            ..Default::default()
+        },
+        nlen: name.len().min(63) as u32,
+        context_init: 0,
+        debug_name: [0u8; 64],
+    };
+    // Copy name
+    let name_bytes = name.as_bytes();
+    let copy_len = name_bytes.len().min(63);
+    cmd.debug_name[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+    
+    let dma = gpu.dma_buf.as_ref().ok_or("DMA not ready")?;
+    unsafe { dma.write_at(0, &cmd); }
+    
+    let resp = gpu.send_command(
+        core::mem::size_of::<GpuCtxCreate>() as u32,
+        512,
+        core::mem::size_of::<GpuCtrlHdr>() as u32,
+    )?;
+    
+    if resp != GpuCtrlType::RespOkNodata as u32 {
+        return Err("CTX_CREATE failed");
+    }
+    
+    let mut virgl = VIRGL_CTX.lock();
+    virgl.ctx_id = ctx_id;
+    virgl.active = true;
+    
+    crate::serial_println!("[VIRGL] 3D context created: id={} name={}", ctx_id, name);
+    Ok(ctx_id)
+}
+
+/// Destroy the VIRGL 3D context
+pub fn destroy_virgl_context() -> Result<(), &'static str> {
+    let mut virgl = VIRGL_CTX.lock();
+    if !virgl.active { return Ok(()); }
+    
+    let mut gpu = GPU.lock();
+    let cmd = GpuCtxDestroy {
+        hdr: GpuCtrlHdr {
+            ctrl_type: GpuCtrlType::CmdCtxDestroy as u32,
+            ctx_id: virgl.ctx_id,
+            ..Default::default()
+        },
+    };
+    
+    let dma = gpu.dma_buf.as_ref().ok_or("DMA not ready")?;
+    unsafe { dma.write_at(0, &cmd); }
+    
+    let resp = gpu.send_command(
+        core::mem::size_of::<GpuCtxDestroy>() as u32,
+        512,
+        core::mem::size_of::<GpuCtrlHdr>() as u32,
+    )?;
+    
+    if resp != GpuCtrlType::RespOkNodata as u32 {
+        return Err("CTX_DESTROY failed");
+    }
+    
+    virgl.active = false;
+    crate::serial_println!("[VIRGL] 3D context destroyed");
+    Ok(())
+}
+
+/// Submit a VIRGL 3D command buffer (Gallium3D command stream)
+pub fn submit_virgl_commands(commands: &[u8]) -> Result<(), &'static str> {
+    let virgl = VIRGL_CTX.lock();
+    if !virgl.active { return Err("No active 3D context"); }
+    let ctx_id = virgl.ctx_id;
+    drop(virgl);
+    
+    let mut gpu = GPU.lock();
+    if !gpu.initialized { return Err("GPU not initialized"); }
+    // Max command size: DMA buffer is typically 4096 bytes, header takes ~24 bytes
+    if commands.len() > 3800 { return Err("Command buffer too large"); }
+    
+    let dma = gpu.dma_buf.as_ref().ok_or("DMA not ready")?;
+    
+    let cmd = GpuSubmit3d {
+        hdr: GpuCtrlHdr {
+            ctrl_type: GpuCtrlType::CmdSubmit3d as u32,
+            ctx_id,
+            ..Default::default()
+        },
+        size: commands.len() as u32,
+        padding: 0,
+    };
+    unsafe { dma.write_at(0, &cmd); }
+    
+    // Copy command data after header
+    let cmd_hdr_size = core::mem::size_of::<GpuSubmit3d>();
+    unsafe {
+        core::ptr::copy_nonoverlapping(
+            commands.as_ptr(),
+            dma.virt.add(cmd_hdr_size),
+            commands.len(),
+        );
+    }
+    
+    let total_cmd_sz = (cmd_hdr_size + commands.len()) as u32;
+    let resp = gpu.send_command(total_cmd_sz, 512, core::mem::size_of::<GpuCtrlHdr>() as u32)?;
+    
+    if resp != GpuCtrlType::RespOkNodata as u32 {
+        return Err("SUBMIT_3D failed");
+    }
+    Ok(())
+}
+
+/// VIRGL status string for diagnostics
+pub fn virgl_info() -> alloc::string::String {
+    let gpu = GPU.lock();
+    let virgl = VIRGL_CTX.lock();
+    if gpu.has_3d {
+        alloc::format!("VIRGL: {} (ctx={})", 
+            if virgl.active { "active" } else { "ready" },
+            virgl.ctx_id)
+    } else {
+        alloc::string::String::from("VIRGL: not available")
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

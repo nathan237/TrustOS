@@ -1,0 +1,293 @@
+═══════════════════════════════════════════════════════════════════════
+ iOS 18.5 (22F76) IOSurface CHAIN B — COMPLETE INTELLIGENCE REPORT
+ iPhone 11 Pro (iPhone12,3) / A13 Bionic (T8030) / PAC v1
+═══════════════════════════════════════════════════════════════════════
+
+ Generated: 2026-03-02
+ Kernelcache: 60,473,344 bytes, SHA256 prefix: 79b92c7dc5b0568b
+ KC_BASE: 0xfffffff007004000
+ MH_FILESET: 236 fileset entries, 247 load commands
+
+═══════════════════════════════════════════════════════════════════════
+ 1. KERNELCACHE ARCHITECTURE
+═══════════════════════════════════════════════════════════════════════
+
+ Format:       MH_FILESET (filetype=12) Kernel Collection
+ CPU:          ARM64 (cputype=0x100000c)
+ Compression:  LZFSE (bvx2)
+ IM4P FourCC:  krnl
+ 
+ IOSurface kext: com.apple.iokit.IOSurface
+   VA:           0xfffffff007729b20
+   FileOff:      0x725b20
+   __TEXT:        0xfffffff007729b20 (size 0x6196)
+   __TEXT_EXEC:   0xfffffff009e676d0 - 0xfffffff009e954c8 (187,896 bytes)
+   __DATA:        0xfffffff00a8dce48 (size 0x598)
+   __DATA_CONST:  0xfffffff007e543b0 (size 0x5ac8)
+
+═══════════════════════════════════════════════════════════════════════
+ 2. DISPATCH TABLE — 63 SELECTORS
+═══════════════════════════════════════════════════════════════════════
+
+ Location: 0xfffffff007e56618 (24-byte stride)
+ 
+ Key selectors:
+ 
+ Sel  Name                         Target VA              PAC
+ ───  ─────────────────────────    ──────────────────     ────────
+  0   s_create_surface             0xfffffff009e86024     IA/0x3771
+  1   s_delete_surface             0xfffffff0084ff664     IA/0x3607
+  2   s_lookup_surface             0xfffffff0084ff418     IA/0x89a9
+  3   s_lock_surface               0xfffffff0084ff390     IA/0x5635
+  4   s_unlock_surface             0xfffffff0085630e8     IA/0x9209
+  5   s_get_value                  0xfffffff00857f3a4     IA/0x5c68
+  6   s_set_value                  0xfffffff00857ee7c     IA/0xaf75
+  7   s_increment_use_count        0xfffffff00861c8d0     IA/0x43aa
+  8   s_decrement_use_count        0xfffffff00857e464     IA/0x4275
+  9   s_set_value_xml              0xfffffff00857e1ac     IA/0x122e
+  10  s_get_value_xml              0xfffffff00857dde8     IA/0xacb1
+  11  s_bulk_set_value             0xfffffff00857dba0     IA/0x82eb
+  12  s_bulk_get_value             0xfffffff00857d83c     IA/0xb659
+
+═══════════════════════════════════════════════════════════════════════
+ 3. PAC DIVERSITY MAP
+═══════════════════════════════════════════════════════════════════════
+
+ Vtable pointer auth:   0xcda1 (DA key)
+ Vtable+0x20 retain:    0x2e4a (IA key)
+ Vtable+0x28 release:   0x3a87 (IA key)
+ 
+ s_get_value dispatches:
+   vtable+0x148:        0x5a20 (property getter)
+   vtable+0x68:         0x4a6a (helper)
+   vtable+0x20:         0x2e4a (retain)
+   vtable+0x???:        0x1ac8 (allocation helper)
+   vtable+0x148:        0x5a20 (second getter call)
+   vtable+0x28:         0x3a87 (release)
+ 
+ s_set_value dispatches:
+   vtable+0x128:        0x5837 (property container)
+   vtable+0x118:        0x8453 (property setter)
+   vtable+0x20:         0x2e4a (retain)
+ 
+ s_set_value_xml dispatches:
+   vtable+0x???:        0x4578 (xml handler)
+   vtable+0x28:         0x3a87 (release × 2)
+
+═══════════════════════════════════════════════════════════════════════
+ 4. OVERFLOW PROTECTION ANALYSIS
+═══════════════════════════════════════════════════════════════════════
+
+ Total MUL-family instructions in IOSurface: 96
+ 
+ Protection breakdown:
+   UMULH+CBNZ (strong):   24  (25.0%)
+   CMP+branch (bounds):   61  (63.5%)
+   CBNZ (conditional):    10  (10.4%)
+   "Unprotected":          1  (1.0%) ← FALSE POSITIVE (see below)
+ 
+ The single "unprotected" MUL at 0xfffffff009e76790:
+   UMULL x8, w9, w8  where w8 = 0xD1B71759
+   Followed by:  LSR x8, x8, #0x2d
+   
+   This is the compiler's DIVISION BY 10 optimization:
+     result = (input * 0xD1B71759) >> 45  ≈  input / 10
+   
+   UMULL produces 64-bit result from 32-bit inputs → NO OVERFLOW POSSIBLE.
+   This is in a CEA-861 display info parsing function (not allocation).
+   
+ VERDICT: ALL integer overflows are PROTECTED on iOS 18.5.
+          Integer overflow exploitation is NOT viable.
+
+═════════════════════════════════════���═════════════════════════════════
+ 5. PHASE 9 — TYPE CONFUSION & RACE ANALYSIS
+═══════════════════════════════════════════════════════════════════════
+
+ ┌─────────────────────────┬───────┬──────────┬──────────┬──────────┐
+ │ Function                │ Locks │ AUTDA    │ VT Calls │ Race     │
+ ├─────────────────────────┼───────┼──────────┼──────────┼──────────┤
+ │ s_get_value (sel 5)     │   0   │    6     │    6     │   YES    │
+ │ s_set_value (sel 6)     │   0   │    3     │    3     │   YES    │
+ │ s_set_value_xml (sel 9) │   0   │    3     │    3     │   YES    │
+ │ s_get_value_xml (sel 10)│   3   │    1     │    1     │ LIMITED  │
+ │ s_bulk_set_value (11)   │   3   │    1     │    1     │ LIMITED  │
+ │ s_bulk_get_value (12)   │   0   │    6     │    6     │   YES    │
+ │ s_create_surface (sel 0)│   0   │    3     │    3     │   YES    │
+ │ s_increment_use (sel 7) │   0   │    1     │    1     │   YES    │
+ │ s_decrement_use (sel 8) │   0   │    2     │    3     │   YES    │
+ │ s_unlock_surface (sel 4)│   0   │    0     │    0     │   YES    │
+ └─────────────────────────┴───────┴──────────┴──────────┴──────────┘
+ 
+ CRITICAL FINDINGS:
+ 
+ 1. s_set_value, s_get_value, s_bulk_get_value have ZERO lock operations
+    → Fully raceable from multiple threads
+ 
+ 2. s_set_value uses vtable dispatch at offset 0x128 (div 0x5837)
+    s_set_value_xml uses vtable dispatch at offset 0x??? (div 0x4578)
+    → DIFFERENT virtual methods for the same logical operation!
+    → Type confusion: set via XML path, read via binary path
+ 
+ 3. s_get_value_xml and s_bulk_set_value have CAS-based locking
+    but s_get_value and s_bulk_get_value do NOT
+    → Asymmetric locking: writer locks, reader doesn't
+    → Classic TOCTOU race between locked set and unlocked get
+ 
+ 4. s_increment_use_count and s_decrement_use_count have no locking
+    → Race decrement to 0 while another thread reads → UAF
+ 
+ 5. s_set_value reads from self+0x18 (inner object) without lock:
+      0x857eea4: ldr x0, [x20, #0x18]    ← NO LOCK before this
+      0x857eea8: ldr x1, [x19, #0x18]
+      0x857eeac: ldr x16, [x0]           ← vtable load from inner obj
+      0x857eeb8: autda x16, x17          ← auth with 0xcda1
+    If inner object is freed/replaced during this window → UAF/confusion
+
+═══════════════════════════════════════════════════════════════════════
+ 6. ATTACK VECTORS (priority order)
+═══════════════════════════════════════════════════════════════════════
+
+ VECTOR 1: RACE s_set_value vs s_get_value [HIGH PRIORITY]
+ ──────────────────────────────────────────────────────────
+ Neither function has any locking. Race them:
+   Thread A: s_set_value(surface, key, large_OSData)
+   Thread B: s_get_value(surface, key) → reads during replacement
+ 
+ The race window in s_set_value:
+   1. Loads inner object at self+0x18
+   2. Auth vtable (AUTDA)
+   3. Calls vtable+0x128 (property container lookup)
+   4. Calls vtable+0x118 (property setter)
+   5. Calls vtable+0x20 (retain new value)
+ 
+ Between steps 3-4 or 4-5, a concurrent s_get_value can read stale data.
+ 
+ VECTOR 2: TYPE CONFUSION s_set_value_xml → s_get_value [HIGH PRIORITY]
+ ──────────────────────────────────────────────────────────────────────
+ s_set_value_xml dispatches through different vtable offsets than s_set_value.
+ If the XML deserializer creates a different object type than what
+ s_get_value expects (e.g., OSDictionary where OSData expected):
+   - The getter reads the wrong object layout
+   - Pointers/sizes are misinterpreted
+   - Controlled kernel memory read via fake backing pointer
+ 
+ VECTOR 3: UAF via s_decrement_use_count race [MEDIUM]
+ ─────────────────────────────────────────────────────
+ No locking on decrement. Race with get_value:
+   Thread A: decrement_use_count → refcount hits 0 → free
+   Thread B: get_value → reads freed memory → info leak or crash
+ 
+ VECTOR 4: s_bulk_get_value iteration race [MEDIUM]
+ ──────────────────────────────────────────────────
+ s_bulk_get_value has NO locking but iterates over multiple properties.
+ If another thread modifies the property dictionary during iteration:
+   - Array count vs actual entries desync → OOB read
+   - Iterator invalidation → use of freed entries
+ 
+ VECTOR 5: s_create_surface initialization race [LOW]
+ ───────────────────────────────────────────────────
+ No locking during surface creation. If increment_use_count runs
+ before initialization completes, uninitialized fields may be used.
+
+═══════════════════════════════════════════════════════════════════════
+ 7. EXPLOITATION CHAIN: IOSurface → Kernel R/W → BootROM
+═══════════════════════════════════════════════════════════════════════
+
+ Phase A: Achieve Type Confusion
+   1. Create 2 surfaces (spray + target)
+   2. Set known properties on target surface via s_set_value
+   3. Start getter thread: s_get_value in tight loop
+   4. Start setter thread: alternate between s_set_value (OSData)
+      and s_set_value_xml (OSDictionary) on same key
+   5. When getter reads OSDictionary as OSData:
+      → length/pointer fields are misaligned
+      → controlled info leak of kernel heap pointers
+ 
+ Phase B: Kernel Heap Info Leak
+   6. From the type confusion, leak:
+      a. Kernel heap addresses (from misread pointers)
+      b. Kernel slide (from leaked vtable pointers → compare with KC_BASE)
+      c. PAC-signed pointers (for PAC oracle or diversity extraction)
+ 
+ Phase C: Build Kernel R/W
+   7. With heap info + kernel slide:
+      a. Spray controlled data via IOSurface properties
+      b. Free target surface → heap hole
+      c. Reclaim with crafted fake object containing:
+         - Fake vtable → controlled dispatch
+         - Fake backing pointer → arbitrary read target
+      d. Call s_get_value on reclaimed surface → reads from fake pointer
+   
+   ALTERNATIVE (PAC-aware):
+      a. Use type confusion to read PAC-signed vtable entries
+      b. Extract signing context from leaked pointers
+      c. Forge new PAC pointers using known diversity values
+      d. Build arbitrary call primitive via forged vtable
+ 
+ Phase D: BootROM Dump
+   8. With kernel R/W:
+      a. Read gPhysBase/gVirtBase (kernel DATA segment)
+      b. Validate physical addressing via known patterns
+      c. Call ml_phys_read (or use MMIO mapping) for 0x100000000
+      d. Read 512KB BootROM → dump to file
+
+═══════════════════════════════════════════════════════════════════════
+ 8. KEY SYMBOL TABLE (iOS 18.5 specific)
+═══════════════════════════════════════════════════════════════════════
+
+ String Xref → Function VA mappings:
+ 
+ IOSurfaceBufferTileFormat  → 0xfffffff009e6dd08
+ IOSurfaceWidth             → 0xfffffff009e6de6c, 0xfffffff009e893a0
+ IOSurfaceHeight            → 0xfffffff009e6de98, 0xfffffff009e893a8
+ IOSurfaceBytesPerRow       → 0xfffffff009e6df5c, 0xfffffff009e893c8
+ IOSurfaceBytesPerElement   → 0xfffffff009e6de44, 0xfffffff009e893bc
+ IOSurfaceAllocSize         → 0xfffffff009e6e3e8, 0xfffffff009e893d0,
+                               0xfffffff009e89864
+ IOSurfaceElementWidth      → 0xfffffff009e6ded0
+ IOSurfaceElementHeight     → 0xfffffff009e6def8
+ IOSurfacePlaneWidth        → 0xfffffff009e6caac, 0xfffffff009e6d2bc,
+                               0xfffffff009e6d2ec, 0xfffffff009e6db34
+ IOSurfacePlaneHeight       → 0xfffffff009e6cab4, 0xfffffff009e6d2c4,
+                               0xfffffff009e6d2f4, 0xfffffff009e6db3c
+ IOSurfacePlaneBytesPerRow  → 0xfffffff009e6ce3c
+ CEA-861:Type1              → 0xfffffff00772d8e6 (display info parser)
+
+═══════════════════════════════════════════════════════════════════════
+ 9. TOOL INVENTORY
+═══════════════════════════════════════════════════════════════════════
+
+ ios185_full_pipeline.py       → KC download + full analysis pipeline
+ ios185_unprotected_mul.py     → Deep dive on "unprotected" MUL (false positive)
+ ios185_phase9_typeconfusion.py → Type confusion + race condition analysis
+ view_ios185.py                → Quick viewer for analysis JSON
+ chain_b_ios185_poc.m          → Complete PoC skeleton with real addresses
+ 
+ Output data:
+ extracted/ios185_full_analysis.json      → Complete address database
+ extracted/ios185_phase9_results.json     → Type confusion findings
+ extracted/kernelcache_iPhone12,3_18_5.raw → Decompressed kernelcache
+
+═══════════════════════════════════════════════════════════════════════
+ 10. NEXT STEPS
+═══════════════════════════════════════════════════════════════════════
+
+ □ Phase 10: On-device type confusion fuzzer
+   - Deploy chain_b_ios185_poc.m to device
+   - Run race between s_set_value and s_get_value  
+   - Monitor for kernel panics (type confusion indicator)
+   - Tune timing to hit race window consistently
+
+ □ Phase 11: Heap Feng Shui framework
+   - IOSurface property spray for controlled heap layout
+   - kalloc zone targeting (kalloc.48, kalloc.80, kalloc.128)
+   - Slot reclamation after surface destruction
+
+ □ Phase 12: BootROM dump
+   - After kernel R/W: read 0x100000000-0x100080000
+   - Validate against known T8030 BootROM signatures
+   - Extract SecureROM entry point and DFU handler
+
+═══════════════════════════════════════════════════════════════════════
+ END OF iOS 18.5 INTELLIGENCE REPORT
+═══════════════════════════════════════════════════════════════════════

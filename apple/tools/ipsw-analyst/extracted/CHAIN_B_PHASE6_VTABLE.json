@@ -1,0 +1,395 @@
+{
+  "vtable_entries": {
+    "+0x000": {
+      "va": "0xfffffff00a1e75e8",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x3771"
+    },
+    "+0x008": {
+      "va": "0xfffffff00a1e7728",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x56b7"
+    },
+    "+0x010": {
+      "va": "0xfffffff0086220f8",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xbaa2"
+    },
+    "+0x018": {
+      "va": "0xfffffff0086220f0",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x3607"
+    },
+    "+0x020": {
+      "va": "0xfffffff0086220c8",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x2e4a"
+    },
+    "+0x028": {
+      "va": "0xfffffff0086220a0",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x3a87"
+    },
+    "+0x030": {
+      "va": "0xfffffff008621ea4",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x89a9"
+    },
+    "+0x038": {
+      "va": "0xfffffff00a1e7784",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xfffc"
+    },
+    "+0x040": {
+      "va": "0xfffffff00861e88c",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xfc74"
+    },
+    "+0x048": {
+      "va": "0xfffffff008621e18",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x5635"
+    },
+    "+0x050": {
+      "va": "0xfffffff008621df0",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xbe60"
+    },
+    "+0x058": {
+      "va": "0xfffffff008621c80",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x32e5"
+    },
+    "+0x060": {
+      "va": "0xfffffff00868683c",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x9209"
+    },
+    "+0x068": {
+      "va": "0xfffffff008743414",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x4a6a"
+    },
+    "+0x070": {
+      "va": "0xfffffff00a1e9644",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xedc5"
+    },
+    "+0x078": {
+      "va": "0xfffffff0086a30e0",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x5c68"
+    },
+    "+0x080": {
+      "va": "0xfffffff0086a2ec4",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x6a10"
+    },
+    "+0x088": {
+      "va": "0xfffffff0086a2ca8",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x7a2a"
+    },
+    "+0x090": {
+      "va": "0xfffffff0086a2bb8",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xaf75"
+    },
+    "+0x098": {
+      "va": "0xfffffff0086a2ac8",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x137e"
+    },
+    "+0x0a0": {
+      "va": "0xfffffff0086a29ac",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x655"
+    },
+    "+0x0a8": {
+      "va": "0xfffffff00874318c",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x43aa"
+    },
+    "+0x0b0": {
+      "va": "0xfffffff0086a2488",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x12e9"
+    },
+    "+0x0b8": {
+      "va": "0xfffffff0086a224c",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x4578"
+    },
+    "+0x0c0": {
+      "va": "0xfffffff0086a21a0",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x4275"
+    },
+    "+0x0c8": {
+      "va": "0xfffffff0086a20f4",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xff53"
+    },
+    "+0x0d0": {
+      "va": "0xfffffff0086a1ffc",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x1814"
+    },
+    "+0x0d8": {
+      "va": "0xfffffff0086a1ee8",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x122e"
+    },
+    "+0x0e0": {
+      "va": "0xfffffff0086a1d90",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x13f6"
+    },
+    "+0x0e8": {
+      "va": "0xfffffff0086a1c38",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x1d35"
+    },
+    "+0x0f0": {
+      "va": "0xfffffff0086a1b24",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xacb1"
+    },
+    "+0x0f8": {
+      "va": "0xfffffff0086a1a84",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x7eb0"
+    },
+    "+0x100": {
+      "va": "0xfffffff0086a19e4",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x1262"
+    },
+    "+0x108": {
+      "va": "0xfffffff0086a18dc",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x82eb"
+    },
+    "+0x110": {
+      "va": "0xfffffff0086a1838",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x164e"
+    },
+    "+0x118": {
+      "va": "0xfffffff0086a1794",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x37a5"
+    },
+    "+0x120": {
+      "va": "0xfffffff0086a1578",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xb659"
+    },
+    "+0x128": {
+      "va": "0xfffffff0086a135c",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x6c51"
+    },
+    "+0x130": {
+      "va": "0xfffffff0086a1140",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xa20f"
+    },
+    "+0x138": {
+      "va": "0xfffffff0086a1008",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xb3b6"
+    },
+    "+0x140": {
+      "va": "0xfffffff0086a0ed0",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x6bcb"
+    },
+    "+0x148": {
+      "va": "0xfffffff0086a0d98",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x5a20"
+    },
+    "+0x150": {
+      "va": "0xfffffff0086a0be4",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x5062"
+    },
+    "+0x158": {
+      "va": "0xfffffff0086bbfe0",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xd7"
+    },
+    "+0x160": {
+      "va": "0xfffffff0086a0a60",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x7c85"
+    },
+    "+0x168": {
+      "va": "0xfffffff0086a07dc",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x8a26"
+    },
+    "+0x170": {
+      "va": "0xfffffff0086a05c4",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x3539"
+    },
+    "+0x178": {
+      "va": "0xfffffff0086a0554",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x688b"
+    },
+    "+0x180": {
+      "va": "0xfffffff0086a02d0",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x1e60"
+    },
+    "+0x188": {
+      "va": "0xfffffff0086a00b8",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x1955"
+    },
+    "+0x190": {
+      "va": "0xfffffff0086a0048",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x689"
+    },
+    "+0x198": {
+      "va": "0xfffffff00869fe34",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xc256"
+    },
+    "+0x1a0": {
+      "va": "0xfffffff00869fc20",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xa383"
+    },
+    "+0x1a8": {
+      "va": "0xfffffff00869f9e0",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xf021"
+    },
+    "+0x1b0": {
+      "va": "0xfffffff00869f7c8",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x1f0a"
+    },
+    "+0x1b8": {
+      "va": "0xfffffff00869f318",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xb4bb"
+    },
+    "+0x1c0": {
+      "va": "0xfffffff00869f124",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x8ffc"
+    },
+    "+0x1c8": {
+      "va": "0xfffffff00869ef68",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xb5b9"
+    },
+    "+0x1d0": {
+      "va": "0xfffffff00869ed74",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x8764"
+    },
+    "+0x1d8": {
+      "va": "0xfffffff00869ec00",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x5d96"
+    },
+    "+0x1e0": {
+      "va": "0xfffffff00869df1c",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x80d9"
+    },
+    "+0x1e8": {
+      "va": "0xfffffff00869ddd8",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xc9c"
+    },
+    "+0x1f0": {
+      "va": "0xfffffff00869dc90",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0x5d0a"
+    },
+    "+0x1f8": {
+      "va": "0xfffffff00869da4c",
+      "auth": true,
+      "key": "IA",
+      "diversity": "0xcbcc"
+    }
+  },
+  "multiply_method": "0xfffffff0086a1008",
+  "result_store_method": "0xfffffff0086a2488",
+  "kernel_helper": "0xfffffff00861ed6c",
+  "max_check_labels": [],
+  "kernel_call_gadgets": 393,
+  "pac_indirect_calls": 1098,
+  "exploitation_approach": "dimension_product_overflow"
+}

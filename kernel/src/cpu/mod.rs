@@ -44,6 +44,7 @@ pub struct CpuCapabilities {
     pub avx: bool,
     pub avx2: bool,
     pub avx512f: bool,
+    pub fma: bool,
     
     // Crypto acceleration
     pub aesni: bool,         // AES-NI instructions
@@ -100,6 +101,7 @@ impl CpuCapabilities {
             avx: false,
             avx2: false,
             avx512f: false,
+            fma: false,
             aesni: false,
             pclmulqdq: false,
             sha_ext: false,
@@ -168,6 +170,7 @@ impl CpuCapabilities {
             caps.sse4_2 = (cpuid_1.ecx & (1 << 20)) != 0;
             caps.aesni = (cpuid_1.ecx & (1 << 25)) != 0;
             caps.avx = (cpuid_1.ecx & (1 << 28)) != 0;
+            caps.fma = (cpuid_1.ecx & (1 << 12)) != 0;
             caps.rdrand = (cpuid_1.ecx & (1 << 30)) != 0;
             caps.vmx = (cpuid_1.ecx & (1 << 5)) != 0;
             caps.tsc_deadline = (cpuid_1.ecx & (1 << 24)) != 0;
@@ -259,8 +262,8 @@ pub fn init() {
         caps.vendor, caps.family, caps.model);
     crate::serial_println!("[CPU] TSC: {} (invariant: {}, freq: {} MHz)", 
         caps.tsc, caps.tsc_invariant, caps.tsc_frequency_hz / 1_000_000);
-    crate::serial_println!("[CPU] SIMD: SSE={} SSE2={} SSE4.2={} AVX={} AVX2={}", 
-        caps.sse, caps.sse2, caps.sse4_2, caps.avx, caps.avx2);
+    crate::serial_println!("[CPU] SIMD: SSE={} SSE2={} SSE4.2={} AVX={} AVX2={} FMA={}", 
+        caps.sse, caps.sse2, caps.sse4_2, caps.avx, caps.avx2, caps.fma);
     crate::serial_println!("[CPU] Crypto: AES-NI={} PCLMULQDQ={} SHA={} RDRAND={}", 
         caps.aesni, caps.pclmulqdq, caps.sha_ext, caps.rdrand);
     crate::serial_println!("[CPU] Security: SMEP={} SMAP={} NX={}", 
@@ -270,6 +273,11 @@ pub fn init() {
     // Enable SIMD if available
     if caps.sse {
         simd::enable_sse();
+    }
+    
+    // Enable AVX if available (required for AVX2+FMA SIMD kernels)
+    if caps.avx {
+        simd::enable_avx();
     }
     
     // Initialize high-precision TSC

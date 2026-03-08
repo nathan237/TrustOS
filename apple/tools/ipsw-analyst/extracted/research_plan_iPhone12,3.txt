@@ -1,0 +1,51 @@
+======================================================================
+  TrustOS Security Research — Concrete Action Plan
+  Target: iPhone 11 Pro (iPhone12,3) — A13 Bionic (T8030)
+======================================================================
+
+PHASE 1: STATIC ANALYSIS (Week 1-2)
+--------------------------------------------------
+  1. Download IPSW: python ipsw_fetch.py --device iPhone12,3
+  2. Extract & analyze kernelcache (automatic)
+  3. Load in Ghidra with kernelcache plugin
+  4. Focus on top components:
+     → Kernel (score: 200, CVEs: 6, exploited: 4)
+     → WebKit (score: 100, CVEs: 3, exploited: 2)
+     → Kernel (RTKit) (score: 75, CVEs: 1, exploited: 1)
+     → JavaScriptCore (score: 55, CVEs: 1, exploited: 1)
+     → CoreTrust (score: 55, CVEs: 1, exploited: 1)
+
+PHASE 2: IOKIT ATTACK SURFACE (Week 2-4)
+--------------------------------------------------
+  1. List all IOUserClient subclasses in kernelcache
+  2. Identify sandbox-reachable services
+  3. Map externalMethod() dispatch tables
+  4. Priority targets based on analysis:
+
+PHASE 3: PATCH DIFF ANALYSIS (Week 2-3)
+--------------------------------------------------
+  1. Download iOS 18.4 + 18.5 kernelcaches
+  2. BinDiff comparison → identify patched functions
+  3. Each patch = potential N-day in older versions
+  4. Cross-reference with Apple security advisories
+
+PHASE 4: ACTIVE FUZZING (Week 4-12)
+--------------------------------------------------
+  A) WebKit/JSC fuzzing (no device needed):
+     - Build WebKit with ASAN
+     - Run Fuzzilli against JSC
+     - Target JIT compiler (DFG, FTL)
+  B) IOKit fuzzing (requires device or Corellium):
+     - ipc-fuzzer for Mach message interfaces
+     - Custom fuzzer for top IOUserClient targets
+  C) USB protocol fuzzing (physical):
+     - Facedancer for USB descriptor fuzzing
+     - Target Recovery mode USB stack
+
+A13-SPECIFIC NOTES:
+--------------------------------------------------
+  ✓ PAC v1 — weaker than A15+, known bypasses exist
+  ✓ No MTE — heap exploitation is classical
+  ✗ checkm8 — NOT applicable (A13 patched SecureROM)
+  ✓ Lightning — DCSD cable possible for serial debug
+  ✓ Intel XMM 7660 baseband — less audited than Qualcomm

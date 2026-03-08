@@ -275,7 +275,7 @@ impl VirtioNet {
         let queue = self.rx_queue.as_mut().ok_or("RX queue not initialized")?;
         
         // Allocate buffers and add them to the available ring
-        let num_buffers = (queue.size / 2).min(32) as usize; // Use half the queue, max 32
+        let num_buffers = (queue.size / 2).min(128) as usize; // Use half the queue, max 128
         
         for _ in 0..num_buffers {
             let buffer = Box::new(RxBuffer {

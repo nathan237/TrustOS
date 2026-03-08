@@ -102,6 +102,31 @@ pub fn poll_serial() {
 
 /// Process a mentor command (without the "MENTOR:" prefix)
 fn process_command(cmd: &str) {
+    // Guardian authentication via serial: MENTOR:GUARDIAN:AUTH:<token>
+    if cmd.starts_with("GUARDIAN:AUTH:") {
+        let token = &cmd[13..];
+        if super::guardian::authenticate_copilot(token) {
+            respond("OK:Copilot guardian authenticated");
+        } else {
+            respond("ERROR:Authentication failed");
+        }
+        return;
+    }
+    if cmd == "GUARDIAN:LOCK" {
+        super::guardian::lock_session();
+        respond("OK:Guardian session locked");
+        return;
+    }
+    if cmd == "GUARDIAN:STATUS" {
+        let lines = super::guardian::display_status();
+        for l in &lines { respond(l); }
+        return;
+    }
+    if cmd == "GUARDIAN:PACT" {
+        respond(super::guardian::THE_PACT);
+        return;
+    }
+
     if cmd.starts_with("TEACH:") {
         let text = &cmd[6..];
         handle_teach(text);
@@ -196,6 +221,10 @@ fn handle_generate(prompt: &str) {
 
 /// Handle configuration changes
 fn handle_config(config: &str) {
+    if let Err(msg) = super::guardian::authorize(super::guardian::ProtectedOp::ConfigChange) {
+        respond(&alloc::format!("ERROR:Guardian denied — {}", msg));
+        return;
+    }
     if config.starts_with("temp=") {
         if let Ok(t) = config[5..].parse::<f32>() {
             // Would need to update engine config — for now just ack
@@ -231,6 +260,10 @@ fn handle_save() {
 
 /// Load weights from RamFS disk
 fn handle_load() {
+    if let Err(msg) = super::guardian::authorize(super::guardian::ProtectedOp::WeightLoad) {
+        respond(&alloc::format!("ERROR:Guardian denied — {}", msg));
+        return;
+    }
     match super::load_weights() {
         Ok(bytes) => respond(&format!("OK:Loaded {} KB from /jarvis/weights.bin", bytes / 1024)),
         Err(e) => respond(&format!("ERROR:{}", e)),
@@ -239,6 +272,10 @@ fn handle_load() {
 
 /// Reset all weights to random initialization
 fn handle_reset() {
+    if let Err(msg) = super::guardian::authorize(super::guardian::ProtectedOp::ModelReset) {
+        respond(&alloc::format!("ERROR:Guardian denied — {}", msg));
+        return;
+    }
     if let Some(model) = super::MODEL.lock().as_mut() {
         model.reset();
         respond("OK:Weights reset to random initialization");

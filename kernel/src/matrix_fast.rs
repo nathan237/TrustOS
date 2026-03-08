@@ -266,6 +266,14 @@ pub(crate) const MATRIX_CHARSET: &[u8] = b"0123456789ABCDEF@#$%&*<>[]{}|/\\";
 // GLYPH MATRIX RAIN - 6x6 Matrix characters with multiple drops per column
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/// High-resolution cell size — 4px cells = 4× density vs 8px, same perf
+/// Each cell is CELL_SIZE×CELL_SIZE pixels with a 3×3 glyph inside
+const CELL_SIZE: usize = 4;
+/// Glyph pixel dimensions inside each cell
+const GLYPH_SIZE: usize = 3;
+/// Center offset for cube hit-testing
+const CELL_CENTER: usize = CELL_SIZE / 2;
+
 /// Trail length bounds - LONGER for denser rain
 const MIN_TRAIL_LENGTH: usize = 15;
 const MAX_TRAIL_LENGTH: usize = 50;
@@ -273,8 +281,81 @@ const MAX_TRAIL_LENGTH: usize = 50;
 /// Maximum drops per column - MORE for denser rain
 const DROPS_PER_COLUMN: usize = 6;
 
-/// Total columns for 1280px width
-const MAX_COLUMNS: usize = 160;
+/// Total columns — supports up to 2048px width at 4px cells
+const MAX_COLUMNS: usize = 512;
+
+/// Ultra-compact 3×3 pixel micro-glyphs — 64 patterns for high-res matrix rain
+/// Each glyph is [row0, row1, row2], each row uses lower 3 bits (bit0=left)
+/// At 3×3 pixels the brain reads patterns, not characters — cinematic density
+const MATRIX_GLYPHS_3X3: [[u8; 3]; 64] = [
+    [0b111, 0b101, 0b111], // 0  - Zero (box)
+    [0b010, 0b010, 0b010], // 1  - One (vertical)
+    [0b111, 0b010, 0b111], // 2  - Two (H)
+    [0b110, 0b011, 0b110], // 3  - Three (zigzag)
+    [0b101, 0b111, 0b001], // 4  - Four
+    [0b011, 0b110, 0b011], // 5  - Five (reverse zigzag)
+    [0b011, 0b111, 0b111], // 6  - Six
+    [0b111, 0b001, 0b010], // 7  - Seven (angle)
+    [0b111, 0b111, 0b111], // 8  - Eight (full block)
+    [0b111, 0b111, 0b001], // 9  - Nine
+    [0b111, 0b010, 0b100], // 10 - ア
+    [0b001, 0b111, 0b010], // 11 - イ
+    [0b111, 0b101, 0b010], // 12 - ウ
+    [0b111, 0b100, 0b111], // 13 - エ
+    [0b010, 0b111, 0b100], // 14 - オ
+    [0b100, 0b111, 0b010], // 15 - カ
+    [0b010, 0b111, 0b001], // 16 - キ (L mirror)
+    [0b110, 0b001, 0b100], // 17 - ク
+    [0b100, 0b110, 0b001], // 18 - ケ
+    [0b111, 0b001, 0b111], // 19 - コ (U rotated)
+    [0b101, 0b111, 0b100], // 20 - サ
+    [0b100, 0b010, 0b001], // 21 - シ (diagonal)
+    [0b111, 0b010, 0b001], // 22 - ス
+    [0b100, 0b111, 0b001], // 23 - セ
+    [0b101, 0b001, 0b010], // 24 - ソ
+    [0b011, 0b111, 0b100], // 25 - タ
+    [0b111, 0b011, 0b010], // 26 - チ
+    [0b101, 0b010, 0b010], // 27 - ツ
+    [0b111, 0b010, 0b010], // 28 - テ (T)
+    [0b100, 0b110, 0b100], // 29 - ト
+    [0b010, 0b111, 0b110], // 30 - ナ
+    [0b111, 0b000, 0b111], // 31 - ニ (double line)
+    [0b010, 0b101, 0b010], // 32 - Diamond
+    [0b010, 0b101, 0b111], // 33 - Triangle up
+    [0b111, 0b101, 0b010], // 34 - Triangle down
+    [0b010, 0b111, 0b010], // 35 - Cross (+)
+    [0b101, 0b010, 0b101], // 36 - X mark
+    [0b111, 0b000, 0b111], // 37 - Horizontal lines
+    [0b101, 0b101, 0b101], // 38 - Vertical lines
+    [0b110, 0b110, 0b000], // 39 - Corner TL
+    [0b011, 0b011, 0b000], // 40 - Corner TR
+    [0b000, 0b110, 0b110], // 41 - Corner BL
+    [0b000, 0b011, 0b011], // 42 - Corner BR
+    [0b010, 0b000, 0b010], // 43 - Colon
+    [0b000, 0b010, 0b000], // 44 - Dot
+    [0b010, 0b101, 0b000], // 45 - Caret
+    [0b000, 0b101, 0b010], // 46 - V shape
+    [0b100, 0b010, 0b100], // 47 - Wave
+    [0b001, 0b010, 0b001], // 48 - Wave reverse
+    [0b110, 0b010, 0b011], // 49 - S curve
+    [0b011, 0b010, 0b110], // 50 - S reverse
+    [0b010, 0b100, 0b010], // 51 - Shift left
+    [0b010, 0b001, 0b010], // 52 - Shift right
+    [0b101, 0b000, 0b101], // 53 - Sparse dots
+    [0b001, 0b011, 0b111], // 54 - Staircase
+    [0b100, 0b110, 0b111], // 55 - Staircase mirror
+    [0b111, 0b011, 0b001], // 56 - Stair down
+    [0b111, 0b110, 0b100], // 57 - Stair down mirror
+    [0b011, 0b100, 0b011], // 58 - Bracket
+    [0b110, 0b001, 0b110], // 59 - Bracket reverse
+    [0b101, 0b010, 0b010], // 60 - Y shape
+    [0b010, 0b010, 0b101], // 61 - Y inverted
+    [0b110, 0b011, 0b001], // 62 - Slash
+    [0b011, 0b110, 0b100], // 63 - Backslash
+];
+
+/// Number of 3×3 micro-glyphs
+const GLYPH_3X3_COUNT: usize = 64;
 
 /// A single rain drop
 #[derive(Clone, Copy)]
@@ -427,7 +508,33 @@ struct BrailleParallelParams {
 unsafe impl Send for BrailleParallelParams {}
 unsafe impl Sync for BrailleParallelParams {}
 
-/// Draw 6x6 glyph at pixel position (raw pointer version for parallel render)
+/// Draw 3×3 micro-glyph at pixel position (raw pointer, parallel-safe)
+/// Ultra-fast: only 9 pixel positions, fully unrolled, no loop overhead
+#[inline(always)]
+unsafe fn draw_glyph_3x3_raw(buffer: *mut u32, fb_width: usize, fb_height: usize,
+                              px: usize, py: usize, glyph: &[u8; 3], color: u32) {
+    if py + 2 >= fb_height || px + 2 >= fb_width { return; }
+    // Row 0
+    let b0 = glyph[0];
+    let base0 = py * fb_width + px;
+    if b0 & 0b001 != 0 { *buffer.add(base0) = color; }
+    if b0 & 0b010 != 0 { *buffer.add(base0 + 1) = color; }
+    if b0 & 0b100 != 0 { *buffer.add(base0 + 2) = color; }
+    // Row 1
+    let b1 = glyph[1];
+    let base1 = base0 + fb_width;
+    if b1 & 0b001 != 0 { *buffer.add(base1) = color; }
+    if b1 & 0b010 != 0 { *buffer.add(base1 + 1) = color; }
+    if b1 & 0b100 != 0 { *buffer.add(base1 + 2) = color; }
+    // Row 2
+    let b2 = glyph[2];
+    let base2 = base1 + fb_width;
+    if b2 & 0b001 != 0 { *buffer.add(base2) = color; }
+    if b2 & 0b010 != 0 { *buffer.add(base2 + 1) = color; }
+    if b2 & 0b100 != 0 { *buffer.add(base2 + 2) = color; }
+}
+
+/// Draw 6x6 glyph at pixel position (raw pointer version for shape overlays)
 #[inline]
 unsafe fn draw_glyph_6x6_raw(buffer: *mut u32, fb_width: usize, fb_height: usize,
                               px: usize, py: usize, glyph: &[u8; 6], color: u32) {
@@ -471,7 +578,7 @@ fn render_columns_parallel(start: usize, end: usize, data: *mut u8) {
         let depth = unsafe { *p.col_depth_ptr.add(col) };
         let depth_brightness = 100 + (depth as u32 * 155 / 255);
         
-        let col_px = (col * cell_size + 4) as f32;
+        let col_px = (col * cell_size + CELL_CENTER) as f32;
         let col_in_cube_x = p.cube_active && col_px >= p.cube_min_x && col_px <= p.cube_max_x;
         
         let drops = unsafe { &*p.drops_ptr.add(col) };
@@ -492,7 +599,7 @@ fn render_columns_parallel(start: usize, end: usize, data: *mut u8) {
                 let intensity = ((base_intensity * depth_brightness) / 255) as u8;
                 
                 if col_in_cube_x {
-                    let py = (cell_y as usize * cell_size + 4) as f32;
+                    let py = (cell_y as usize * cell_size + CELL_CENTER) as f32;
                     if py >= p.cube_min_y && py <= p.cube_max_y {
                         if point_in_quad_par(col_px, py, &p.pad_edges) { continue; }
                         if point_in_quad_par(col_px, py, &p.top_edges)
@@ -506,21 +613,21 @@ fn render_columns_parallel(start: usize, end: usize, data: *mut u8) {
                 if intensity < 2 { continue; }
                 
                 let glyph_seed = drop.glyph_seed.wrapping_add(trail_pos as u32 * 2654435761);
-                let glyph_idx = (glyph_seed % GLYPH_COUNT as u32) as usize;
-                let glyph = &MATRIX_GLYPHS_6X6[glyph_idx];
+                let glyph_idx = (glyph_seed % GLYPH_3X3_COUNT as u32) as usize;
+                let glyph = &MATRIX_GLYPHS_3X3[glyph_idx];
                 let color = intensity_to_color(intensity);
                 
                 let px = col * cell_size + 1;
                 let py = cell_y as usize * cell_size + 1;
                 unsafe {
-                    draw_glyph_6x6_raw(p.buffer_ptr, p.fb_width, p.fb_height,
+                    draw_glyph_3x3_raw(p.buffer_ptr, p.fb_width, p.fb_height,
                                        px, py, glyph, color);
                 }
                 
-                // HEAD GLOW
+                // HEAD GLOW — compact for 3×3 cells
                 if trail_pos == 0 && intensity > 200 {
-                    let gx = px + 3;
-                    let gy = py + 3;
+                    let gx = px + 1; // center of 3×3
+                    let gy = py + 1;
                     let offsets: [(i32, i32); 4] = [(-1,0),(1,0),(0,-1),(0,1)];
                     for &(ox, oy) in &offsets {
                         let tx = gx as i32 + ox;
@@ -574,8 +681,8 @@ impl BrailleMatrix {
     pub fn new() -> Self {
         use alloc::vec::Vec;
         
-        let cols = 160; // 1280 / 8
-        let rows = 100; // 800 / 8
+        let cols = 1280 / CELL_SIZE; // 320 cols at 4px cells (was 160 at 8px)
+        let rows = 800 / CELL_SIZE;  // 200 rows at 4px cells (was 100 at 8px)
         
         // Allocate on heap using Vec to avoid stack overflow
         let mut drops: Vec<[RainDrop; DROPS_PER_COLUMN]> = Vec::with_capacity(MAX_COLUMNS);
@@ -861,9 +968,9 @@ impl BrailleMatrix {
             self.shape_time += 0.016; // ~60 FPS step
             
             // Center in pixels (assuming 1280x800 or similar)
-            let center_x = (self.num_cols * 8 / 2) as f32;  // Pixel center X
-            let center_y = (self.num_rows * 8 / 2) as f32;  // Pixel center Y
-            let scale = ((self.num_rows * 8) as f32).min((self.num_cols * 8) as f32) * 0.18;  // MUST match entity layer
+            let center_x = (self.num_cols * CELL_SIZE / 2) as f32;  // Pixel center X
+            let center_y = (self.num_rows * CELL_SIZE / 2) as f32;  // Pixel center Y
+            let scale = ((self.num_rows * CELL_SIZE) as f32).min((self.num_cols * CELL_SIZE) as f32) * 0.18;  // MUST match entity layer
             
             let count = self.shape_drop_count.min(MAX_SHAPE_DROPS);
             for i in 0..count {
@@ -1014,7 +1121,7 @@ impl BrailleMatrix {
         #[cfg(not(target_arch = "x86_64"))]
         buffer.fill(bg_color);
         
-        let cell_size = 8usize;
+        let cell_size = CELL_SIZE;
         let cell_cols = fb_width / cell_size;
         let cell_rows = fb_height / cell_size;
         
@@ -1375,7 +1482,7 @@ impl BrailleMatrix {
             return;
         }
         
-        let cell_size = 8usize;
+        let cell_size = CELL_SIZE;
         let screen_width = (self.num_cols * cell_size) as f32;
         let screen_height = (self.num_rows * cell_size) as f32;
         let center_x = screen_width / 2.0;
@@ -1461,8 +1568,8 @@ impl BrailleMatrix {
         
         for cy in cell_y0..cell_y1 {
             for cx in cell_x0..cell_x1 {
-                let px = (cx * cell_size + 4) as f32;
-                let py = (cy * cell_size + 4) as f32;
+                let px = (cx * cell_size + CELL_CENTER) as f32;
+                let py = (cy * cell_size + CELL_CENTER) as f32;
                 
                 // === TOP FACE: diagonal rain following isometric edges ===
                 if top_det.abs() > 0.01 && point_in_quad(px, py, &top_quad) {
@@ -1524,8 +1631,8 @@ impl BrailleMatrix {
                         let cell_hash = (cx as u32).wrapping_mul(2654435761)
                             .wrapping_add((cy as u32).wrapping_mul(340573321));
                         let anim_frame = (time * 8.0) as u32;
-                        let glyph_idx = ((cell_hash.wrapping_add(anim_frame)) % GLYPH_COUNT as u32) as usize;
-                        let glyph = &MATRIX_GLYPHS_6X6[glyph_idx];
+                        let glyph_idx = ((cell_hash.wrapping_add(anim_frame)) % GLYPH_3X3_COUNT as u32) as usize;
+                        let glyph = &MATRIX_GLYPHS_3X3[glyph_idx];
                         
                         // Color: INTERSECTION of both lanes → WHITE
                         let color = if on_u && on_v {
@@ -1542,7 +1649,7 @@ impl BrailleMatrix {
                             0xFF000000 | ((g as u32) << 8) | 0x06
                         };
                         
-                        self.draw_glyph_6x6(buffer, fb_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
+                        self.draw_glyph_3x3(buffer, fb_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
                     }
                     continue;
                 }
@@ -1574,8 +1681,8 @@ impl BrailleMatrix {
                         let cell_hash = (cx as u32).wrapping_mul(2654435761)
                             .wrapping_add((cy as u32).wrapping_mul(340573321));
                         let anim_frame = (time * 6.0) as u32;
-                        let glyph_idx = ((cell_hash.wrapping_add(anim_frame)) % GLYPH_COUNT as u32) as usize;
-                        let glyph = &MATRIX_GLYPHS_6X6[glyph_idx];
+                        let glyph_idx = ((cell_hash.wrapping_add(anim_frame)) % GLYPH_3X3_COUNT as u32) as usize;
+                        let glyph = &MATRIX_GLYPHS_3X3[glyph_idx];
                         
                         let color = if brightness > 0.88 {
                             let g = (brightness * 200.0) as u8;
@@ -1585,7 +1692,7 @@ impl BrailleMatrix {
                             0xFF000000 | ((g as u32) << 8) | 0x04
                         };
                         
-                        self.draw_glyph_6x6(buffer, fb_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
+                        self.draw_glyph_3x3(buffer, fb_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
                     }
                     continue;
                 }
@@ -1617,8 +1724,8 @@ impl BrailleMatrix {
                         let cell_hash = (cx as u32).wrapping_mul(2654435761)
                             .wrapping_add((cy as u32).wrapping_mul(340573321));
                         let anim_frame = (time * 7.0) as u32;
-                        let glyph_idx = ((cell_hash.wrapping_add(anim_frame)) % GLYPH_COUNT as u32) as usize;
-                        let glyph = &MATRIX_GLYPHS_6X6[glyph_idx];
+                        let glyph_idx = ((cell_hash.wrapping_add(anim_frame)) % GLYPH_3X3_COUNT as u32) as usize;
+                        let glyph = &MATRIX_GLYPHS_3X3[glyph_idx];
                         
                         let color = if brightness > 0.88 {
                             let g = (brightness * 230.0) as u8;
@@ -1628,7 +1735,7 @@ impl BrailleMatrix {
                             0xFF000000 | ((g as u32) << 8) | 0x06
                         };
                         
-                        self.draw_glyph_6x6(buffer, fb_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
+                        self.draw_glyph_3x3(buffer, fb_width, cx * cell_size + 1, cy * cell_size + 1, glyph, color);
                     }
                 }
             }
@@ -1821,30 +1928,44 @@ impl BrailleMatrix {
         }
     }
     
-    /// Draw a 6x6 glyph at pixel position - OPTIMIZED: minimal bounds checks
+    /// Draw a 3×3 micro-glyph at pixel position — high-res version
+    #[inline(always)]
+    fn draw_glyph_3x3(&self, buffer: &mut [u32], fb_width: usize,
+                       px: usize, py: usize, glyph: &[u8; 3], color: u32) {
+        let fb_height = buffer.len() / fb_width;
+        if py + 2 >= fb_height || px + 2 >= fb_width { return; }
+        // Row 0
+        let b0 = glyph[0];
+        let base0 = py * fb_width + px;
+        if b0 & 0b001 != 0 { buffer[base0] = color; }
+        if b0 & 0b010 != 0 { buffer[base0 + 1] = color; }
+        if b0 & 0b100 != 0 { buffer[base0 + 2] = color; }
+        // Row 1
+        let b1 = glyph[1];
+        let base1 = base0 + fb_width;
+        if b1 & 0b001 != 0 { buffer[base1] = color; }
+        if b1 & 0b010 != 0 { buffer[base1 + 1] = color; }
+        if b1 & 0b100 != 0 { buffer[base1 + 2] = color; }
+        // Row 2
+        let b2 = glyph[2];
+        let base2 = base1 + fb_width;
+        if b2 & 0b001 != 0 { buffer[base2] = color; }
+        if b2 & 0b010 != 0 { buffer[base2 + 1] = color; }
+        if b2 & 0b100 != 0 { buffer[base2 + 2] = color; }
+    }
+
+    /// Draw a 6x6 glyph at pixel position (kept for entity overlay)
     #[inline(always)]
     fn draw_glyph_6x6(&self, buffer: &mut [u32], fb_width: usize, 
                        px: usize, py: usize, glyph: &[u8; 6], color: u32) {
-        // Pre-compute fb_height once (avoid division in loop)
         let fb_height = buffer.len() / fb_width;
-        
-        // Early exit if completely off-screen
-        if py >= fb_height || px >= fb_width {
-            return;
-        }
-        
-        // Determine safe row range
+        if py >= fb_height || px >= fb_width { return; }
         let max_row = (fb_height - py).min(6);
         let max_col = (fb_width - px).min(6);
-        
-        // Unrolled inner loop for common case
         for row in 0..max_row {
             let row_bits = glyph[row];
-            if row_bits == 0 { continue; } // Skip empty rows
-            
+            if row_bits == 0 { continue; }
             let row_start = (py + row) * fb_width + px;
-            
-            // Fast unrolled pixel writes (no bounds check needed now)
             if row_bits & 0b000001 != 0 && 0 < max_col { buffer[row_start] = color; }
             if row_bits & 0b000010 != 0 && 1 < max_col { buffer[row_start + 1] = color; }
             if row_bits & 0b000100 != 0 && 2 < max_col { buffer[row_start + 2] = color; }
@@ -2301,7 +2422,7 @@ impl Matrix3D {
         let bg_color = 0xFF010201u32;
         buffer.fill(bg_color);
         
-        let cell_size = 8usize;
+        let cell_size = CELL_SIZE;
         
         // Sort drops by Z for proper occlusion (far first)
         // For performance, we skip sorting and just render with alpha blend effect
@@ -2338,13 +2459,13 @@ impl Matrix3D {
                 
                 // Get glyph
                 let glyph_seed = drop.glyph_seed.wrapping_add(trail_pos as u32 * 2654435761);
-                let glyph_idx = (glyph_seed % GLYPH_COUNT as u32) as usize;
-                let glyph = &MATRIX_GLYPHS_6X6[glyph_idx];
+                let glyph_idx = (glyph_seed % GLYPH_3X3_COUNT as u32) as usize;
+                let glyph = &MATRIX_GLYPHS_3X3[glyph_idx];
                 let color = intensity_to_color(intensity);
                 
                 let px = tx as usize * cell_size + 1;
                 let py = ty_screen as usize * cell_size + 1;
-                self.draw_glyph_6x6(buffer, fb_width, px, py, glyph, color);
+                self.draw_glyph_3x3(buffer, fb_width, px, py, glyph, color);
             }
         }
         
@@ -2352,25 +2473,38 @@ impl Matrix3D {
         // self.draw_shape_outline(buffer, fb_width, fb_height);
     }
     
-    /// Draw a 6x6 glyph at pixel position
+    /// Draw a 3×3 micro-glyph at pixel position — high-res version
+    #[inline(always)]
+    fn draw_glyph_3x3(&self, buffer: &mut [u32], fb_width: usize,
+                       px: usize, py: usize, glyph: &[u8; 3], color: u32) {
+        let fb_height = buffer.len() / fb_width;
+        if py + 2 >= fb_height || px + 2 >= fb_width { return; }
+        let b0 = glyph[0]; let base0 = py * fb_width + px;
+        if b0 & 0b001 != 0 { buffer[base0] = color; }
+        if b0 & 0b010 != 0 { buffer[base0 + 1] = color; }
+        if b0 & 0b100 != 0 { buffer[base0 + 2] = color; }
+        let b1 = glyph[1]; let base1 = base0 + fb_width;
+        if b1 & 0b001 != 0 { buffer[base1] = color; }
+        if b1 & 0b010 != 0 { buffer[base1 + 1] = color; }
+        if b1 & 0b100 != 0 { buffer[base1 + 2] = color; }
+        let b2 = glyph[2]; let base2 = base1 + fb_width;
+        if b2 & 0b001 != 0 { buffer[base2] = color; }
+        if b2 & 0b010 != 0 { buffer[base2 + 1] = color; }
+        if b2 & 0b100 != 0 { buffer[base2 + 2] = color; }
+    }
+    
+    /// Draw a 6x6 glyph (kept for compatibility)
     #[inline(always)]
     fn draw_glyph_6x6(&self, buffer: &mut [u32], fb_width: usize, 
                        px: usize, py: usize, glyph: &[u8; 6], color: u32) {
         let fb_height = buffer.len() / fb_width;
-        
-        if py >= fb_height || px >= fb_width {
-            return;
-        }
-        
+        if py >= fb_height || px >= fb_width { return; }
         let max_row = (fb_height - py).min(6);
         let max_col = (fb_width - px).min(6);
-        
         for row in 0..max_row {
             let row_bits = glyph[row];
             if row_bits == 0 { continue; }
-            
             let row_start = (py + row) * fb_width + px;
-            
             if row_bits & 0b000001 != 0 && 0 < max_col { buffer[row_start] = color; }
             if row_bits & 0b000010 != 0 && 1 < max_col { buffer[row_start + 1] = color; }
             if row_bits & 0b000100 != 0 && 2 < max_col { buffer[row_start + 2] = color; }

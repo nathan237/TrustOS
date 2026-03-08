@@ -1,0 +1,126 @@
+[15:35:16.503] [INFO] ============================================================
+[15:35:16.503] [INFO] T8020 (A12) SecureROM DFU Probe
+[15:35:16.503] [INFO] Date: 2026-03-02T15:35:16.503720
+[15:35:16.504] [INFO] ============================================================
+[15:35:16.567] [INFO] Connected: CPID=0x8020, Serial=CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C20802E IBFL:3C SRTG:[iBoot-3865.0.0.4.7]
+[15:35:16.567] [INFO] 
+Device: CPID=0x8020
+[15:35:16.567] [INFO] Serial: CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C20802E IBFL:3C SRTG:[iBoot-3865.0.0.4.7]
+
+[15:35:16.567] [INFO] ============================================================
+[15:35:16.567] [INFO] PROBE 7: USB String Descriptor Enumeration
+[15:35:16.568] [INFO] ============================================================
+[15:35:16.568] [INFO]   String[  0]: "Љ" (4B)
+[15:35:16.569] [INFO]   String[  1]: " NONC:620EEBD268D4A3C403BC037496DFF18F8D9DE1389448565852D422B6B6082F59 SNON:A54164853FE0C2717392C4020DFADD2CE384E1C5" (234B)
+[15:35:16.570] [INFO]   String[  2]: "Apple Inc." (22B)
+[15:35:16.571] [INFO]   String[  3]: "Apple Mobile Device (DFU Mode)" (62B)
+[15:35:16.571] [INFO]   String[  4]: "CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C20802E IBFL:3C SRTG:[iBoot-3865.0.0.4.7]" (196B)
+[15:35:16.573] [INFO]   String[  5]: "Apple Mobile Device (DFU Mode)" (62B)
+[15:35:16.702] [INFO]   Found 6 string descriptors
+[15:35:16.703] [INFO] ============================================================
+[15:35:16.703] [INFO] PROBE 6: wValue/wIndex Exploration
+[15:35:16.703] [INFO] ============================================================
+[15:35:16.703] [INFO]   Testing wValue variations on DFU_DNLOAD...
+[15:35:16.715] [INFO]     DNLOAD wValue=0x0000: OK → none
+[15:35:16.715] [INFO]     DNLOAD wValue=0x0001: OK → none
+[15:35:16.715] [FIND] [**] FINDING: DNLOAD accepted with wValue=0x0001 — Non-zero wValue accepted — may index different buffer/block
+[15:35:16.716] [INFO]     DNLOAD wValue=0x0002: OK → none
+[15:35:16.716] [FIND] [**] FINDING: DNLOAD accepted with wValue=0x0002 — Non-zero wValue accepted — may index different buffer/block
+[15:35:16.716] [INFO]     DNLOAD wValue=0x00FF: OK → none
+[15:35:16.716] [FIND] [**] FINDING: DNLOAD accepted with wValue=0x00FF — Non-zero wValue accepted — may index different buffer/block
+[15:35:16.717] [INFO]     DNLOAD wValue=0x0100: OK → none
+[15:35:16.717] [FIND] [**] FINDING: DNLOAD accepted with wValue=0x0100 — Non-zero wValue accepted — may index different buffer/block
+[15:35:16.717] [INFO]     DNLOAD wValue=0xFFFF: OK → none
+[15:35:16.717] [FIND] [**] FINDING: DNLOAD accepted with wValue=0xFFFF — Non-zero wValue accepted — may index different buffer/block
+[15:35:16.718] [INFO]   Testing wIndex variations on DFU_DNLOAD...
+[15:35:16.718] [INFO]     DNLOAD wIndex=0x0000: OK → none
+[15:35:16.718] [INFO]     DNLOAD wIndex=0x0001: FAIL → none
+[15:35:16.719] [INFO]     DNLOAD wIndex=0x0002: FAIL → none
+[15:35:16.719] [INFO]     DNLOAD wIndex=0x00FF: FAIL → none
+[15:35:16.719] [INFO]     DNLOAD wIndex=0x0100: OK → none
+[15:35:16.720] [FIND] [**] FINDING: DNLOAD accepted with wIndex=0x0100 — Non-zero wIndex accepted — may target different interface/endpoint
+[15:35:16.720] [INFO]     DNLOAD wIndex=0xFFFF: FAIL → none
+[15:35:16.720] [INFO]   Testing wValue variations on DFU_UPLOAD...
+[15:35:16.720] [INFO]     UPLOAD wValue=0x0000: len=0 nonzero=False
+[15:35:16.721] [INFO]     UPLOAD wValue=0x0001: len=0 nonzero=False
+[15:35:16.721] [INFO]     UPLOAD wValue=0x00FF: len=0 nonzero=False
+[15:35:16.721] [INFO]     UPLOAD wValue=0xFFFF: len=0 nonzero=False
+[15:35:16.721] [INFO] ============================================================
+[15:35:16.721] [INFO] PROBE 2: DFU State Machine Edge Cases
+[15:35:16.721] [INFO] ============================================================
+[15:35:16.722] [INFO]   [2a] Double DNLOAD without GET_STATUS...
+[15:35:16.722] [INFO]   [2b] Multiple GET_STATUS from dfuIDLE...
+[15:35:16.723] [INFO]   [2c] ABORT from various states...
+[15:35:16.724] [INFO]   [2d] CLR_STATUS from non-error states...
+[15:35:16.724] [FIND] [!!] FINDING: CLR_STATUS accepted from dfuIDLE — SecureROM accepted CLR_STATUS outside dfuERROR — potential state confusion
+[15:35:16.724] [INFO]   [2e] DFU_UPLOAD from dfuIDLE...
+[15:35:16.725] [INFO]   [2f] Zero-length DNLOAD (manifest trigger)...
+[15:35:16.725] [INFO]   State machine tests complete: 7 tests
+[15:35:16.725] [INFO] ============================================================
+[15:35:16.725] [INFO] PROBE 3: DNLOAD Size Boundaries
+[15:35:16.725] [INFO] ============================================================
+[15:35:16.726] [INFO]   Size 0x00000 (     0B): OK       → ?                    (0.1ms)
+[15:35:16.726] [INFO]   Size 0x00001 (     1B): OK       → ?                    (0.1ms)
+[15:35:16.727] [INFO]   Size 0x00002 (     2B): OK       → ?                    (0.1ms)
+[15:35:16.727] [INFO]   Size 0x00003 (     3B): OK       → ?                    (0.1ms)
+[15:35:16.728] [INFO]   Size 0x00007 (     7B): OK       → ?                    (0.1ms)
+[15:35:16.728] [INFO]   Size 0x00008 (     8B): OK       → ?                    (0.1ms)
+[15:35:16.729] [INFO]   Size 0x0000F (    15B): OK       → ?                    (0.1ms)
+[15:35:16.729] [INFO]   Size 0x00010 (    16B): OK       → ?                    (0.1ms)
+[15:35:16.729] [INFO]   Size 0x0003F (    63B): OK       → ?                    (0.1ms)
+[15:35:16.730] [INFO]   Size 0x00040 (    64B): OK       → ?                    (0.1ms)
+[15:35:16.730] [INFO]   Size 0x00041 (    65B): OK       → ?                    (0.1ms)
+[15:35:16.731] [INFO]   Size 0x0007F (   127B): OK       → ?                    (0.1ms)
+[15:35:16.731] [INFO]   Size 0x00080 (   128B): OK       → ?                    (0.1ms)
+[15:35:16.732] [INFO]   Size 0x00081 (   129B): OK       → ?                    (0.1ms)
+[15:35:16.732] [INFO]   Size 0x000FF (   255B): OK       → ?                    (0.1ms)
+[15:35:16.733] [INFO]   Size 0x00100 (   256B): OK       → ?                    (0.1ms)
+[15:35:16.733] [INFO]   Size 0x00101 (   257B): OK       → ?                    (0.1ms)
+[15:35:16.733] [INFO]   Size 0x001FF (   511B): OK       → ?                    (0.1ms)
+[15:35:16.734] [INFO]   Size 0x00200 (   512B): OK       → ?                    (0.1ms)
+[15:35:16.734] [INFO]   Size 0x00201 (   513B): OK       → ?                    (0.1ms)
+[15:35:16.735] [INFO]   Size 0x003FF (  1023B): OK       → ?                    (0.1ms)
+[15:35:16.735] [INFO]   Size 0x00400 (  1024B): OK       → ?                    (0.1ms)
+[15:35:16.736] [INFO]   Size 0x00401 (  1025B): OK       → ?                    (0.1ms)
+[15:35:16.736] [INFO]   Size 0x007FF (  2047B): OK       → ?                    (0.1ms)
+[15:35:16.737] [INFO]   Size 0x00800 (  2048B): OK       → ?                    (0.1ms)
+[15:35:16.737] [INFO]   Size 0x00801 (  2049B): OK       → ?                    (0.1ms)
+[15:35:16.737] [FIND] [!!] FINDING: Large DNLOAD (0x801) accepted — SecureROM accepted 2049B DNLOAD without error. Max expected: 0x800
+[15:35:16.738] [INFO]   Size 0x00FFF (  4095B): OK       → ?                    (0.1ms)
+[15:35:16.738] [FIND] [!!] FINDING: Large DNLOAD (0xFFF) accepted — SecureROM accepted 4095B DNLOAD without error. Max expected: 0x800
+[15:35:16.739] [INFO]   Size 0x01000 (  4096B): OK       → ?                    (0.1ms)
+[15:35:16.739] [FIND] [!!] FINDING: Large DNLOAD (0x1000) accepted — SecureROM accepted 4096B DNLOAD without error. Max expected: 0x800
+[15:35:16.739] [INFO]   Size 0x01001 (  4097B): [Errno 22] Invalid parameter → ?                    (0.1ms)
+[15:35:16.740] [INFO]   Size 0x01FFF (  8191B): [Errno 22] Invalid parameter → ?                    (0.0ms)
+[15:35:16.740] [INFO]   Size 0x02000 (  8192B): [Errno 22] Invalid parameter → ?                    (0.0ms)
+[15:35:16.741] [INFO]   Size 0x04000 ( 16384B): [Errno 22] Invalid parameter → ?                    (0.0ms)
+[15:35:16.741] [INFO]   Size 0x08000 ( 32768B): [Errno 22] Invalid parameter → ?                    (0.0ms)
+[15:35:16.742] [INFO]   Size 0x0FFFF ( 65535B): [Errno 22] Invalid parameter → ?                    (0.1ms)
+[15:35:16.743] [INFO] ============================================================
+[15:35:16.743] [INFO] PROBE 4: IMG4/DER Parser Probing
+[15:35:16.743] [INFO] ============================================================
+[15:35:16.743] [INFO]   Baseline DNLOAD time: 0.1ms
+[15:35:16.744] [INFO]   random_garbage           : none                 total=0.1ms (+0.1ms)
+[15:35:16.744] [INFO]   der_seq_garbage          : none                 total=0.2ms (+0.1ms)
+[15:35:16.745] [INFO]   valid_im4p_header        : none                 total=0.2ms (+0.1ms)
+[15:35:16.745] [INFO]   valid_img4_header        : none                 total=0.1ms (+0.1ms)
+[15:35:16.746] [INFO]   huge_der_length          : none                 total=0.2ms (+0.1ms)
+[15:35:16.746] [INFO]   deep_nesting             : none                 total=0.2ms (+0.1ms)
+[15:35:16.747] [INFO]   wrong_type_tag           : none                 total=0.1ms (+0.0ms)
+[15:35:16.747] [INFO]   zero_length_der          : none                 total=0.1ms (+0.0ms)
+[15:35:16.747] [INFO]   dfu_suffix_only          : none                 total=0.1ms (+0.1ms)
+[15:35:16.748] [INFO]   macho_header             : none                 total=0.2ms (+0.1ms)
+[15:35:16.748] [INFO] 
+============================================================
+[15:35:16.748] [INFO] SUMMARY
+[15:35:16.748] [INFO] ============================================================
+[15:35:16.748] [INFO] Total findings: 10
+[15:35:16.749] [INFO]   CRITICAL: 0
+[15:35:16.749] [INFO]   HIGH:     4
+[15:35:16.749] [INFO]   MEDIUM:   6
+[15:35:16.749] [INFO]   → CLR_STATUS accepted from dfuIDLE: SecureROM accepted CLR_STATUS outside dfuERROR — potential state confusion
+[15:35:16.749] [INFO]   → Large DNLOAD (0x801) accepted: SecureROM accepted 2049B DNLOAD without error. Max expected: 0x800
+[15:35:16.749] [INFO]   → Large DNLOAD (0xFFF) accepted: SecureROM accepted 4095B DNLOAD without error. Max expected: 0x800
+[15:35:16.749] [INFO]   → Large DNLOAD (0x1000) accepted: SecureROM accepted 4096B DNLOAD without error. Max expected: 0x800
+[15:35:16.752] [INFO] 
+Results saved: C:\Users\nathan\Documents\Scripts\OSrust\tools\checkm8-dualboot\results\a12_probe_results.json

@@ -17,7 +17,7 @@
 [![Version](https://img.shields.io/badge/version-0.7.0--checkm8-orange?style=for-the-badge)]()
 [![Tests](https://img.shields.io/badge/tests-95%2F96%20(99%25)-brightgreen?style=for-the-badge)]()
 [![Auditable](https://img.shields.io/badge/fully-auditable-00C853?style=for-the-badge)]()
-[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)]()
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
 [![Watch the demo](https://img.shields.io/badge/%E2%96%B6%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
@@ -542,7 +542,7 @@ TrustOS uses Ed25519 cryptographic signatures to recognize contributors:
 
 ## License
 
-MIT License -- see [LICENSE](LICENSE).
+Apache License 2.0 -- see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 ---
 

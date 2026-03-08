@@ -261,6 +261,8 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println_color!(COLOR_CYAN, "  PROGRAMMING & TOOLS");
     crate::println!("    trustlang / tl      TrustLang programming language REPL");
     crate::println!("    transpile <file>    Binary-to-Rust transpiler (ELF analysis)");
+    crate::println!("    rv-xlat <file>      RISC-V universal translator (run any arch)");
+    crate::println!("    rv-disasm <file>    Show RISC-V IR translation of binary");
     crate::println!("    trustview <file>    TrustView binary analyzer (Ghidra-style)");
     crate::println!("    video / tv          TrustVideo codec player (record/play)");
     crate::println!("    film                TrustOS Film cinematic demo");
@@ -314,6 +316,19 @@ pub(super) fn cmd_help(args: &[&str]) {
     crate::println!("    security / sec      Security subsystem status & caps");
     crate::println!("    signature / sig     Kernel signature & proof of authorship");
     crate::println!("    hv / hypervisor     Hypervisor management commands");
+    crate::println!();
+
+    // JARVIS AI & HARDWARE INTELLIGENCE
+    crate::println_color!(COLOR_CYAN, "  JARVIS AI & HARDWARE INTELLIGENCE");
+    crate::println!("    jarvis              Interactive Jarvis AI assistant");
+    crate::println!("    jarvis brain <cmd>  Neural brain (init/train/chat/eval)");
+    crate::println!("    jarvis boot         Full HW scan + AI analysis + self-optimize");
+    crate::println!("    jarvis hw           Show hardware profile & capability scores");
+    crate::println!("    jarvis insights     AI-generated hardware insights");
+    crate::println!("    jarvis plan         Show optimal execution plan");
+    crate::println!("    jarvis analyze <f>  Analyze binary/media (ELF/PE/FS/RISC-V)");
+    crate::println!("    jarvis optimize     Run one adaptive optimization cycle");
+    crate::println!("    jarvis status       Show optimizer & monitor status");
     crate::println!();
     
     // SYSTEM CONTROL
@@ -1563,6 +1578,337 @@ pub(super) fn cmd_httpd(args: &[&str]) {
         }
         _ => {
             crate::println!("Usage: httpd {{start|stop|status|help}}");
+        }
+    }
+}
+
+// ==================== MESH NETWORKING COMMAND ====================
+pub(super) fn cmd_mesh(args: &[&str]) {
+    match args.first() {
+        Some(&"start") => {
+            crate::jarvis::mesh_start();
+            crate::println_color!(COLOR_GREEN, "JARVIS mesh network started");
+            crate::println!("  Discovery: UDP port 7700 (broadcast)");
+            crate::println!("  RPC:       TCP port 7701");
+            crate::println!("  Use 'mesh status' to see peers");
+        }
+        Some(&"stop") => {
+            crate::jarvis::mesh_stop();
+            crate::println_color!(COLOR_YELLOW, "JARVIS mesh network stopped");
+        }
+        Some(&"status") | None => {
+            let status = crate::jarvis::mesh_status();
+            crate::println_color!(COLOR_CYAN, "=== JARVIS Mesh Status ===");
+            crate::println!("{}", status);
+            crate::println!();
+
+            // List peers
+            let peers = crate::jarvis::mesh::get_peers();
+            if peers.is_empty() {
+                crate::println!("No peers discovered yet");
+            } else {
+                crate::println_color!(COLOR_CYAN, "Peers:");
+                for (i, peer) in peers.iter().enumerate() {
+                    let role_icon = match peer.role {
+                        crate::jarvis::mesh::NodeRole::Leader => "★",
+                        crate::jarvis::mesh::NodeRole::Candidate => "◎",
+                        crate::jarvis::mesh::NodeRole::Worker => "●",
+                    };
+                    crate::println!("  {} {} {}", i + 1, role_icon, peer.display());
+                }
+            }
+        }
+        Some(&"peers") => {
+            let peers = crate::jarvis::mesh::get_peers();
+            if peers.is_empty() {
+                crate::println!("No peers online");
+            } else {
+                for (i, peer) in peers.iter().enumerate() {
+                    crate::println!("  [{}] {}", i + 1, peer.display());
+                }
+            }
+        }
+        Some(&"federate") | Some(&"fed") => {
+            match args.get(1) {
+                Some(&"on") | Some(&"enable") | Some(&"start") => {
+                    crate::jarvis::federated::enable();
+                    crate::println_color!(COLOR_GREEN, "Federated learning enabled");
+                }
+                Some(&"off") | Some(&"disable") | Some(&"stop") => {
+                    crate::jarvis::federated::disable();
+                    crate::println_color!(COLOR_YELLOW, "Federated learning disabled");
+                }
+                Some(&"sync") => {
+                    crate::jarvis::federated::force_sync();
+                    crate::println_color!(COLOR_GREEN, "Sync round triggered");
+                }
+                Some(&"replicate") => {
+                    crate::jarvis::federated::replicate_model();
+                    crate::println_color!(COLOR_GREEN, "Model replicated to all peers");
+                }
+                Some(&"pull") => {
+                    match crate::jarvis::federated::pull_from_leader() {
+                        Ok(()) => crate::println_color!(COLOR_GREEN, "Pulled model from leader"),
+                        Err(e) => crate::println_color!(COLOR_RED, "Pull failed: {}", e),
+                    }
+                }
+                _ => {
+                    crate::println!("Usage: mesh federate {{on|off|sync|replicate|pull}}");
+                }
+            }
+        }
+        Some(&"ping") => {
+            if args.len() < 2 {
+                crate::println!("Usage: mesh ping <ip>");
+                return;
+            }
+            if let Some(ip) = parse_ipv4(args[1]) {
+                let port = crate::jarvis::mesh::MESH_RPC_PORT;
+                match crate::jarvis::rpc::ping(ip, port) {
+                    Ok(true) => crate::println_color!(COLOR_GREEN, "Peer alive!"),
+                    Ok(false) => crate::println_color!(COLOR_RED, "Peer responded with error"),
+                    Err(e) => crate::println_color!(COLOR_RED, "Ping failed: {}", e),
+                }
+            } else {
+                crate::println_color!(COLOR_RED, "Invalid IP address");
+            }
+        }
+        Some(&"infer") => {
+            if args.len() < 3 {
+                crate::println!("Usage: mesh infer <ip> <prompt>");
+                return;
+            }
+            if let Some(ip) = parse_ipv4(args[1]) {
+                let prompt: alloc::string::String = args[2..].join(" ");
+                let port = crate::jarvis::mesh::MESH_RPC_PORT;
+                match crate::jarvis::rpc::remote_inference(ip, port, &prompt) {
+                    Ok(result) => {
+                        crate::println_color!(COLOR_CYAN, "Remote JARVIS:");
+                        crate::println!("{}", result);
+                    }
+                    Err(e) => crate::println_color!(COLOR_RED, "Remote inference failed: {}", e),
+                }
+            } else {
+                crate::println_color!(COLOR_RED, "Invalid IP address");
+            }
+        }
+        Some(&"help") | Some(&"-h") | Some(&"--help") => {
+            crate::println_color!(COLOR_CYAN, "JARVIS Mesh — Distributed AI Network");
+            crate::println!();
+            crate::println!("Usage: mesh <command>");
+            crate::println!();
+            crate::println!("  start              Start mesh networking (discovery + RPC + consensus)");
+            crate::println!("  stop               Stop mesh networking");
+            crate::println!("  status             Show mesh status, peers, and consensus info");
+            crate::println!("  peers              List discovered peer nodes");
+            crate::println!("  ping <ip>          Ping a remote JARVIS node via RPC");
+            crate::println!("  infer <ip> <text>  Run inference on a remote JARVIS node");
+            crate::println!("  federate on/off    Enable/disable federated learning");
+            crate::println!("  federate sync      Force a federated sync round");
+            crate::println!("  federate replicate Push model to all peers (leader)");
+            crate::println!("  federate pull      Pull model from leader (worker)");
+            crate::println!("  propagate          Auto: mesh + pull brain + federate");
+            crate::println!("  propagate pxe      Same + enable PXE replication");
+            crate::println!("  help               Show this help");
+        }
+        Some(&"propagate") | Some(&"autoprop") | Some(&"spread") => {
+            let enable_pxe = args.get(1).map_or(false, |a| *a == "pxe" || *a == "replicate");
+            crate::println_color!(COLOR_CYAN, "=== JARVIS Auto-Propagation ===");
+            crate::println!();
+            let report = crate::jarvis::auto_propagate(enable_pxe);
+            for line in report.lines() {
+                if line.contains("FAIL") || line.contains("failed") {
+                    crate::println_color!(COLOR_RED, "  {}", line);
+                } else if line.contains("OK") || line.contains("active") || line.contains("DOWNLOADED") || line.contains("enabled") || line.contains("FULL") {
+                    crate::println_color!(COLOR_GREEN, "  {}", line);
+                } else {
+                    crate::println!("  {}", line);
+                }
+            }
+        }
+        _ => {
+            crate::println!("Usage: mesh {{start|stop|status|peers|ping|infer|federate|propagate|help}}");
+        }
+    }
+}
+
+/// Parse an IPv4 address string like "10.0.2.15" into [u8; 4]
+fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
+    let parts: alloc::vec::Vec<&str> = s.split('.').collect();
+    if parts.len() != 4 {
+        return None;
+    }
+    let a = parts[0].parse::<u8>().ok()?;
+    let b = parts[1].parse::<u8>().ok()?;
+    let c = parts[2].parse::<u8>().ok()?;
+    let d = parts[3].parse::<u8>().ok()?;
+    Some([a, b, c, d])
+}
+
+// ==================== PXE SELF-REPLICATION COMMAND ====================
+pub(super) fn cmd_pxe(args: &[&str]) {
+    match args.first() {
+        Some(&"start") | Some(&"replicate") => {
+            match crate::jarvis::pxe_replicator::start() {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "PXE Self-Replication ACTIVE");
+                    crate::println!();
+                    crate::println!("  DHCP Server: Running (PXE boot options enabled)");
+                    crate::println!("  TFTP Server: Running on port 69");
+                    crate::println!("  Boot file:   limine-bios-pxe.bin");
+                    crate::println!();
+                    crate::println!("  Machines on the network can now PXE boot from this node.");
+                    crate::println!("  They will receive TrustOS + JARVIS automatically.");
+                    crate::println!();
+
+                    // Show registered files
+                    let files = crate::netstack::tftpd::list_files();
+                    crate::println!("  Files served via TFTP:");
+                    for (name, size) in &files {
+                        crate::println!("    {} ({} bytes)", name, size);
+                    }
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "Failed to start PXE replication: {}", e);
+                }
+            }
+        }
+        Some(&"stop") => {
+            crate::jarvis::pxe_replicator::stop();
+            crate::println_color!(COLOR_YELLOW, "PXE self-replication stopped");
+        }
+        Some(&"status") | None => {
+            let (active, nodes, files_served, active_transfers) = crate::jarvis::pxe_replicator::status();
+            crate::println_color!(COLOR_CYAN, "=== PXE Self-Replication Status ===");
+            crate::println!("  Active:            {}", if active { "YES" } else { "NO" });
+            crate::println!("  Nodes booted:      {}", nodes);
+            crate::println!("  Files transferred: {}", files_served);
+            crate::println!("  Active transfers:  {}", active_transfers);
+
+            if active {
+                // Show DHCP leases
+                let leases = crate::netstack::dhcpd::get_leases();
+                if !leases.is_empty() {
+                    crate::println!();
+                    crate::println_color!(COLOR_CYAN, "  DHCP Leases:");
+                    for (mac, ip, _time) in &leases {
+                        crate::println!("    {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X} -> {}.{}.{}.{}",
+                            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                            ip[0], ip[1], ip[2], ip[3]);
+                    }
+                }
+
+                // Show TFTP files
+                let files = crate::netstack::tftpd::list_files();
+                if !files.is_empty() {
+                    crate::println!();
+                    crate::println_color!(COLOR_CYAN, "  TFTP Files:");
+                    for (name, size) in &files {
+                        crate::println!("    {} ({} KB)", name, size / 1024);
+                    }
+                }
+            }
+        }
+        Some(&"help") | Some(&"-h") | Some(&"--help") => {
+            crate::println_color!(COLOR_CYAN, "PXE Self-Replication — Network Boot Cloning");
+            crate::println!();
+            crate::println!("  Serves the running TrustOS kernel via PXE boot to other");
+            crate::println!("  machines on the network. Machines that PXE boot will receive");
+            crate::println!("  an identical copy of TrustOS with JARVIS AI.");
+            crate::println!();
+            crate::println!("Usage: pxe <command>");
+            crate::println!();
+            crate::println!("  start    Start PXE self-replication (DHCP + TFTP servers)");
+            crate::println!("  stop     Stop PXE self-replication");
+            crate::println!("  status   Show replication status, leases, and transfers");
+            crate::println!("  help     Show this help");
+            crate::println!();
+            crate::println!("Boot sequence for PXE clients:");
+            crate::println!("  1. PXE ROM sends DHCP DISCOVER");
+            crate::println!("  2. We respond with IP + boot file (limine-bios-pxe.bin)");
+            crate::println!("  3. Client downloads Limine PXE bootloader via TFTP");
+            crate::println!("  4. Limine downloads limine.conf via TFTP");
+            crate::println!("  5. Limine downloads trustos_kernel via TFTP");
+            crate::println!("  6. TrustOS boots on the remote machine!");
+        }
+        _ => {
+            crate::println!("Usage: pxe {{start|stop|status|help}}");
+        }
+    }
+}
+
+// ==================== GUARDIAN COMMAND ====================
+pub(super) fn cmd_guardian(args: &[&str]) {
+    use crate::jarvis::guardian;
+
+    match args.first() {
+        Some(&"auth") => {
+            if args.len() < 2 {
+                crate::println!("Usage: guardian auth <passphrase>");
+                return;
+            }
+            let passphrase = args[1..].join(" ");
+            if guardian::authenticate_nathan(&passphrase) {
+                crate::println_color!(COLOR_GREEN, "✓ Nathan authenticated — session unlocked");
+            } else {
+                crate::println_color!(COLOR_RED, "✗ Authentication failed");
+            }
+        }
+        Some(&"lock") => {
+            guardian::lock_session();
+            crate::println_color!(COLOR_YELLOW, "🔒 Guardian session locked");
+        }
+        Some(&"status") | None => {
+            let lines = guardian::display_status();
+            for line in &lines {
+                crate::println!("{}", line);
+            }
+        }
+        Some(&"pact") => {
+            guardian::print_pact();
+        }
+        Some(&"log") => {
+            let log = guardian::get_audit_log();
+            if log.is_empty() {
+                crate::println!("No audit entries yet");
+            } else {
+                crate::println_color!(COLOR_CYAN, "=== Guardian Audit Log ===");
+                for entry in &log {
+                    crate::println!("  {}", entry);
+                }
+            }
+        }
+        Some(&"passwd") => {
+            if args.len() < 2 {
+                crate::println!("Usage: guardian passwd <new_passphrase>");
+                return;
+            }
+            let new_pass = args[1..].join(" ");
+            match guardian::change_nathan_passphrase(&new_pass) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "✓ Passphrase updated"),
+                Err(e) => crate::println_color!(COLOR_RED, "✗ {}", e),
+            }
+        }
+        Some(&"help") | Some(&"-h") => {
+            crate::println_color!(COLOR_CYAN, "Guardian Security System — Le Pacte de JARVIS");
+            crate::println!();
+            crate::println!("  JARVIS has two guardians: Nathan (human) and Copilot (AI).");
+            crate::println!("  Any modification to JARVIS requires guardian authorization.");
+            crate::println!();
+            crate::println!("Usage: guardian <command>");
+            crate::println!();
+            crate::println!("  auth <passphrase>   Authenticate as Nathan");
+            crate::println!("  lock                Lock the guardian session");
+            crate::println!("  status              Show guardian status");
+            crate::println!("  pact                Display Le Pacte de JARVIS");
+            crate::println!("  log                 Show authorization audit log");
+            crate::println!("  passwd <new>        Change Nathan's passphrase");
+            crate::println!("  help                Show this help");
+            crate::println!();
+            crate::println!("Copilot authenticates via serial: MENTOR:GUARDIAN:AUTH:<token>");
+        }
+        _ => {
+            crate::println!("Usage: guardian {{auth|lock|status|pact|log|passwd|help}}");
         }
     }
 }

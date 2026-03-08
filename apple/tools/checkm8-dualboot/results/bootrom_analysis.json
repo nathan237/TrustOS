@@ -1,0 +1,95 @@
+{
+  "size": 524288,
+  "sha256": "07854d2fef297a06ba81685e660c332de36d5d18d546927d30daad6d7fda1541",
+  "md5": "59071590099d21dd439896592338bf95",
+  "appears_valid": false,
+  "is_all_zeros": true,
+  "is_all_ff": false,
+  "entropy": 0.0,
+  "strings": [],
+  "arm64_markers": [],
+  "exception_vectors": {
+    "0x000": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x080": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x100": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x180": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x200": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x280": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x300": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x380": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x400": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x480": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x500": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x580": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x600": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x680": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x700": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    },
+    "0x780": {
+      "instruction": "0x00000000",
+      "is_branch": false,
+      "target_offset": null
+    }
+  },
+  "first_64_bytes": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "last_64_bytes": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+}

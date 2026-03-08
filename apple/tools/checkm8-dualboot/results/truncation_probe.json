@@ -1,0 +1,446 @@
+{
+  "all_runs": [
+    {
+      "probe": "truncation_probe",
+      "device": "A12 T8020 (iPhone XR)",
+      "timestamp": "2026-03-02T17:42:55.492248",
+      "results": [
+        {
+          "name": "REPRO_exact_10B",
+          "size": 10,
+          "payload_hex": "308210001604494d4734",
+          "dnload_time_ms": 61.6,
+          "crashed": true,
+          "crash_phase": "MANIFEST",
+          "crash_time_ms": 72.7,
+          "manifest_time_ms": 586.1,
+          "total_time_ms": 648.1,
+          "states": [
+            {
+              "t_ms": 0.9,
+              "phase": "DNLOAD",
+              "state": 5,
+              "poll": 50
+            },
+            {
+              "t_ms": 0.5,
+              "phase": "MANIFEST",
+              "state": 6,
+              "poll": 50,
+              "bStatus": 0
+            },
+            {
+              "t_ms": 72.7,
+              "phase": "MANIFEST",
+              "state": null,
+              "poll": null,
+              "note": "GET_STATUS returned None"
+            }
+          ],
+          "n_state_transitions": 3,
+          "index": 0
+        }
+      ],
+      "findings": [
+        {
+          "title": "CRASH in manifest",
+          "detail": "REPRO_exact_10B: device gone @ 73ms",
+          "severity": "HIGH",
+          "timestamp": "2026-03-02T17:42:55.491368"
+        }
+      ],
+      "summary": {
+        "total_tests": 1,
+        "crashes": 1,
+        "survived": 0,
+        "errors": 0,
+        "fast_manifests": 0
+      }
+    },
+    {
+      "probe": "truncation_probe",
+      "device": "A12 T8020 (iPhone XR)",
+      "timestamp": "2026-03-02T17:49:08.720757",
+      "results": [
+        {
+          "name": "magic_zeroes_10B",
+          "size": 10,
+          "payload_hex": "30821000000000000000",
+          "dnload_time_ms": 61.9,
+          "crashed": true,
+          "crash_phase": "MANIFEST",
+          "crash_time_ms": 72.6,
+          "manifest_time_ms": 587.4,
+          "total_time_ms": 649.6,
+          "states": [
+            {
+              "t_ms": 1.0,
+              "phase": "DNLOAD",
+              "state": 5,
+              "poll": 50
+            },
+            {
+              "t_ms": 0.5,
+              "phase": "MANIFEST",
+              "state": 6,
+              "poll": 50,
+              "bStatus": 0
+            },
+            {
+              "t_ms": 72.6,
+              "phase": "MANIFEST",
+              "state": null,
+              "poll": null,
+              "note": "GET_STATUS returned None"
+            }
+          ],
+          "n_state_transitions": 3,
+          "index": 1
+        }
+      ],
+      "findings": [
+        {
+          "title": "CRASH in manifest",
+          "detail": "magic_zeroes_10B: device gone @ 73ms",
+          "severity": "HIGH",
+          "timestamp": "2026-03-02T17:49:08.719799"
+        }
+      ],
+      "summary": {
+        "total_tests": 1,
+        "crashes": 1,
+        "survived": 0,
+        "errors": 0,
+        "fast_manifests": 0
+      }
+    },
+    {
+      "probe": "truncation_probe",
+      "device": "A12 T8020 (iPhone XR)",
+      "timestamp": "2026-03-02T17:51:39.108929",
+      "results": [
+        {
+          "name": "magic_random_10B",
+          "size": 10,
+          "payload_hex": "30821000414243444546",
+          "dnload_time_ms": 61.7,
+          "crashed": true,
+          "crash_phase": "MANIFEST",
+          "crash_time_ms": 72.9,
+          "manifest_time_ms": 586.5,
+          "total_time_ms": 648.6,
+          "states": [
+            {
+              "t_ms": 0.9,
+              "phase": "DNLOAD",
+              "state": 5,
+              "poll": 50
+            },
+            {
+              "t_ms": 0.5,
+              "phase": "MANIFEST",
+              "state": 6,
+              "poll": 50,
+              "bStatus": 0
+            },
+            {
+              "t_ms": 72.9,
+              "phase": "MANIFEST",
+              "state": null,
+              "poll": null,
+              "note": "GET_STATUS returned None"
+            }
+          ],
+          "n_state_transitions": 3,
+          "index": 2
+        }
+      ],
+      "findings": [
+        {
+          "title": "CRASH in manifest",
+          "detail": "magic_random_10B: device gone @ 73ms",
+          "severity": "HIGH",
+          "timestamp": "2026-03-02T17:51:39.107902"
+        }
+      ],
+      "summary": {
+        "total_tests": 1,
+        "crashes": 1,
+        "survived": 0,
+        "errors": 0,
+        "fast_manifests": 0
+      }
+    },
+    {
+      "probe": "truncation_probe",
+      "device": "A12 T8020 (iPhone XR)",
+      "timestamp": "2026-03-02T17:53:29.977065",
+      "results": [
+        {
+          "name": "correct_len_0B",
+          "size": 2,
+          "payload_hex": "3000",
+          "dnload_time_ms": 61.7,
+          "crashed": true,
+          "crash_phase": "MANIFEST",
+          "crash_time_ms": 72.8,
+          "manifest_time_ms": 586.5,
+          "total_time_ms": 648.7,
+          "states": [
+            {
+              "t_ms": 1.0,
+              "phase": "DNLOAD",
+              "state": 5,
+              "poll": 50
+            },
+            {
+              "t_ms": 0.5,
+              "phase": "MANIFEST",
+              "state": 6,
+              "poll": 50,
+              "bStatus": 0
+            },
+            {
+              "t_ms": 72.8,
+              "phase": "MANIFEST",
+              "state": null,
+              "poll": null,
+              "note": "GET_STATUS returned None"
+            }
+          ],
+          "n_state_transitions": 3,
+          "index": 27
+        }
+      ],
+      "findings": [
+        {
+          "title": "CRASH in manifest",
+          "detail": "correct_len_0B: device gone @ 73ms",
+          "severity": "HIGH",
+          "timestamp": "2026-03-02T17:53:29.976168"
+        }
+      ],
+      "summary": {
+        "total_tests": 1,
+        "crashes": 1,
+        "survived": 0,
+        "errors": 0,
+        "fast_manifests": 0
+      }
+    },
+    {
+      "probe": "truncation_probe",
+      "device": "A12 T8020 (iPhone XR)",
+      "timestamp": "2026-03-02T17:55:38.284248",
+      "results": [
+        {
+          "name": "padded_512B",
+          "size": 512,
+          "payload_hex": "308210001604494d473400000000000000000000000000000000000000000000...",
+          "dnload_time_ms": 61.8,
+          "survived": true,
+          "manifest_time_ms": 3562.4,
+          "total_time_ms": 3624.5,
+          "states": [
+            {
+              "t_ms": 1.2,
+              "phase": "DNLOAD",
+              "state": 5,
+              "poll": 50
+            },
+            {
+              "t_ms": 0.5,
+              "phase": "MANIFEST",
+              "state": 6,
+              "poll": 50,
+              "bStatus": 0
+            },
+            {
+              "t_ms": 61.4,
+              "phase": "MANIFEST",
+              "state": 7,
+              "poll": 3000,
+              "bStatus": 0
+            },
+            {
+              "t_ms": 3562.4,
+              "phase": "MANIFEST",
+              "state": 8,
+              "poll": 50,
+              "bStatus": 0
+            }
+          ],
+          "n_state_transitions": 4,
+          "final_state": 8,
+          "final_bStatus": 0,
+          "crashed": false,
+          "index": 20
+        },
+        {
+          "name": "padded_4096B",
+          "size": 4096,
+          "payload_hex": "308210001604494d473400000000000000000000000000000000000000000000...",
+          "dnload_time_ms": 1366.3,
+          "crashed": true,
+          "crash_phase": "MANIFEST",
+          "crash_time_ms": 72.9,
+          "manifest_time_ms": 585.7,
+          "total_time_ms": 1952.5,
+          "states": [
+            {
+              "t_ms": 1001.5,
+              "phase": "DNLOAD",
+              "state": 2,
+              "poll": 50
+            },
+            {
+              "t_ms": 0.5,
+              "phase": "MANIFEST",
+              "state": 6,
+              "poll": 50,
+              "bStatus": 0
+            },
+            {
+              "t_ms": 72.9,
+              "phase": "MANIFEST",
+              "state": null,
+              "poll": null,
+              "note": "GET_STATUS returned None"
+            }
+          ],
+          "n_state_transitions": 3,
+          "index": 21
+        }
+      ],
+      "findings": [
+        {
+          "title": "CRASH in manifest",
+          "detail": "padded_4096B: device gone @ 73ms",
+          "severity": "HIGH",
+          "timestamp": "2026-03-02T17:55:38.283380"
+        }
+      ],
+      "summary": {
+        "total_tests": 2,
+        "crashes": 1,
+        "survived": 1,
+        "errors": 0,
+        "fast_manifests": 0
+      }
+    },
+    {
+      "probe": "truncation_probe",
+      "device": "A12 T8020 (iPhone XR)",
+      "timestamp": "2026-03-02T17:57:04.080595",
+      "results": [
+        {
+          "name": "trunc_SEQUENCE_alone",
+          "size": 4,
+          "payload_hex": "30821000",
+          "dnload_time_ms": 61.7,
+          "crashed": true,
+          "crash_phase": "MANIFEST",
+          "crash_time_ms": 72.6,
+          "manifest_time_ms": 586.2,
+          "total_time_ms": 648.2,
+          "states": [
+            {
+              "t_ms": 1.0,
+              "phase": "DNLOAD",
+              "state": 5,
+              "poll": 50
+            },
+            {
+              "t_ms": 0.5,
+              "phase": "MANIFEST",
+              "state": 6,
+              "poll": 50,
+              "bStatus": 0
+            },
+            {
+              "t_ms": 72.6,
+              "phase": "MANIFEST",
+              "state": null,
+              "poll": null,
+              "note": "GET_STATUS returned None"
+            }
+          ],
+          "n_state_transitions": 3,
+          "index": 22
+        }
+      ],
+      "findings": [
+        {
+          "title": "CRASH in manifest",
+          "detail": "trunc_SEQUENCE_alone: device gone @ 73ms",
+          "severity": "HIGH",
+          "timestamp": "2026-03-02T17:57:04.079738"
+        }
+      ],
+      "summary": {
+        "total_tests": 1,
+        "crashes": 1,
+        "survived": 0,
+        "errors": 0,
+        "fast_manifests": 0
+      }
+    }
+  ],
+  "latest": {
+    "probe": "truncation_probe",
+    "device": "A12 T8020 (iPhone XR)",
+    "timestamp": "2026-03-02T17:57:04.080595",
+    "results": [
+      {
+        "name": "trunc_SEQUENCE_alone",
+        "size": 4,
+        "payload_hex": "30821000",
+        "dnload_time_ms": 61.7,
+        "crashed": true,
+        "crash_phase": "MANIFEST",
+        "crash_time_ms": 72.6,
+        "manifest_time_ms": 586.2,
+        "total_time_ms": 648.2,
+        "states": [
+          {
+            "t_ms": 1.0,
+            "phase": "DNLOAD",
+            "state": 5,
+            "poll": 50
+          },
+          {
+            "t_ms": 0.5,
+            "phase": "MANIFEST",
+            "state": 6,
+            "poll": 50,
+            "bStatus": 0
+          },
+          {
+            "t_ms": 72.6,
+            "phase": "MANIFEST",
+            "state": null,
+            "poll": null,
+            "note": "GET_STATUS returned None"
+          }
+        ],
+        "n_state_transitions": 3,
+        "index": 22
+      }
+    ],
+    "findings": [
+      {
+        "title": "CRASH in manifest",
+        "detail": "trunc_SEQUENCE_alone: device gone @ 73ms",
+        "severity": "HIGH",
+        "timestamp": "2026-03-02T17:57:04.079738"
+      }
+    ],
+    "summary": {
+      "total_tests": 1,
+      "crashes": 1,
+      "survived": 0,
+      "errors": 0,
+      "fast_manifests": 0
+    }
+  }
+}

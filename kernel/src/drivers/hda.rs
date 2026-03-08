@@ -1210,6 +1210,11 @@ pub fn start_looped_playback(samples: &[i16]) -> Result<(), &'static str> {
         ctrl.play(false);
     }
 
+    // Ensure DMA buffer was allocated
+    if ctrl.audio_buf_virt == 0 || ctrl.audio_buf_size == 0 {
+        return Err("HDA: DMA buffer not initialized");
+    }
+
     // Copy samples to DMA buffer
     let buf = ctrl.audio_buf_virt as *mut i16;
     let buf_capacity = (ctrl.audio_buf_size / 2) as usize;

@@ -122,7 +122,7 @@ impl FastSurface {
         }
     }
 
-    /// Draw horizontal line (very fast - single fill)
+    /// Draw horizontal line (very fast - SSE2 SIMD fill)
     #[inline]
     pub fn hline(&mut self, x: i32, y: i32, len: u32, color: u32) {
         if y < 0 || y >= self.height as i32 { return; }
@@ -133,8 +133,20 @@ impl FastSurface {
         
         let y = y as u32;
         let start = (y * self.width + x1) as usize;
-        let end = (y * self.width + x2) as usize;
-        self.data[start..end].fill(color);
+        let fill_len = (x2 - x1) as usize;
+        
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            crate::graphics::simd::fill_row_sse2(
+                self.data.as_mut_ptr().add(start),
+                fill_len,
+                color,
+            );
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            self.data[start..start + fill_len].fill(color);
+        }
         
         self.dirty.add_rect(x1, y, x2 - x1, 1);
     }

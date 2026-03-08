@@ -1,0 +1,358 @@
+{
+  "target": "iPhone 11 Pro (A13 / T8030)",
+  "ios_version": "26.3",
+  "scan_results": {
+    "phys_read_primitives": 11,
+    "dart_config_paths": 3,
+    "dma_primitives": 6,
+    "fw_upload_paths": 9,
+    "oopjit_paths": 10
+  },
+  "attack_chains": 4,
+  "chains": [
+    {
+      "id": "A",
+      "name": "GPU Command Buffer -> DART Physical Remap",
+      "difficulty": "HIGH",
+      "time_estimate": "2-4 months",
+      "success_probability": "40-60%",
+      "prerequisites": [
+        "Jailbroken or developer device for initial research",
+        "Ghidra + ARM64 reversing skills",
+        "Metal shader programming knowledge"
+      ],
+      "stages": [
+        {
+          "stage": "A1",
+          "name": "Trigger kernel memory corruption via GPU command buffer",
+          "target_function": "IOGPUCommandQueue::submitCommandBuffer()",
+          "target_offset": "0x72ca36 (string ref in kernelcache)",
+          "technique": "Craft malformed sIOGPUCommandQueueCommandBufferArgs struct",
+          "attack_vector": [
+            "1. Create MTLDevice (sandbox-reachable)",
+            "2. Create MTLCommandQueue + MTLCommandBuffer",
+            "3. Serialize crafted GPU commands with malformed fields:",
+            "   - Oversized segment_list_offset -> OOB read in kernel shmem",
+            "   - Corrupted kernel_command struct -> type confusion",
+            "   - Invalid shmem offset -> information leak",
+            "4. Submit via IOGPUDeviceUserClient (IOKit)"
+          ],
+          "indicators": [
+            "IOGPUCommandQueue.cpp debug strings present",
+            "\"kernel command shmem no longer mapped\" assertion = validation exists",
+            "\"sideband buffer shmem no longer mapped\" = shared memory parsing",
+            "\"segment list shmem no longer mapped\" = segment list in shared memory"
+          ],
+          "vulnerability_class": "OOB read/write in shared memory parsing",
+          "risk": "Kernel panic on failure - need to be precise"
+        },
+        {
+          "stage": "A2",
+          "name": "Convert corruption to stable kernel R/W via IOSurface",
+          "target_function": "IOSurfaceRootUserClient",
+          "target_offset": "0x787554 (string ref)",
+          "technique": "IOSurface property spray + overlapping allocations",
+          "attack_vector": [
+            "1. Spray IOSurface objects with controlled properties",
+            "   (IOSurfaceRootUserClient::s_create_surface = sandbox-reachable)",
+            "2. Use initial OOB to corrupt IOSurface backing store pointer",
+            "3. Create overlapping read/write via IOSurface get/set properties",
+            "4. Achieve arbitrary kernel read (read any kernel address)",
+            "5. Achieve arbitrary kernel write (write any kernel address)"
+          ],
+          "indicators": [
+            "IOSurfaceRootUserClient at 0x787554",
+            "s_create_surface string = surface creation entry point",
+            "CSBufferPitch = buffer layout validation",
+            "Global IOSurface lookup warnings = sandbox reachable"
+          ],
+          "vulnerability_class": "Use-after-free / type confusion via heap spray"
+        },
+        {
+          "stage": "A3",
+          "name": "Bypass PAC v1 (A13-specific)",
+          "technique": "PAC forgery via signing gadget or context oracle",
+          "attack_vector": [
+            "A13 uses PAC v1 (ARMv8.3-A) with IMPLEMENTATION DEFINED keys.",
+            "Known bypass strategies:",
+            "  a) PACGA signing oracle: find a kernel function that signs",
+            "     attacker-controlled data, use it to forge valid PACs",
+            "  b) PAC-less gadget chain: find unpacked function pointers",
+            "     in kernel data (IOKit vtables sometimes have gaps)",
+            "  c) Context collision: A13 PAC uses 7-bit context,",
+            "     only 128 possible contexts -> brute-forceable",
+            "  d) JIT page abuse: MAP_JIT pages may have different PAC",
+            "     policy than normal kernel pages"
+          ],
+          "indicators": [
+            "PAC v1 = weaker than v2 (A14+)",
+            "7-bit upper address = limited PAC space",
+            "MAP_JIT present = JIT-specific PAC policy exists"
+          ]
+        },
+        {
+          "stage": "A4",
+          "name": "Reprogram GPU DART to map BootROM physical address",
+          "target_function": "IODARTMapper (GPU DART instance)",
+          "target_offset": "0x11bfc9 (IODARTMapper string ref)",
+          "technique": "Modify DART page tables to include 0x100000000",
+          "attack_vector": [
+            "With kernel R/W from A2 + PAC bypass from A3:",
+            "1. Find GPU DART instance in kernel memory:",
+            "   - Search IORegistry for AppleT8020DART attached to AGX",
+            "   - Read DART base address from device tree (0x231004000)",
+            "2. Read current DART translation table (TT) base from DART regs",
+            "3. Allocate new TT entries mapping BootROM (0x100000000-0x100080000)",
+            "4. Write new TTE into DART page tables",
+            "5. Flush DART TLB (dart_flush_tlb)",
+            "6. Create IOGPUResource backed by the new DART IOVA",
+            "7. Map resource to userspace and read = BootROM dump!"
+          ],
+          "phys_addresses": {
+            "bootrom_base": "0x100000000",
+            "bootrom_size": "0x80000 (512 KB)",
+            "dart_gpu_base": "0x231004000",
+            "agx_mmio_base": "0x206400000"
+          },
+          "evidence": [
+            "IODARTMapper - DART driver: 20 refs",
+            "AppleT8020DART - T8020/T8030 DART driver: 16 refs",
+            "dart_map_mdesc - map memory descriptor via DART: 1 refs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "name": "IOSurface Race Condition -> ml_phys_read Direct Dump",
+      "difficulty": "MEDIUM-HIGH",
+      "time_estimate": "1-3 months",
+      "success_probability": "50-70%",
+      "prerequisites": [
+        "Jailbroken/developer device",
+        "Knowledge of IOSurface internals",
+        "Heap feng shui experience"
+      ],
+      "stages": [
+        {
+          "stage": "B1",
+          "name": "Race condition in IOSurface shared memory",
+          "target_function": "IOSurfaceRootUserClient",
+          "technique": "Double-fetch / TOCTOU in surface creation",
+          "attack_vector": [
+            "IOSurface is the most proven iOS kernel attack surface.",
+            "1. Trigger race in IOSurfaceRootUserClient::s_create_surface:",
+            "   - Two threads: one creating, one modifying surface properties",
+            "   - Race window between size validation and allocation",
+            "2. Alternatively, race in IOSurface shared block management:",
+            "   - 'failed to alloc IOSurfaceSharedListEntry' = shared entry path",
+            "   - 'IOBufferMemoryDescriptor::inTaskWithOptions' = allocation path",
+            "   - Race between prepare and use of shared memory mapping",
+            "3. Win race -> UAF or OOB write in kernel heap"
+          ],
+          "indicators": [
+            "IOSurfaceRootUserClient at 0x787554 with rich debug strings",
+            "'s_create_surface' entry point confirmed",
+            "'shared memory region ownership' = kernel-owned shared mem",
+            "'global (insecure) IOSurface lookups' = global namespace accessible"
+          ]
+        },
+        {
+          "stage": "B2",
+          "name": "Stable kernel R/W primitive",
+          "technique": "Pipe buffer / IOSurface property spray",
+          "attack_vector": [
+            "1. Use initial corruption to spray controlled data",
+            "2. Create fake kernel objects with controlled vtable pointers",
+            "3. Use IOSurface set_value/get_value as arbitrary R/W gadget",
+            "4. Verify read: read known kernel constant to confirm",
+            "5. Target: modify proc->p_ucred for root + unsandbox"
+          ]
+        },
+        {
+          "stage": "B3",
+          "name": "Call ml_phys_read_data to dump BootROM",
+          "target_function": "ml_phys_read_data",
+          "target_offset": "0x55813 (string cluster with iBoot)",
+          "technique": "Redirect function pointer to ml_phys_read_data",
+          "attack_vector": [
+            "KEY DISCOVERY: ml_phys_read and iBoot are in the same",
+            "3KB code region (cluster at 0x54b39-0x55852).",
+            "",
+            "Option 1 - Data-only attack (no code exec needed):",
+            "  1. With kernel R/W, find an IOKit UserClient object",
+            "  2. Overwrite its externalMethod dispatch to redirect to",
+            "     a gadget that calls ml_phys_read_data",
+            "  3. Call from userspace with args:",
+            "     - phys_addr = 0x100000000 (BootROM base)",
+            "     - buffer = kernel-accessible buffer address",
+            "     - size = 0x80000",
+            "  4. Read the buffer back via kernel R/W primitive",
+            "",
+            "Option 2 - Code execution (need PAC bypass):",
+            "  1. With kernel exec, directly call ml_phys_read_data()",
+            "  2. Read 512KB from 0x100000000 into kernel buffer",
+            "  3. Copy to userspace via copyout()",
+            "",
+            "CRITICAL: ml_phys_read has validation checks:",
+            "  - 'address error: passed in address not a kernel managed address'",
+            "  - 'alignment error: addresses spanning more than one page'",
+            "  - 'paddr spans a page boundary'",
+            "  These checks must be satisfied or bypassed."
+          ],
+          "validation_checks": [
+            "Address must be 'kernel managed' -> may reject 0x100000000",
+            "Must not span page boundary -> read one page at a time (0x4000)",
+            "apply_func_phys wrapper may add additional filtering"
+          ],
+          "workaround": [
+            "If ml_phys_read rejects 0x100000000:",
+            "  1. Use ml_io_map(0x100000000, 0x80000) to map BootROM",
+            "     to a kernel virtual address, then read via kernel R/W",
+            "  2. Or use pmap_enter() to create a direct PTE mapping",
+            "  3. Or bypass the check by patching the validation in memory"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C",
+      "name": "AGX Firmware Upload -> GPU Coprocessor DMA Read",
+      "difficulty": "VERY HIGH",
+      "time_estimate": "4-8 months",
+      "success_probability": "20-35%",
+      "prerequisites": [
+        "GPU firmware reverse engineering",
+        "RTKit protocol knowledge",
+        "ASC coprocessor understanding"
+      ],
+      "stages": [
+        {
+          "stage": "C1",
+          "name": "Achieve kernel code execution (via Chain A or B)",
+          "technique": "Prerequisite from another chain"
+        },
+        {
+          "stage": "C2",
+          "name": "Reverse engineer AGX firmware upload protocol",
+          "target_function": "AGXFirmware / RTKit mailbox",
+          "technique": "Intercept and analyze FW upload sequence",
+          "attack_vector": [
+            "1. With kernel R/W, hook AGXFirmware::loadFirmware()",
+            "2. Dump the GPU firmware binary from memory",
+            "3. Analyze RTKit mailbox protocol (RTBuddy message format)",
+            "4. Identify firmware memory map and DMA capabilities",
+            "5. Determine if GPU ASC has unrestricted physical DMA"
+          ],
+          "evidence": [
+            "AGXFirmwareKextG12PRTBuddy - G12P FW kext",
+            "AGXFirmwareKextG12 - G12 FW kext",
+            "com.apple.AGXG12P - AGX G12P bundle",
+            "RTBuddy - RTKit buddy allocator",
+            "RTKitAudioDrivers - RTKit audio",
+            "isGFXBooted - GPU boot check",
+            "FW Ring write_index - FW ring buffer",
+            "Firmware PDM Command Pool",
+            "Firmware CDM Command Pool"
+          ],
+          "key_strings": [
+            "AGXFirmwareKextG12PRTBuddy - FW kext with RTBuddy",
+            "Firmware PDM/CDM Command Pool - command pools",
+            "FW Ring write_index - ring buffer protocol",
+            "isGFXBooted - boot check exists"
+          ]
+        },
+        {
+          "stage": "C3",
+          "name": "Upload modified GPU firmware with BootROM reader",
+          "technique": "Modify firmware to DMA-read physical 0x100000000",
+          "attack_vector": [
+            "1. Modify dumped GPU firmware to include DMA read routine",
+            "2. Firmware DMA reads 0x100000000 (BootROM) into GPU SRAM",
+            "3. Signal AP via RTKit mailbox that data is ready",
+            "4. Kernel reads GPU SRAM and copies to userspace",
+            "",
+            "KEY RISK: GPU DART may restrict firmware's DMA range",
+            "KEY RISK: Firmware signature check may prevent modification",
+            "KEY ADVANTAGE: ASC coprocessors often have broader DMA access"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "D",
+      "name": "OOP-JIT Compiler Service Escape -> Kernel Exploit",
+      "difficulty": "HIGH",
+      "time_estimate": "3-6 months",
+      "success_probability": "30-50%",
+      "prerequisites": [
+        "XPC fuzzing tools",
+        "Sandbox escape research",
+        "Metal/AIR bytecode knowledge"
+      ],
+      "stages": [
+        {
+          "stage": "D1",
+          "name": "Exploit OOP-JIT compiler service from sandbox",
+          "target_function": "AGXCompilerService-S2A8 (userland XPC)",
+          "technique": "Malformed AIR bytecode -> compiler bug",
+          "attack_vector": [
+            "DISCOVERY: AGXCompilerService runs as OOP-JIT userland process.",
+            "Path: /System/Library/PrivateFrameworks/",
+            "  AGXCompilerConnection-S2A8.framework/XPCServices/",
+            "  AGXCompilerService-S2A8.xpc/AGXCompilerService-S2A8",
+            "",
+            "This is reachable from ANY sandboxed app via Metal framework:",
+            "1. Create Metal shader with crafted AIR bytecode",
+            "2. Metal framework sends AIR to AGXCompilerService via XPC",
+            "3. Compiler processes untrusted AIR -> memory corruption",
+            "4. Gain code execution in AGXCompilerService process",
+            "",
+            "AGXCompilerService has special entitlements:",
+            "  - com.apple.private.oop-jit.loader (JIT loading capability)",
+            "  - com.apple.sandbox.oopjit (special sandbox profile)",
+            "  - Access to /private/var/OOPJit (JIT cache directory)"
+          ],
+          "evidence": [
+            "OOP-JIT - out-of-process JIT reference",
+            "oop-jit (lowercase)",
+            "OOPJit - OOP JIT directory",
+            "com.apple.private.oop-jit entitlement",
+            "com.apple.sandbox.oopjit - sandbox profile",
+            "PMAP_CS - code signing in pmap",
+            "cs_blob - code signature blob",
+            "csflags - code signing flags",
+            "trust_cache - static trust cache",
+            "proc_check_map_anon - MAP_JIT check"
+          ]
+        },
+        {
+          "stage": "D2",
+          "name": "Escape OOP-JIT sandbox to kernel",
+          "technique": "Use OOP-JIT entitlements for kernel attack",
+          "attack_vector": [
+            "From inside AGXCompilerService process:",
+            "1. com.apple.private.oop-jit.loader allows loading JIT code",
+            "   into other processes' address spaces",
+            "2. Potentially write to MAP_JIT regions of kernel or other procs",
+            "3. Alternatively: exploit the XPC return path to kernel:",
+            "   - Compiled shader is passed back to kernel via IOKit",
+            "   - Corrupted compiled shader -> kernel code execution",
+            "   - 'PMAP_CS: OOP-JIT code signature is a main binary' =",
+            "     code signature validation exists but may have gaps"
+          ]
+        },
+        {
+          "stage": "D3",
+          "name": "Kernel R/W -> BootROM dump (same as B3)",
+          "technique": "ml_phys_read or DART remap"
+        }
+      ]
+    }
+  ],
+  "poc_skeletons": [
+    "gpu_command_fuzzer",
+    "dart_remap_bootrom",
+    "metal_shader_fuzzer"
+  ]
+}

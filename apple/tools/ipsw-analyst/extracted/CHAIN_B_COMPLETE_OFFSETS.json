@@ -1,0 +1,357 @@
+{
+  "_meta": {
+    "target_device": "iPhone 11 Pro (iPhone12,3)",
+    "soc": "A13 Bionic (T8030)",
+    "ios_version": "26.3",
+    "pac_version": "v1 (7-bit context, ARM8.3-A)",
+    "kc_base_va": "0xfffffff007004000",
+    "kc_format": "MH_FILESET (240 kexts)",
+    "page_size": 16384,
+    "chained_fixup_type": "DYLD_CHAINED_PTR_64_KERNEL_CACHE"
+  },
+  "kernel_rw_primitives": {
+    "ml_phys_read": {
+      "va": "0xfffffff00814f740",
+      "signature": "uint64_t ml_phys_read(uint64_t paddr, uint32_t size)",
+      "args": {
+        "x0": "physical_address",
+        "w1": "byte_count (1/2/4/8)"
+      },
+      "returns": "value at physical address",
+      "bootrom_call": "ml_phys_read(0x100000000, 8)",
+      "gPhysBase_ptr": "0xfffffff007b00bb8",
+      "gPhysEnd_ptr": "0xfffffff007b00bc0",
+      "bl_targets": [
+        "0xfffffff00814b3b8",
+        "0xfffffff0081450e4",
+        "0xfffffff007fc308c",
+        "0xfffffff007fc3104"
+      ]
+    },
+    "ml_phys_write": {
+      "va": "0xfffffff00814f9f0",
+      "signature": "void ml_phys_write(uint64_t paddr, uint64_t val, uint32_t size)",
+      "args": {
+        "x0": "physical_address",
+        "x1": "value",
+        "x2": "high_value",
+        "w3": "byte_count"
+      }
+    }
+  },
+  "iosurface_kext": {
+    "bundle_id": "com.apple.iokit.IOSurface",
+    "segments": {
+      "__TEXT": {
+        "va": "0xfffffff007788b80",
+        "file": "0x784b80"
+      },
+      "__TEXT_EXEC": {
+        "va": "0xfffffff00a1c5c80",
+        "file": "0x31c1c80",
+        "size": "0x3195c"
+      },
+      "__DATA_CONST": {
+        "va": "0xfffffff007f1fd30",
+        "file": "0xf1bd30"
+      },
+      "__DATA": {
+        "va": "0xfffffff00acd2418",
+        "file": "0x3cce418"
+      }
+    },
+    "cstring": {
+      "va": "0xfffffff007789298",
+      "file": "0x785298",
+      "size": "0x2e5a"
+    }
+  },
+  "iosurface_vtables": {
+    "IOSurfaceRootUserClient": {
+      "vtable_base": "0xfffffff007f22598",
+      "vtable_methods_start": "0xfffffff007f225a8",
+      "vtable_pac_context": "0xcda1",
+      "alloc_size": "0x148",
+      "init_function": "0xfffffff00a1e7410",
+      "key_vtable_entries": {
+        "[0] release/retain": "0xfffffff00a1e7408",
+        "[13] open": "0xfffffff00a1e77dc",
+        "[15] s_create_surface?": "0xfffffff00a1e789c"
+      }
+    },
+    "IOSurface": {
+      "vtable_base": "0xfffffff007f21fa0",
+      "vtable_methods_start": "0xfffffff007f21fb0"
+    }
+  },
+  "dispatch_table": {
+    "va": "0xfffffff007f238e8",
+    "file": "0xf1f8e8",
+    "format": "8-byte PAC-signed function pointer array",
+    "pac_key": "IA",
+    "pac_diversity": "0x705d",
+    "selector_count": 26,
+    "selectors": {
+      "0": {
+        "name": "s_create_surface",
+        "trampoline_va": "0xfffffff00a1e91e0",
+        "handler_va": "0xfffffff00a1eba5c",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "1": {
+        "name": "s_release_surface",
+        "trampoline_va": "0xfffffff00a1e91e8",
+        "handler_va": "0xfffffff00a1ebb80",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "2": {
+        "name": "s_lock",
+        "trampoline_va": "0xfffffff00a1e91f0",
+        "handler_va": "0xfffffff00a1ebca4",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "3": {
+        "name": "s_unlock",
+        "trampoline_va": "0xfffffff00a1e91f8",
+        "handler_va": "0xfffffff00a1ebe54",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "4": {
+        "name": "s_set_value",
+        "trampoline_va": "0xfffffff00a1e9200",
+        "handler_va": "0xfffffff00a1ea1c0",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "5": {
+        "name": "s_get_value",
+        "trampoline_va": "0xfffffff00a1e9208",
+        "handler_va": "0xfffffff00a1ea038",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "6": {
+        "name": "s_increment_use_count",
+        "trampoline_va": "0xfffffff00a1e9210",
+        "handler_va": "0xfffffff00a1ebefc",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "7": {
+        "name": "s_decrement_use_count",
+        "trampoline_va": "0xfffffff00a1e9218",
+        "handler_va": "0xfffffff00a1ebfd8",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "8": {
+        "name": "s_lookup",
+        "trampoline_va": "0xfffffff00a1e9220",
+        "handler_va": "0xfffffff00a1e9220",
+        "entry_type": "direct PACIBSP",
+        "pac_diversity": "0x705d"
+      },
+      "9": {
+        "name": "s_lookup_by_name",
+        "trampoline_va": "0xfffffff00a1e926c",
+        "handler_va": "0xfffffff00a1ec07c",
+        "entry_type": "BTI+MOV+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "10": {
+        "name": "s_set_value_xml",
+        "trampoline_va": "0xfffffff00a1e9278",
+        "handler_va": "0xfffffff00a1ecfe8",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "11": {
+        "name": "s_get_value_xml",
+        "trampoline_va": "0xfffffff00a1e9280",
+        "handler_va": "0xfffffff00a1e9280",
+        "entry_type": "BTI+? (complex)",
+        "pac_diversity": "0x705d"
+      },
+      "12": {
+        "name": "s_remove_value",
+        "trampoline_va": "0xfffffff00a1e9290",
+        "handler_va": "0xfffffff00a1ef34c",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "13": {
+        "name": "s_set_bulk_attachments",
+        "trampoline_va": "0xfffffff00a1e91e0",
+        "handler_va": "0xfffffff00a1eba5c",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "14": {
+        "name": "s_copy_ycbcr_matrix",
+        "trampoline_va": "0xfffffff00a1e91e8",
+        "handler_va": "0xfffffff00a1ebb80",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "15": {
+        "name": "s_create_surface_fast_path",
+        "trampoline_va": "0xfffffff00a1e91f0",
+        "handler_va": "0xfffffff00a1ebca4",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "16": {
+        "name": "s_get_surface_use_count",
+        "trampoline_va": "0xfffffff00a1e91f8",
+        "handler_va": "0xfffffff00a1ebe54",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "17": {
+        "name": "s_set_surface_notify",
+        "trampoline_va": "0xfffffff00a1e9200",
+        "handler_va": "0xfffffff00a1ea1c0",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "18": {
+        "name": "s_get_surface_notify",
+        "trampoline_va": "0xfffffff00a1e9208",
+        "handler_va": "0xfffffff00a1ea038",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "19": {
+        "name": "s_remove_surface_notify",
+        "trampoline_va": "0xfffffff00a1e9210",
+        "handler_va": "0xfffffff00a1ebefc",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "20": {
+        "name": "s_set_protected_flags",
+        "trampoline_va": "0xfffffff00a1e9218",
+        "handler_va": "0xfffffff00a1ebfd8",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "21": {
+        "name": "s_get_protected_flags",
+        "trampoline_va": "0xfffffff00a1e9220",
+        "handler_va": "0xfffffff00a1e9220",
+        "entry_type": "direct PACIBSP",
+        "pac_diversity": "0x705d"
+      },
+      "22": {
+        "name": "s_set_ownership_identity",
+        "trampoline_va": "0xfffffff00a1e926c",
+        "handler_va": "0xfffffff00a1ec07c",
+        "entry_type": "BTI+MOV+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "23": {
+        "name": "s_set_value_gated_xml",
+        "trampoline_va": "0xfffffff00a1e9278",
+        "handler_va": "0xfffffff00a1ecfe8",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      },
+      "24": {
+        "name": "s_set_value_gated",
+        "trampoline_va": "0xfffffff00a1e9280",
+        "handler_va": "0xfffffff00a1e9280",
+        "entry_type": "BTI+? (complex)",
+        "pac_diversity": "0x705d"
+      },
+      "25": {
+        "name": "s_get_surface_region_count",
+        "trampoline_va": "0xfffffff00a1e9290",
+        "handler_va": "0xfffffff00a1ef34c",
+        "entry_type": "BTI+B trampoline",
+        "pac_diversity": "0x705d"
+      }
+    }
+  },
+  "key_functions": {
+    "s_create_surface_handler": {
+      "va": "0xfffffff00a1eba5c",
+      "purpose": "Creates IOSurface from properties dict \u2014 integer overflow target",
+      "notes": "Validates bytesPerRow, allocationSize etc. via IOSurface_max_check"
+    },
+    "s_set_value_handler": {
+      "va": "0xfffffff00a1ea1c0",
+      "purpose": "Set arbitrary key-value on IOSurface \u2014 spray primitive"
+    },
+    "s_get_value_handler": {
+      "va": "0xfffffff00a1ea038",
+      "purpose": "Read key-value from IOSurface \u2014 info leak primitive"
+    },
+    "s_lookup_handler": {
+      "va": "0xfffffff00a1e9220",
+      "purpose": "Lookup surface by ID \u2014 type confusion potential"
+    },
+    "IOSurface_max_check": {
+      "va": "0xfffffff00a1d02d0",
+      "purpose": "Validates integer doesn't exceed 32-bit max (LSR #32 check)",
+      "vulnerability": "Checks upper 32 bits only \u2014 lower 32 bits pass through"
+    },
+    "IOSurface_allocate": {
+      "va": "0xfffffff00a1cece8",
+      "purpose": "Allocates IOSurface backing memory",
+      "notes": "Reads width/height/bytesPerRow at offsets +0x58/+0x60/+0x90"
+    },
+    "IOBufferMemoryDescriptor_handler": {
+      "va": "0xfffffff00a1e5be0",
+      "purpose": "inTaskWithOptions wrapper for memory allocation"
+    },
+    "os_log_handler": {
+      "va": "0xfffffff008670688",
+      "purpose": "os_log() \u2014 called for error logging in IOSurface"
+    }
+  },
+  "pac_context": {
+    "vtable_signing": {
+      "key": "DA",
+      "diversity": "0xcda1",
+      "usage": "movk x17, #0xcda1, lsl #48; autda x16, x17"
+    },
+    "dispatch_signing": {
+      "key": "IA",
+      "diversity": "0x705d",
+      "usage": "Dispatch function pointers in __DATA_CONST"
+    },
+    "method_call_diversities": {
+      "vtable_offset_0xe8": "0x3ed6",
+      "vtable_offset_0x78": "0x34f6",
+      "vtable_offset_0xb8": "0x43aa"
+    }
+  },
+  "exploitation_notes": {
+    "attack_surface": [
+      "26 IOKit selectors via IOSurfaceRootUserClient",
+      "create_surface (sel 0): main integer overflow target",
+      "set_value (sel 4): arbitrary property spray for heap shaping",
+      "get_value (sel 5): info leak from surface properties",
+      "lookup (sel 8): cross-process surface access"
+    ],
+    "integer_overflow_detail": {
+      "function": "IOSurface_max_check at 0xfffffff00a1d02d0",
+      "check": "LSR x8, #32; CBNZ \u2192 rejects values > 0xFFFFFFFF",
+      "bypass": "Values with upper 32 bits = 0 but large lower 32 bits pass",
+      "allocate_reads": "width@+0x58, height@+0x60, bytesPerRow@+0x90",
+      "overflow_calc": "total = width * height * bytesPerRow \u2192 potential wraparound"
+    },
+    "bootrom_dump_sequence": [
+      "1. Open IOSurfaceRootUserClient connection",
+      "2. Trigger integer overflow in s_create_surface (selector 0)",
+      "3. Use s_set_value (selector 4) to spray controlled data",
+      "4. Achieve kernel R/W via corrupted IOSurface metadata",
+      "5. Call ml_phys_read(0x100000000, 8) via kernel execute",
+      "6. Dump BootROM: iterate 0x100000000-0x10001FFFF (128KB)"
+    ]
+  }
+}

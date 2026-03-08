@@ -310,32 +310,79 @@ impl<'a> Renderer2D<'a> {
         let _ = Text::new(text, Point::new(x, y), style).draw(self.target);
     }
 
-    /// Draw a gradient rectangle (vertical)
+    /// Draw a gradient rectangle (vertical) — optimized: one color per row, SIMD fill
     pub fn gradient_rect_v(&mut self, x: i32, y: i32, w: u32, h: u32, top: Color2D, bottom: Color2D) {
+        if h == 0 || w == 0 { return; }
         for row in 0..h {
             let t = row as f32 / h as f32;
             let r = (top.r as f32 + (bottom.r as f32 - top.r as f32) * t) as u8;
             let g = (top.g as f32 + (bottom.g as f32 - top.g as f32) * t) as u8;
             let b = (top.b as f32 + (bottom.b as f32 - top.b as f32) * t) as u8;
-            let color = Color2D::rgb(r, g, b);
+            let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
             
-            for col in 0..w {
-                self.target.set_pixel((x + col as i32) as u32, (y + row as i32) as u32, color.to_u32());
+            let py = y + row as i32;
+            if py < 0 || py >= self.target.height as i32 { continue; }
+            let px_start = x.max(0) as u32;
+            let px_end = ((x + w as i32) as u32).min(self.target.width);
+            if px_end <= px_start { continue; }
+            
+            let row_offset = (py as u32 * self.target.stride + px_start) as usize;
+            let fill_len = (px_end - px_start) as usize;
+            
+            #[cfg(target_arch = "x86_64")]
+            unsafe {
+                crate::graphics::simd::fill_row_sse2(
+                    self.target.buffer.add(row_offset),
+                    fill_len,
+                    color,
+                );
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
+                for col in 0..fill_len {
+                    unsafe { *self.target.buffer.add(row_offset + col) = color; }
+                }
             }
         }
     }
 
-    /// Draw a gradient rectangle (horizontal)
+    /// Draw a gradient rectangle (horizontal) — optimized: one color per column, row fill
     pub fn gradient_rect_h(&mut self, x: i32, y: i32, w: u32, h: u32, left: Color2D, right: Color2D) {
+        if h == 0 || w == 0 { return; }
+        // Pre-compute a row of gradient colors
+        let mut gradient_row = alloc::vec![0u32; w as usize];
         for col in 0..w {
             let t = col as f32 / w as f32;
             let r = (left.r as f32 + (right.r as f32 - left.r as f32) * t) as u8;
             let g = (left.g as f32 + (right.g as f32 - left.g as f32) * t) as u8;
             let b = (left.b as f32 + (right.b as f32 - left.b as f32) * t) as u8;
-            let color = Color2D::rgb(r, g, b);
+            gradient_row[col as usize] = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
+        }
+        // Copy the same gradient row to every line
+        for row in 0..h {
+            let py = y + row as i32;
+            if py < 0 || py >= self.target.height as i32 { continue; }
+            let px_start = x.max(0) as u32;
+            let px_end = ((x + w as i32) as u32).min(self.target.width);
+            if px_end <= px_start { continue; }
             
-            for row in 0..h {
-                self.target.set_pixel((x + col as i32) as u32, (y + row as i32) as u32, color.to_u32());
+            let src_off = (px_start as i32 - x).max(0) as usize;
+            let copy_len = (px_end - px_start) as usize;
+            let dst_offset = (py as u32 * self.target.stride + px_start) as usize;
+            
+            #[cfg(target_arch = "x86_64")]
+            unsafe {
+                crate::graphics::simd::copy_row_sse2(
+                    self.target.buffer.add(dst_offset),
+                    gradient_row.as_ptr().add(src_off),
+                    copy_len,
+                );
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
+                for i in 0..copy_len {
+                    unsafe { *self.target.buffer.add(dst_offset + i) = gradient_row[src_off + i]; }
+                }
             }
         }
     }

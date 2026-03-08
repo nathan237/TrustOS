@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-03-04T18:16:31.021051",
+  "device": "CPID:8020 CPRV:11 CPFM:03 SCEP:01 BDID:0C ECID:001C15D43C20802E IBFL:3C SRTG:[iBoot-3865.0.0.4.7]",
+  "exp3_depth_sweep": [
+    {
+      "depth": 10,
+      "payload_size": 22,
+      "manifest_ms": 115.1,
+      "state": "dfuMANIFEST-WAIT-RESET",
+      "outcome": "STUCK_MANIFEST"
+    },
+    {
+      "depth": 9,
+      "payload_size": 20,
+      "manifest_ms": 115.0,
+      "state": "dfuMANIFEST-WAIT-RESET",
+      "outcome": "STUCK_MANIFEST"
+    },
+    {
+      "depth": 8,
+      "payload_size": 18,
+      "manifest_ms": 115.0,
+      "state": "dfuMANIFEST-WAIT-RESET",
+      "outcome": "STUCK_MANIFEST"
+    },
+    {
+      "depth": 7,
+      "payload_size": 16,
+      "manifest_ms": 115.0,
+      "state": "dfuMANIFEST-WAIT-RESET",
+      "outcome": "STUCK_MANIFEST"
+    },
+    {
+      "depth": 6,
+      "payload_size": 14,
+      "manifest_ms": 71.4,
+      "state": "{'error': '[Errno 32] Pipe error'}",
+      "outcome": "DEVICE_LOST"
+    }
+  ]
+}

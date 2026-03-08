@@ -1,0 +1,301 @@
+{
+  "target": "iPhone 11 Pro (A13 / T8030)",
+  "kernelcache": "extracted\\kernelcache_iPhone12,3_26_3.raw",
+  "symbols_summary": {
+    "total": 0,
+    "agx": 0,
+    "gpu": 0,
+    "jit_compiler": 0,
+    "dart": 0,
+    "userclient": 0
+  },
+  "pipeline_strings": {
+    "stage1_userland_entry": [
+      {
+        "pattern": "externalMethod",
+        "count": 44
+      },
+      {
+        "pattern": "getTargetAndMethodForIndex",
+        "count": 5
+      },
+      {
+        "pattern": "IOExternalMethodDispatch",
+        "count": 10
+      },
+      {
+        "pattern": "IOExternalMethodArguments",
+        "count": 100
+      }
+    ],
+    "stage2_command_submit": [
+      {
+        "pattern": "submitCommandBuffer",
+        "count": 1
+      },
+      {
+        "pattern": "CommandQueue",
+        "count": 81
+      },
+      {
+        "pattern": "CommandBuffer",
+        "count": 22
+      },
+      {
+        "pattern": "AGXAcceleratorRing",
+        "count": 15
+      }
+    ],
+    "stage3_shader_compile": [
+      {
+        "pattern": "AGXCompilerService",
+        "count": 5
+      },
+      {
+        "pattern": "MTLCompilerService",
+        "count": 8
+      },
+      {
+        "pattern": "CompilationMode",
+        "count": 7
+      }
+    ],
+    "stage4_jit_codegen": [
+      {
+        "pattern": "JIT",
+        "count": 34
+      },
+      {
+        "pattern": "code_gen",
+        "count": 1
+      },
+      {
+        "pattern": "codegen",
+        "count": 1
+      },
+      {
+        "pattern": "MAP_JIT",
+        "count": 3
+      },
+      {
+        "pattern": "RWX",
+        "count": 2
+      },
+      {
+        "pattern": "mach_vm_protect",
+        "count": 3
+      },
+      {
+        "pattern": "vm_map_protect",
+        "count": 2
+      }
+    ],
+    "stage5_gpu_memory": [
+      {
+        "pattern": "IOGPUResource",
+        "count": 50
+      },
+      {
+        "pattern": "IODARTMapper",
+        "count": 22
+      },
+      {
+        "pattern": "DART",
+        "count": 100
+      },
+      {
+        "pattern": "dart_map",
+        "count": 1
+      },
+      {
+        "pattern": "gpu_va",
+        "count": 1
+      }
+    ],
+    "stage6_firmware": [
+      {
+        "pattern": "AGXFirmware",
+        "count": 53
+      },
+      {
+        "pattern": "RTKit",
+        "count": 41
+      }
+    ]
+  },
+  "dispatch_tables_found": 0,
+  "dispatch_tables": [],
+  "disassembled_functions": 0,
+  "xrefs": {
+    "key_strings": {
+      "AGXCompilerService": "0x8b7822",
+      "AGXDeviceUserClient": "0xfbef3",
+      "IOGPUDeviceUserClient": "0x728340",
+      "ml_phys_read": "0x55813",
+      "ml_phys_write": "0x55852",
+      "IODARTMapper": "0x11bfc9",
+      "submitCommandBuffer": "0x72ca36",
+      "externalMethod": "0xaaabb",
+      "AGXFirmware": "0x47a",
+      "IOSurfaceRootUserClient": "0x787554",
+      "MAP_JIT": "0x556060",
+      "vm_map_protect": "0x48457",
+      "AGXAcceleratorRing": "0xfd0f8",
+      "AGXSecureMonitor": "0x100729",
+      "TrustZone": "0x626961",
+      "iBoot": "0x54b39"
+    },
+    "clusters": [
+      [
+        {
+          "name": "iBoot",
+          "offset": "0x54b39"
+        },
+        {
+          "name": "ml_phys_read",
+          "offset": "0x55813"
+        },
+        {
+          "name": "ml_phys_write",
+          "offset": "0x55852"
+        }
+      ]
+    ]
+  },
+  "phys_refs": {
+    "bootrom": {
+      "description": "SecureROM/BootROM",
+      "range": "0x100000000-0x100080000",
+      "exact_base_refs": 50,
+      "first_refs": [
+        "0x1b4",
+        "0x1fc",
+        "0x294",
+        "0x404",
+        "0x8054",
+        "0x827c",
+        "0x875c",
+        "0x87f4",
+        "0x892c",
+        "0x8b9c"
+      ]
+    },
+    "sram": {
+      "description": "SRAM (iBoot stage)",
+      "range": "0x19c000000-0x19c100000",
+      "exact_base_refs": 2,
+      "first_refs": [
+        "0x13a731",
+        "0xbb46bf"
+      ]
+    },
+    "agx_mmio": {
+      "description": "AGX GPU MMIO registers",
+      "range": "0x206400000-0x206500000",
+      "exact_base_refs": 0,
+      "first_refs": []
+    },
+    "pmp": {
+      "description": "PMP (Performance Monitor)",
+      "range": "0x23b700000-0x23b800000",
+      "exact_base_refs": 0,
+      "first_refs": []
+    },
+    "dart_gpu": {
+      "description": "GPU DART IOMMU base",
+      "range": "0x231004000-0x231008000",
+      "exact_base_refs": 0,
+      "first_refs": []
+    },
+    "amcc": {
+      "description": "AMCC memory controller",
+      "range": "0x200000000-0x200100000",
+      "exact_base_refs": 50,
+      "first_refs": [
+        "0x8144",
+        "0x8afc",
+        "0x9464",
+        "0x9abc",
+        "0x9d45",
+        "0x9dc8",
+        "0xa304",
+        "0xa484",
+        "0xa82c",
+        "0xa88c"
+      ]
+    },
+    "sep": {
+      "description": "SEP region",
+      "range": "0x240000000-0x241000000",
+      "exact_base_refs": 41,
+      "first_refs": [
+        "0x8bde",
+        "0x2388d",
+        "0x47fd44",
+        "0x47fd5c",
+        "0x47fdac",
+        "0x47fdc4",
+        "0x47fef5",
+        "0x481514",
+        "0x48152c",
+        "0x48157c"
+      ]
+    },
+    "pmgr": {
+      "description": "PMGR power management",
+      "range": "0x23b100000-0x23b200000",
+      "exact_base_refs": 0,
+      "first_refs": []
+    }
+  },
+  "exploitation_paths": [
+    {
+      "name": "Shader JIT -> Kernel Code Exec",
+      "score": 50,
+      "steps": [
+        "1. App creates MTLDevice + MTLCommandQueue (sandbox-reachable)",
+        "2. Submit crafted Metal shader (malformed AIR bytecode)",
+        "3. Shader reaches AGXCompilerService in kernel",
+        "4. Compiler processes AIR -> native: type confusion / OOB in",
+        "   AGXCompilerService::compileShader()",
+        "5. Corrupted JIT output written to executable page (MAP_JIT region)",
+        "6. Controlled kernel code execution when GPU executes compiled shader"
+      ]
+    },
+    {
+      "name": "GPU DART Remap -> Physical Read",
+      "score": 50,
+      "steps": [
+        "1. Achieve kernel code exec (from Path 1)",
+        "2. Find GPU DART instance (IODARTMapper for AGX)",
+        "3. Program DART to map BootROM phys range (0x100000000)",
+        "   into GPU-accessible IOVA space",
+        "4. Create GPU buffer backed by DART-mapped BootROM pages",
+        "5. Read GPU buffer contents from userspace -> BootROM dump"
+      ]
+    },
+    {
+      "name": "AGX Firmware / RTKit Exploit",
+      "score": 40,
+      "steps": [
+        "1. Achieve kernel code exec (from Path 1)",
+        "2. Intercept AGXFirmware upload to GPU coprocessor via RTKit",
+        "3. Upload modified GPU firmware with BootROM read capability",
+        "4. GPU coprocessor (ASC) may have DMA to physical memory",
+        "5. GPU firmware reads BootROM and reports back via RTKit mailbox"
+      ]
+    },
+    {
+      "name": "Direct ml_phys_read",
+      "score": 0,
+      "steps": [
+        "1. Achieve kernel code exec (from Path 1)",
+        "2. Bypass KTRR/CTRR to call arbitrary kernel functions",
+        "   OR use data-only attack to redirect a function pointer",
+        "3. Call ml_phys_read_data(0x100000000, buf, 0x80000)",
+        "4. Copy BootROM contents to userspace buffer"
+      ]
+    }
+  ],
+  "ghidra_script": "extracted\\ghidra_agx_analysis.py"
+}

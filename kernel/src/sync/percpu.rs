@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use alloc::boxed::Box;
 
 /// Maximum number of CPUs supported
-pub const MAX_CPUS: usize = 256;
+pub const MAX_CPUS: usize = 32;
 
 /// Per-CPU block - contains all per-CPU data for one CPU
 ///

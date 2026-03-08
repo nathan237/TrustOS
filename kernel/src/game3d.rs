@@ -386,6 +386,12 @@ pub struct Game3DState {
 
     // RNG
     rng_state: u32,
+
+    // Pre-computed sin/cos table for raycasting (one per screen column)
+    ray_cos_table: Vec<f32>,
+    ray_sin_table: Vec<f32>,
+    last_table_width: usize,
+    last_table_angle: f32,
 }
 
 impl Game3DState {
@@ -431,7 +437,30 @@ impl Game3DState {
             z_buffer: Vec::new(),
 
             rng_state: 12345,
+
+            ray_cos_table: Vec::new(),
+            ray_sin_table: Vec::new(),
+            last_table_width: 0,
+            last_table_angle: f32::NAN,
         }
+    }
+
+    /// Rebuild ray direction lookup table when screen width or angle changes
+    fn rebuild_ray_table(&mut self, w: usize) {
+        if w == self.last_table_width && self.player_angle == self.last_table_angle {
+            return; // No change needed
+        }
+        let fov = core::f32::consts::FRAC_PI_3;
+        self.ray_cos_table.resize(w, 0.0);
+        self.ray_sin_table.resize(w, 0.0);
+        for col in 0..w {
+            let ray_offset = (col as f32 / w as f32 - 0.5) * 2.0;
+            let ray_angle = self.player_angle + ray_offset * (fov / 2.0);
+            self.ray_cos_table[col] = ray_angle.cos();
+            self.ray_sin_table[col] = ray_angle.sin();
+        }
+        self.last_table_width = w;
+        self.last_table_angle = self.player_angle;
     }
 
     fn next_rng(&mut self) -> u32 {
@@ -757,14 +786,22 @@ impl Game3DState {
         let hud_h = 40; // Bottom HUD height
         let view_h = h.saturating_sub(hud_h);
 
-        // Clear buffer
-        for i in 0..w * h {
-            buf[i] = 0xFF000000;
+        // Clear buffer using SSE2 fill (instead of per-pixel loop)
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            crate::graphics::simd::fill_row_sse2(buf.as_mut_ptr(), w * h, 0xFF000000);
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            buf[..w * h].fill(0xFF000000);
         }
 
         // Prepare z-buffer
         self.z_buffer.clear();
         self.z_buffer.resize(w, f32::MAX);
+
+        // Pre-compute ray direction table (cached, only rebuilt when angle or width changes)
+        self.rebuild_ray_table(w);
 
         // Render ceiling and floor
         self.render_floor_ceiling(buf, w, view_h);
@@ -829,21 +866,30 @@ impl Game3DState {
         let half = h / 2;
 
         for y in 0..h {
-            if y < half {
+            let color = if y < half {
                 // Ceiling - gradient from dark to slightly lighter
                 let t = y as u32 * 20 / half as u32;
                 let g = 8u32 + t;
-                let color = 0xFF000000 | ((g / 3) << 16) | (g << 8) | (g / 4);
-                for x in 0..w {
-                    buf[y * w + x] = color;
-                }
+                0xFF000000 | ((g / 3) << 16) | (g << 8) | (g / 4)
             } else {
                 // Floor - gradient from lighter near horizon to dark at bottom
                 let dist = (y - half) as u32;
                 let max_dist = half as u32;
                 let t = dist * 25 / max_dist.max(1);
                 let base = 6u32 + t;
-                let color = 0xFF000000 | ((base / 2) << 16) | ((base / 2) << 8) | (base / 2);
+                0xFF000000 | ((base / 2) << 16) | ((base / 2) << 8) | (base / 2)
+            };
+            // Fill entire row with SIMD instead of per-pixel loop
+            #[cfg(target_arch = "x86_64")]
+            unsafe {
+                crate::graphics::simd::fill_row_sse2(
+                    buf.as_mut_ptr().add(y * w),
+                    w,
+                    color,
+                );
+            }
+            #[cfg(not(target_arch = "x86_64"))]
+            {
                 for x in 0..w {
                     buf[y * w + x] = color;
                 }
@@ -856,12 +902,9 @@ impl Game3DState {
         let half_h = h as f32 / 2.0;
 
         for col in 0..w {
-            // Ray angle for this column
-            let ray_offset = (col as f32 / w as f32 - 0.5) * 2.0;
-            let ray_angle = self.player_angle + ray_offset * (fov / 2.0);
-
-            let ray_dx = ray_angle.cos();
-            let ray_dy = ray_angle.sin();
+            // Use pre-computed sin/cos from ray table
+            let ray_dx = self.ray_cos_table[col];
+            let ray_dy = self.ray_sin_table[col];
 
             // DDA Raycasting
             let mut map_x = self.player_x as i32;

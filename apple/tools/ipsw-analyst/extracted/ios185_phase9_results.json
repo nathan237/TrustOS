@@ -1,0 +1,616 @@
+{
+  "s_get_value": {
+    "va": "0xfffffff00857f3a4",
+    "kext": "com.apple.kernel",
+    "size": 540,
+    "calls": [
+      {
+        "addr": "0xfffffff00857f43c",
+        "target": "0xfffffff007f444bc",
+        "type": "direct"
+      },
+      {
+        "addr": "0xfffffff00857f450",
+        "target": "0xfffffff007f449a8",
+        "type": "direct"
+      }
+    ],
+    "string_refs": [],
+    "locks": [],
+    "type_checks": [
+      {
+        "addr": "0xfffffff00857f3d8",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857f4b4",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857f4e0",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857f520",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857f54c",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857f58c",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      }
+    ],
+    "vtable_dispatches": [
+      {
+        "addr": "0xfffffff00857f3f4",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x5a20"
+      },
+      {
+        "addr": "0xfffffff00857f4cc",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x4a6a"
+      },
+      {
+        "addr": "0xfffffff00857f4f8",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x2e4a"
+      },
+      {
+        "addr": "0xfffffff00857f538",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x1ac8"
+      },
+      {
+        "addr": "0xfffffff00857f56c",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x5a20"
+      },
+      {
+        "addr": "0xfffffff00857f5a4",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x3a87"
+      }
+    ],
+    "race_windows": []
+  },
+  "s_set_value": {
+    "va": "0xfffffff00857ee7c",
+    "kext": "com.apple.kernel",
+    "size": 240,
+    "calls": [
+      {
+        "addr": "0xfffffff00857ee9c",
+        "target": "0xfffffff007f4bc20",
+        "type": "direct"
+      },
+      {
+        "addr": "0xfffffff00857ef58",
+        "target": "0xfffffff007f4c894",
+        "type": "direct"
+      }
+    ],
+    "string_refs": [],
+    "locks": [],
+    "type_checks": [
+      {
+        "addr": "0xfffffff00857eeb8",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857eee8",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857ef1c",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      }
+    ],
+    "vtable_dispatches": [
+      {
+        "addr": "0xfffffff00857eed4",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x5837"
+      },
+      {
+        "addr": "0xfffffff00857ef08",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x8453"
+      },
+      {
+        "addr": "0xfffffff00857ef44",
+        "mnemonic": "blraa",
+        "operands": "x9, x17",
+        "diversity": "0x2e4a"
+      }
+    ],
+    "race_windows": []
+  },
+  "s_set_value_xml": {
+    "va": "0xfffffff00857e1ac",
+    "kext": "com.apple.kernel",
+    "size": 276,
+    "calls": [
+      {
+        "addr": "0xfffffff00857e1e4",
+        "target": "0xfffffff0085427e8",
+        "type": "direct"
+      }
+    ],
+    "string_refs": [],
+    "locks": [],
+    "type_checks": [
+      {
+        "addr": "0xfffffff00857e1f8",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857e240",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857e27c",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      }
+    ],
+    "vtable_dispatches": [
+      {
+        "addr": "0xfffffff00857e22c",
+        "mnemonic": "blraa",
+        "operands": "x9, x17",
+        "diversity": "0x4578"
+      },
+      {
+        "addr": "0xfffffff00857e26c",
+        "mnemonic": "blraa",
+        "operands": "x9, x17",
+        "diversity": "0x3a87"
+      },
+      {
+        "addr": "0xfffffff00857e2a8",
+        "mnemonic": "blraa",
+        "operands": "x9, x17",
+        "diversity": "0x3a87"
+      }
+    ],
+    "race_windows": []
+  },
+  "s_get_value_xml": {
+    "va": "0xfffffff00857dde8",
+    "kext": "com.apple.kernel",
+    "size": 212,
+    "calls": [],
+    "string_refs": [],
+    "locks": [
+      {
+        "addr": "0xfffffff00857de0c",
+        "type": "MRS_TPIDR",
+        "detail": "Thread ID read (before lock check)"
+      },
+      {
+        "addr": "0xfffffff00857de24",
+        "type": "CAS",
+        "detail": "casa x8, x9, [x10]"
+      },
+      {
+        "addr": "0xfffffff00857dea0",
+        "type": "CAS",
+        "detail": "casl w2, wzr, [x8]"
+      }
+    ],
+    "type_checks": [
+      {
+        "addr": "0xfffffff00857de58",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      }
+    ],
+    "vtable_dispatches": [
+      {
+        "addr": "0xfffffff00857de74",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x9a44"
+      }
+    ],
+    "race_windows": [
+      {
+        "type": "LOCK_SEQUENCE",
+        "gap": 24,
+        "mrs_addr": "0xfffffff00857de0c",
+        "cas_addr": "0xfffffff00857de24",
+        "note": "Lock sequence: MRS→CAS in 24 bytes, potential race"
+      }
+    ]
+  },
+  "s_bulk_set_value": {
+    "va": "0xfffffff00857dba0",
+    "kext": "com.apple.kernel",
+    "size": 212,
+    "calls": [],
+    "string_refs": [],
+    "locks": [
+      {
+        "addr": "0xfffffff00857dbc4",
+        "type": "MRS_TPIDR",
+        "detail": "Thread ID read (before lock check)"
+      },
+      {
+        "addr": "0xfffffff00857dbdc",
+        "type": "CAS",
+        "detail": "casa x8, x9, [x10]"
+      },
+      {
+        "addr": "0xfffffff00857dc58",
+        "type": "CAS",
+        "detail": "casl w2, wzr, [x9]"
+      }
+    ],
+    "type_checks": [
+      {
+        "addr": "0xfffffff00857dc10",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      }
+    ],
+    "vtable_dispatches": [
+      {
+        "addr": "0xfffffff00857dc2c",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x5837"
+      }
+    ],
+    "race_windows": [
+      {
+        "type": "LOCK_SEQUENCE",
+        "gap": 24,
+        "mrs_addr": "0xfffffff00857dbc4",
+        "cas_addr": "0xfffffff00857dbdc",
+        "note": "Lock sequence: MRS→CAS in 24 bytes, potential race"
+      }
+    ]
+  },
+  "s_bulk_get_value": {
+    "va": "0xfffffff00857d83c",
+    "kext": "com.apple.kernel",
+    "size": 540,
+    "calls": [
+      {
+        "addr": "0xfffffff00857d8d4",
+        "target": "0xfffffff007f444bc",
+        "type": "direct"
+      },
+      {
+        "addr": "0xfffffff00857d8e8",
+        "target": "0xfffffff007f449a8",
+        "type": "direct"
+      }
+    ],
+    "string_refs": [],
+    "locks": [],
+    "type_checks": [
+      {
+        "addr": "0xfffffff00857d870",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857d94c",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857d978",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857d9b8",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857d9e4",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857da24",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      }
+    ],
+    "vtable_dispatches": [
+      {
+        "addr": "0xfffffff00857d88c",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x82eb"
+      },
+      {
+        "addr": "0xfffffff00857d964",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x4a6a"
+      },
+      {
+        "addr": "0xfffffff00857d990",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x2e4a"
+      },
+      {
+        "addr": "0xfffffff00857d9d0",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x1ac8"
+      },
+      {
+        "addr": "0xfffffff00857da04",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x82eb"
+      },
+      {
+        "addr": "0xfffffff00857da3c",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x3a87"
+      }
+    ],
+    "race_windows": []
+  },
+  "s_create_surface": {
+    "va": "0xfffffff009e86024",
+    "kext": "com.apple.iokit.IOSurface",
+    "size": 428,
+    "calls": [
+      {
+        "addr": "0xfffffff009e86178",
+        "target": "0xfffffff009e86024",
+        "type": "direct"
+      }
+    ],
+    "string_refs": [],
+    "locks": [],
+    "type_checks": [
+      {
+        "addr": "0xfffffff009e86068",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff009e86098",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff009e860c8",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff009e860f8",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff009e86128",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      }
+    ],
+    "vtable_dispatches": [
+      {
+        "addr": "0xfffffff009e8607c",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x3a87"
+      },
+      {
+        "addr": "0xfffffff009e860ac",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x3a87"
+      },
+      {
+        "addr": "0xfffffff009e860dc",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x3a87"
+      },
+      {
+        "addr": "0xfffffff009e8610c",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x3a87"
+      },
+      {
+        "addr": "0xfffffff009e8613c",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x3a87"
+      }
+    ],
+    "race_windows": []
+  },
+  "s_lock_surface": {
+    "va": "0xfffffff0084ff390",
+    "kext": "com.apple.kernel",
+    "size": 96,
+    "calls": [],
+    "string_refs": [],
+    "locks": [
+      {
+        "addr": "0xfffffff0084ff3d0",
+        "type": "CAS",
+        "detail": "casal w13, w12, [x10]"
+      }
+    ],
+    "type_checks": [],
+    "vtable_dispatches": [],
+    "race_windows": []
+  },
+  "s_unlock_surface": {
+    "va": "0xfffffff0085630e8",
+    "kext": "com.apple.kernel",
+    "size": 44,
+    "calls": [
+      {
+        "addr": "0xfffffff008563104",
+        "target": "0xfffffff008563114",
+        "type": "direct"
+      }
+    ],
+    "string_refs": [],
+    "locks": [],
+    "type_checks": [],
+    "vtable_dispatches": [],
+    "race_windows": []
+  },
+  "s_increment_use_count": {
+    "va": "0xfffffff00861c8d0",
+    "kext": "com.apple.kernel",
+    "size": 400,
+    "calls": [
+      {
+        "addr": "0xfffffff00861c8f0",
+        "target": "0xfffffff008597b28",
+        "type": "direct"
+      },
+      {
+        "addr": "0xfffffff00861c91c",
+        "target": "0xfffffff007f449a8",
+        "type": "direct"
+      },
+      {
+        "addr": "0xfffffff00861ca48",
+        "target": "0xfffffff0086c6d40",
+        "type": "direct"
+      }
+    ],
+    "string_refs": [],
+    "locks": [],
+    "type_checks": [
+      {
+        "addr": "0xfffffff00861c930",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00861c974",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      }
+    ],
+    "vtable_dispatches": [
+      {
+        "addr": "0xfffffff00861c958",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0xc6b2"
+      },
+      {
+        "addr": "0xfffffff00861c9a0",
+        "mnemonic": "blraa",
+        "operands": "x9, x17",
+        "diversity": "0x8a43"
+      }
+    ],
+    "race_windows": []
+  },
+  "s_decrement_use_count": {
+    "va": "0xfffffff00857e464",
+    "kext": "com.apple.kernel",
+    "size": 172,
+    "calls": [
+      {
+        "addr": "0xfffffff00857e484",
+        "target": "0xfffffff00854257c",
+        "type": "direct"
+      }
+    ],
+    "string_refs": [],
+    "locks": [],
+    "type_checks": [
+      {
+        "addr": "0xfffffff00857e498",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      },
+      {
+        "addr": "0xfffffff00857e4cc",
+        "type": "AUTDA (vtable auth)",
+        "diversity": "0xcda1",
+        "note": "PAC auth = implicit type check via vtable pointer"
+      }
+    ],
+    "vtable_dispatches": [
+      {
+        "addr": "0xfffffff00857e4b8",
+        "mnemonic": "blraa",
+        "operands": "x8, x17",
+        "diversity": "0x4578"
+      },
+      {
+        "addr": "0xfffffff00857e4f8",
+        "mnemonic": "blraa",
+        "operands": "x9, x17",
+        "diversity": "0x3a87"
+      }
+    ],
+    "race_windows": []
+  }
+}

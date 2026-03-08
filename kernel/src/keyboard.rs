@@ -138,6 +138,15 @@ pub const KEY_DELETE: u8 = 0xF6;
 pub const KEY_PGUP: u8 = 0xF7;
 pub const KEY_PGDOWN: u8 = 0xF8;
 
+// Extended editor key codes (0xD0+ range, avoids 0xE0 PS/2 prefix conflict)
+pub const KEY_CTRL_SLASH: u8 = 0xD0;      // Ctrl+/ toggle comment
+pub const KEY_CTRL_SHIFT_K: u8 = 0xD1;    // Ctrl+Shift+K delete line
+pub const KEY_CTRL_SHIFT_D: u8 = 0xD2;    // Ctrl+Shift+D duplicate line
+pub const KEY_ALT_UP: u8 = 0xD3;          // Alt+Up move line up
+pub const KEY_ALT_DOWN: u8 = 0xD4;        // Alt+Down move line down
+pub const KEY_CTRL_LEFT: u8 = 0xD5;       // Ctrl+Left word left
+pub const KEY_CTRL_RIGHT: u8 = 0xD6;      // Ctrl+Right word right
+
 /// Ring buffer for keyboard input
 struct KeyboardBuffer {
     buffer: [u8; BUFFER_SIZE],
@@ -443,7 +452,16 @@ pub fn handle_scancode(scancode: u8) {
     
     // Handle extended keys (arrows, etc.)
     if is_extended && !is_release {
+        let alt = ALT_PRESSED.load(Ordering::SeqCst);
+        let ctrl = CTRL_PRESSED.load(Ordering::SeqCst);
+        
+        // Check modifier+arrow combos FIRST (before plain arrows)
         let special = match key {
+            0x48 if alt  => Some(KEY_ALT_UP),      // Alt+Up: move line up
+            0x50 if alt  => Some(KEY_ALT_DOWN),     // Alt+Down: move line down
+            0x4B if ctrl => Some(KEY_CTRL_LEFT),    // Ctrl+Left: word left
+            0x4D if ctrl => Some(KEY_CTRL_RIGHT),   // Ctrl+Right: word right
+            // Plain extended keys
             0x48 => Some(KEY_UP),
             0x50 => Some(KEY_DOWN),
             0x4B => Some(KEY_LEFT),
@@ -579,7 +597,25 @@ pub fn handle_scancode(scancode: u8) {
         KEYBOARD_BUFFER.lock().push(0x19); // ASCII EM (redo)
         return;
     }
-    
+
+    // Handle Ctrl+/ (toggle comment) — scancode 0x35 = '/'
+    if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x35 {
+        KEYBOARD_BUFFER.lock().push(KEY_CTRL_SLASH);
+        return;
+    }
+
+    // Handle Ctrl+Shift+K (delete line) — scancode 0x25 = 'K'
+    if CTRL_PRESSED.load(Ordering::SeqCst) && SHIFT_PRESSED.load(Ordering::SeqCst) && key == 0x25 {
+        KEYBOARD_BUFFER.lock().push(KEY_CTRL_SHIFT_K);
+        return;
+    }
+
+    // Handle Ctrl+Shift+D (duplicate line) — scancode 0x20 = 'D'
+    if CTRL_PRESSED.load(Ordering::SeqCst) && SHIFT_PRESSED.load(Ordering::SeqCst) && key == 0x20 {
+        KEYBOARD_BUFFER.lock().push(KEY_CTRL_SHIFT_D);
+        return;
+    }
+
     // Convert scancode to ASCII
     let shift = SHIFT_PRESSED.load(Ordering::SeqCst)
         || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Shift);

@@ -243,69 +243,94 @@ pub unsafe fn fill_row_sse2_nt(dst: *mut u32, count: usize, color: u32) {
 // SSE2 ALPHA BLENDING (4 pixels at a time)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Fast alpha blend using SSE2
-/// Blends src over dst: result = src * alpha + dst * (1 - alpha)
+/// Fast alpha blend using SSE2 — true SIMD: blends 4 pixels in parallel
+/// Blends src over dst: result = src * alpha + dst * (255 - alpha)
+/// Uses 16-bit unpacking to perform per-channel multiply+add in XMM registers.
 #[cfg(target_arch = "x86_64")]
 #[inline]
 pub unsafe fn blend_row_sse2(dst: *mut u32, src: *const u32, count: usize) {
     let mut dst_ptr = dst;
     let mut src_ptr = src;
     let mut remaining = count;
-    
-    // SSE2 constants for unpacking
+
     let zero = _mm_setzero_si128();
-    let alpha_mask = _mm_set1_epi32(0xFF000000u32 as i32);
-    let one_255 = _mm_set1_epi16(255);
-    
-    // Process 2 pixels at a time (more practical for alpha blending)
-    while remaining >= 2 {
-        // Load 2 source and 2 destination pixels
-        let src_lo = _mm_loadl_epi64(src_ptr as *const __m128i);
-        let dst_lo = _mm_loadl_epi64(dst_ptr as *const __m128i);
-        
-        // Unpack to 16-bit for math
-        let src16 = _mm_unpacklo_epi8(src_lo, zero);
-        let dst16 = _mm_unpacklo_epi8(dst_lo, zero);
-        
-        // Extract alpha (high byte of each pixel)
-        // For simplicity, use scalar alpha extraction
-        let src_pixels = [*src_ptr, *src_ptr.add(1)];
-        let alphas = [
-            (src_pixels[0] >> 24) as i16,
-            (src_pixels[1] >> 24) as i16,
-        ];
-        
-        // Quick path: if both alphas are 255, just copy
-        if alphas[0] == 255 && alphas[1] == 255 {
-            *dst_ptr = *src_ptr;
-            *dst_ptr.add(1) = *src_ptr.add(1);
-        } else if alphas[0] == 0 && alphas[1] == 0 {
-            // Skip fully transparent
-        } else {
-            // Scalar blend for mixed alpha (SSE2 alpha blend is complex)
-            for i in 0..2 {
-                let alpha = alphas[i] as u32;
-                if alpha == 255 {
-                    *dst_ptr.add(i) = src_pixels[i];
-                } else if alpha > 0 {
-                    *dst_ptr.add(i) = blend_pixel_fast(src_pixels[i], *dst_ptr.add(i));
-                }
-            }
+
+    // Process 4 pixels at a time with true SIMD alpha blending
+    while remaining >= 4 {
+        let s = _mm_loadu_si128(src_ptr as *const __m128i);
+        let d = _mm_loadu_si128(dst_ptr as *const __m128i);
+
+        // Quick check: if all src alphas are 0 → skip, if all 255 → copy
+        let alpha_mask_val = _mm_srli_epi32(s, 24);
+        let all_zero = _mm_cmpeq_epi32(alpha_mask_val, zero);
+        if _mm_movemask_epi8(all_zero) == 0xFFFF {
+            // All 4 pixels fully transparent — skip
+            src_ptr = src_ptr.add(4);
+            dst_ptr = dst_ptr.add(4);
+            remaining -= 4;
+            continue;
         }
-        
-        src_ptr = src_ptr.add(2);
-        dst_ptr = dst_ptr.add(2);
-        remaining -= 2;
+        let all_opaque = _mm_cmpeq_epi32(alpha_mask_val, _mm_set1_epi32(255));
+        if _mm_movemask_epi8(all_opaque) == 0xFFFF {
+            // All 4 pixels fully opaque — direct copy
+            _mm_storeu_si128(dst_ptr as *mut __m128i, s);
+            src_ptr = src_ptr.add(4);
+            dst_ptr = dst_ptr.add(4);
+            remaining -= 4;
+            continue;
+        }
+
+        // Full SIMD blend: process pixels 0-1 then pixels 2-3 (16-bit math)
+        // --- Pixels 0-1 ---
+        let s_lo = _mm_unpacklo_epi8(s, zero); // src RGBA as 16-bit [R0 G0 B0 A0 R1 G1 B1 A1]
+        let d_lo = _mm_unpacklo_epi8(d, zero); // dst RGBA as 16-bit
+
+        // Broadcast alpha of each pixel across its 4 channels
+        // Pixel 0 alpha is at position 3, pixel 1 alpha at position 7
+        let a0 = _mm_shufflelo_epi16(s_lo, 0xFF); // [A0 A0 A0 A0 ? ? ? ?]
+        let a_lo = _mm_shufflehi_epi16(a0, 0xFF);  // [A0 A0 A0 A0 A1 A1 A1 A1]
+        let inv_a_lo = _mm_sub_epi16(_mm_set1_epi16(255), a_lo);
+
+        // blend = (src * alpha + dst * inv_alpha + 128) >> 8
+        let src_mul = _mm_mullo_epi16(s_lo, a_lo);
+        let dst_mul = _mm_mullo_epi16(d_lo, inv_a_lo);
+        let sum_lo = _mm_add_epi16(_mm_add_epi16(src_mul, dst_mul), _mm_set1_epi16(128));
+        let res_lo = _mm_srli_epi16(sum_lo, 8);
+
+        // --- Pixels 2-3 ---
+        let s_hi = _mm_unpackhi_epi8(s, zero);
+        let d_hi = _mm_unpackhi_epi8(d, zero);
+
+        let a2 = _mm_shufflelo_epi16(s_hi, 0xFF);
+        let a_hi = _mm_shufflehi_epi16(a2, 0xFF);
+        let inv_a_hi = _mm_sub_epi16(_mm_set1_epi16(255), a_hi);
+
+        let src_mul_hi = _mm_mullo_epi16(s_hi, a_hi);
+        let dst_mul_hi = _mm_mullo_epi16(d_hi, inv_a_hi);
+        let sum_hi = _mm_add_epi16(_mm_add_epi16(src_mul_hi, dst_mul_hi), _mm_set1_epi16(128));
+        let res_hi = _mm_srli_epi16(sum_hi, 8);
+
+        // Pack 16-bit results back to 8-bit: [p0 p1 p2 p3]
+        let result = _mm_packus_epi16(res_lo, res_hi);
+        // Force alpha to 0xFF (fully opaque output)
+        let result = _mm_or_si128(result, _mm_set1_epi32(0xFF000000u32 as i32));
+        _mm_storeu_si128(dst_ptr as *mut __m128i, result);
+
+        src_ptr = src_ptr.add(4);
+        dst_ptr = dst_ptr.add(4);
+        remaining -= 4;
     }
-    
-    // Handle tail
-    if remaining > 0 {
+
+    // Handle remaining pixels (1-3) with scalar
+    for _ in 0..remaining {
         let alpha = (*src_ptr >> 24) as u32;
         if alpha == 255 {
             *dst_ptr = *src_ptr;
         } else if alpha > 0 {
             *dst_ptr = blend_pixel_fast(*src_ptr, *dst_ptr);
         }
+        src_ptr = src_ptr.add(1);
+        dst_ptr = dst_ptr.add(1);
     }
 }
 
@@ -557,5 +582,220 @@ pub fn blend_buffer_fast(dst: &mut [u32], src: &[u32]) {
     // Fallback
     for i in 0..count {
         dst[i] = blend_pixel_fast(src[i], dst[i]);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AVX2 OPTIMIZED OPERATIONS (8 pixels at a time)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+use core::sync::atomic::{AtomicU8, Ordering};
+
+/// 0 = not checked, 1 = no AVX2, 2 = AVX2 available
+static AVX2_SUPPORT: AtomicU8 = AtomicU8::new(0);
+
+/// Check AVX2 support via CPUID
+#[cfg(target_arch = "x86_64")]
+fn has_avx2() -> bool {
+    let cached = AVX2_SUPPORT.load(Ordering::Relaxed);
+    if cached != 0 {
+        return cached == 2;
+    }
+    let result = unsafe {
+        // CPUID leaf 7, subleaf 0: EBX bit 5 = AVX2
+        let ebx: u32;
+        core::arch::asm!(
+            "mov {tmp_rbx}, rbx",
+            "cpuid",
+            "mov {out}, ebx",
+            "mov rbx, {tmp_rbx}",
+            tmp_rbx = out(reg) _,
+            out = out(reg) ebx,
+            inout("eax") 7u32 => _,
+            inout("ecx") 0u32 => _,
+            out("edx") _,
+        );
+        (ebx & (1 << 5)) != 0
+    };
+    AVX2_SUPPORT.store(if result { 2 } else { 1 }, Ordering::Relaxed);
+    result
+}
+
+/// Fill a row of pixels with a color using AVX2
+/// Processes 8 pixels (32 bytes) per iteration
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+pub unsafe fn fill_row_avx2(dst: *mut u32, count: usize, color: u32) {
+    if count == 0 { return; }
+
+    let color_vec = _mm256_set1_epi32(color as i32);
+    let mut ptr = dst;
+    let mut remaining = count;
+
+    // Process 32 pixels per unrolled iteration
+    while remaining >= 32 {
+        _mm256_storeu_si256(ptr as *mut __m256i, color_vec);
+        _mm256_storeu_si256(ptr.add(8) as *mut __m256i, color_vec);
+        _mm256_storeu_si256(ptr.add(16) as *mut __m256i, color_vec);
+        _mm256_storeu_si256(ptr.add(24) as *mut __m256i, color_vec);
+        ptr = ptr.add(32);
+        remaining -= 32;
+    }
+    // 8 pixels at a time
+    while remaining >= 8 {
+        _mm256_storeu_si256(ptr as *mut __m256i, color_vec);
+        ptr = ptr.add(8);
+        remaining -= 8;
+    }
+    // Scalar tail
+    for i in 0..remaining {
+        *ptr.add(i) = color;
+    }
+}
+
+/// Copy a row of pixels using AVX2
+/// Processes 8 pixels (32 bytes) per iteration
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+pub unsafe fn copy_row_avx2(dst: *mut u32, src: *const u32, count: usize) {
+    if count == 0 { return; }
+
+    let mut d = dst;
+    let mut s = src;
+    let mut remaining = count;
+
+    // Process 32 pixels per unrolled iteration
+    while remaining >= 32 {
+        let a = _mm256_loadu_si256(s as *const __m256i);
+        let b = _mm256_loadu_si256(s.add(8) as *const __m256i);
+        let c = _mm256_loadu_si256(s.add(16) as *const __m256i);
+        let e = _mm256_loadu_si256(s.add(24) as *const __m256i);
+        _mm256_storeu_si256(d as *mut __m256i, a);
+        _mm256_storeu_si256(d.add(8) as *mut __m256i, b);
+        _mm256_storeu_si256(d.add(16) as *mut __m256i, c);
+        _mm256_storeu_si256(d.add(24) as *mut __m256i, e);
+        d = d.add(32);
+        s = s.add(32);
+        remaining -= 32;
+    }
+    // 8 pixels at a time
+    while remaining >= 8 {
+        _mm256_storeu_si256(d as *mut __m256i, _mm256_loadu_si256(s as *const __m256i));
+        d = d.add(8);
+        s = s.add(8);
+        remaining -= 8;
+    }
+    // Scalar tail
+    for i in 0..remaining {
+        *d.add(i) = *s.add(i);
+    }
+}
+
+/// Alpha blend a row of pixels using AVX2
+/// Processes 4 pixels per iteration (unpacked to 16-bit for multiply)
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+pub unsafe fn blend_row_avx2(dst: *mut u32, src: *const u32, count: usize) {
+    if count == 0 { return; }
+
+    let zero = _mm256_setzero_si256();
+    let half = _mm256_set1_epi16(128);
+
+    let mut d = dst;
+    let mut s = src;
+    let mut remaining = count;
+
+    // Process 8 pixels at a time using AVX2
+    while remaining >= 8 {
+        let src_px = _mm256_loadu_si256(s as *const __m256i);
+        let dst_px = _mm256_loadu_si256(d as *const __m256i);
+
+        // Check if all pixels are fully opaque or transparent
+        let alpha_mask = _mm256_srli_epi32(src_px, 24);
+        let all_opaque = _mm256_cmpeq_epi32(alpha_mask, _mm256_set1_epi32(0xFF));
+        let all_zero = _mm256_cmpeq_epi32(alpha_mask, zero);
+
+        if _mm256_movemask_epi8(all_opaque) == -1i32 {
+            _mm256_storeu_si256(d as *mut __m256i, src_px);
+        } else if _mm256_movemask_epi8(all_zero) != -1i32 {
+            // Process lo 4 pixels
+            let src_lo = _mm256_unpacklo_epi8(src_px, zero);
+            let dst_lo = _mm256_unpacklo_epi8(dst_px, zero);
+
+            // Extract alpha and broadcast to all channels for lo
+            let alpha_lo = _mm256_shufflehi_epi16(
+                _mm256_shufflelo_epi16(src_lo, 0xFF), 0xFF
+            );
+            let inv_alpha_lo = _mm256_sub_epi16(_mm256_set1_epi16(255), alpha_lo);
+
+            let blended_lo = _mm256_add_epi16(
+                _mm256_add_epi16(_mm256_mullo_epi16(src_lo, alpha_lo), half),
+                _mm256_mullo_epi16(dst_lo, inv_alpha_lo),
+            );
+            let result_lo = _mm256_srli_epi16(blended_lo, 8);
+
+            // Process hi 4 pixels
+            let src_hi = _mm256_unpackhi_epi8(src_px, zero);
+            let dst_hi = _mm256_unpackhi_epi8(dst_px, zero);
+
+            let alpha_hi = _mm256_shufflehi_epi16(
+                _mm256_shufflelo_epi16(src_hi, 0xFF), 0xFF
+            );
+            let inv_alpha_hi = _mm256_sub_epi16(_mm256_set1_epi16(255), alpha_hi);
+
+            let blended_hi = _mm256_add_epi16(
+                _mm256_add_epi16(_mm256_mullo_epi16(src_hi, alpha_hi), half),
+                _mm256_mullo_epi16(dst_hi, inv_alpha_hi),
+            );
+            let result_hi = _mm256_srli_epi16(blended_hi, 8);
+
+            _mm256_storeu_si256(d as *mut __m256i, _mm256_packus_epi16(result_lo, result_hi));
+        }
+        // else: all transparent, skip
+
+        d = d.add(8);
+        s = s.add(8);
+        remaining -= 8;
+    }
+    // Scalar tail
+    for i in 0..remaining {
+        *d.add(i) = blend_pixel_fast(*s.add(i), *d.add(i));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AUTO-DISPATCH WRAPPERS (SSE2 → AVX2)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Fill with auto-dispatch: AVX2 if available, else SSE2
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub unsafe fn fill_row_fast(dst: *mut u32, count: usize, color: u32) {
+    if has_avx2() {
+        fill_row_avx2(dst, count, color);
+    } else {
+        fill_row_sse2(dst, count, color);
+    }
+}
+
+/// Copy with auto-dispatch: AVX2 if available, else SSE2
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub unsafe fn copy_row_fast(dst: *mut u32, src: *const u32, count: usize) {
+    if has_avx2() {
+        copy_row_avx2(dst, src, count);
+    } else {
+        copy_row_sse2(dst, src, count);
+    }
+}
+
+/// Blend with auto-dispatch: AVX2 if available, else SSE2
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub unsafe fn blend_row_fast(dst: *mut u32, src: *const u32, count: usize) {
+    if has_avx2() {
+        blend_row_avx2(dst, src, count);
+    } else {
+        blend_row_sse2(dst, src, count);
     }
 }
