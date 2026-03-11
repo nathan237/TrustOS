@@ -413,3 +413,185 @@ fn draw_matrix_rain(width: u32, height: u32) {
         draw_char_at(c, x as usize, y as usize, color, 0xFF000000);
     }
 }
+
+// ============================================================================
+// BOOT SPLASH SCREEN WITH ANIMATED PROGRESS BAR
+// ============================================================================
+
+/// Total number of boot phases for progress calculation
+const BOOT_TOTAL_PHASES: u32 = 22;
+
+/// Color constants for the splash screen
+const SPLASH_BG: u32 = 0xFF050606;
+const SPLASH_BAR_BG: u32 = 0xFF0A1A0E;
+const SPLASH_BAR_FG: u32 = 0xFF00FF66;
+const SPLASH_BAR_GLOW: u32 = 0xFF00CC55;
+const SPLASH_TEXT_DIM: u32 = 0xFF558866;
+const SPLASH_TEXT_BRIGHT: u32 = 0xFFCCEEDD;
+const SPLASH_VERSION: u32 = 0xFF00AA44;
+
+/// Initialize and draw the boot splash screen (logo + empty progress bar)
+/// Called once after framebuffer is ready, before any boot phases
+pub fn init_boot_splash() {
+    let (width, height) = super::get_dimensions();
+    if width == 0 || height == 0 { return; }
+    
+    // Fill background with deep dark color
+    super::fill_rect(0, 0, width, height, SPLASH_BG);
+    
+    // Draw subtle matrix rain on sides (decorative)
+    draw_matrix_rain(width, height);
+    
+    // Calculate logo position — centered, upper third
+    let logo_scale = if width >= 1024 { 3 } else if width >= 800 { 2 } else { 1 };
+    let logo_w = 64 * logo_scale;
+    let logo_h = 80 * logo_scale;
+    let logo_x = (width - logo_w) / 2;
+    let logo_y = height / 5;
+    
+    // Draw the shield logo
+    draw_logo_procedural(logo_x, logo_y, logo_scale);
+    
+    // Draw "TRust-OS" title below logo
+    let title_y = logo_y + logo_h + 20;
+    let title = "T R u s t - O S";
+    let title_px = title.len() as u32 * 8;
+    let title_x = (width.saturating_sub(title_px)) / 2;
+    for (i, c) in title.chars().enumerate() {
+        let px = title_x + (i as u32) * 8;
+        draw_char_at(c, px as usize, title_y as usize, LOGO_GREEN_BRIGHT, SPLASH_BG);
+    }
+    
+    // Draw version below title
+    let ver_y = title_y + 22;
+    let version = "v0.7.0  |  100% Rust  |  Zero C";
+    let ver_px = version.len() as u32 * 8;
+    let ver_x = (width.saturating_sub(ver_px)) / 2;
+    for (i, c) in version.chars().enumerate() {
+        let px = ver_x + (i as u32) * 8;
+        draw_char_at(c, px as usize, ver_y as usize, SPLASH_VERSION, SPLASH_BG);
+    }
+    
+    // Draw the empty progress bar frame
+    let bar_w = if width >= 1024 { 500 } else { width * 2 / 3 };
+    let bar_h: u32 = 10;
+    let bar_x = (width - bar_w) / 2;
+    let bar_y = ver_y + 50;
+    
+    // Bar background track
+    super::fill_rect(bar_x, bar_y, bar_w, bar_h, SPLASH_BAR_BG);
+    // Bar outline
+    super::draw_rect(bar_x.saturating_sub(1), bar_y.saturating_sub(1), bar_w + 2, bar_h + 2, LOGO_GREEN_DARK);
+    
+    // Draw "Initializing..." text below bar
+    let init_text = "Initializing...";
+    let init_px = init_text.len() as u32 * 8;
+    let init_x = (width.saturating_sub(init_px)) / 2;
+    let init_y = bar_y + bar_h + 16;
+    for (i, c) in init_text.chars().enumerate() {
+        let px = init_x + (i as u32) * 8;
+        draw_char_at(c, px as usize, init_y as usize, SPLASH_TEXT_DIM, SPLASH_BG);
+    }
+}
+
+/// Update the splash progress bar and phase message
+/// `phase`: current phase number (0-based) 
+/// `message`: short description of what's being initialized
+pub fn update_boot_splash(phase: u32, message: &str) {
+    let (width, height) = super::get_dimensions();
+    if width == 0 || height == 0 { return; }
+    
+    // Calculate layout (must match init_boot_splash)
+    let logo_scale = if width >= 1024 { 3 } else if width >= 800 { 2 } else { 1 };
+    let logo_h = 80 * logo_scale;
+    let logo_y = height / 5;
+    let title_y = logo_y + logo_h + 20;
+    let ver_y = title_y + 22;
+    
+    let bar_w = if width >= 1024 { 500 } else { width * 2 / 3 };
+    let bar_h: u32 = 10;
+    let bar_x = (width - bar_w) / 2;
+    let bar_y = ver_y + 50;
+    
+    // Calculate progress percentage
+    let progress = ((phase + 1) * 100) / BOOT_TOTAL_PHASES;
+    let filled_w = (bar_w * progress.min(100)) / 100;
+    
+    // Draw filled portion with glow effect
+    if filled_w > 0 {
+        // Main bar fill
+        super::fill_rect(bar_x, bar_y, filled_w, bar_h, SPLASH_BAR_FG);
+        // Subtle glow line on top
+        super::fill_rect(bar_x, bar_y, filled_w, 2, SPLASH_BAR_GLOW);
+    }
+    
+    // Clear the message area below bar
+    let msg_y = bar_y + bar_h + 16;
+    let msg_clear_w = width * 2 / 3;
+    let msg_clear_x = (width - msg_clear_w) / 2;
+    super::fill_rect(msg_clear_x, msg_y, msg_clear_w, 18, SPLASH_BG);
+    
+    // Draw phase message centered
+    let msg_px = message.len() as u32 * 8;
+    let msg_x = (width.saturating_sub(msg_px)) / 2;
+    for (i, c) in message.chars().enumerate() {
+        let px = msg_x + (i as u32) * 8;
+        draw_char_at(c, px as usize, msg_y as usize, SPLASH_TEXT_BRIGHT, SPLASH_BG);
+    }
+    
+    // Draw percentage on right side of bar
+    let pct_text = if progress >= 100 {
+        "100%"
+    } else {
+        // We can't use format! here reliably before heap, use static buffer approach
+        static mut PCT_BUF: [u8; 5] = [0; 5];
+        let buf = unsafe { &mut PCT_BUF };
+        let tens = (progress / 10) as u8;
+        let ones = (progress % 10) as u8;
+        if progress >= 10 {
+            buf[0] = b' ';
+            buf[1] = b'0' + tens;
+            buf[2] = b'0' + ones;
+            buf[3] = b'%';
+            buf[4] = 0;
+        } else {
+            buf[0] = b' ';
+            buf[1] = b' ';
+            buf[2] = b'0' + ones;
+            buf[3] = b'%';
+            buf[4] = 0;
+        }
+        unsafe { core::str::from_utf8_unchecked(&buf[..4]) }
+    };
+    let pct_x = bar_x + bar_w + 8;
+    for (i, c) in pct_text.chars().enumerate() {
+        let px = pct_x + (i as u32) * 8;
+        draw_char_at(c, px as usize, bar_y as usize, SPLASH_BAR_FG, SPLASH_BG);
+    }
+}
+
+/// Fade out the splash screen to black before transitioning to shell
+pub fn fade_out_splash() {
+    let (width, height) = super::get_dimensions();
+    if width == 0 || height == 0 { return; }
+    
+    // 8-step fade: overlay increasingly opaque black rectangles
+    for step in 0u32..8 {
+        let alpha = (step + 1) * 32; // 32, 64, 96 ... 256
+        let shade = if alpha >= 255 { 0xFF000000 } else {
+            // Blend: darken existing pixels
+            let inv = 255 - alpha;
+            let g = (0x05 * inv) / 255;
+            0xFF000000 | (g << 8)
+        };
+        super::fill_rect(0, 0, width, height, shade);
+        
+        // Small delay between frames (~20ms per step)
+        for _ in 0..2_000_000 { core::hint::spin_loop(); }
+    }
+    
+    // Final: full black
+    super::fill_rect(0, 0, width, height, 0xFF000000);
+    // Brief pause before shell appears
+    for _ in 0..3_000_000 { core::hint::spin_loop(); }
+}

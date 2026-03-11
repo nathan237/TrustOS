@@ -1,3 +1,6 @@
 # Override workspace config — build for the host, not bare metal
 [build]
 target = "x86_64-pc-windows-msvc"
+
+[unstable]
+build-std = []

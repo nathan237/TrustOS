@@ -28,6 +28,51 @@ fn hc(normal: u32, hc_replacement: u32) -> u32 {
 /// Module-level flag to signal desktop exit (accessible from run() and handle_menu_action)
 static EXIT_DESKTOP_FLAG: AtomicBool = AtomicBool::new(false);
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// JARVIS async inference — run on background thread, poll result in render loop
+// ═══════════════════════════════════════════════════════════════════════════════
+/// Pending JARVIS query (set by terminal, consumed by background thread)
+static JARVIS_PENDING_QUERY: Mutex<Option<String>> = Mutex::new(None);
+/// Completed JARVIS result lines (set by background thread, consumed by render loop)
+static JARVIS_RESULT: Mutex<Option<Vec<String>>> = Mutex::new(None);
+/// Flag: JARVIS is currently thinking
+static JARVIS_BUSY: AtomicBool = AtomicBool::new(false);
+
+/// Background thread entry point for JARVIS inference
+fn jarvis_worker(_arg: u64) -> i32 {
+    // Take the pending query
+    let query = {
+        let mut pending = JARVIS_PENDING_QUERY.lock();
+        pending.take()
+    };
+    let query = match query {
+        Some(q) => q,
+        None => {
+            JARVIS_BUSY.store(false, Ordering::SeqCst);
+            return 0;
+        }
+    };
+
+    // Run the JARVIS command through shell capture
+    crate::shell::take_captured(); // clear stale
+    crate::shell::CAPTURE_MODE.store(true, Ordering::SeqCst);
+    crate::shell::execute_command(&query);
+    crate::shell::CAPTURE_MODE.store(false, Ordering::SeqCst);
+    let captured = crate::shell::take_captured();
+
+    // Store result
+    let mut lines = Vec::new();
+    for line in captured.lines() {
+        lines.push(String::from(line));
+    }
+    {
+        let mut result = JARVIS_RESULT.lock();
+        *result = Some(lines);
+    }
+    JARVIS_BUSY.store(false, Ordering::SeqCst);
+    0
+}
+
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🎨 TRUSTOS OFFICIAL PALETTE - Matrix-like professional dark theme
@@ -103,12 +148,12 @@ const CONTEXT_MENU_BORDER: u32 = MENU_BORDER;
 const DESKTOP_BG_TOP: u32 = BG_DEEPEST;
 const DESKTOP_BG_BOTTOM: u32 = 0xFF020303;
 
-// Layout constants (official spec)
-const TASKBAR_HEIGHT: u32 = 40;
-const TITLE_BAR_HEIGHT: u32 = 28;             // Official: 28px
-const WINDOW_BORDER_RADIUS: u32 = 6;          // Official: 6px rounded corners
-const WINDOW_SHADOW_BLUR: u32 = 12;
-const DOCK_ICON_SIZE: u32 = 24;               // Official icon size
+// Layout constants (official spec — v2 visual overhaul)
+const TASKBAR_HEIGHT: u32 = 48;
+const TITLE_BAR_HEIGHT: u32 = 28;             // Classic title bar height
+const WINDOW_BORDER_RADIUS: u32 = 8;          // Moderate rounded corners
+const WINDOW_SHADOW_BLUR: u32 = 16;
+const DOCK_ICON_SIZE: u32 = 32;               // Larger dock icons
 const DOCK_WIDTH: u32 = 60;                   // Official: 56-64px
 
 // Animation state (minimal - no flashy effects)
@@ -911,35 +956,35 @@ impl Window {
     
     /// Check if point is in title bar
     pub fn in_title_bar(&self, px: i32, py: i32) -> bool {
-        px >= self.x && px < self.x + self.width as i32 - 60 &&
+        px >= self.x && px < self.x + self.width as i32 - 90 &&
         py >= self.y && py < self.y + TITLE_BAR_HEIGHT as i32
     }
     
-    /// Check if point is on close button
+    /// Check if point is on close button (Windows-style: rightmost, top-right)
     pub fn on_close_button(&self, px: i32, py: i32) -> bool {
-        // Windows-style: close is rightmost button (32px wide)
-        let btn_w = 32i32;
-        let btn_x = self.x + self.width as i32 - btn_w - 2;
-        px >= btn_x && px < btn_x + btn_w &&
-        py >= self.y + 2 && py < self.y + TITLE_BAR_HEIGHT as i32
+        let btn_w = 28i32;
+        let btn_h = TITLE_BAR_HEIGHT as i32;
+        let bx = self.x + self.width as i32 - btn_w - 1;
+        let by = self.y + 1;
+        px >= bx && px < bx + btn_w && py >= by && py < by + btn_h
     }
     
-    /// Check if point is on maximize button
+    /// Check if point is on maximize button (Windows-style: second from right)
     pub fn on_maximize_button(&self, px: i32, py: i32) -> bool {
-        // Windows-style: maximize is middle button
-        let btn_w = 32i32;
-        let btn_x = self.x + self.width as i32 - btn_w * 2 - 2;
-        px >= btn_x && px < btn_x + btn_w &&
-        py >= self.y + 2 && py < self.y + TITLE_BAR_HEIGHT as i32
+        let btn_w = 28i32;
+        let btn_h = TITLE_BAR_HEIGHT as i32;
+        let bx = self.x + self.width as i32 - btn_w * 2 - 1;
+        let by = self.y + 1;
+        px >= bx && px < bx + btn_w && py >= by && py < by + btn_h
     }
     
-    /// Check if point is on minimize button
+    /// Check if point is on minimize button (Windows-style: third from right)
     pub fn on_minimize_button(&self, px: i32, py: i32) -> bool {
-        // Windows-style: minimize is leftmost of the three buttons
-        let btn_w = 32i32;
-        let btn_x = self.x + self.width as i32 - btn_w * 3 - 2;
-        px >= btn_x && px < btn_x + btn_w &&
-        py >= self.y + 2 && py < self.y + TITLE_BAR_HEIGHT as i32
+        let btn_w = 28i32;
+        let btn_h = TITLE_BAR_HEIGHT as i32;
+        let bx = self.x + self.width as i32 - btn_w * 3 - 1;
+        let by = self.y + 1;
+        px >= bx && px < bx + btn_w && py >= by && py < by + btn_h
     }
     
     /// Check if point is on resize edge
@@ -1015,6 +1060,10 @@ pub struct MusicPlayerState {
     pub audio: Option<Vec<i16>>,
     /// Current song title
     pub song_title: String,
+    /// Current track index on the audio disk
+    pub current_track: usize,
+    /// Total tracks available on disk
+    pub num_tracks: usize,
     /// DMA write cursor (samples written so far)
     pub write_cursor: usize,
     /// Which DMA half was last refilled (0 or 1)
@@ -1068,6 +1117,8 @@ impl MusicPlayerState {
             state: PlaybackState::Stopped,
             audio: None,
             song_title: String::from("No Track"),
+            current_track: 0,
+            num_tracks: 0,
             write_cursor: 0,
             last_half: 0,
             audio_exhausted: false,
@@ -1097,59 +1148,117 @@ impl MusicPlayerState {
         }
     }
 
-    /// Start playback of the embedded Untitled2 track.
+    /// Start playback of the current track (or default).
     pub fn play_untitled2(&mut self) {
-        // Make sure any previous playback is fully stopped first
-        if self.state != PlaybackState::Stopped {
-            let _ = crate::drivers::hda::stop();
-            self.state = PlaybackState::Stopped;
+        self.play_track(self.current_track);
+    }
+
+    /// Play a specific track by index.
+    pub fn play_track(&mut self, track_idx: usize) {
+        // Fully stop and release old audio buffer BEFORE loading new track.
+        // This frees ~30-50MB of PCM data, preventing OOM when allocating the new track.
+        self.stop();
+
+        // Detect track count on first play
+        if self.num_tracks == 0 {
+            self.num_tracks = crate::trustdaw::disk_audio::track_count();
+            crate::serial_println!("[MUSIC] Detected {} tracks on disk", self.num_tracks);
         }
 
-        // Try loading WAV: VFS → raw disk → embedded → procedural (priority order)
+        // Try loading WAV: disk (by track index) → VFS → embedded → procedural
         let (audio, title) = 'decode: {
-            // Try VFS paths, disk, and embedded WAV first
             let wav_data_owned;
-            let wav_data: &[u8] = 'load: {
-                // 1) VFS paths (external storage / filesystem)
-                for path in crate::trustdaw::audio_viz::UNTITLED2_VFS_PATHS {
-                    if crate::vfs::stat(path).is_ok() {
-                        if let Ok(data) = crate::vfs::read_file(path) {
-                            if !data.is_empty() {
-                                crate::serial_println!("[MUSIC] Loaded WAV from VFS: {} ({} bytes)", path, data.len());
-                                wav_data_owned = data;
-                                break 'load &wav_data_owned;
-                            }
+            let wav_data: &[u8];
+            let mut track_title: &str = "Unknown Track";
+
+            // 1) Multi-track disk (AHCI) — preferred
+            if self.num_tracks > 0 {
+                let idx = track_idx % self.num_tracks;
+                self.current_track = idx;
+                match crate::trustdaw::disk_audio::load_track_from_disk(idx) {
+                    Ok((data, name)) => {
+                        crate::serial_println!("[MUSIC] Loaded track {}: '{}' ({} bytes)", idx, name, data.len());
+                        if let Ok(audio) = crate::trustdaw::audio_viz::decode_wav_to_pcm(&data) {
+                            let title_string: alloc::string::String = name;
+                            let title_ref: &str = title_string.leak();
+                            break 'decode (audio, title_ref);
+                        } else {
+                            crate::serial_println!("[MUSIC] Track {} WAV decode failed", idx);
                         }
                     }
-                }
-                // 2) Raw disk (AHCI sector approach)
-                match crate::trustdaw::disk_audio::load_wav_from_disk() {
-                    Ok(data) => {
-                        crate::serial_println!("[MUSIC] Loaded WAV from data disk ({} bytes)", data.len());
-                        wav_data_owned = data;
-                        break 'load &wav_data_owned;
-                    }
                     Err(e) => {
-                        crate::serial_println!("[MUSIC] Disk load failed: {}", e);
+                        crate::serial_println!("[MUSIC] Track {} load failed: {}", idx, e);
                     }
-                }
-                // 3) Embedded WAV (only with --features daw)
-                crate::trustdaw::audio_viz::UNTITLED2_WAV
-            };
-
-            // Try decoding WAV data
-            if !wav_data.is_empty() {
-                if let Ok(audio) = crate::trustdaw::audio_viz::decode_wav_to_pcm(wav_data) {
-                    break 'decode (audio, "Untitled (2) \u{2014} Lo-Fi");
                 }
             }
 
-            // 4) FALLBACK: Generate procedural lo-fi beat (48kHz stereo, ~30s)
+            // 2) VFS paths (fallback)
+            {
+                let found = 'vfs: {
+                    for path in crate::trustdaw::audio_viz::UNTITLED2_VFS_PATHS {
+                        if crate::vfs::stat(path).is_ok() {
+                            if let Ok(data) = crate::vfs::read_file(path) {
+                                if !data.is_empty() {
+                                    crate::serial_println!("[MUSIC] Loaded WAV from VFS: {} ({} bytes)", path, data.len());
+                                    wav_data_owned = data;
+                                    break 'vfs Some(&wav_data_owned as &[u8]);
+                                }
+                            }
+                        }
+                    }
+                    None
+                };
+                if let Some(data) = found {
+                    if let Ok(audio) = crate::trustdaw::audio_viz::decode_wav_to_pcm(data) {
+                        break 'decode (audio, "Untitled (2) \u{2014} Lo-Fi");
+                    }
+                }
+            }
+
+            // 3) Legacy single-track disk
+            {
+                match crate::trustdaw::disk_audio::load_wav_from_disk() {
+                    Ok(data) => {
+                        if let Ok(audio) = crate::trustdaw::audio_viz::decode_wav_to_pcm(&data) {
+                            break 'decode (audio, "Untitled (2) \u{2014} Lo-Fi");
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
+
+            // 4) Embedded WAV
+            {
+                let embedded = crate::trustdaw::audio_viz::UNTITLED2_WAV;
+                if !embedded.is_empty() {
+                    if let Ok(audio) = crate::trustdaw::audio_viz::decode_wav_to_pcm(embedded) {
+                        break 'decode (audio, "Untitled (2) \u{2014} Lo-Fi");
+                    }
+                }
+            }
+
+            // 5) FALLBACK: procedural
             crate::serial_println!("[MUSIC] No WAV available, generating procedural lo-fi beat");
             (Self::generate_procedural_audio(), "Procedural Lo-Fi Beat")
         };
 
         self.start_playback_with_audio(audio, title);
+    }
+
+    /// Switch to next track and start playback.
+    pub fn next_track(&mut self) {
+        if self.num_tracks > 1 {
+            let next = (self.current_track + 1) % self.num_tracks;
+            self.play_track(next);
+        }
+    }
+
+    /// Switch to previous track and start playback.
+    pub fn prev_track(&mut self) {
+        if self.num_tracks > 1 {
+            let prev = if self.current_track == 0 { self.num_tracks - 1 } else { self.current_track - 1 };
+            self.play_track(prev);
+        }
     }
 
     /// Generate a procedural lo-fi beat: 48kHz stereo i16 PCM, ~30 seconds.
@@ -1771,6 +1880,10 @@ pub struct Desktop {
     pub fps_current: u32,
     /// Show FPS overlay on desktop
     pub fps_display: bool,
+    /// Snap preview zone (shown while dragging a window near screen edges)
+    snap_preview: Option<SnapDir>,
+    /// Shortcut help overlay visible (F1 toggle)
+    show_shortcuts: bool,
 }
 
 /// Calculator state for interactive calculator windows
@@ -2380,6 +2493,8 @@ impl Desktop {
             fps_frame_accum: 0,
             fps_current: 0,
             fps_display: true,
+            snap_preview: None,
+            show_shortcuts: false,
         }
     }
     
@@ -2488,9 +2603,9 @@ impl Desktop {
     
     /// Initialize matrix rain background data (depth-parallax advancing effect)
     fn init_matrix_rain(&mut self) {
-        // 320 columns × 6 layers: depth-layered rain with far=dense/slow, near=sparse/fast
-        const MATRIX_COLS: usize = 320;
-        const NUM_LAYERS: usize = 6;
+        // 256 columns × 4 layers: depth-layered rain with far=dense/slow, near=sparse/fast
+        const MATRIX_COLS: usize = 256;
+        const NUM_LAYERS: usize = 4;
         const MAX_TRAIL: usize = 40;   // must match draw_background
         const CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
         
@@ -2556,8 +2671,8 @@ impl Desktop {
     // ═══════════════════════════════════════════════════════════════════
     
     /// Matrix layout constants (must match draw_background)
-    const MATRIX_COLS: usize = 320;
-    const MATRIX_LAYERS: usize = 6;
+    const MATRIX_COLS: usize = 256;
+    const MATRIX_LAYERS: usize = 4;
     const MATRIX_MAX_TRAIL: usize = 40;
 
     /// Set rain speed preset: 0=slow, 1=mid, 2=fast
@@ -2703,7 +2818,7 @@ struct AppConfig {
             fs.write_file("/demo.rs", sample_code.as_bytes())
         });
         
-        let id = self.create_window("TrustCode: demo.rs", 200, 80, 720, 520, WindowType::TextEditor);
+        let id = self.create_window("TrustCode: demo.rs", 160, 50, 780, 560, WindowType::TextEditor);
         if let Some(editor) = self.editor_states.get_mut(&id) {
             editor.load_file("demo.rs");
         }
@@ -3178,23 +3293,49 @@ struct AppConfig {
         }
     }
     
-    /// Snap focused window to left/right (Win+Arrow)
+    /// Snap focused window to left/right/quadrant (Win+Arrow or drag-to-edge)
     pub fn snap_focused_window(&mut self, dir: SnapDir) {
         if let Some(w) = self.windows.iter_mut().rev().find(|w| w.focused) {
             let work_height = self.height - TASKBAR_HEIGHT;
+            let half_w = self.width / 2;
+            let half_h = work_height / 2;
             
             match dir {
                 SnapDir::Left => {
                     w.x = 0;
                     w.y = 0;
-                    w.width = self.width / 2;
+                    w.width = half_w;
                     w.height = work_height;
                 }
                 SnapDir::Right => {
-                    w.x = (self.width / 2) as i32;
+                    w.x = half_w as i32;
                     w.y = 0;
-                    w.width = self.width / 2;
+                    w.width = half_w;
                     w.height = work_height;
+                }
+                SnapDir::TopLeft => {
+                    w.x = 0;
+                    w.y = 0;
+                    w.width = half_w;
+                    w.height = half_h;
+                }
+                SnapDir::TopRight => {
+                    w.x = half_w as i32;
+                    w.y = 0;
+                    w.width = half_w;
+                    w.height = half_h;
+                }
+                SnapDir::BottomLeft => {
+                    w.x = 0;
+                    w.y = half_h as i32;
+                    w.width = half_w;
+                    w.height = half_h;
+                }
+                SnapDir::BottomRight => {
+                    w.x = half_w as i32;
+                    w.y = half_h as i32;
+                    w.width = half_w;
+                    w.height = half_h;
                 }
             }
             w.maximized = false;
@@ -3235,9 +3376,17 @@ struct AppConfig {
             .collect()
     }
     
+    /// Get window info (title, type) for Alt+Tab overlay
+    pub fn get_window_info(&self) -> Vec<(String, WindowType)> {
+        self.windows.iter()
+            .filter(|w| !w.minimized)
+            .map(|w| (w.title.clone(), w.window_type.clone()))
+            .collect()
+    }
+    
     /// Open a new terminal window
     pub fn open_terminal(&mut self) {
-        let id = self.create_window("Terminal", 100, 100, 700, 500, WindowType::Terminal);
+        let id = self.create_window("Terminal", 100, 60, 780, 540, WindowType::Terminal);
         self.focus_window(id);
     }
 
@@ -3688,8 +3837,30 @@ struct AppConfig {
                             }
                         }
 
+                        // Previous track button
+                        let trk_btn_w = 26u32;
+                        let prev_trk_x = stop_x + btn_w + btn_gap;
+                        if click_x >= prev_trk_x && click_x < prev_trk_x + trk_btn_w
+                            && click_y >= ctrl_y && click_y < ctrl_y + btn_h {
+                            if let Some(mp) = self.music_player_states.get_mut(&win_id) {
+                                mp.prev_track();
+                            }
+                        }
+
+                        // Next track button
+                        let next_trk_x = prev_trk_x + trk_btn_w + 4;
+                        if click_x >= next_trk_x && click_x < next_trk_x + trk_btn_w
+                            && click_y >= ctrl_y && click_y < ctrl_y + btn_h {
+                            if let Some(mp) = self.music_player_states.get_mut(&win_id) {
+                                mp.next_track();
+                            }
+                        }
+
                         // Volume bar click
-                        let vol_x = stop_x + btn_w + btn_gap + 10;
+                        let vol_x_base = next_trk_x + trk_btn_w;
+                        let has_multi = self.music_player_states.get(&win_id)
+                            .map(|mp| mp.num_tracks > 1).unwrap_or(false);
+                        let vol_x = vol_x_base + if has_multi { 36 } else { 8 };
                         let track_x = vol_x + 10;
                         let track_w = inner_w.saturating_sub(vol_x - inner_x + 14);
                         let vol_h = 10u32;
@@ -3779,8 +3950,28 @@ struct AppConfig {
                             }
                         }
 
+                        // Palette buttons
+                        let pal_y = viz_mode_y + vm_btn_h + 8;
+                        let pal_btn_w = 20u32;
+                        let pal_btn_h = 16u32;
+                        let pal_prev_x = inner_x + 30;
+                        if click_y >= pal_y && click_y < pal_y + pal_btn_h {
+                            if click_x >= pal_prev_x && click_x < pal_prev_x + pal_btn_w {
+                                let p = self.visualizer.palette;
+                                self.visualizer.palette = if p == 0 { crate::visualizer::NUM_PALETTES - 1 } else { p - 1 };
+                                crate::serial_println!("[PALETTE] {}", crate::visualizer::PALETTE_NAMES[self.visualizer.palette as usize % crate::visualizer::NUM_PALETTES as usize]);
+                            }
+                            let pal_name_len = crate::visualizer::PALETTE_NAMES[self.visualizer.palette as usize % crate::visualizer::NUM_PALETTES as usize].len() as u32;
+                            let pal_name_x = pal_prev_x + pal_btn_w + 6;
+                            let pal_next_x = pal_name_x + pal_name_len * cw + 6;
+                            if click_x >= pal_next_x && click_x < pal_next_x + pal_btn_w {
+                                self.visualizer.palette = (self.visualizer.palette + 1) % crate::visualizer::NUM_PALETTES;
+                                crate::serial_println!("[PALETTE] {}", crate::visualizer::PALETTE_NAMES[self.visualizer.palette as usize % crate::visualizer::NUM_PALETTES as usize]);
+                            }
+                        }
+
                         // Rain speed preset buttons
-                        let rain_y = viz_mode_y + vm_btn_h + 8;
+                        let rain_y = pal_y + pal_btn_h + 8;
                         let rain_btn_w = 20u32;
                         let rain_btn_h = 16u32;
                         let rain_prev_x = inner_x + 30;
@@ -3821,8 +4012,28 @@ struct AppConfig {
             self.start_menu_open = false;
             self.start_menu_search.clear();
         } else {
-            // Mouse released - stop dragging and resizing
+            // Mouse released - stop dragging and snap if preview active
+            let snap_dir = self.snap_preview.take();
+            let mut snapped_id: Option<u32> = None;
             for w in &mut self.windows {
+                if w.dragging {
+                    if let Some(dir) = snap_dir {
+                        // Apply snap: resize window to preview zone
+                        let work_h = self.height - TASKBAR_HEIGHT;
+                        let half_w = self.width / 2;
+                        let half_h = work_h / 2;
+                        match dir {
+                            SnapDir::Left => { w.x = 0; w.y = 0; w.width = half_w; w.height = work_h; }
+                            SnapDir::Right => { w.x = half_w as i32; w.y = 0; w.width = half_w; w.height = work_h; }
+                            SnapDir::TopLeft => { w.x = 0; w.y = 0; w.width = half_w; w.height = half_h; }
+                            SnapDir::TopRight => { w.x = half_w as i32; w.y = 0; w.width = half_w; w.height = half_h; }
+                            SnapDir::BottomLeft => { w.x = 0; w.y = half_h as i32; w.width = half_w; w.height = half_h; }
+                            SnapDir::BottomRight => { w.x = half_w as i32; w.y = half_h as i32; w.width = half_w; w.height = half_h; }
+                        }
+                        w.maximized = false;
+                        snapped_id = Some(w.id);
+                    }
+                }
                 w.dragging = false;
                 w.resizing = ResizeEdge::None;
             }
@@ -4161,40 +4372,40 @@ struct AppConfig {
         let offset = (self.windows.len() as i32 * 25) % 200;
         let id = match action {
             IconAction::OpenTerminal => {
-                self.create_window("Terminal", 150 + offset, 100 + offset, 500, 350, WindowType::Terminal)
+                self.create_window("Terminal", 120 + offset, 60 + offset, 640, 440, WindowType::Terminal)
             },
             IconAction::OpenFileManager => {
-                self.create_window("Files", 180 + offset, 120 + offset, 400, 350, WindowType::FileManager)
+                self.create_window("Files", 140 + offset, 80 + offset, 520, 420, WindowType::FileManager)
             },
             IconAction::OpenCalculator => {
-                self.create_window("Calculator", 450 + offset, 150 + offset, 200, 220, WindowType::Calculator)
+                self.create_window("Calculator", 350 + offset, 100 + offset, 300, 380, WindowType::Calculator)
             },
             IconAction::OpenNetwork => {
-                self.create_window("Network", 200 + offset, 140 + offset, 320, 200, WindowType::NetworkInfo)
+                self.create_window("Network", 180 + offset, 100 + offset, 420, 300, WindowType::NetworkInfo)
             },
             IconAction::OpenSettings => {
-                self.create_window("Settings", 300 + offset, 160 + offset, 350, 250, WindowType::Settings)
+                self.create_window("Settings", 250 + offset, 120 + offset, 440, 340, WindowType::Settings)
             },
             IconAction::OpenAbout => {
-                self.create_window("About TrustOS", 350 + offset, 180 + offset, 350, 200, WindowType::About)
+                self.create_window("About TrustOS", 300 + offset, 140 + offset, 420, 280, WindowType::About)
             },
             IconAction::OpenGame => {
-                self.create_window("Snake Game", 250 + offset, 120 + offset, 320, 320, WindowType::Game)
+                self.create_window("Snake Game", 220 + offset, 80 + offset, 380, 400, WindowType::Game)
             },
             IconAction::OpenEditor => {
-                self.create_window("TrustCode", 150 + offset, 80 + offset, 700, 500, WindowType::TextEditor)
+                self.create_window("TrustCode", 120 + offset, 50 + offset, 780, 560, WindowType::TextEditor)
             },
             IconAction::OpenGL3D => {
-                self.create_window("TrustGL 3D Demo", 150 + offset, 80 + offset, 400, 350, WindowType::Demo3D)
+                self.create_window("TrustGL 3D Demo", 120 + offset, 50 + offset, 500, 420, WindowType::Demo3D)
             },
             IconAction::OpenBrowser => {
-                self.create_window("TrustBrowser", 120 + offset, 60 + offset, 600, 450, WindowType::Browser)
+                self.create_window("TrustBrowser", 100 + offset, 40 + offset, 720, 520, WindowType::Browser)
             },
             IconAction::OpenModelEditor => {
-                self.create_window("TrustEdit 3D", 100 + offset, 60 + offset, 700, 500, WindowType::ModelEditor)
+                self.create_window("TrustEdit 3D", 80 + offset, 40 + offset, 780, 560, WindowType::ModelEditor)
             },
             IconAction::OpenGame3D => {
-                self.create_window("TrustDoom 3D", 80 + offset, 50 + offset, 640, 480, WindowType::Game3D)
+                self.create_window("TrustDoom 3D", 60 + offset, 30 + offset, 720, 540, WindowType::Game3D)
             },
             #[cfg(feature = "emulators")]
             IconAction::OpenNes => {
@@ -4228,8 +4439,8 @@ struct AppConfig {
             return;
         }
         
-        // TrustOS button (left side, matches draw_taskbar)
-        if x >= 4 && x < 112 {
+        // TrustOS button (left side, matches draw_taskbar v2)
+        if x >= 4 && x < 120 {
             self.start_menu_open = !self.start_menu_open;
             if !self.start_menu_open {
                 self.start_menu_search.clear();
@@ -4245,10 +4456,10 @@ struct AppConfig {
             return;
         }
         
-        // Window buttons — must match the centered layout in draw_taskbar
+        // Window buttons — must match the centered layout in draw_taskbar v2
         let total_btns = self.windows.len();
         if total_btns > 0 {
-            let btn_w = 84u32;
+            let btn_w = 96u32;
             let btn_gap = 6u32;
             let total_w = total_btns as u32 * (btn_w + btn_gap) - btn_gap;
             let start_x = (self.width.saturating_sub(total_w)) / 2;
@@ -4280,14 +4491,14 @@ struct AppConfig {
             }
         }
         // Create new settings window
-        self.create_window("Settings", 250, 140, 400, 350, WindowType::Settings);
+        self.create_window("Settings", 220, 100, 460, 380, WindowType::Settings);
     }
     
     /// Menu actions enum — must match draw_start_menu layout exactly
     fn check_start_menu_click(&self, x: i32, y: i32) -> Option<u8> {
-        // Same dimensions as draw_start_menu()
-        let menu_w = 420u32;
-        let menu_h = 640u32;
+        // Same dimensions as draw_start_menu() v2
+        let menu_w = 480u32;
+        let menu_h = 680u32;
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
@@ -4296,11 +4507,8 @@ struct AppConfig {
             return None;
         }
         
-        // Search bar is at menu_y + 30, height 32 — clicking there focuses search (no action)
-        let search_bar_bottom = menu_y + 66;
-        let items_start_y = search_bar_bottom + 4;
-        let item_spacing = 28;
-        let item_h = 26;
+        // Search bar: menu_y + 34, height 36 → items start at menu_y + 78
+        let items_start_y = menu_y + 78;
         
         // App labels (indices 0-14, non-special)
         let app_labels: [&str; 15] = [
@@ -4317,7 +4525,12 @@ struct AppConfig {
         let search = self.start_menu_search.trim();
         let search_lower: String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
         
-        // Check app items first
+        // Grid layout: 2 columns, tile_h=44, tile_gap=4
+        let col_count = 2u32;
+        let tile_w = (menu_w - 24) / col_count;
+        let tile_h = 44u32;
+        let tile_gap = 4u32;
+        
         let filtered_apps: alloc::vec::Vec<u8> = if search.is_empty() {
             app_indices.to_vec()
         } else {
@@ -4327,28 +4540,32 @@ struct AppConfig {
             }).copied().collect()
         };
         
-        if y >= items_start_y && y < menu_y + menu_h as i32 - 106 {
-            let clicked_row = ((y - items_start_y) / item_spacing) as usize;
-            if clicked_row < filtered_apps.len() {
-                let item_top = items_start_y + (clicked_row as i32 * item_spacing);
-                if y < item_top + item_h {
-                    return Some(filtered_apps[clicked_row]);
+        // Check app grid items
+        if y >= items_start_y && y < menu_y + menu_h as i32 - 110 {
+            for (drawn, &app_idx) in filtered_apps.iter().enumerate() {
+                let col = (drawn % col_count as usize) as i32;
+                let row = (drawn / col_count as usize) as i32;
+                let item_x = menu_x + 10 + col * (tile_w + tile_gap) as i32;
+                let item_y = items_start_y + row * (tile_h + tile_gap) as i32;
+                
+                if x >= item_x && x < item_x + tile_w as i32
+                    && y >= item_y && y < item_y + tile_h as i32 {
+                    return Some(app_idx);
                 }
             }
         }
         
         // Check power items (bottom-anchored)
         let power_y = menu_y + menu_h as i32 - 106;
-        let power_start_y = power_y + 6;
+        let power_start_y = power_y + 8;
         if y >= power_start_y {
             for (pi, &pidx) in power_indices.iter().enumerate() {
-                // Filter by search
                 if !search_lower.is_empty() {
                     let ll: String = power_labels[pi].chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
                     if !ll.contains(search_lower.as_str()) { continue; }
                 }
-                let item_top = power_start_y + (pi as i32 * item_spacing);
-                if y >= item_top && y < item_top + item_h {
+                let item_top = power_start_y + (pi as i32 * 30);
+                if y >= item_top && y < item_top + 28 {
                     return Some(pidx);
                 }
             }
@@ -4364,32 +4581,32 @@ struct AppConfig {
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
-                let y = 80 + (self.windows.len() as i32 * 20);
-                self.create_window("Terminal", x, y, 500, 350, WindowType::Terminal);
+                let y = 60 + (self.windows.len() as i32 * 20);
+                self.create_window("Terminal", x, y, 640, 440, WindowType::Terminal);
             },
             1 => { // Files
-                self.create_window("Files", 150, 100, 400, 350, WindowType::FileManager);
+                self.create_window("Files", 140, 80, 520, 420, WindowType::FileManager);
             },
             2 => { // Calculator
-                self.create_window("Calculator", 400, 150, 280, 350, WindowType::Calculator);
+                self.create_window("Calculator", 350, 100, 300, 380, WindowType::Calculator);
             },
             3 => { // Network
-                self.create_window("Network", 200, 120, 320, 200, WindowType::NetworkInfo);
+                self.create_window("Network", 180, 100, 420, 300, WindowType::NetworkInfo);
             },
             4 => { // Text Editor (TrustCode)
-                self.create_window("TrustCode", 150, 80, 700, 500, WindowType::TextEditor);
+                self.create_window("TrustCode", 120, 50, 780, 560, WindowType::TextEditor);
             },
             5 => { // TrustEdit 3D
-                self.create_window("TrustEdit 3D", 100, 60, 700, 500, WindowType::ModelEditor);
+                self.create_window("TrustEdit 3D", 80, 40, 780, 560, WindowType::ModelEditor);
             },
             6 => { // Browser
-                self.create_window("TrustBrowser", 120, 60, 600, 450, WindowType::Browser);
+                self.create_window("TrustBrowser", 100, 40, 720, 520, WindowType::Browser);
             },
             7 => { // Snake
-                self.create_window("Snake Game", 250, 120, 340, 360, WindowType::Game);
+                self.create_window("Snake Game", 220, 80, 380, 400, WindowType::Game);
             },
             8 => { // Chess
-                self.create_window("TrustChess", 200, 80, 480, 520, WindowType::Chess);
+                self.create_window("TrustChess", 180, 60, 520, 560, WindowType::Chess);
             },
             9 => { // Chess 3D — open fullscreen
                 let sw = self.width;
@@ -4402,11 +4619,11 @@ struct AppConfig {
             },
             10 => { // NES Emulator
                 #[cfg(feature = "emulators")]
-                self.create_window("NES Emulator", 80, 50, 512, 480, WindowType::NesEmu);
+                self.create_window("NES Emulator", 80, 40, 560, 520, WindowType::NesEmu);
             },
             11 => { // Game Boy
                 #[cfg(feature = "emulators")]
-                self.create_window("Game Boy", 100, 60, 480, 432, WindowType::GameBoyEmu);
+                self.create_window("Game Boy", 100, 40, 520, 480, WindowType::GameBoyEmu);
             },
             12 => { // TrustLab
                 self.open_lab_mode();
@@ -5976,6 +6193,20 @@ struct AppConfig {
                     }
                 }
             },
+            _ if cmd.starts_with("j ") || cmd.starts_with("jarvis ") || cmd == "j" || cmd == "jarvis" => {
+                // JARVIS commands: run async on background thread to avoid freezing desktop
+                if JARVIS_BUSY.load(core::sync::atomic::Ordering::SeqCst) {
+                    output.push(String::from("\x01Y[Jarvis] \x01MStill thinking... please wait."));
+                } else {
+                    JARVIS_BUSY.store(true, core::sync::atomic::Ordering::SeqCst);
+                    {
+                        let mut pending = JARVIS_PENDING_QUERY.lock();
+                        *pending = Some(String::from(cmd));
+                    }
+                    crate::thread::spawn_kernel("jarvis-bg", jarvis_worker, 0);
+                    output.push(String::from("\x01Y[Jarvis] \x01M\u{1F4AD} Thinking..."));
+                }
+            },
             _ => {
                 // Route through the real shell engine so ALL commands are available
                 // Clear captured output, enable capture, run command, collect output
@@ -6010,6 +6241,28 @@ struct AppConfig {
             if w.dragging && !w.maximized {
                 w.x = (x - w.drag_offset_x).max(0).min(self.width as i32 - 50);
                 w.y = (y - w.drag_offset_y).max(0).min(self.height as i32 - TASKBAR_HEIGHT as i32 - TITLE_BAR_HEIGHT as i32);
+                
+                // Detect snap zone while dragging
+                let edge_margin = 16i32;
+                let sw = self.width as i32;
+                let sh = (self.height - TASKBAR_HEIGHT) as i32;
+                let half_h = sh / 2;
+                
+                if x <= edge_margin && y <= edge_margin + half_h / 4 {
+                    self.snap_preview = Some(SnapDir::TopLeft);
+                } else if x <= edge_margin && y >= sh - half_h / 4 {
+                    self.snap_preview = Some(SnapDir::BottomLeft);
+                } else if x <= edge_margin {
+                    self.snap_preview = Some(SnapDir::Left);
+                } else if x >= sw - edge_margin && y <= edge_margin + half_h / 4 {
+                    self.snap_preview = Some(SnapDir::TopRight);
+                } else if x >= sw - edge_margin && y >= sh - half_h / 4 {
+                    self.snap_preview = Some(SnapDir::BottomRight);
+                } else if x >= sw - edge_margin {
+                    self.snap_preview = Some(SnapDir::Right);
+                } else {
+                    self.snap_preview = None;
+                }
             }
             
             // Handle window resizing (all edges)
@@ -6617,6 +6870,26 @@ struct AppConfig {
         self.draw_nes_windows();
         #[cfg(feature = "emulators")]
         self.draw_gameboy_windows();
+        
+        // Draw snap preview overlay (translucent green zone while dragging to edge)
+        if let Some(snap_dir) = self.snap_preview {
+            let work_h = self.height - TASKBAR_HEIGHT;
+            let half_w = self.width / 2;
+            let half_h = work_h / 2;
+            let (sx, sy, sw, sh) = match snap_dir {
+                SnapDir::Left       => (0, 0, half_w, work_h),
+                SnapDir::Right      => (half_w, 0, half_w, work_h),
+                SnapDir::TopLeft    => (0, 0, half_w, half_h),
+                SnapDir::TopRight   => (half_w, 0, half_w, half_h),
+                SnapDir::BottomLeft => (0, half_h, half_w, half_h),
+                SnapDir::BottomRight => (half_w, half_h, half_w, half_h),
+            };
+            // Translucent green fill
+            framebuffer::fill_rect_alpha(sx, sy, sw, sh, 0x00FF66, 18);
+            // Green border outline
+            framebuffer::draw_rect(sx + 2, sy + 2, sw.saturating_sub(4), sh.saturating_sub(4), GREEN_MUTED);
+            framebuffer::draw_rect(sx + 3, sy + 3, sw.saturating_sub(6), sh.saturating_sub(6), GREEN_GHOST);
+        }
         
         // ALWAYS draw taskbar last (on top of everything, never covered by windows)
         self.draw_taskbar();
@@ -7482,54 +7755,35 @@ struct AppConfig {
         // MATRIX RAIN — Multi-color, beat-synced, depth-layered
         // Logo: faithful chrome/silver rendering from bitmap
         // ═══════════════════════════════════════════════════════════════
-        const MATRIX_COLS: usize = 320;
+        const MATRIX_COLS: usize = 256;
         const MAX_TRAIL: usize = 40;
-        const NUM_LAYERS: usize = 6;
+        const NUM_LAYERS: usize = 4;
         
-        // ── Per-layer depth parameters (6 layers: far→near) ──
-        // Layer 0 = DEEPEST BG  (slowest, dimmest, densest — shadow wash)
-        // Layer 1 = FAR BG      (slow, dark, long trails)
-        // Layer 2 = MID-FAR     (moderate fog layer)
-        // Layer 3 = MID-NEAR    (medium, visible characters)
-        // Layer 4 = NEAR         (faster, bright, vivid colors)
-        // Layer 5 = FOREGROUND   (fastest, brightest, sparse)
-        // Trail length: far=long, near=short (shadow effect)
-        const LAYER_TRAIL: [usize; 6]  = [32, 26, 22, 16, 12, 8];
-        // Brightness: far=very dim, near=full
-        const LAYER_DIM: [f32; 6]       = [0.22, 0.32, 0.42, 0.58, 0.80, 1.0];
-        // Speed multipliers per preset: [slow, mid, fast] for each layer
-        // Far layers always slow, near layers scale with preset
-        const LAYER_SPEED_PRESETS: [[f32; 6]; 3] = [
-            // slow:  gentle drift everywhere (+25%)
-            [0.38, 0.50, 0.75, 1.12, 1.62, 2.25],
-            // mid:   balanced cinematic rain (+25%)
-            [0.62, 0.88, 1.25, 1.88, 2.75, 3.75],
-            // fast:  intense downpour (+25%)
-            [1.0, 1.38, 2.0, 3.0, 4.38, 6.25],
+        // ── Per-layer depth parameters (4 layers: far→near) ──
+        // Layer 0 = FAR BG      (slow, dark, long trails)
+        // Layer 1 = MID          (moderate, medium chars)
+        // Layer 2 = NEAR         (faster, bright, vivid colors)
+        // Layer 3 = FOREGROUND   (fastest, brightest, sparse)
+        const LAYER_TRAIL: [usize; 4]  = [28, 20, 14, 8];
+        const LAYER_DIM: [f32; 4]       = [0.28, 0.50, 0.78, 1.0];
+        const LAYER_SPEED_PRESETS: [[f32; 4]; 3] = [
+            [0.44, 0.88, 1.62, 2.25],
+            [0.75, 1.50, 2.75, 3.75],
+            [1.19, 2.38, 4.38, 6.25],
         ];
         let preset = (self.matrix_rain_preset as usize).min(2);
-        let layer_speed: [f32; 6] = LAYER_SPEED_PRESETS[preset];
-        // Parallax sway: far=none, near=slight
-        const LAYER_SWAY: [f32; 6]      = [0.0, 0.0, 0.3, 0.6, 1.2, 2.0];
-        // Column density: far=every col (dense shadow), near=sparse (rain streams)
-        // skip=1 → all cols, 2 → half, 3 → third, 4 → quarter
-        const LAYER_COL_SKIP: [usize; 6] = [1, 2, 2, 3, 4, 5];
-        // Atmospheric color shift: far=dimmer green, near=vivid green (NO red/blue)
-        const LAYER_ATMO_R: [i16; 6]    = [ 0,  0,  0,  0,  0,  0];
-        const LAYER_ATMO_G: [i16; 6]    = [-6, -3,  0,  0,  4,  8];
-        const LAYER_ATMO_B: [i16; 6]    = [ 0,  0,  0,  0,  0,  0];
-        // ── Flow field: organic horizontal drift (per layer intensity) ──
-        // Far layers barely move, near layers curve more visibly
-        const LAYER_FLOW: [f32; 6]       = [0.0, 0.5, 1.2, 2.5, 4.0, 6.0];
-        // ── Glyph scale: pixel size of each rendered character ──
-        // Far = tiny (4×8), near = large (14×28) → depth illusion
-        // (scale_w, scale_h) in pixels — glyph bitmap is stretched from 8×16
-        const LAYER_GLYPH_W: [u32; 6]    = [4, 5, 7, 8, 10, 14];
-        const LAYER_GLYPH_H: [u32; 6]    = [8, 10, 14, 16, 20, 28];
-        // Mobile overrides: smaller glyphs + sparser near-layers for 498px viewport
-        const MOBILE_GLYPH_W: [u32; 6]   = [3, 3, 4, 5, 6, 7];
-        const MOBILE_GLYPH_H: [u32; 6]   = [6, 6, 8, 10, 12, 14];
-        const MOBILE_COL_SKIP: [usize; 6] = [1, 2, 3, 4, 6, 8];
+        let layer_speed: [f32; 4] = LAYER_SPEED_PRESETS[preset];
+        const LAYER_SWAY: [f32; 4]      = [0.0, 0.3, 1.0, 2.0];
+        const LAYER_COL_SKIP: [usize; 4] = [2, 3, 4, 6];
+        const LAYER_ATMO_R: [i16; 4]    = [ 0,  0,  0,  0];
+        const LAYER_ATMO_G: [i16; 4]    = [-4,  0,  4,  8];
+        const LAYER_ATMO_B: [i16; 4]    = [ 0,  0,  0,  0];
+        const LAYER_FLOW: [f32; 4]       = [0.0, 1.5, 3.5, 6.0];
+        const LAYER_GLYPH_W: [u32; 4]    = [5, 7, 10, 14];
+        const LAYER_GLYPH_H: [u32; 4]    = [10, 14, 20, 28];
+        const MOBILE_GLYPH_W: [u32; 4]   = [3, 4, 6, 7];
+        const MOBILE_GLYPH_H: [u32; 4]   = [6, 8, 12, 14];
+        const MOBILE_COL_SKIP: [usize; 4] = [2, 3, 6, 8];
         let is_mobile = self.mobile_state.active;
         
         let height = self.height.saturating_sub(TASKBAR_HEIGHT);
@@ -7566,7 +7820,7 @@ struct AppConfig {
         // Deterministic grid with hash-based selection — ~0.15% of pixels twinkle
         // Stars are fixed positions but brightness gently oscillates per frame
         {
-            let star_phase = self.frame_count as f32 * 0.02;
+            let star_tick = self.frame_count as u32;
             let step = 12u32; // check every 12th pixel in both axes
             let mut sy = 0u32;
             while sy < height {
@@ -7582,10 +7836,10 @@ struct AppConfig {
                         let px = sx + ox;
                         let py = sy + oy;
                         if px < width && py < height && py < refl_start {
-                            // Twinkle: gentle brightness oscillation unique per star
-                            let twinkle_phase = (h & 0xFF) as f32 * 0.025 + star_phase;
-                            let twinkle = 0.4 + 0.6 * ((libm::sinf(twinkle_phase) + 1.0) * 0.5);
-                            let lum = (40.0 + twinkle * 60.0) as u32; // 40..100 brightness
+                            // Twinkle: fast integer triangle wave (no sinf)
+                            let phase = star_tick.wrapping_add(h & 0xFF).wrapping_mul(3);
+                            let tri = ((phase & 255) as i32 - 128).unsigned_abs(); // 0..128
+                            let lum = 40 + (tri * 60 / 128) as u32; // 40..100 brightness
                             let c = 0xFF000000 | (lum << 16) | (lum << 8) | lum;
                             framebuffer::put_pixel_fast(px, py, c);
                         }
@@ -7633,6 +7887,9 @@ struct AppConfig {
         let flow_time = self.frame_count as f32 * 0.008;
         
         if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} rain start", self.frame_count); }
+        // Get raw framebuffer pointer once — eliminates 3 atomic loads per pixel
+        let (fb_ptr, fb_stride, _fb_height) = framebuffer::frame_context();
+        let has_any_overrides = !self.matrix_overrides.is_empty();
         for layer in 0..NUM_LAYERS {
         // ── Parallax sway: horizontal drift based on frame time ──
         // Each layer oscillates at a different frequency for organic motion
@@ -7640,9 +7897,10 @@ struct AppConfig {
         let sway_freq = match layer { 4 => 0.010f32, 5 => 0.014, 3 => 0.006, _ => 0.0 };
         let sway_offset = if sway_amp > 0.0 {
             let phase = (self.frame_count as f32) * sway_freq;
-            // Use two sine waves at different frequencies for non-repetitive motion
-            let s1 = libm::sinf(phase);
-            let s2 = libm::sinf(phase * 1.7 + 2.0) * 0.4;
+            // Use fast sin approx for non-repetitive motion
+            let sin = crate::graphics::holomatrix::sin_approx_pub;
+            let s1 = sin(phase);
+            let s2 = sin(phase * 1.7 + 2.0) * 0.4;
             ((s1 + s2) * sway_amp) as i32
         } else { 0i32 };
         let col_skip = if is_mobile { MOBILE_COL_SKIP[layer] } else { LAYER_COL_SKIP[layer] };
@@ -7719,9 +7977,8 @@ struct AppConfig {
             } else { 0 };
             
             // Visualizer: slow rain in columns that intersect the 3D shape
-            let ghost_slow = if m_playing {
-                crate::visualizer::column_slow_factor(&self.visualizer, col) as i32
-            } else { 100 };
+            // Always active (idle mode shows shapes even without music)
+            let ghost_slow = crate::visualizer::column_slow_factor(&self.visualizer, col) as i32;
             let speed_adj = ((speed as f32) * layer_spd) as i32;
             let effective_advance = (((speed_adj + beat_boost) * ghost_slow / 100) * fov_speed_pct / 100).max(1);
             let new_y = self.matrix_heads[idx] + effective_advance;
@@ -7764,6 +8021,8 @@ struct AppConfig {
             let eff_trail = speed_trail.max(4).min(MAX_TRAIL);
             
             for i in 0..eff_trail {
+                // Far layer: render every other trail char (barely visible anyway)
+                if layer == 0 && (i & 1) == 1 { continue; }
                 
                 let char_y = head_y - (i as i32 * eff_char_h as i32);
                 if char_y < 0 || char_y >= height as i32 { continue; }
@@ -7822,7 +8081,9 @@ struct AppConfig {
                 let (mut r, mut g, mut b) = (r, g, b);
                 let mut ghost_trail_boost: u8 = 0;
                 let mut ghost_depth: u8 = 128;
-                if m_playing {
+                // Far layer 0: skip expensive collision — barely visible
+                // Always active: shapes visible in idle mode too
+                if layer >= 1 {
                     let fx = crate::visualizer::check_rain_collision(
                         &self.visualizer, col, char_y,
                         self.visualizer.beat_pulse, m_energy,
@@ -7834,6 +8095,8 @@ struct AppConfig {
                             fx.fresnel, fx.specular,
                             fx.ao, fx.bloom, fx.scanline, fx.inner_glow, fx.shadow,
                             m_beat, m_energy,
+                            m_sub_bass, m_bass, m_mid, m_treble,
+                            self.visualizer.palette,
                         );
                         r = mr; g = mg; b = mb;
                         ghost_trail_boost = fx.trail_boost;
@@ -7866,33 +8129,43 @@ struct AppConfig {
                 
                 // ── Flow field: organic horizontal displacement ──
                 // Radial: strongest near the TrustOS logo, fades to zero far away
-                let flow_offset = if flow_amp > 0.0 {
+                // Skip for far layers (0-2) — not noticeable at their dim brightness
+                let flow_offset = if flow_amp > 0.0 && layer >= 3 {
                     let dx = x as f32 - logo_center_x as f32;
                     let dy = char_y as f32 - logo_center_y as f32;
-                    let dist = libm::sqrtf(dx * dx + dy * dy);
-                    // Radial falloff: 1.0 inside flow_radius, fades to 0 over flow_fade
-                    let radial = if dist < flow_radius {
+                    let dist_sq = dx * dx + dy * dy;
+                    // Radial falloff using squared distances (no sqrtf)
+                    let r_sq = flow_radius * flow_radius;
+                    let outer_sq = (flow_radius + flow_fade) * (flow_radius + flow_fade);
+                    let radial = if dist_sq < r_sq {
                         1.0
-                    } else if dist < flow_radius + flow_fade {
-                        1.0 - (dist - flow_radius) / flow_fade
+                    } else if dist_sq < outer_sq {
+                        // Linear approx in squared space
+                        1.0 - (dist_sq - r_sq) / (outer_sq - r_sq)
                     } else {
                         0.0
                     };
                     if radial > 0.01 {
                         let cy = char_y as f32;
                         let cx = col as f32;
-                        let o1 = libm::sinf(cy * 0.0045 + cx * 0.13 + flow_time);
-                        let o2 = libm::sinf(cy * 0.012 + cx * 0.07 + flow_time * 1.6 + 3.0) * 0.4;
-                        let o3 = libm::sinf(cy * 0.028 + cx * 0.21 + flow_time * 2.3 + 1.5) * 0.15;
+                        let sin = crate::graphics::holomatrix::sin_approx_pub;
+                        let o1 = sin(cy * 0.0045 + cx * 0.13 + flow_time);
+                        let o2 = sin(cy * 0.012 + cx * 0.07 + flow_time * 1.6 + 3.0) * 0.4;
+                        let o3 = sin(cy * 0.028 + cx * 0.21 + flow_time * 2.3 + 1.5) * 0.15;
                         ((o1 + o2 + o3) * flow_amp * radial) as i32
                     } else { 0 }
                 } else { 0 };
                 let x_flow = (x as i32 + flow_offset).max(0).min(width as i32 - 1) as u32;
                 
                 // ── Drone Swarm: holographic wireframe formations ──
-                let drone_fx = crate::drone_swarm::query(
-                    &self.drone_swarm, x_flow as f32, char_y as f32,
-                );
+                // Skip for far layers (0-2) — subtle effect invisible at low brightness
+                let drone_fx = if layer >= 3 {
+                    crate::drone_swarm::query(
+                        &self.drone_swarm, x_flow as f32, char_y as f32,
+                    )
+                } else {
+                    crate::drone_swarm::DroneInteraction { brightness: 1.0, color_r: 0, color_g: 0, color_b: 0 }
+                };
                 if drone_fx.brightness != 1.0 || drone_fx.color_r != 0 {
                     let bf = drone_fx.brightness;
                     r = ((r as f32 * bf).min(255.0)) as u8;
@@ -7937,13 +8210,11 @@ struct AppConfig {
 
                 // Check for per-cell pixel override (skip if projection takes priority)
                 let cell_key = idx * MAX_TRAIL + i;
-                let has_override = !in_proj && self.matrix_overrides.contains_key(&cell_key);
+                let has_override = !in_proj && has_any_overrides && self.matrix_overrides.contains_key(&cell_key);
                 
                 let cr = ((color >> 16) & 0xFF) as u8;
                 let cg = ((color >> 8) & 0xFF) as u8;
                 let cb = (color & 0xFF) as u8;
-                let overlap_boost: u8 = if layer > 0 { 30u8 } else { 0 };
-                // Note: overlap_boost only applied to GREEN channel to prevent yellow
                 
                 if in_proj {
                     // ── PROJECTION MODE: reveal image pixels through rain ──
@@ -8005,9 +8276,8 @@ struct AppConfig {
                             let mut fr = (pr * intensity).min(255.0) as u8;
                             let mut fg = (pg * intensity).min(255.0) as u8;
                             let mut fb = (pb * intensity).min(255.0) as u8;
-                            if overlap_boost > 0 {
-                                // Only boost green channel (R/B boost causes yellow)
-                                fg = (fg as u16 + overlap_boost as u16).min(255) as u8;
+                            if layer > 0 {
+                                fg = (fg as u16 + 30u16).min(255) as u8;
                             }
                             fr = ((fr as f32 * scanline).min(255.0)) as u8;
                             fg = ((fg as f32 * scanline).min(255.0)) as u8;
@@ -8020,41 +8290,57 @@ struct AppConfig {
                         }
                     }
                 } else {
-                    // ── NORMAL MODE: scaled glyph rendering + flow field ──
-                    // Each layer has its own glyph size (glyph_w × glyph_h).
-                    // We sample the 8×16 source bitmap with nearest-neighbor scaling.
+                    // ── GLYPH RENDERING (all layers) — direct pointer writes ──
+                    // Pre-compute colors for even/odd scanlines (avoid per-pixel float math)
+                    let fg_boost = if layer > 0 { 30u16 } else { 0u16 };
+                    let ar = cr;
+                    let ag = (cg as u16 + fg_boost).min(255) as u8;
+                    let ab = cb;
+                    let color_even = 0xFF000000 | ((ar as u32) << 16) | ((ag as u32) << 8) | (ab as u32);
+                    let sr = (ar as u16 * 245 >> 8) as u8;
+                    let sg = (ag as u16 * 245 >> 8) as u8;
+                    let sb = (ab as u16 * 245 >> 8) as u8;
+                    let color_odd = 0xFF000000 | ((sr as u32) << 16) | ((sg as u32) << 8) | (sb as u32);
+                    let refl_y = height * 88 / 100;
+                    let rg_even = (ag as u16 + 10).min(255) as u8;
+                    let rg_odd = (sg as u16 + 10).min(255) as u8;
+                    let color_refl_even = 0xFF000000 | ((ar as u32) << 16) | ((rg_even as u32) << 8) | (ab as u32);
+                    let color_refl_odd = 0xFF000000 | ((sr as u32) << 16) | ((rg_odd as u32) << 8) | (sb as u32);
+                    let use_direct = !fb_ptr.is_null();
                     for sy in 0..glyph_h {
                         let py = char_y as u32 + sy;
                         if py >= height { continue; }
-                        // Map scaled row → source row (0..15)
                         let src_row = ((sy * 16) / glyph_h).min(15) as usize;
                         let bits = glyph[src_row];
                         if bits == 0 { continue; }
-                        let scanline: f32 = if py & 1 == 0 { 1.0 } else { 0.96 };
-                        let in_reflection = py > height * 88 / 100;
-                        // Use pre-computed per-character flow offset (no per-row sinf)
-                        let row_x = x_flow;
-                        for sx in 0..glyph_w {
-                            // Map scaled col → source col (0..7)
-                            let src_col = ((sx * 8) / glyph_w).min(7);
-                            if bits & (0x80 >> src_col) != 0 {
-                                let px = row_x + sx;
-                                if px < width {
-                                    let mut fr = cr;
-                                    let mut fg = cg;
-                                    let mut fb = cb;
-                                    if overlap_boost > 0 {
-                                        // Only boost green channel (R/B boost causes yellow)
-                                        fg = (fg as u16 + overlap_boost as u16).min(255) as u8;
+                        let is_odd = py & 1 != 0;
+                        let in_reflection = py > refl_y;
+                        let fc = match (is_odd, in_reflection) {
+                            (false, false) => color_even,
+                            (true, false) => color_odd,
+                            (false, true) => color_refl_even,
+                            (true, true) => color_refl_odd,
+                        };
+                        if use_direct {
+                            // Direct pointer write — zero atomic loads per pixel
+                            let row_base = py as usize * fb_stride as usize;
+                            for sx in 0..glyph_w {
+                                let src_col = ((sx * 8) / glyph_w).min(7);
+                                if bits & (0x80 >> src_col) != 0 {
+                                    let px = x_flow + sx;
+                                    if px < width {
+                                        unsafe { *fb_ptr.add(row_base + px as usize) = fc; }
                                     }
-                                    fr = ((fr as f32 * scanline).min(255.0)) as u8;
-                                    fg = ((fg as f32 * scanline).min(255.0)) as u8;
-                                    fb = ((fb as f32 * scanline).min(255.0)) as u8;
-                                    if in_reflection {
-                                        fg = (fg as u16 + 10).min(255) as u8;
+                                }
+                            }
+                        } else {
+                            for sx in 0..glyph_w {
+                                let src_col = ((sx * 8) / glyph_w).min(7);
+                                if bits & (0x80 >> src_col) != 0 {
+                                    let px = x_flow + sx;
+                                    if px < width {
+                                        framebuffer::put_pixel_fast(px, py, fc);
                                     }
-                                    let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
-                                    framebuffer::put_pixel_fast(px, py, fc);
                                 }
                             }
                         }
@@ -8069,9 +8355,9 @@ struct AppConfig {
         // the 3D shape, filling gaps for a much denser silhouette
         // (skip on mobile — too heavy for small viewport)
         // ═════════════════════════════════════════════════════════════
-        if m_playing && !is_mobile {
-            const NUM_FILL: usize = 5;
-            const FILL_TRAIL: usize = 20;
+        if !is_mobile {
+            const NUM_FILL: usize = 4;
+            const FILL_TRAIL: usize = 16;
             const FILL_CH: u32 = 16;  // Fill layers use standard 8×16 glyphs
             
             for col in 0..MATRIX_COLS.min(self.visualizer.column_bounds.len()) {
@@ -8125,6 +8411,8 @@ struct AppConfig {
                             fx.fresnel, fx.specular,
                             fx.ao, fx.bloom, fx.scanline, fx.inner_glow, fx.shadow,
                             m_beat, m_energy,
+                            m_sub_bass, m_bass, m_mid, m_treble,
+                            self.visualizer.palette,
                         );
                         // Image mode: blend fill chars toward image color too
                         if fx.target_blend > 0 {
@@ -8148,11 +8436,23 @@ struct AppConfig {
                         for (gr, &bits) in glyph.iter().enumerate() {
                             let py = char_y as u32 + gr as u32;
                             if py >= height || bits == 0 { continue; }
-                            for bit in 0..8u32 {
-                                if bits & (0x80 >> bit) != 0 {
-                                    let px = x + bit;
-                                    if px < width {
-                                        framebuffer::put_pixel_fast(px, py, color);
+                            if !fb_ptr.is_null() {
+                                let row_base = py as usize * fb_stride as usize;
+                                for bit in 0..8u32 {
+                                    if bits & (0x80 >> bit) != 0 {
+                                        let px = x + bit;
+                                        if px < width {
+                                            unsafe { *fb_ptr.add(row_base + px as usize) = color; }
+                                        }
+                                    }
+                                }
+                            } else {
+                                for bit in 0..8u32 {
+                                    if bits & (0x80 >> bit) != 0 {
+                                        let px = x + bit;
+                                        if px < width {
+                                            framebuffer::put_pixel_fast(px, py, color);
+                                        }
                                     }
                                 }
                             }
@@ -8176,67 +8476,19 @@ struct AppConfig {
             let logo_x = (width / 2).saturating_sub(logo_w / 2);
             let logo_y = logo_center_y.saturating_sub(logo_h / 2);
             
-            // ── Dark radial vignette behind logo for contrast ──
-            // Dim the matrix rain behind the logo so chrome stands out
-            {
-                let pad = 30u32; // extra darkening margin around logo
-                let cx = logo_x + logo_w / 2;
-                let cy = logo_y + logo_h / 2;
-                let max_r = ((logo_w / 2 + pad) as f32).max((logo_h / 2 + pad) as f32);
-                let y_start = logo_y.saturating_sub(pad);
-                let y_end = (logo_y + logo_h + pad).min(height);
-                let x_start = logo_x.saturating_sub(pad);
-                let x_end = (logo_x + logo_w + pad).min(width);
-                // Darken every 2nd pixel for performance (checkerboard)
-                let phase = (self.frame_count & 1) as u32;
-                for py in y_start..y_end {
-                    for px in x_start..x_end {
-                        if ((px + py) & 1) != phase { continue; }
-                        let dx = (px as f32 - cx as f32) / max_r;
-                        let dy = (py as f32 - cy as f32) / max_r;
-                        let dist = libm::sqrtf(dx * dx + dy * dy);
-                        if dist > 1.0 { continue; }
-                        // Stronger darkening in center (80%), fading at edge (0%)
-                        let darken = ((1.0 - dist) * 0.80) as f32;
-                        let existing = framebuffer::get_pixel_fast(px, py);
-                        let er = ((existing >> 16) & 0xFF) as f32;
-                        let eg = ((existing >> 8) & 0xFF) as f32;
-                        let eb = (existing & 0xFF) as f32;
-                        let keep = 1.0 - darken;
-                        let nr = (er * keep) as u32;
-                        let ng = (eg * keep) as u32;
-                        let nb = (eb * keep) as u32;
-                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
-                    }
-                }
-            }
+            // No vignette — rain behind logo provides sufficient contrast
             
-            // Green glow behind chrome edges — every frame for visibility
-            for ly in 0..logo_h {
-                for lx in 0..logo_w {
-                    if !crate::logo_bitmap::logo_edge_pixel(lx as usize, ly as usize) { continue; }
-                    let px = logo_x + lx;
-                    let py = logo_y + ly;
-                    if px >= width || py >= height { continue; }
-                    let glow_g: u32 = if m_playing { 35 + (m_beat * 50.0) as u32 } else { 30 };
-                    // 3x3 glow
-                    for gdy in 0..3u32 {
-                        for gdx in 0..3u32 {
-                            let gx = px as i32 + gdx as i32 - 1;
-                            let gy = py as i32 + gdy as i32 - 1;
-                            if gx >= 0 && gy >= 0 && (gx as u32) < width && (gy as u32) < height {
-                                let dist = ((gdx as i32 - 1).unsigned_abs() + (gdy as i32 - 1).unsigned_abs()) as u32;
-                                if dist > 0 && dist <= 2 {
-                                    let existing = framebuffer::get_pixel_fast(gx as u32, gy as u32);
-                                    let eg = (existing >> 8) & 0xFF;
-                                    if eg < 60 {
-                                        let fade = glow_g / (dist + 1);
-                                        framebuffer::put_pixel_fast(gx as u32, gy as u32,
-                                            0xFF000000 | (fade.min(255) << 8));
-                                    }
-                                }
-                            }
-                        }
+            // Green glow behind chrome edges — render every 4th frame for performance
+            if self.frame_count % 4 == 0 {
+                for ly in (0..logo_h).step_by(2) {
+                    for lx in 0..logo_w {
+                        if !crate::logo_bitmap::logo_edge_pixel(lx as usize, ly as usize) { continue; }
+                        let px = logo_x + lx;
+                        let py = logo_y + ly;
+                        if px >= width || py >= height { continue; }
+                        let glow_g: u32 = if m_playing { 35 + (m_beat * 50.0) as u32 } else { 30 };
+                        // Single pixel glow (skip 3×3)
+                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (glow_g.min(255) << 8));
                     }
                 }
             }
@@ -8642,196 +8894,288 @@ struct AppConfig {
             // Use accent color for hovered icons, muted version for normal
             let draw_color = if is_hovered { accent_color } else { icon_color };
             
-            // Pixel-art icon inside square
+            // Pixel-art icon inside square — v2 refined icons
             let cx = ix + icon_size / 2;
             let cy = iy + icon_size / 2;
             use crate::icons::IconType;
             match icon.icon_type {
                 IconType::Terminal => {
-                    // Terminal: rounded rect with >_ prompt and blinking cursor
-                    draw_rounded_rect_border((cx - 14) as i32, (cy - 10) as i32, 28, 20, 3, draw_color);
-                    // Top bar of terminal window
-                    framebuffer::fill_rect(cx - 13, cy - 9, 26, 3, draw_color);
-                    // 3 tiny dots in top bar (traffic lights)
-                    framebuffer::fill_rect(cx - 11, cy - 8, 2, 1, 0xFF0A0A0A);
-                    framebuffer::fill_rect(cx - 8, cy - 8, 2, 1, 0xFF0A0A0A);
-                    framebuffer::fill_rect(cx - 5, cy - 8, 2, 1, 0xFF0A0A0A);
-                    // Prompt >_
-                    self.draw_text((cx - 8) as i32, (cy - 2) as i32, ">", draw_color);
-                    framebuffer::fill_rect(cx - 2, cy, 8, 2, draw_color);
+                    // Terminal: monitor shape with prompt
+                    // Outer screen body
+                    draw_rounded_rect((cx - 15) as i32, (cy - 11) as i32, 30, 22, 3, draw_color);
+                    // Dark inner screen
+                    framebuffer::fill_rect(cx - 13, cy - 9, 26, 16, 0xFF050A05);
+                    // Screen border highlight
+                    framebuffer::draw_hline(cx - 13, cy - 9, 26, accent_color);
+                    // Prompt: $ _
+                    self.draw_text((cx - 9) as i32, (cy - 5) as i32, "$", 0xFF40FF60);
+                    framebuffer::fill_rect(cx - 3, cy - 3, 8, 2, 0xFF40FF60);
+                    // Stand/base
+                    framebuffer::fill_rect(cx - 3, cy + 8, 6, 3, draw_color);
+                    framebuffer::fill_rect(cx - 6, cy + 10, 12, 2, draw_color);
                 },
                 IconType::Folder => {
-                    // Files: folder with tab and inner shadow
-                    // Folder tab
-                    framebuffer::fill_rect(cx - 14, cy - 8, 12, 5, draw_color);
-                    // Main folder body
-                    framebuffer::fill_rect(cx - 14, cy - 3, 28, 15, draw_color);
-                    // Inner shadow (darker interior)
-                    framebuffer::fill_rect(cx - 12, cy - 1, 24, 11, 0xFF0A0A0A);
-                    // File hint lines inside
-                    framebuffer::fill_rect(cx - 8, cy + 2, 16, 1, 0xFF303020);
-                    framebuffer::fill_rect(cx - 8, cy + 5, 12, 1, 0xFF303020);
+                    // Folder: detailed with tab, clasp, inner files
+                    // Tab
+                    draw_rounded_rect((cx - 14) as i32, (cy - 10) as i32, 14, 6, 2, draw_color);
+                    // Main body
+                    draw_rounded_rect((cx - 14) as i32, (cy - 5) as i32, 28, 18, 2, draw_color);
+                    // Inner dark area
+                    framebuffer::fill_rect(cx - 12, cy - 3, 24, 13, 0xFF0A0A06);
+                    // Document lines peek out
+                    framebuffer::fill_rect(cx - 8, cy, 14, 1, 0xFF404020);
+                    framebuffer::fill_rect(cx - 8, cy + 3, 10, 1, 0xFF404020);
+                    framebuffer::fill_rect(cx - 8, cy + 6, 16, 1, 0xFF404020);
+                    // Clasp on front
+                    framebuffer::fill_rect(cx - 2, cy - 5, 4, 2, accent_color);
                 },
                 IconType::Editor => {
-                    // Editor: document with code lines (syntax colored)
-                    framebuffer::fill_rect(cx - 10, cy - 12, 20, 24, draw_color);
-                    // Dog-eared corner
-                    framebuffer::fill_rect(cx + 4, cy - 12, 6, 6, 0xFF0A0A0A);
-                    framebuffer::fill_rect(cx + 4, cy - 12, 1, 6, draw_color);
-                    framebuffer::fill_rect(cx + 4, cy - 7, 6, 1, draw_color);
-                    // Dark interior
-                    framebuffer::fill_rect(cx - 8, cy - 6, 16, 16, 0xFF0A0A0A);
-                    // Code-like lines with colors
-                    framebuffer::fill_rect(cx - 6, cy - 4, 6, 1, 0xFF6688CC); // blue keyword
-                    framebuffer::fill_rect(cx - 6, cy - 2, 10, 1, draw_color);
-                    framebuffer::fill_rect(cx - 6, cy + 0, 8, 1, 0xFFCC8844); // orange string
-                    framebuffer::fill_rect(cx - 6, cy + 2, 12, 1, draw_color);
-                    framebuffer::fill_rect(cx - 6, cy + 4, 4, 1, 0xFF88BB44); // green comment
-                    framebuffer::fill_rect(cx - 6, cy + 6, 9, 1, draw_color);
+                    // Code editor: document with syntax-colored lines
+                    // Page body
+                    draw_rounded_rect((cx - 11) as i32, (cy - 13) as i32, 22, 26, 2, draw_color);
+                    // Dog-ear
+                    framebuffer::fill_rect(cx + 5, cy - 13, 6, 6, 0xFF0A0A0A);
+                    framebuffer::draw_hline(cx + 5, cy - 13, 1, draw_color);
+                    framebuffer::draw_vline(cx + 5, cy - 13, 6, draw_color);
+                    framebuffer::draw_hline(cx + 5, cy - 8, 6, draw_color);
+                    // Dark code area
+                    framebuffer::fill_rect(cx - 9, cy - 7, 18, 18, 0xFF080C08);
+                    // Gutter line numbers
+                    for row in 0..5u32 {
+                        framebuffer::fill_rect(cx - 8, cy - 5 + row * 3, 2, 1, 0xFF335533);
+                    }
+                    // Syntax-colored code lines
+                    framebuffer::fill_rect(cx - 4, cy - 5, 7, 1, 0xFF6688CC);  // blue keyword
+                    framebuffer::fill_rect(cx - 4, cy - 2, 10, 1, draw_color);  // normal
+                    framebuffer::fill_rect(cx - 4, cy + 1, 6, 1, 0xFFCC8844);  // orange string
+                    framebuffer::fill_rect(cx - 4, cy + 4, 12, 1, draw_color);  // normal
+                    framebuffer::fill_rect(cx - 4, cy + 7, 5, 1, 0xFF88BB44);  // green comment
                 },
                 IconType::Calculator => {
-                    // Calculator: screen + colored button grid
-                    draw_rounded_rect_border((cx - 10) as i32, (cy - 12) as i32, 20, 24, 2, draw_color);
-                    // LED screen
-                    framebuffer::fill_rect(cx - 8, cy - 10, 16, 6, 0xFF1A3320);
-                    self.draw_text((cx - 4) as i32, (cy - 10) as i32, "42", 0xFF40FF40);
-                    // Button grid (3x3)
+                    // Calculator: screen + button grid, more detailed
+                    draw_rounded_rect((cx - 11) as i32, (cy - 13) as i32, 22, 26, 3, draw_color);
+                    // Inner body
+                    framebuffer::fill_rect(cx - 9, cy - 11, 18, 22, 0xFF0C0C0A);
+                    // LED display
+                    draw_rounded_rect((cx - 8) as i32, (cy - 10) as i32, 16, 7, 1, 0xFF1A3320);
+                    self.draw_text((cx - 5) as i32, (cy - 10) as i32, "42", 0xFF40FF40);
+                    // Buttons: 4×3 grid
                     for row in 0..3u32 {
-                        for col in 0..3u32 {
-                            let bx = cx - 8 + col * 6;
-                            let by = cy - 1 + row * 5;
-                            let btn_col = if row == 2 && col == 2 { 0xFFCC6633 } else { draw_color };
-                            framebuffer::fill_rect(bx, by, 4, 3, btn_col);
+                        for col in 0..4u32 {
+                            let bx = cx - 8 + col * 5;
+                            let by = cy - 0 + row * 4;
+                            let btn_col = if col == 3 { accent_color } else { draw_color };
+                            framebuffer::fill_rect(bx, by, 3, 2, btn_col);
                         }
                     }
                 },
                 IconType::Network => {
-                    // Network: Wi-Fi arcs + signal strength
+                    // Wi-Fi: proper arc shapes with dot
                     let arc_cx = cx as i32;
-                    let arc_cy = (cy + 4) as i32;
-                    // Signal arcs (3 concentric)
+                    let arc_cy = (cy + 6) as i32;
+                    // 3 arcs from outside in
                     for ring in 0..3u32 {
-                        let r = 4 + ring * 4;
+                        let r = 5 + ring * 4;
                         let r2 = (r * r) as i32;
                         let r2_inner = ((r.saturating_sub(2)) * (r.saturating_sub(2))) as i32;
-                        for dy in 0..r as i32 + 1 {
+                        for dy in -(r as i32)..=0 {
                             for dx in -(r as i32)..=(r as i32) {
                                 let dist2 = dx * dx + dy * dy;
-                                if dist2 <= r2 && dist2 >= r2_inner && dy <= 0 {
+                                if dist2 <= r2 && dist2 >= r2_inner {
                                     let px = (arc_cx + dx) as u32;
                                     let py = (arc_cy + dy) as u32;
                                     if px >= ix && px < ix + icon_size && py >= iy && py < iy + icon_size {
-                                        let fade = if ring == 0 { draw_color } 
-                                            else if ring == 1 { if is_hovered { draw_color } else { GREEN_GHOST } }
-                                            else { GREEN_GHOST };
-                                        framebuffer::put_pixel_fast(px, py, fade);
+                                        let color = if ring == 0 { 
+                                            if is_hovered { accent_color } else { GREEN_GHOST }
+                                        } else if ring == 1 { 
+                                            if is_hovered { accent_color } else { GREEN_SUBTLE }
+                                        } else { 
+                                            draw_color 
+                                        };
+                                        framebuffer::put_pixel_fast(px, py, color);
                                     }
                                 }
                             }
                         }
                     }
                     // Center dot
-                    framebuffer::fill_rect(cx - 1, cy + 3, 3, 3, draw_color);
-                },
-                IconType::Game => {
-                    // Game: game controller / gamepad
-                    // Controller body (wide rounded shape)
-                    framebuffer::fill_rect(cx - 12, cy - 4, 24, 12, draw_color);
-                    framebuffer::fill_rect(cx - 14, cy - 2, 4, 8, draw_color);
-                    framebuffer::fill_rect(cx + 10, cy - 2, 4, 8, draw_color);
-                    // Dark interior
-                    framebuffer::fill_rect(cx - 11, cy - 3, 22, 10, 0xFF0A0A0A);
-                    // D-pad (left)
-                    framebuffer::fill_rect(cx - 9, cy - 1, 5, 1, draw_color);
-                    framebuffer::fill_rect(cx - 7, cy - 3, 1, 5, draw_color);
-                    // Action buttons (right) — colored dots
-                    framebuffer::fill_rect(cx + 5, cy - 2, 2, 2, 0xFF4488DD); // blue
-                    framebuffer::fill_rect(cx + 8, cy - 1, 2, 2, ACCENT_RED); // red
-                    framebuffer::fill_rect(cx + 5, cy + 1, 2, 2, 0xFF44DD44); // green
-                    framebuffer::fill_rect(cx + 8, cy + 2, 2, 2, 0xFFDDDD44); // yellow
-                },
-                IconType::Settings => {
-                    // Settings: detailed gear with teeth
-                    for dy in 0..18u32 {
-                        for dx in 0..18u32 {
-                            let ddx = dx as i32 - 9;
-                            let ddy = dy as i32 - 9;
-                            let dist_sq = ddx * ddx + ddy * ddy;
-                            // Outer ring
-                            if dist_sq >= 30 && dist_sq <= 64 {
-                                framebuffer::put_pixel_fast(cx - 9 + dx, cy - 9 + dy, draw_color);
-                            }
-                            // Inner circle
-                            if dist_sq <= 9 {
-                                framebuffer::put_pixel_fast(cx - 9 + dx, cy - 9 + dy, draw_color);
+                    for dy in -1..=1i32 {
+                        for dx in -1..=1i32 {
+                            if dx*dx+dy*dy <= 1 {
+                                framebuffer::put_pixel_fast((cx as i32 + dx) as u32, (arc_cy + dy) as u32, draw_color);
                             }
                         }
                     }
-                    // 8 gear teeth
-                    let teeth: &[(i32, i32)] = &[(0, -9), (0, 9), (-9, 0), (9, 0), (-7, -7), (7, -7), (-7, 7), (7, 7)];
-                    for &(tx, ty) in teeth {
-                        let px = (cx as i32 + tx) as u32;
-                        let py = (cy as i32 + ty) as u32;
-                        framebuffer::fill_rect(px.saturating_sub(1), py.saturating_sub(1), 3, 3, draw_color);
-                    }
                 },
-                IconType::Browser => {
-                    // Browser: globe with meridians and parallels
+                IconType::Game => {
+                    // Gamepad: wider body with grips, d-pad and colored buttons
+                    // Body
+                    draw_rounded_rect((cx - 15) as i32, (cy - 6) as i32, 30, 16, 5, draw_color);
+                    // Darker interior
+                    framebuffer::fill_rect(cx - 13, cy - 4, 26, 12, 0xFF0A0A0A);
+                    // Left grip
+                    draw_rounded_rect((cx - 15) as i32, (cy - 2) as i32, 6, 10, 2, draw_color);
+                    // Right grip
+                    draw_rounded_rect((cx + 9) as i32, (cy - 2) as i32, 6, 10, 2, draw_color);
+                    // D-pad (left side)
+                    framebuffer::fill_rect(cx - 10, cy - 1, 7, 2, draw_color);
+                    framebuffer::fill_rect(cx - 8, cy - 3, 2, 7, draw_color);
+                    // Action buttons (right side) — ABXY style
+                    framebuffer::fill_rect(cx + 4, cy - 3, 3, 3, 0xFF4488DD);  // blue (top)
+                    framebuffer::fill_rect(cx + 8, cy - 1, 3, 3, ACCENT_RED);  // red (right)
+                    framebuffer::fill_rect(cx + 4, cy + 1, 3, 3, 0xFF44DD44);  // green (bottom)
+                    framebuffer::fill_rect(cx + 1, cy - 1, 3, 3, 0xFFDDDD44);  // yellow (left)
+                },
+                IconType::Settings => {
+                    // Gear: proper circle with teeth
                     for dy in 0..20u32 {
                         for dx in 0..20u32 {
                             let ddx = dx as i32 - 10;
                             let ddy = dy as i32 - 10;
                             let dist_sq = ddx * ddx + ddy * ddy;
-                            // Outer circle
+                            // Outer ring (gear body)
+                            if dist_sq >= 36 && dist_sq <= 72 {
+                                framebuffer::put_pixel_fast(cx - 10 + dx, cy - 10 + dy, draw_color);
+                            }
+                            // Inner hole
+                            if dist_sq <= 12 {
+                                framebuffer::put_pixel_fast(cx - 10 + dx, cy - 10 + dy, draw_color);
+                            }
+                            // Inner ring border
+                            if dist_sq >= 10 && dist_sq <= 16 {
+                                framebuffer::put_pixel_fast(cx - 10 + dx, cy - 10 + dy, accent_color);
+                            }
+                        }
+                    }
+                    // 8 gear teeth (wider)
+                    let teeth: &[(i32, i32)] = &[(0, -10), (0, 10), (-10, 0), (10, 0), (-7, -7), (7, -7), (-7, 7), (7, 7)];
+                    for &(tx, ty) in teeth {
+                        let px = (cx as i32 + tx) as u32;
+                        let py = (cy as i32 + ty) as u32;
+                        framebuffer::fill_rect(px.saturating_sub(2), py.saturating_sub(1), 4, 3, draw_color);
+                    }
+                },
+                IconType::Browser => {
+                    // Globe: circle with meridians and parallels
+                    for dy in 0..22u32 {
+                        for dx in 0..22u32 {
+                            let ddx = dx as i32 - 11;
+                            let ddy = dy as i32 - 11;
+                            let dist_sq = ddx * ddx + ddy * ddy;
+                            // Filled circle (globe body)
+                            if dist_sq <= 110 {
+                                framebuffer::put_pixel_fast(cx - 11 + dx, cy - 11 + dy, 0xFF0A1A2A);
+                            }
+                            // Outer ring
+                            if dist_sq >= 100 && dist_sq <= 121 {
+                                framebuffer::put_pixel_fast(cx - 11 + dx, cy - 11 + dy, draw_color);
+                            }
+                        }
+                    }
+                    // Equator
+                    framebuffer::fill_rect(cx - 10, cy, 20, 1, draw_color);
+                    // Vertical meridian
+                    framebuffer::fill_rect(cx, cy - 10, 1, 20, draw_color);
+                    // Curved meridian (ellipse)
+                    for dy in 0..20u32 {
+                        let ddy = dy as i32 - 10;
+                        let val = 100 - ddy * ddy;
+                        if val > 0 {
+                            let curve_x = (fast_sqrt_i32(val) * 2 / 5) as u32;
+                            if cx + curve_x < ix + icon_size {
+                                framebuffer::put_pixel_fast(cx + curve_x, cy - 10 + dy, draw_color);
+                            }
+                            if cx >= curve_x + ix {
+                                framebuffer::put_pixel_fast(cx.saturating_sub(curve_x), cy - 10 + dy, draw_color);
+                            }
+                        }
+                    }
+                    // Parallels
+                    framebuffer::fill_rect(cx - 9, cy - 5, 18, 1, draw_color);
+                    framebuffer::fill_rect(cx - 9, cy + 5, 18, 1, draw_color);
+                },
+                IconType::GameBoy => {
+                    // Game Boy: handheld console shape
+                    draw_rounded_rect((cx - 10) as i32, (cy - 13) as i32, 20, 26, 3, draw_color);
+                    framebuffer::fill_rect(cx - 8, cy - 11, 16, 22, 0xFF1A1A1A);
+                    // Green screen
+                    draw_rounded_rect((cx - 7) as i32, (cy - 10) as i32, 14, 11, 1, 0xFF1A3320);
+                    // Pixel character on screen
+                    framebuffer::fill_rect(cx - 2, cy - 8, 4, 4, 0xFF40CC40);
+                    framebuffer::fill_rect(cx - 3, cy - 4, 6, 2, 0xFF40CC40);
+                    // D-pad
+                    framebuffer::fill_rect(cx - 7, cy + 4, 5, 2, 0xFF333333);
+                    framebuffer::fill_rect(cx - 5, cy + 2, 2, 6, 0xFF333333);
+                    // A/B buttons
+                    framebuffer::fill_rect(cx + 3, cy + 3, 3, 3, ACCENT_RED);
+                    framebuffer::fill_rect(cx + 1, cy + 5, 3, 3, 0xFF4488DD);
+                    // Speaker grilles (bottom)
+                    for i in 0..3u32 {
+                        framebuffer::fill_rect(cx + 2 + i * 3, cy + 10, 1, 2, 0xFF333333);
+                    }
+                },
+                IconType::About => {
+                    // Info circle: (i) icon
+                    for dy in 0..20u32 {
+                        for dx in 0..20u32 {
+                            let ddx = dx as i32 - 10;
+                            let ddy = dy as i32 - 10;
+                            let dist_sq = ddx * ddx + ddy * ddy;
                             if dist_sq >= 72 && dist_sq <= 100 {
                                 framebuffer::put_pixel_fast(cx - 10 + dx, cy - 10 + dy, draw_color);
                             }
                         }
                     }
-                    // Equator
-                    framebuffer::fill_rect(cx - 10, cy - 1, 20, 2, draw_color);
-                    // Vertical meridian
-                    framebuffer::fill_rect(cx - 1, cy - 10, 2, 20, draw_color);
-                    // Elliptical meridian (curved) — integer sqrt approximation
-                    for dy in 0..20u32 {
-                        let ddy = dy as i32 - 10;
-                        let val = 100 - ddy * ddy;
-                        if val > 0 {
-                            let curve_x = (fast_sqrt_i32(val) * 2 / 5) as u32; // ~0.4 * sqrt
-                            let px1 = cx + curve_x;
-                            let px2 = cx.saturating_sub(curve_x);
-                            if px1 > ix && px1 < ix + icon_size {
-                                framebuffer::put_pixel_fast(px1, cy - 10 + dy, draw_color);
-                            }
-                            if px2 > ix && px2 < ix + icon_size {
-                                framebuffer::put_pixel_fast(px2, cy - 10 + dy, draw_color);
-                            }
-                        }
-                    }
-                    // Parallels (latitude lines)
-                    framebuffer::fill_rect(cx - 8, cy - 5, 16, 1, draw_color);
-                    framebuffer::fill_rect(cx - 8, cy + 5, 16, 1, draw_color);
+                    // "i" letter
+                    framebuffer::fill_rect(cx - 1, cy - 6, 2, 2, accent_color); // dot
+                    framebuffer::fill_rect(cx - 1, cy - 2, 2, 8, accent_color); // body
+                    framebuffer::fill_rect(cx - 3, cy + 5, 6, 1, accent_color); // serif
                 },
-                IconType::GameBoy => {
-                    // Game Boy: handheld console (detailed)
-                    draw_rounded_rect_border((cx - 10) as i32, (cy - 12) as i32, 20, 24, 2, draw_color);
-                    framebuffer::fill_rect(cx - 9, cy - 11, 18, 22, draw_color);
-                    // Screen area (green-tinted)
-                    framebuffer::fill_rect(cx - 7, cy - 9, 14, 10, 0xFF1A3320);
-                    // Pixel character on screen
-                    framebuffer::fill_rect(cx - 2, cy - 7, 4, 4, 0xFF40CC40);
-                    framebuffer::fill_rect(cx - 3, cy - 3, 6, 2, 0xFF40CC40);
-                    // D-pad
-                    framebuffer::fill_rect(cx - 7, cy + 3, 5, 2, 0xFF0A0A0A);
-                    framebuffer::fill_rect(cx - 5, cy + 1, 1, 6, 0xFF0A0A0A);
-                    // A/B buttons (colored)
-                    framebuffer::fill_rect(cx + 4, cy + 2, 3, 3, ACCENT_RED);
-                    framebuffer::fill_rect(cx + 1, cy + 4, 3, 3, 0xFF4488DD);
+                IconType::ModelEditor => {
+                    // 3D cube: wireframe with colored faces
+                    // Front face
+                    let f_x = cx as i32 - 8;
+                    let f_y = cy as i32 - 2;
+                    framebuffer::fill_rect(f_x as u32, f_y as u32, 14, 12, 0xFF162016);
+                    framebuffer::draw_rect(f_x as u32, f_y as u32, 14, 12, draw_color);
+                    // Top face (parallelogram)
+                    for i in 0..14i32 {
+                        framebuffer::put_pixel_fast((f_x + i + 4) as u32, (f_y - 4) as u32, draw_color);
+                        framebuffer::put_pixel_fast((f_x + i + 2) as u32, (f_y - 2) as u32, accent_color);
+                    }
+                    // Side edges
+                    framebuffer::draw_vline((f_x + 17) as u32, (f_y - 4) as u32, 12, draw_color);
+                    for j in 0..4u32 {
+                        framebuffer::put_pixel_fast((f_x + 14 + j as i32) as u32, (f_y + j as i32 - 4) as u32, draw_color);
+                    }
+                },
+                IconType::GameLab => {
+                    // Flask/beaker shape
+                    framebuffer::fill_rect(cx - 3, cy - 12, 6, 8, draw_color); // neck
+                    framebuffer::fill_rect(cx - 5, cy - 12, 10, 2, draw_color); // rim
+                    // Body (triangle shape)
+                    for row in 0..10u32 {
+                        let half_w = 3 + row;
+                        framebuffer::fill_rect(cx.saturating_sub(half_w), cy - 4 + row, half_w * 2, 1, draw_color);
+                    }
+                    // Liquid inside
+                    for row in 4..10u32 {
+                        let half_w = row;
+                        framebuffer::fill_rect(cx.saturating_sub(half_w) + 1, cy - 4 + row, (half_w * 2).saturating_sub(2), 1, accent_color);
+                    }
+                    // Bubbles
+                    framebuffer::fill_rect(cx - 2, cy + 1, 2, 2, 0xFF80FF80);
+                    framebuffer::fill_rect(cx + 1, cy + 3, 2, 2, 0xFF80FF80);
                 },
                 _ => {
-                    // Generic: bordered square with inner pattern
+                    // Generic: bordered square with inner diamond
                     draw_rounded_rect_border((cx - 10) as i32, (cy - 10) as i32, 20, 20, 3, draw_color);
-                    framebuffer::fill_rect(cx - 4, cy - 4, 8, 8, draw_color);
+                    for i in 0..6i32 {
+                        framebuffer::put_pixel_fast((cx as i32 + i) as u32, (cy as i32 - i) as u32, accent_color);
+                        framebuffer::put_pixel_fast((cx as i32 - i) as u32, (cy as i32 - i) as u32, accent_color);
+                        framebuffer::put_pixel_fast((cx as i32 + i) as u32, (cy as i32 + i) as u32, accent_color);
+                        framebuffer::put_pixel_fast((cx as i32 - i) as u32, (cy as i32 + i) as u32, accent_color);
+                    }
                 },
             }
             
@@ -8847,32 +9191,40 @@ struct AppConfig {
         let y = self.height - TASKBAR_HEIGHT;
         
         // ═══════════════════════════════════════════════════════════════
-        // TRANSLUCENT ROUNDED TASKBAR — Frosted glass, matrix shows through
+        // MODERN TASKBAR — v2: taller, glass morphism, larger icons
         // ═══════════════════════════════════════════════════════════════
         
-        // Rounded translucent background — alpha-blended over matrix rain
+        // Rounded translucent background with deeper glass effect
         {
-            let radius = 12u32;
+            let radius = 14u32;
             let ri = radius as i32;
             let r2 = ri * ri;
             let w = self.width;
             
-            // Top rows: rounded corners (per-row scanline)
+            // Top rows: rounded corners
             for row in 0..radius {
                 let vert_dist = ri - row as i32;
                 let horiz = fast_sqrt_i32(r2 - vert_dist * vert_dist) as u32;
                 let left_indent = radius - horiz;
                 let visible_w = w.saturating_sub(left_indent * 2);
                 if visible_w > 0 {
-                    framebuffer::fill_rect_alpha(left_indent, y + row, visible_w, 1, 0x040A06, 155);
+                    framebuffer::fill_rect_alpha(left_indent, y + row, visible_w, 1, 0x040A06, 170);
                 }
             }
-            // Main body below rounded zone
-            framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT - radius, 0x040A06, 155);
-            // Subtle green tint overlay
-            framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT - radius, 0x00AA44, 8);
+            // Main body
+            framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT - radius, 0x040A06, 170);
+            // Green tint overlay (more visible)
+            framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT - radius, 0x00AA44, 10);
+            // Glass top highlight
+            if w > radius * 2 {
+                for px in radius..(w - radius) {
+                    framebuffer::put_pixel_fast(px, y, CHROME_DIM);
+                }
+                // Second highlight row (softer)
+                framebuffer::fill_rect_alpha(radius, y + 1, w - radius * 2, 1, 0x00FF66, 12);
+            }
             
-            // Rounded top border — chrome arc (TrustOS logo grey)
+            // Rounded top border
             for row in 0..radius {
                 let vert_dist = ri - row as i32;
                 let horiz = fast_sqrt_i32(r2 - vert_dist * vert_dist) as u32;
@@ -8885,149 +9237,158 @@ struct AppConfig {
                     framebuffer::put_pixel_fast(right_x - 1, y + row, CHROME_DIM);
                 }
             }
-            // Straight top border between corners
-            if w > radius * 2 {
-                for px in radius..(w - radius) {
-                    framebuffer::put_pixel_fast(px, y, CHROME_DIM);
-                }
-            }
         }
         
-        // ── TrustOS button (left) — rounded pill shape ──
-        let start_hover = self.cursor_x >= 4 && self.cursor_x < 112 && self.cursor_y >= y as i32;
+        // ── TrustOS button (left) — pill shape with glow ──
+        let start_hover = self.cursor_x >= 4 && self.cursor_x < 120 && self.cursor_y >= y as i32;
         if start_hover || self.start_menu_open {
-            draw_rounded_rect(4, (y + 5) as i32, 104, 30, 8, 0xFF003318);
-            framebuffer::fill_rect_alpha(4, y + 5, 104, 30, 0x00CC66, 50);
+            draw_rounded_rect(6, (y + 7) as i32, 110, 34, 10, 0xFF003318);
+            framebuffer::fill_rect_alpha(6, y + 7, 110, 34, 0x00CC66, 60);
+            // Glow effect
+            framebuffer::fill_rect_alpha(4, y + 5, 114, 1, 0x00FF66, 25);
         }
-        // Rounded chrome border
         let border_color = if start_hover || self.start_menu_open { CHROME_BRIGHT } else { CHROME_GHOST };
-        draw_rounded_rect_border(4, (y + 5) as i32, 104, 30, 8, border_color);
+        draw_rounded_rect_border(6, (y + 7) as i32, 110, 34, 10, border_color);
         let txt_color = if start_hover || self.start_menu_open { GREEN_PRIMARY } else { GREEN_SECONDARY };
-        self.draw_text_smooth(16, (y + 11) as i32, "TrustOS", txt_color);
+        self.draw_text_smooth(20, (y + 15) as i32, "TrustOS", txt_color);
+        // Subtle bold effect for TrustOS label
+        if start_hover || self.start_menu_open {
+            self.draw_text_smooth(21, (y + 15) as i32, "TrustOS", txt_color);
+        }
         
-        // ── Window buttons (centered) ──
+        // ── Window buttons (centered) — taller pills ──
         let total_btns = self.windows.len();
-        let btn_w = 84u32;
+        let btn_w = 96u32;
+        let btn_h = 34u32;
         let btn_gap = 6u32;
         let total_w = if total_btns > 0 { total_btns as u32 * (btn_w + btn_gap) - btn_gap } else { 0 };
         let start_x = (self.width.saturating_sub(total_w)) / 2;
         
         for (i, w) in self.windows.iter().enumerate() {
             let btn_x = start_x + i as u32 * (btn_w + btn_gap);
-            let btn_y = y + 5;
+            let btn_y = y + 7;
             
             let is_hover = self.cursor_x >= btn_x as i32 && self.cursor_x < (btn_x + btn_w) as i32
                 && self.cursor_y >= y as i32;
             
-            // Button background — rounded translucent glass pill
+            // Button background — rounded glass pill
             if w.focused {
-                draw_rounded_rect(btn_x as i32, btn_y as i32, btn_w, 30, 6, 0xFF001A0A);
-                framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, 30, 0x00AA44, 60);
+                draw_rounded_rect(btn_x as i32, btn_y as i32, btn_w, btn_h, 8, 0xFF001A0A);
+                framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, btn_h, 0x00AA44, 70);
+                // Top glass highlight
+                framebuffer::fill_rect_alpha(btn_x + 4, btn_y, btn_w - 8, 1, 0x00FF66, 35);
             } else if is_hover {
-                draw_rounded_rect(btn_x as i32, btn_y as i32, btn_w, 30, 6, 0xFF000D05);
-                framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, 30, 0x008833, 40);
+                draw_rounded_rect(btn_x as i32, btn_y as i32, btn_w, btn_h, 8, 0xFF000D05);
+                framebuffer::fill_rect_alpha(btn_x, btn_y, btn_w, btn_h, 0x008833, 50);
             }
-            // Rounded chrome border
+            // Border
             let bdr = if w.focused { CHROME_BRIGHT } else if is_hover { CHROME_MID } else { CHROME_GHOST };
-            draw_rounded_rect_border(btn_x as i32, btn_y as i32, btn_w, 30, 6, bdr);
+            draw_rounded_rect_border(btn_x as i32, btn_y as i32, btn_w, btn_h, 8, bdr);
             
-            // Window title (truncated, anti-aliased)
-            let title_max = 8;
+            // Window icon (2-char)
+            let icon_str = match w.window_type {
+                WindowType::Terminal => ">_",
+                WindowType::FileManager => "[]",
+                WindowType::Calculator => "##",
+                WindowType::Browser => "WW",
+                WindowType::TextEditor => "Tx",
+                WindowType::Game => "Sk",
+                WindowType::MusicPlayer => "Mu",
+                _ => "::",
+            };
+            let icon_color = if w.focused { GREEN_PRIMARY } else { GREEN_GHOST };
+            self.draw_text_smooth((btn_x + 8) as i32, (btn_y + 10) as i32, icon_str, icon_color);
+            
+            // Window title (truncated)
+            let title_max = 7;
             let title: String = w.title.chars().take(title_max).collect();
             let text_color = if w.focused { GREEN_PRIMARY } else { GREEN_TERTIARY };
-            self.draw_text_smooth((btn_x + 8) as i32, (btn_y + 9) as i32, &title, text_color);
+            self.draw_text_smooth((btn_x + 28) as i32, (btn_y + 10) as i32, &title, text_color);
             
-            // Active indicator (green glow line at bottom)
+            // Active indicator (green glow bar at bottom)
             if w.focused {
-                let indicator_w = 60u32.min(btn_w - 10);
+                let indicator_w = 60u32.min(btn_w - 14);
                 let indicator_x = btn_x + (btn_w - indicator_w) / 2;
-                framebuffer::fill_rect(indicator_x, y + TASKBAR_HEIGHT - 4, indicator_w, 3, GREEN_PRIMARY);
-                // Soft glow under indicator
-                framebuffer::fill_rect_alpha(indicator_x.saturating_sub(2), y + TASKBAR_HEIGHT - 6, indicator_w + 4, 2, GREEN_PRIMARY, 60);
+                draw_rounded_rect((indicator_x) as i32, (y + TASKBAR_HEIGHT - 5) as i32, indicator_w, 3, 1, GREEN_PRIMARY);
+                framebuffer::fill_rect_alpha(indicator_x.saturating_sub(2), y + TASKBAR_HEIGHT - 7, indicator_w + 4, 2, GREEN_PRIMARY, 50);
             } else if !w.minimized {
-                // Small green dot for open windows
                 let dot_x = btn_x + btn_w / 2 - 2;
-                framebuffer::fill_rect(dot_x, y + TASKBAR_HEIGHT - 3, 4, 2, GREEN_SUBTLE);
+                framebuffer::fill_rect(dot_x, y + TASKBAR_HEIGHT - 4, 4, 2, GREEN_SUBTLE);
             }
         }
         
         // ── System tray (right side) ──
-        // FPS counter (real measured value)
+        // FPS counter
         let fps_str = format!("{}fps", self.fps_current);
         let fps_color = if self.fps_current >= 55 { GREEN_SECONDARY } else if self.fps_current >= 30 { ACCENT_AMBER } else { ACCENT_RED };
-        self.draw_text_smooth((self.width - 200) as i32, (y + 14) as i32, &fps_str, fps_color);
+        self.draw_text_smooth((self.width - 200) as i32, (y + 17) as i32, &fps_str, fps_color);
         
-        // Clock (anti-aliased, bright)
+        // Clock (larger, centered vertically)
         let time = self.get_time_string();
-        self.draw_text_smooth((self.width - 130) as i32, (y + 8) as i32, &time, hc(GREEN_PRIMARY, 0xFFFFFFFF));
+        self.draw_text_smooth((self.width - 130) as i32, (y + 10) as i32, &time, hc(GREEN_PRIMARY, 0xFFFFFFFF));
+        // Bold effect for clock
+        self.draw_text_smooth((self.width - 129) as i32, (y + 10) as i32, &time, hc(GREEN_PRIMARY, 0xFFFFFFFF));
         
         // Date below clock
         let date = self.get_date_string();
-        self.draw_text_smooth((self.width - 130) as i32, (y + 22) as i32, &date, hc(GREEN_TERTIARY, 0xFFCCCCCC));
+        self.draw_text_smooth((self.width - 130) as i32, (y + 27) as i32, &date, hc(GREEN_TERTIARY, 0xFFCCCCCC));
         
-        // Accessibility status indicators (left of clock)
+        // Accessibility status indicators
         let a11y_str = crate::accessibility::status_indicators();
         if !a11y_str.is_empty() {
             let a11y_x = (self.width - 210) as i32;
-            self.draw_text_smooth(a11y_x, (y + 14) as i32, &a11y_str, hc(ACCENT_AMBER, 0xFFFFFF00));
+            self.draw_text_smooth(a11y_x, (y + 17) as i32, &a11y_str, hc(ACCENT_AMBER, 0xFFFFFF00));
         }
         
         // ── System tray indicators (WiFi, Volume, Battery) ──
-        self.draw_sys_tray_indicators(self.width - 290, y + 6);
+        self.draw_sys_tray_indicators(self.width - 290, y + 10);
 
         // System indicators (CPU + MEM mini-bars)
         let ind_x = self.width - 50;
-        let ind_y = y + 6;
-        // CPU indicator — simulated activity based on frame timing
-        let cpu_level = ((self.frame_count % 7) + 2).min(6) as u32; // 2-6 of 8 segments
-        self.draw_text((ind_x - 24) as i32, (ind_y + 1) as i32, "C", GREEN_GHOST);
+        let ind_y = y + 8;
+        let cpu_level = ((self.frame_count % 7) + 2).min(6) as u32;
+        self.draw_text((ind_x - 24) as i32, (ind_y + 2) as i32, "C", GREEN_GHOST);
         for seg in 0..8u32 {
             let seg_color = if seg < cpu_level {
                 if cpu_level > 6 { ACCENT_RED } else { GREEN_PRIMARY }
             } else { GREEN_GHOST };
-            framebuffer::fill_rect(ind_x + seg * 3, ind_y + 2, 2, 8, seg_color);
+            framebuffer::fill_rect(ind_x + seg * 3, ind_y + 3, 2, 8, seg_color);
         }
-        // MEM indicator — gets actual memory usage from allocator stats
         let mem_level = {
-            let total = 16u32; // normalized to 16 segments (represents "total")
-            let used = ((self.windows.len() as u32 * 2) + 4).min(total); // rough estimate
+            let total = 16u32;
+            let used = ((self.windows.len() as u32 * 2) + 4).min(total);
             (used * 8 / total).min(8)
         };
-        self.draw_text((ind_x - 24) as i32, (ind_y + 15) as i32, "M", GREEN_GHOST);
+        self.draw_text((ind_x - 24) as i32, (ind_y + 17) as i32, "M", GREEN_GHOST);
         for seg in 0..8u32 {
             let seg_color = if seg < mem_level {
                 if mem_level > 6 { ACCENT_AMBER } else { GREEN_PRIMARY }
             } else { GREEN_GHOST };
-            framebuffer::fill_rect(ind_x + seg * 3, ind_y + 16, 2, 8, seg_color);
+            framebuffer::fill_rect(ind_x + seg * 3, ind_y + 18, 2, 8, seg_color);
         }
         
-        // ── Settings gear icon (left of indicators, no overlap) ──
+        // ── Settings gear icon ──
         let gear_x = self.width - 80;
-        let gear_y = y + 12;
+        let gear_y = y + 16;
         let gear_hover = self.cursor_x >= (gear_x as i32 - 4) && self.cursor_x < (gear_x as i32 + 20)
             && self.cursor_y >= y as i32;
         let gear_color = if gear_hover { GREEN_PRIMARY } else { GREEN_TERTIARY };
         if gear_hover {
-            // Subtle hover glow background
             framebuffer::fill_rect_alpha(gear_x - 2, gear_y - 2, 20, 20, 0x00CC66, 30);
         }
-        // Outer gear ring with teeth
         for dy in 0..16u32 {
             for dx in 0..16u32 {
                 let ddx = dx as i32 - 8;
                 let ddy = dy as i32 - 8;
                 let dist_sq = ddx * ddx + ddy * ddy;
-                // Outer ring
                 if dist_sq >= 25 && dist_sq <= 56 {
                     framebuffer::put_pixel_fast(gear_x + dx, gear_y + dy, gear_color);
                 }
-                // Inner dot
                 if dist_sq <= 6 {
                     framebuffer::put_pixel_fast(gear_x + dx, gear_y + dy, gear_color);
                 }
             }
         }
-        // Gear teeth (small rects at cardinal + diagonal directions)
         let teeth: &[(i32, i32)] = &[(0, -8), (0, 8), (-8, 0), (8, 0), (-6, -6), (6, -6), (-6, 6), (6, 6)];
         for &(tx, ty) in teeth {
             let px = (gear_x as i32 + 8 + tx) as u32;
@@ -9035,14 +9396,13 @@ struct AppConfig {
             framebuffer::fill_rect(px.saturating_sub(1), py.saturating_sub(1), 3, 3, gear_color);
         }
         
-        // ── Show Desktop button (far right corner, Windows-style) ──
+        // ── Show Desktop button (far right) ──
         let sd_x = self.width - 8;
         let sd_w = 8u32;
         let sd_hover = self.cursor_x >= sd_x as i32 && self.cursor_y >= y as i32;
         let sd_color = if sd_hover { GREEN_MUTED } else { GREEN_GHOST };
         framebuffer::fill_rect(sd_x, y, sd_w, TASKBAR_HEIGHT, sd_color);
-        // Thin separator line
-        framebuffer::fill_rect(sd_x, y + 4, 1, TASKBAR_HEIGHT - 8, GREEN_SUBTLE);
+        framebuffer::fill_rect(sd_x, y + 6, 1, TASKBAR_HEIGHT - 12, GREEN_SUBTLE);
     }
     
     fn get_time_string(&mut self) -> String {
@@ -9062,53 +9422,56 @@ struct AppConfig {
     }
     
     fn draw_start_menu(&self) {
-        let menu_w = 420u32;
-        let menu_h = 640u32;
+        let menu_w = 480u32;
+        let menu_h = 680u32;
         let menu_x = 4i32;
         let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
         
         let is_hc = crate::accessibility::is_high_contrast();
         
         // ═══════════════════════════════════════════════════════════════
-        // MATRIX HACKER STYLE START MENU — Wide frosted glass popup with search
+        // MODERN START MENU — v2: glass panel, icon grid, rounded search
         // ═══════════════════════════════════════════════════════════════
         
-        // Frosted dark glass background
+        // Frosted glass background (deeper alpha)
         if is_hc {
             framebuffer::fill_rect(menu_x as u32, menu_y as u32, menu_w, menu_h, 0xFF000000);
         } else {
-            framebuffer::fill_rect_alpha(menu_x as u32, menu_y as u32, menu_w, menu_h, 0x060A08, 210);
+            draw_rounded_rect(menu_x, menu_y, menu_w, menu_h, 14, 0xFF060A08);
+            framebuffer::fill_rect_alpha(menu_x as u32, menu_y as u32, menu_w, menu_h, 0x060A08, 220);
         }
         
-        // Double chrome border (TrustOS logo style)
-        let border1 = hc(CHROME_BRIGHT, 0xFFFFFFFF);
-        let border2 = hc(CHROME_DIM, 0xFF888888);
-        framebuffer::draw_rect(menu_x as u32, menu_y as u32, menu_w, menu_h, border1);
-        framebuffer::draw_rect((menu_x + 1) as u32, (menu_y + 1) as u32, menu_w - 2, menu_h - 2, border2);
+        // Single chrome border with rounded corners
+        let border1 = hc(CHROME_MID, 0xFFFFFFFF);
+        draw_rounded_rect_border(menu_x, menu_y, menu_w, menu_h, 14, border1);
+        // Top highlight
+        framebuffer::fill_rect_alpha((menu_x + 14) as u32, menu_y as u32, menu_w - 28, 1, 0x00FF66, 20);
         
         // Title bar
         if is_hc {
-            framebuffer::fill_rect((menu_x + 2) as u32, (menu_y + 2) as u32, menu_w - 4, 24, 0xFF1A1A1A);
+            framebuffer::fill_rect((menu_x + 2) as u32, (menu_y + 2) as u32, menu_w - 4, 28, 0xFF1A1A1A);
         } else {
-            framebuffer::fill_rect_alpha((menu_x + 2) as u32, (menu_y + 2) as u32, menu_w - 4, 24, 0x002200, 180);
+            framebuffer::fill_rect_alpha((menu_x + 2) as u32, (menu_y + 2) as u32, menu_w - 4, 28, 0x002200, 180);
         }
-        self.draw_text_smooth(menu_x + 10, menu_y + 6, "TrustOS Menu", hc(GREEN_PRIMARY, 0xFFFFFF00));
+        self.draw_text_smooth(menu_x + 14, menu_y + 8, "TrustOS Menu", hc(GREEN_PRIMARY, 0xFFFFFF00));
+        self.draw_text_smooth(menu_x + 15, menu_y + 8, "TrustOS Menu", hc(GREEN_PRIMARY, 0xFFFFFF00)); // bold
         
-        // Separator (chrome)
-        framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 26) as u32, menu_w - 4, CHROME_DIM);
+        // Separator
+        framebuffer::draw_hline((menu_x + 2) as u32, (menu_y + 30) as u32, menu_w - 4, GREEN_GHOST);
         
-        // ── Search bar ──
-        let search_y = menu_y + 30;
-        let search_h = 32u32;
-        let search_pad = 8i32;
-        // Search bar background
-        framebuffer::fill_rect((menu_x + search_pad) as u32, search_y as u32, menu_w - search_pad as u32 * 2, search_h, 0xFF0A120A);
-        framebuffer::draw_rect((menu_x + search_pad) as u32, search_y as u32, menu_w - search_pad as u32 * 2, search_h, CHROME_DIM);
+        // ── Rounded search bar ──
+        let search_y = menu_y + 34;
+        let search_h = 36u32;
+        let search_pad = 12i32;
+        let search_w = menu_w - search_pad as u32 * 2;
+        draw_rounded_rect(menu_x + search_pad, search_y, search_w, search_h, 10, 0xFF0A120A);
+        draw_rounded_rect_border(menu_x + search_pad, search_y, search_w, search_h, 10, GREEN_GHOST);
+        // Glass highlight on search bar
+        framebuffer::fill_rect_alpha((menu_x + search_pad + 4) as u32, search_y as u32, search_w - 8, 1, 0x00FF66, 15);
         
         // Search icon (magnifying glass)
-        let mag_x = menu_x + search_pad + 8;
-        let mag_y = search_y + 8;
-        // Circle part
+        let mag_x = menu_x + search_pad + 12;
+        let mag_y = search_y + 10;
         for dy in 0..10u32 {
             for dx in 0..10u32 {
                 let ddx = dx as i32 - 5;
@@ -9119,25 +9482,23 @@ struct AppConfig {
                 }
             }
         }
-        // Handle part
         framebuffer::fill_rect((mag_x + 8) as u32, (mag_y + 8) as u32, 4, 2, GREEN_TERTIARY);
         
-        // Search text or placeholder
-        let search_text_x = menu_x + search_pad + 22;
+        // Search text
+        let search_text_x = menu_x + search_pad + 26;
         if self.start_menu_search.is_empty() {
-            self.draw_text_smooth(search_text_x, search_y + 10, "Search apps...", GREEN_GHOST);
+            self.draw_text_smooth(search_text_x, search_y + 12, "Search apps...", GREEN_GHOST);
         } else {
-            self.draw_text_smooth(search_text_x, search_y + 10, &self.start_menu_search, GREEN_PRIMARY);
-            // Cursor blink
+            self.draw_text_smooth(search_text_x, search_y + 12, &self.start_menu_search, GREEN_PRIMARY);
             let cursor_x = search_text_x + (self.start_menu_search.len() as i32 * 8);
             if (self.frame_count / 30) % 2 == 0 {
-                framebuffer::fill_rect(cursor_x as u32, (search_y + 8) as u32, 2, 16, GREEN_PRIMARY);
+                framebuffer::fill_rect(cursor_x as u32, (search_y + 10) as u32, 2, 16, GREEN_PRIMARY);
             }
         }
         
-        let items_start_y = search_y + search_h as i32 + 4;
+        let items_start_y = search_y + search_h as i32 + 8;
         
-        // Menu items — full list
+        // ── App items — 2-column ICON GRID ──
         let items: [(&str, &str, bool); 18] = [
             (">_", "Terminal", false),
             ("[]", "Files", false),
@@ -9163,12 +9524,16 @@ struct AppConfig {
         let search = self.start_menu_search.trim();
         let search_lower: alloc::string::String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
         
-        // Draw app items (non-special, indices 0-13)
+        // ── Draw app grid (non-special items in 2 columns) ──
+        let col_count = 2u32;
+        let tile_w = (menu_w - 24) / col_count;
+        let tile_h = 44u32;
+        let tile_gap = 4u32;
         let mut drawn = 0usize;
+        
         for (ii, (icon, label, is_special)) in items.iter().enumerate() {
-            if *is_special { continue; } // Power items drawn separately
+            if *is_special { continue; }
             
-            // Filter: skip items that don't match search
             if !search_lower.is_empty() {
                 let label_lower: alloc::string::String = label.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
                 if !label_lower.contains(search_lower.as_str()) {
@@ -9176,41 +9541,62 @@ struct AppConfig {
                 }
             }
             
-            let item_y = items_start_y + (drawn as i32 * 28);
-            let item_h = 26u32;
+            let col = (drawn % col_count as usize) as u32;
+            let row = (drawn / col_count as usize) as u32;
+            let item_x = menu_x + 10 + col as i32 * (tile_w + tile_gap) as i32;
+            let item_y = items_start_y + (row as i32 * (tile_h + tile_gap) as i32);
             drawn += 1;
             
-            // Don't draw past the power section
-            if item_y + item_h as i32 > menu_y + menu_h as i32 - 110 { break; }
+            // Don't overflow into power section
+            if item_y + tile_h as i32 > menu_y + menu_h as i32 - 110 { break; }
             
-            // Hover or keyboard selection detection
-            let is_hovered = self.cursor_x >= menu_x 
-                && self.cursor_x < menu_x + menu_w as i32
+            let is_hovered = self.cursor_x >= item_x 
+                && self.cursor_x < item_x + tile_w as i32
                 && self.cursor_y >= item_y 
-                && self.cursor_y < item_y + item_h as i32;
+                && self.cursor_y < item_y + tile_h as i32;
             let is_selected = self.start_menu_selected == ii as i32;
             
+            // Tile background (rounded, with hover glow)
             if is_hovered || is_selected {
-                framebuffer::fill_rect_alpha((menu_x + 3) as u32, item_y as u32, menu_w - 6, item_h, 0x00AA44, if is_selected { 70 } else { 50 });
-                framebuffer::fill_rect((menu_x + 3) as u32, (item_y + 3) as u32, 2, item_h - 6, GREEN_PRIMARY);
+                draw_rounded_rect(item_x, item_y, tile_w, tile_h, 8, 0xFF0A2A14);
+                framebuffer::fill_rect_alpha(item_x as u32, item_y as u32, tile_w, tile_h, 0x00AA44, if is_selected { 70 } else { 50 });
+                draw_rounded_rect_border(item_x, item_y, tile_w, tile_h, 8, GREEN_GHOST);
             }
             
-            // Icon
-            let icon_color = if is_hovered || is_selected { GREEN_PRIMARY } else { GREEN_TERTIARY };
-            self.draw_text_smooth(menu_x + 14, item_y + 6, icon, icon_color);
-            
-            // Label
-            let label_color = if is_hovered || is_selected { GREEN_SECONDARY } else { GREEN_SECONDARY };
-            self.draw_text_smooth(menu_x + 40, item_y + 6, label, label_color);
-            
-            // Show search match highlight
-            if !search_lower.is_empty() && is_hovered {
-                let kw_x = menu_x + 40 + (label.len() as i32 * 8) + 8;
-                self.draw_text(kw_x, item_y + 8, "*", GREEN_GHOST);
+            // Icon circle background
+            let icon_cx = item_x + 22;
+            let icon_cy = item_y + tile_h as i32 / 2;
+            let icon_r = 14i32;
+            let icon_r2 = icon_r * icon_r;
+            let icon_bg = if is_hovered || is_selected { 0xFF0A3A1A } else { 0xFF0C1810 };
+            for dy in -icon_r..=icon_r {
+                for dx in -icon_r..=icon_r {
+                    if dx * dx + dy * dy <= icon_r2 {
+                        framebuffer::put_pixel_fast((icon_cx + dx) as u32, (icon_cy + dy) as u32, icon_bg);
+                    }
+                }
             }
+            // Icon border circle
+            for dy in -icon_r..=icon_r {
+                for dx in -icon_r..=icon_r {
+                    let d2 = dx * dx + dy * dy;
+                    if d2 >= (icon_r - 1) * (icon_r - 1) && d2 <= icon_r2 {
+                        let bc = if is_hovered || is_selected { GREEN_MUTED } else { GREEN_GHOST };
+                        framebuffer::put_pixel_fast((icon_cx + dx) as u32, (icon_cy + dy) as u32, bc);
+                    }
+                }
+            }
+            
+            // Icon text (centered in circle)
+            let icon_color = if is_hovered || is_selected { GREEN_PRIMARY } else { GREEN_SECONDARY };
+            self.draw_text_smooth(icon_cx - 8, icon_cy - 6, icon, icon_color);
+            
+            // Label text (right of circle)
+            let label_color = if is_hovered || is_selected { GREEN_PRIMARY } else { TEXT_PRIMARY };
+            self.draw_text_smooth(item_x + 42, icon_cy - 6, label, label_color);
         }
         
-        // "No results" when search yields nothing (and no power items match either)
+        // "No results" when search yields nothing
         let power_items_visible = if search_lower.is_empty() { true } else {
             items[14..].iter().any(|(_, label, _)| {
                 let ll: String = label.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
@@ -9222,10 +9608,9 @@ struct AppConfig {
             self.draw_text_smooth(menu_x + 40, no_y, "No results found", GREEN_GHOST);
         }
         
-        // ── Power section (bottom-anchored with separator) ──
+        // ── Power section (bottom-anchored) ──
         let power_y = menu_y + menu_h as i32 - 106;
-        // Separator line
-        framebuffer::draw_hline((menu_x + 8) as u32, power_y as u32, menu_w - 16, GREEN_MUTED);
+        framebuffer::draw_hline((menu_x + 12) as u32, power_y as u32, menu_w - 24, GREEN_GHOST);
         
         let power_items: [(&str, &str, u8); 3] = [
             ("<-", "Exit Desktop", 14),
@@ -9234,7 +9619,6 @@ struct AppConfig {
         ];
         
         for (pi, (icon, label, idx)) in power_items.iter().enumerate() {
-            // Filter by search
             if !search_lower.is_empty() {
                 let label_lower: String = label.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
                 if !label_lower.contains(search_lower.as_str()) {
@@ -9242,8 +9626,8 @@ struct AppConfig {
                 }
             }
             
-            let item_y = power_y + 6 + (pi as i32 * 28);
-            let item_h = 26u32;
+            let item_y = power_y + 8 + (pi as i32 * 30);
+            let item_h = 28u32;
             
             let is_hovered = self.cursor_x >= menu_x 
                 && self.cursor_x < menu_x + menu_w as i32
@@ -9252,21 +9636,21 @@ struct AppConfig {
             let is_selected = self.start_menu_selected == *idx as i32;
             
             if is_hovered || is_selected {
-                framebuffer::fill_rect_alpha((menu_x + 3) as u32, item_y as u32, menu_w - 6, item_h, 0x00AA44, if is_selected { 70 } else { 50 });
-                framebuffer::fill_rect((menu_x + 3) as u32, (item_y + 3) as u32, 2, item_h - 6, ACCENT_RED);
+                draw_rounded_rect(menu_x + 8, item_y, menu_w - 16, item_h, 6, 0xFF1A0808);
+                framebuffer::fill_rect_alpha((menu_x + 8) as u32, item_y as u32, menu_w - 16, item_h, 0xAA2222, if is_selected { 50 } else { 35 });
             }
             
             let icon_color = if is_hovered || is_selected { ACCENT_RED } else { 0xFF994444 };
-            self.draw_text_smooth(menu_x + 14, item_y + 6, icon, icon_color);
+            self.draw_text_smooth(menu_x + 18, item_y + 8, icon, icon_color);
             
             let label_color = if is_hovered || is_selected { ACCENT_RED } else { 0xFFAA4444 };
-            self.draw_text_smooth(menu_x + 40, item_y + 6, label, label_color);
+            self.draw_text_smooth(menu_x + 44, item_y + 8, label, label_color);
         }
         
         // Bottom: version info
-        let ver_y = menu_y + menu_h as i32 - 20;
-        framebuffer::draw_hline((menu_x + 4) as u32, ver_y as u32, menu_w - 8, GREEN_GHOST);
-        self.draw_text(menu_x + 10, ver_y + 6, "TrustOS v0.4.2", GREEN_SUBTLE);
+        let ver_y = menu_y + menu_h as i32 - 22;
+        framebuffer::draw_hline((menu_x + 8) as u32, ver_y as u32, menu_w - 16, GREEN_GHOST);
+        self.draw_text(menu_x + 14, ver_y + 6, "TrustOS v0.4.2", GREEN_SUBTLE);
     }
     
     fn draw_window(&self, window: &Window) {
@@ -9276,50 +9660,56 @@ struct AppConfig {
         let h = window.height;
         
         // ═══════════════════════════════════════════════════════════════
-        // MATRIX HACKER STYLE WINDOW — Green borders, dark background
+        // CLASSIC WINDOW — Thick borders, transparency, right-side buttons
         // ═══════════════════════════════════════════════════════════════
         
-        // Drop shadow (subtle depth effect, only for non-maximized windows)
-        let corner_radius = if window.maximized { 0u32 } else { 8u32 };
+        let corner_radius = if window.maximized { 0u32 } else { WINDOW_BORDER_RADIUS };
+        
+        // Drop shadow (5-layer)
         if !window.maximized && w > 4 && h > 4 {
-            // 3-layer shadow: decreasing opacity at increasing offset
-            framebuffer::fill_rect_alpha((x + 6) as u32, (y + 6) as u32, w, h, 0x000000, 30);
-            framebuffer::fill_rect_alpha((x + 4) as u32, (y + 4) as u32, w, h, 0x000000, 22);
-            framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w + 2, h + 2, 0x000000, 15);
+            framebuffer::fill_rect_alpha((x + 10) as u32, (y + 10) as u32, w + 2, h + 2, 0x000000, 14);
+            framebuffer::fill_rect_alpha((x + 7) as u32, (y + 7) as u32, w + 2, h + 2, 0x000000, 18);
+            framebuffer::fill_rect_alpha((x + 5) as u32, (y + 5) as u32, w, h, 0x000000, 22);
+            framebuffer::fill_rect_alpha((x + 3) as u32, (y + 3) as u32, w, h, 0x000000, 16);
+            framebuffer::fill_rect_alpha((x + 1) as u32, (y + 1) as u32, w + 2, h + 2, 0x000000, 8);
+            if window.focused {
+                // Green edge glow for focused windows
+                framebuffer::fill_rect_alpha((x - 1) as u32, (y - 1) as u32, w + 2, h + 2, 0x00FF66, 10);
+            }
         }
         
-        // Window background: near-black with rounded corners (increased radius from 6→8)
-        let win_bg = hc(0xFF0A0A0A, 0xFF000000);
+        // Window background with slight transparency (alpha blend over desktop)
         if corner_radius > 0 {
-            draw_rounded_rect(x, y, w, h, corner_radius, win_bg);
+            draw_rounded_rect(x, y, w, h, corner_radius, 0xFF0A0A0A);
+            // Transparency overlay — blend a semi-transparent layer
+            framebuffer::fill_rect_alpha(x as u32, y as u32, w, h, 0x0A0E0A, 235);
         } else {
-            framebuffer::fill_rect(x as u32, y as u32, w, h, win_bg);
+            framebuffer::fill_rect(x as u32, y as u32, w, h, 0xFF0A0A0A);
+            framebuffer::fill_rect_alpha(x as u32, y as u32, w, h, 0x0A0E0A, 235);
         }
         
-        // Chrome/silver border (TrustOS logo style)
+        // Thick border (3px — bold modern look)
         let border_color = if window.focused {
-            hc(CHROME_BRIGHT, 0xFFFFFFFF)
+            hc(CHROME_MID, 0xFFFFFFFF)
         } else {
             hc(CHROME_GHOST, 0xFF888888)
         };
+        let bright_border = if window.focused { GREEN_GHOST } else { CHROME_GHOST };
         if corner_radius > 0 {
+            // 3-layer border for thickness
             draw_rounded_rect_border(x, y, w, h, corner_radius, border_color);
-            if w > 4 && h > 4 {
-                draw_rounded_rect_border(x + 1, y + 1, w - 2, h - 2, corner_radius.saturating_sub(1), 
-                    if window.focused { CHROME_DIM } else { CHROME_GHOST });
-            }
+            draw_rounded_rect_border(x + 1, y + 1, w.saturating_sub(2), h.saturating_sub(2), corner_radius.saturating_sub(1), bright_border);
+            draw_rounded_rect_border(x + 2, y + 2, w.saturating_sub(4), h.saturating_sub(4), corner_radius.saturating_sub(2), border_color);
         } else {
             framebuffer::draw_rect(x as u32, y as u32, w, h, border_color);
-            if w > 4 && h > 4 {
-                framebuffer::draw_rect((x + 1) as u32, (y + 1) as u32, w - 2, h - 2, 
-                    if window.focused { CHROME_DIM } else { CHROME_GHOST });
-            }
+            framebuffer::draw_rect((x + 1) as u32, (y + 1) as u32, w.saturating_sub(2), h.saturating_sub(2), bright_border);
+            framebuffer::draw_rect((x + 2) as u32, (y + 2) as u32, w.saturating_sub(4), h.saturating_sub(4), border_color);
         }
         
         // Visual resize edge indicators (glow strips when hovering)
         if window.focused && !window.maximized && w > 20 && h > 20 {
             let edge = window.on_resize_edge(self.cursor_x, self.cursor_y);
-            let glow_color = 0x00FF66u32; // bright green glow
+            let glow_color = 0x00FF66u32;
             let glow_alpha = 40u32;
             let gt = 3u32;
             let gh = if h > 4 { h - 4 } else { 1 };
@@ -9350,21 +9740,105 @@ struct AppConfig {
             }
         }
 
-        // Title bar: frosted glass effect with subtle gradient
+        // ═══════════════════════════════════════════════════════════════
+        // TITLE BAR — Glass gradient with transparency
+        // ═══════════════════════════════════════════════════════════════
         let titlebar_h = TITLE_BAR_HEIGHT;
+        let tb_x = (x + 3) as u32;
+        let tb_w = w.saturating_sub(6);
         if window.focused {
-            framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w - 4, titlebar_h - 2, 0x0A1A0A, 220);
-            // Subtle highlight at top of title bar
-            framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w - 4, 1, 0x00FF66, 15);
+            framebuffer::fill_rect_alpha(tb_x, (y + 3) as u32, tb_w, titlebar_h - 3, 0x0E2210, 220);
+            // Top glass highlight
+            framebuffer::fill_rect_alpha(tb_x, (y + 3) as u32, tb_w, 1, 0x00FF66, 30);
+            framebuffer::fill_rect_alpha(tb_x, (y + 4) as u32, tb_w, 1, 0x00CC55, 15);
         } else {
-            framebuffer::fill_rect_alpha((x + 2) as u32, (y + 2) as u32, w - 4, titlebar_h - 2, 0x080C08, 200);
+            framebuffer::fill_rect_alpha(tb_x, (y + 3) as u32, tb_w, titlebar_h - 3, 0x080C08, 200);
         }
         
-        // Title bar bottom separator (chrome)
-        framebuffer::draw_hline((x + 2) as u32, (y + titlebar_h as i32) as u32, w - 4, 
-            if window.focused { CHROME_DIM } else { CHROME_GHOST });
+        // Title bar bottom separator
+        framebuffer::draw_hline((x + 3) as u32, (y + titlebar_h as i32) as u32, w.saturating_sub(6), 
+            if window.focused { GREEN_GHOST } else { CHROME_GHOST });
+
+        // ═══════════════════════════════════════════════════════════════
+        // Windows-style BUTTONS (right side: minimize / maximize / close)
+        // ═══════════════════════════════════════════════════════════════
+        let btn_w = 28u32;
+        let btn_h = titlebar_h - 4;
+        let btn_y = (y + 3) as u32;
+        let mx = self.cursor_x;
+        let my = self.cursor_y;
         
-        // Window icon (2-char representation)
+        // Close button (rightmost, red)
+        let close_x = x + w as i32 - btn_w as i32 - 3;
+        let close_hover = mx >= close_x && mx < close_x + btn_w as i32 
+            && my >= btn_y as i32 && my < btn_y as i32 + btn_h as i32;
+        let close_bg = if close_hover { 0xFFCC3333 } else if window.focused { 0xFF2A1414 } else { 0xFF1A1A1A };
+        framebuffer::fill_rect(close_x as u32, btn_y, btn_w, btn_h, close_bg);
+        // X icon
+        let cx_c = close_x + btn_w as i32 / 2;
+        let cy_c = btn_y as i32 + btn_h as i32 / 2;
+        let x_color = if close_hover { 0xFFFFFFFF } else if window.focused { 0xFFCC4444 } else { 0xFF666666 };
+        for i in -3..=3i32 {
+            framebuffer::put_pixel_fast((cx_c + i) as u32, (cy_c + i) as u32, x_color);
+            framebuffer::put_pixel_fast((cx_c + i) as u32, (cy_c - i) as u32, x_color);
+            // Bold: offset by 1 pixel
+            framebuffer::put_pixel_fast((cx_c + i + 1) as u32, (cy_c + i) as u32, x_color);
+            framebuffer::put_pixel_fast((cx_c + i + 1) as u32, (cy_c - i) as u32, x_color);
+        }
+        
+        // Maximize button (second from right, green)
+        let max_x = close_x - btn_w as i32;
+        let max_hover = mx >= max_x && mx < max_x + btn_w as i32 
+            && my >= btn_y as i32 && my < btn_y as i32 + btn_h as i32;
+        let max_bg = if max_hover { 0xFF1A3A20 } else { 0xFF0E0E0E };
+        framebuffer::fill_rect(max_x as u32, btn_y, btn_w, btn_h, max_bg);
+        let cx_m = max_x + btn_w as i32 / 2;
+        let cy_m = btn_y as i32 + btn_h as i32 / 2;
+        let m_color = if max_hover { 0xFF44DD66 } else if window.focused { 0xFF227744 } else { 0xFF555555 };
+        if window.maximized {
+            // Overlapping squares (restore icon)
+            for i in -2..=1i32 {
+                framebuffer::put_pixel_fast((cx_m + i + 1) as u32, (cy_m - 3) as u32, m_color);
+                framebuffer::put_pixel_fast((cx_m + 3) as u32, (cy_m + i - 1) as u32, m_color);
+            }
+            for i in -2..=2i32 {
+                framebuffer::put_pixel_fast((cx_m + i - 1) as u32, (cy_m - 1) as u32, m_color);
+                framebuffer::put_pixel_fast((cx_m + i - 1) as u32, (cy_m + 3) as u32, m_color);
+                framebuffer::put_pixel_fast((cx_m - 3) as u32, (cy_m + i + 1) as u32, m_color);
+                framebuffer::put_pixel_fast((cx_m + 1) as u32, (cy_m + i + 1) as u32, m_color);
+            }
+        } else {
+            // Square icon
+            for i in -3..=3i32 {
+                framebuffer::put_pixel_fast((cx_m + i) as u32, (cy_m - 3) as u32, m_color);
+                framebuffer::put_pixel_fast((cx_m + i) as u32, (cy_m + 3) as u32, m_color);
+                framebuffer::put_pixel_fast((cx_m - 3) as u32, (cy_m + i) as u32, m_color);
+                framebuffer::put_pixel_fast((cx_m + 3) as u32, (cy_m + i) as u32, m_color);
+            }
+        }
+        
+        // Minimize button (third from right, amber)
+        let min_x = max_x - btn_w as i32;
+        let min_hover = mx >= min_x && mx < min_x + btn_w as i32 
+            && my >= btn_y as i32 && my < btn_y as i32 + btn_h as i32;
+        let min_bg = if min_hover { 0xFF2A2A10 } else { 0xFF0E0E0E };
+        framebuffer::fill_rect(min_x as u32, btn_y, btn_w, btn_h, min_bg);
+        let cx_n = min_x + btn_w as i32 / 2;
+        let cy_n = btn_y as i32 + btn_h as i32 / 2;
+        let n_color = if min_hover { 0xFFFFBB33 } else if window.focused { 0xFF886622 } else { 0xFF555555 };
+        // Dash icon —
+        for i in -3..=3i32 {
+            framebuffer::put_pixel_fast((cx_n + i) as u32, cy_n as u32, n_color);
+            framebuffer::put_pixel_fast((cx_n + i) as u32, (cy_n + 1) as u32, n_color);
+        }
+        
+        // Button separator lines
+        framebuffer::fill_rect(min_x as u32, btn_y, 1, btn_h, CHROME_GHOST);
+        framebuffer::fill_rect(max_x as u32, btn_y, 1, btn_h, CHROME_GHOST);
+        framebuffer::fill_rect(close_x as u32, btn_y, 1, btn_h, CHROME_GHOST);
+        
+        // Window icon (left side)
+        let icon_x = x + 10;
         let icon_str = match window.window_type {
             WindowType::Terminal => ">_",
             WindowType::FileManager => "[]",
@@ -9379,82 +9853,38 @@ struct AppConfig {
             _ => "::",
         };
         let icon_color = if window.focused { GREEN_PRIMARY } else { GREEN_TERTIARY };
-        self.draw_text_smooth(x + 10, y + 7, icon_str, icon_color);
+        self.draw_text_smooth(icon_x, y + (titlebar_h as i32 / 2) - 6, icon_str, icon_color);
         
-        // Title text
+        // Title text (centered in title bar)
         let text_color = if window.focused {
             hc(TEXT_PRIMARY, 0xFFFFFFFF)
         } else {
             hc(TEXT_SECONDARY, 0xFFCCCCCC)
         };
-        self.draw_text_smooth(x + 32, y + 7, &window.title, text_color);
-        
-        // ═══════════════════════════════════════════════════════════════
-        // Control Buttons (Windows-style: minimize | maximize | close)
-        // ═══════════════════════════════════════════════════════════════
-        let btn_w = 32u32;
-        let btn_h = titlebar_h - 2;
-        let btn_y_top = y + 2;
-        let btn_y_center = y + titlebar_h as i32 / 2;
-        let mx = self.cursor_x;
-        let my = self.cursor_y;
-        
-        // Close button (rightmost, red on hover)
-        let close_x = x + w as i32 - btn_w as i32 - 2;
-        let close_hover = mx >= close_x && mx < close_x + btn_w as i32 && my >= btn_y_top && my < btn_y_top + btn_h as i32;
-        if close_hover {
-            framebuffer::fill_rect(close_x as u32, btn_y_top as u32, btn_w, btn_h, 0xFFCC3333);
-        }
-        // X icon
-        let cx = close_x + btn_w as i32 / 2;
-        let cy = btn_y_center;
-        let x_color = if close_hover { 0xFFFFFFFF } else { if window.focused { GREEN_SECONDARY } else { GREEN_GHOST } };
-        for i in -3..=3i32 {
-            framebuffer::put_pixel_fast((cx + i) as u32, (cy + i) as u32, x_color);
-            framebuffer::put_pixel_fast((cx + i) as u32, (cy - i) as u32, x_color);
-            // Thicken
-            framebuffer::put_pixel_fast((cx + i + 1) as u32, (cy + i) as u32, x_color);
-            framebuffer::put_pixel_fast((cx + i + 1) as u32, (cy - i) as u32, x_color);
-        }
-        
-        // Maximize button (middle)
-        let max_x = close_x - btn_w as i32;
-        let max_hover = mx >= max_x && mx < max_x + btn_w as i32 && my >= btn_y_top && my < btn_y_top + btn_h as i32;
-        if max_hover {
-            framebuffer::fill_rect(max_x as u32, btn_y_top as u32, btn_w, btn_h, GREEN_GHOST);
-        }
-        // Square icon
-        let sq_color = if max_hover { GREEN_PRIMARY } else { if window.focused { GREEN_SECONDARY } else { GREEN_GHOST } };
-        let sq_x = max_x + btn_w as i32 / 2 - 4;
-        let sq_y = cy - 4;
-        if window.maximized {
-            // Overlapping squares for restore icon
-            framebuffer::draw_rect((sq_x + 2) as u32, (sq_y) as u32, 6, 6, sq_color);
-            framebuffer::draw_rect((sq_x) as u32, (sq_y + 2) as u32, 6, 6, sq_color);
-        } else {
-            framebuffer::draw_rect(sq_x as u32, sq_y as u32, 8, 8, sq_color);
-        }
-        
-        // Minimize button (leftmost of the three)
-        let min_x = max_x - btn_w as i32;
-        let min_hover = mx >= min_x && mx < min_x + btn_w as i32 && my >= btn_y_top && my < btn_y_top + btn_h as i32;
-        if min_hover {
-            framebuffer::fill_rect(min_x as u32, btn_y_top as u32, btn_w, btn_h, GREEN_GHOST);
-        }
-        // Dash icon (horizontal line)
-        let dash_color = if min_hover { GREEN_PRIMARY } else { if window.focused { GREEN_SECONDARY } else { GREEN_GHOST } };
-        framebuffer::fill_rect((min_x + btn_w as i32 / 2 - 4) as u32, cy as u32, 8, 1, dash_color);
-        framebuffer::fill_rect((min_x + btn_w as i32 / 2 - 4) as u32, (cy + 1) as u32, 8, 1, dash_color);
+        let title_pixel_w = window.title.len() as i32 * 8;
+        let title_center_x = x + (w as i32 / 2) - (title_pixel_w / 2);
+        let title_x = title_center_x.max(icon_x + 24);
+        self.draw_text_smooth(title_x, y + (titlebar_h as i32 / 2) - 6, &window.title, text_color);
         
         // ═══════════════════════════════════════════════════════════════
         // Content Area
         // ═══════════════════════════════════════════════════════════════
         let content_y = y + titlebar_h as i32;
         let content_h = h - titlebar_h;
-        framebuffer::fill_rect((x + 2) as u32, (content_y + 1) as u32, w - 4, content_h.saturating_sub(3), 0xFF080808);
+        framebuffer::fill_rect((x + 3) as u32, (content_y + 1) as u32, w.saturating_sub(6), content_h.saturating_sub(4), 0xFF080808);
+        
+        // Set clip rect to window content area
+        let clip_x = (x + 3).max(0) as u32;
+        let clip_y = (content_y + 1).max(0) as u32;
+        let clip_w = w.saturating_sub(6);
+        let clip_h = content_h.saturating_sub(4);
+        framebuffer::set_clip_rect(clip_x, clip_y, clip_w, clip_h);
         
         // Draw window content
         self.draw_window_content(window);
+        
+        // Clear clip rect
+        framebuffer::clear_clip_rect();
     }
     
     /// Draw a modern minimal button (legacy - kept for compatibility)
@@ -9601,7 +10031,7 @@ struct AppConfig {
         }
         
         // ═══════════════════════════════════════════════════════════════
-        // TERMINAL — special rendering with colored text + scrollbar
+        // TERMINAL — v2 visual overhaul: styled prompt, modern scrollbar
         // ═══════════════════════════════════════════════════════════════
         if window.window_type == WindowType::Terminal {
             let line_height = 16i32;
@@ -9633,17 +10063,17 @@ struct AppConfig {
                             if let Some(&code) = chars.peek() {
                                 chars.next();
                                 current_color = match code {
-                                    'R' => ACCENT_RED,           // Red (root, errors)
-                                    'G' => GREEN_PRIMARY,        // Bright green  
-                                    'B' => ACCENT_BLUE,          // Cyan/blue
-                                    'W' => TEXT_PRIMARY,          // White
-                                    'Y' => ACCENT_AMBER,         // Yellow/amber
-                                    'M' => GREEN_MUTED,          // Muted green
-                                    'D' => GREEN_GHOST,          // Dim
-                                    'N' => COLOR_GREEN,          // Normal green
-                                    'H' => 0xFF00FFAA,           // Header bright
-                                    'A' => GREEN_TERTIARY,       // Accent tertiary
-                                    'S' => GREEN_SUBTLE,         // Subtle
+                                    'R' => ACCENT_RED,
+                                    'G' => GREEN_PRIMARY,
+                                    'B' => ACCENT_BLUE,
+                                    'W' => TEXT_PRIMARY,
+                                    'Y' => ACCENT_AMBER,
+                                    'M' => GREEN_MUTED,
+                                    'D' => GREEN_GHOST,
+                                    'N' => COLOR_GREEN,
+                                    'H' => 0xFF00FFAA,
+                                    'A' => GREEN_TERTIARY,
+                                    'S' => GREEN_SUBTLE,
                                     _ => current_color,
                                 };
                             }
@@ -9653,23 +10083,81 @@ struct AppConfig {
                         }
                     }
                 } else {
-                    // Plain green text (legacy)
-                    self.draw_text(content_x, line_y, line, COLOR_GREEN);
+                    // Detect prompt lines (starts with "root@trustos" or "$")
+                    let trimmed = line.trim_start();
+                    if trimmed.starts_with("root@trustos") || trimmed.starts_with("$") {
+                        // Styled prompt: user@host in cyan, path in amber, $ in green
+                        let mut cx = content_x;
+                        if let Some(dollar_pos) = line.find('$') {
+                            // Draw everything before $
+                            let before = &line[..dollar_pos];
+                            // Find @ to split user@host
+                            if let Some(at_pos) = before.find('@') {
+                                // "root" in bright green
+                                for ch in before[..at_pos].chars() {
+                                    crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, GREEN_PRIMARY);
+                                    cx += 8;
+                                }
+                                // "@" in dim
+                                crate::framebuffer::draw_char_at(cx as u32, line_y as u32, '@', GREEN_GHOST);
+                                cx += 8;
+                                // "trustos" in cyan
+                                let host_part = &before[at_pos + 1..];
+                                // Find : separator for path
+                                if let Some(colon_pos) = host_part.find(':') {
+                                    for ch in host_part[..colon_pos].chars() {
+                                        crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, ACCENT_BLUE);
+                                        cx += 8;
+                                    }
+                                    crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ':', GREEN_GHOST);
+                                    cx += 8;
+                                    // Path in amber
+                                    for ch in host_part[colon_pos + 1..].chars() {
+                                        crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, ACCENT_AMBER);
+                                        cx += 8;
+                                    }
+                                } else {
+                                    for ch in host_part.chars() {
+                                        crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, ACCENT_BLUE);
+                                        cx += 8;
+                                    }
+                                }
+                            } else {
+                                for ch in before.chars() {
+                                    crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, GREEN_SECONDARY);
+                                    cx += 8;
+                                }
+                            }
+                            // $ in bright green
+                            crate::framebuffer::draw_char_at(cx as u32, line_y as u32, '$', GREEN_PRIMARY);
+                            cx += 8;
+                            // Rest of line (user input) in white
+                            for ch in line[dollar_pos + 1..].chars() {
+                                crate::framebuffer::draw_char_at(cx as u32, line_y as u32, ch, TEXT_PRIMARY);
+                                cx += 8;
+                            }
+                        } else {
+                            self.draw_text(content_x, line_y, line, COLOR_GREEN);
+                        }
+                    } else {
+                        // Plain green text (output)
+                        self.draw_text(content_x, line_y, line, COLOR_GREEN);
+                    }
                 }
             }
             
-            // ── Scrollbar ──
+            // ── Modern Scrollbar (rounded thumb) ──
             let scrollbar_w = 6u32;
             let scrollbar_x = (window.x + window.width as i32 - scrollbar_w as i32 - 3) as u32;
             let track_y = (window.y + TITLE_BAR_HEIGHT as i32 + 2) as u32;
             let track_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 4);
             
             if total_lines > visible_lines {
-                // Draw track
-                framebuffer::fill_rect(scrollbar_x, track_y, scrollbar_w, track_h, 0xFF0A1A0F);
+                // Track (very subtle)
+                framebuffer::fill_rect_alpha(scrollbar_x, track_y, scrollbar_w, track_h, 0x0A1A0F, 80);
                 
-                // Draw thumb
-                let thumb_h = ((visible_lines as u32 * track_h) / total_lines as u32).max(16);
+                // Rounded thumb
+                let thumb_h = ((visible_lines as u32 * track_h) / total_lines as u32).max(20);
                 let max_scroll = total_lines.saturating_sub(visible_lines);
                 let thumb_y = if max_scroll > 0 {
                     track_y + ((scroll as u32 * (track_h - thumb_h)) / max_scroll as u32)
@@ -9677,9 +10165,9 @@ struct AppConfig {
                     track_y
                 };
                 
-                framebuffer::fill_rect(scrollbar_x, thumb_y, scrollbar_w, thumb_h, GREEN_MUTED);
-                // Thumb border highlight
-                framebuffer::fill_rect(scrollbar_x, thumb_y, 1, thumb_h, GREEN_SUBTLE);
+                draw_rounded_rect(scrollbar_x as i32, thumb_y as i32, scrollbar_w, thumb_h, 3, GREEN_MUTED);
+                // Top/bottom highlight
+                framebuffer::fill_rect_alpha(scrollbar_x + 1, thumb_y + 1, scrollbar_w - 2, 1, 0x00FF66, 30);
             }
             
             return;
@@ -9747,6 +10235,14 @@ struct AppConfig {
                 let content_w = ww;
                 let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
                 
+                // Clip to window content area
+                framebuffer::set_clip_rect(
+                    (content_x + 2).max(0) as u32,
+                    content_y.max(0) as u32,
+                    content_w.saturating_sub(4),
+                    content_h,
+                );
+                
                 render_editor(
                     editor,
                     content_x, content_y, content_w, content_h,
@@ -9762,6 +10258,8 @@ struct AppConfig {
                         crate::framebuffer::draw_char_at(x as u32, y as u32, ch, color);
                     },
                 );
+                
+                framebuffer::clear_clip_rect();
             }
         }
     }
@@ -11965,8 +12463,25 @@ struct AppConfig {
         framebuffer::fill_rect_alpha(stop_x, ctrl_y, btn_w, 1, 0xFF8844, 60);
         self.draw_text(stop_x as i32 + 6, ctrl_y as i32 + 6, "STOP", 0xFFFF8844);
 
+        // Track navigation (PREV / NEXT)
+        let trk_btn_w = 26u32;
+        let prev_x = stop_x + btn_w + btn_gap;
+        framebuffer::fill_rect_alpha(prev_x, ctrl_y, trk_btn_w, btn_h, 0x333355, 200);
+        framebuffer::fill_rect_alpha(prev_x, ctrl_y, trk_btn_w, 1, 0x8888FF, 60);
+        self.draw_text(prev_x as i32 + 4, ctrl_y as i32 + 6, "|<", 0xFF8888FF);
+        let next_x = prev_x + trk_btn_w + 4;
+        framebuffer::fill_rect_alpha(next_x, ctrl_y, trk_btn_w, btn_h, 0x333355, 200);
+        framebuffer::fill_rect_alpha(next_x, ctrl_y, trk_btn_w, 1, 0x8888FF, 60);
+        self.draw_text(next_x as i32 + 4, ctrl_y as i32 + 6, ">|", 0xFF8888FF);
+        // Track counter
+        if state.num_tracks > 1 {
+            let trk_str = alloc::format!("{}/{}", state.current_track + 1, state.num_tracks);
+            let trk_txt_x = next_x + trk_btn_w + 4;
+            self.draw_text(trk_txt_x as i32, ctrl_y as i32 + 6, &trk_str, 0xFF88AACC);
+        }
+
         // ── Volume control ──
-        let vol_x = stop_x + btn_w + btn_gap + 10;
+        let vol_x = next_x + trk_btn_w + (if state.num_tracks > 1 { 36 } else { 8 });
         let vol_w = inner_w.saturating_sub(vol_x - inner_x + 4);
         let vol_h = 10u32;
         let vol_y = ctrl_y + (btn_h - vol_h) / 2;
@@ -12037,8 +12552,23 @@ struct AppConfig {
         framebuffer::fill_rect_alpha(vm_next_x, viz_mode_y, vm_btn_w, vm_btn_h, 0x224444, 180);
         self.draw_text(vm_next_x as i32 + 5, viz_mode_y as i32 + 2, ">", 0xFF88FFCC);
 
+        // ── Color palette selector ──
+        let pal_y = viz_mode_y + vm_btn_h + 8;
+        let pal_btn_w = 20u32;
+        let pal_btn_h = 16u32;
+        self.draw_text(inner_x as i32, pal_y as i32 + 2, "PAL", 0xFF668877);
+        let pal_prev_x = inner_x + 30;
+        framebuffer::fill_rect_alpha(pal_prev_x, pal_y, pal_btn_w, pal_btn_h, 0x442244, 180);
+        self.draw_text(pal_prev_x as i32 + 5, pal_y as i32 + 2, "<", 0xFFCC88FF);
+        let pal_name = crate::visualizer::PALETTE_NAMES[self.visualizer.palette as usize % crate::visualizer::NUM_PALETTES as usize];
+        let pal_name_x = pal_prev_x + pal_btn_w + 6;
+        self.draw_text(pal_name_x as i32, pal_y as i32 + 2, pal_name, 0xFFFFCC00);
+        let pal_next_x = pal_name_x + (pal_name.len() as u32 * cw) + 6;
+        framebuffer::fill_rect_alpha(pal_next_x, pal_y, pal_btn_w, pal_btn_h, 0x224444, 180);
+        self.draw_text(pal_next_x as i32 + 5, pal_y as i32 + 2, ">", 0xFF88FFCC);
+
         // ── Rain speed preset selector (bounds-checked) ──
-        let rain_y = viz_mode_y + vm_btn_h + 8;
+        let rain_y = pal_y + pal_btn_h + 8;
         let rain_btn_w = 20u32;
         let rain_btn_h = 16u32;
         if rain_y + rain_btn_h + 4 < wy + wh {
@@ -12061,8 +12591,6 @@ struct AppConfig {
 
     /// Draw interactive Calculator
     fn draw_calculator(&self, window: &Window) {
-        use crate::gui::windows11::colors;
-        
         let cx = window.x as u32 + 4;
         let cy = window.y as u32 + TITLE_BAR_HEIGHT + 4;
         let cw = window.width.saturating_sub(8);
@@ -12072,10 +12600,20 @@ struct AppConfig {
             return;
         }
         
-        // Display area
-        let display_h = 56u32;
-        framebuffer::fill_rect(cx + 4, cy + 4, cw - 8, display_h, 0xFF1A1A2E);
-        framebuffer::fill_rect(cx + 5, cy + 5, cw - 10, display_h - 2, 0xFF0D0D1A);
+        // ═══════════════════════════════════════════════════════════════
+        // MODERN CALCULATOR — v2 visual overhaul
+        // Larger display, bigger rounded buttons, glass look
+        // ═══════════════════════════════════════════════════════════════
+        
+        // Display area (taller, with gradient)
+        let display_h = 72u32;
+        // Glass display background
+        framebuffer::fill_rect(cx + 6, cy + 6, cw - 12, display_h, 0xFF0D0D1A);
+        framebuffer::fill_rect_alpha(cx + 6, cy + 6, cw - 12, display_h / 2, 0x1A1A3E, 60);
+        // Display border
+        draw_rounded_rect_border((cx + 6) as i32, (cy + 6) as i32, cw - 12, display_h, 6, GREEN_GHOST);
+        // Top inner highlight
+        framebuffer::fill_rect_alpha(cx + 7, cy + 7, cw - 14, 1, 0x4444AA, 40);
         
         // Get calculator state
         let display_text = if let Some(calc) = self.calculator_states.get(&window.id) {
@@ -12084,35 +12622,37 @@ struct AppConfig {
             "0"
         };
         
-        // Draw display text (right-aligned, large)
+        // Draw display text (right-aligned, large — draw each char with bold effect)
         let text_len = display_text.len() as i32;
-        let text_x = cx as i32 + cw as i32 - 16 - text_len * 10;
-        // Draw each char slightly larger (using 2 copies offset)
+        let char_w = 12; // wider spacing for larger look
+        let text_x = cx as i32 + cw as i32 - 18 - text_len * char_w;
         for (i, ch) in display_text.chars().enumerate() {
-            let px = text_x + i as i32 * 10;
-            let py = cy as i32 + 20;
+            let px = text_x + i as i32 * char_w;
+            let py = cy as i32 + 28;
             let mut buf = [0u8; 4];
             let s = ch.encode_utf8(&mut buf);
+            // Triple-draw for bolder look
             self.draw_text(px, py, s, 0xFFFFFFFF);
-            self.draw_text(px + 1, py, s, 0xFFFFFFFF); // Bold effect
+            self.draw_text(px + 1, py, s, 0xFFFFFFFF);
+            self.draw_text(px, py + 1, s, 0xFFEEEEEE);
         }
         
-        // Expression indicator (show expression in small text above result)
+        // Expression indicator
         if let Some(calc) = self.calculator_states.get(&window.id) {
             if calc.just_evaluated && !calc.expression.is_empty() {
-                // Show a small "=" indicator
-                self.draw_text(cx as i32 + 10, cy as i32 + 12, "=", colors::ACCENT);
+                self.draw_text(cx as i32 + 14, cy as i32 + 14, "=", GREEN_PRIMARY);
             }
         }
         
-        // Button grid
-        let btn_area_y = cy + display_h + 12;
-        let btn_rows = 5;
-        let btn_cols = 4;
-        let btn_gap = 4u32;
-        let btn_w = (cw - 12 - btn_gap * (btn_cols - 1)) / btn_cols;
-        let btn_h = (ch - display_h - 20 - btn_gap * (btn_rows - 1)) / btn_rows;
-        let btn_h = btn_h.min(40);
+        // ── Button grid (bigger, rounded, with shadows) ──
+        let btn_area_y = cy + display_h + 16;
+        let btn_rows = 5u32;
+        let btn_cols = 4u32;
+        let btn_gap = 6u32;
+        let available_w = cw.saturating_sub(16);
+        let available_h = ch.saturating_sub(display_h + 28);
+        let btn_w = (available_w - btn_gap * (btn_cols - 1)) / btn_cols;
+        let btn_h = ((available_h - btn_gap * (btn_rows - 1)) / btn_rows).min(52);
         
         let buttons = [
             ["C", "(", ")", "%"],
@@ -12124,48 +12664,75 @@ struct AppConfig {
         
         for (row, btn_row) in buttons.iter().enumerate() {
             for (col, label) in btn_row.iter().enumerate() {
-                let bx = cx + 4 + col as u32 * (btn_w + btn_gap);
+                let bx = cx + 6 + col as u32 * (btn_w + btn_gap);
                 let by = btn_area_y + row as u32 * (btn_h + btn_gap);
                 
-                // Button color based on type
                 let is_operator = matches!(*label, "+" | "-" | "*" | "/" | "%" | "=");
                 let is_clear = *label == "C" || *label == "(" || *label == ")";
                 
-                let btn_bg = if is_operator {
-                    if *label == "=" { colors::ACCENT } else { 0xFF2A3A30 }
+                // Button colors (modern, with depth)
+                let (btn_bg, btn_border) = if is_operator {
+                    if *label == "=" {
+                        (GREEN_MUTED, GREEN_PRIMARY)
+                    } else {
+                        (0xFF1A2A22, GREEN_GHOST)
+                    }
                 } else if is_clear {
-                    0xFF2A2030
+                    (0xFF2A1A28, 0xFF442244)
                 } else {
-                    0xFF1E2228
+                    (0xFF181C20, 0xFF2A2E34)
                 };
                 
                 // Hover detection
                 let hover = self.cursor_x >= bx as i32 && self.cursor_x < (bx + btn_w) as i32
                     && self.cursor_y >= by as i32 && self.cursor_y < (by + btn_h) as i32;
                 
-                let bg = if hover { 
-                    (btn_bg & 0x00FFFFFF) | 0xFF000000 // Brighten slightly
-                } else { 
-                    btn_bg 
+                let bg = if hover {
+                    // Brighten on hover
+                    let r = ((btn_bg >> 16) & 0xFF).min(220) + 30;
+                    let g = ((btn_bg >> 8) & 0xFF).min(220) + 30;
+                    let b = (btn_bg & 0xFF).min(220) + 30;
+                    0xFF000000 | (r << 16) | (g << 8) | b
+                } else {
+                    btn_bg
                 };
                 
-                // Draw button
-                crate::gui::windows11::draw_rounded_rect(bx as i32, by as i32, btn_w, btn_h, 4, bg);
-                if hover {
-                    crate::gui::windows11::draw_rounded_rect_border(bx as i32, by as i32, btn_w, btn_h, 4, colors::ACCENT);
+                // Button shadow
+                if btn_h > 8 {
+                    framebuffer::fill_rect_alpha(bx + 2, by + 2, btn_w, btn_h, 0x000000, 30);
                 }
                 
-                // Label centered
+                // Draw rounded button
+                let btn_radius = 8u32.min(btn_h / 3);
+                draw_rounded_rect(bx as i32, by as i32, btn_w, btn_h, btn_radius, bg);
+                draw_rounded_rect_border(bx as i32, by as i32, btn_w, btn_h, btn_radius, 
+                    if hover { GREEN_PRIMARY } else { btn_border });
+                
+                // Top highlight (glass effect)
+                if btn_h > 12 {
+                    framebuffer::fill_rect_alpha(bx + 3, by + 1, btn_w.saturating_sub(6), 1, 0xFFFFFF, 15);
+                }
+                
+                // Label centered (larger spacing)
                 let lw = label.len() as u32 * 8;
-                let lx = bx + (btn_w - lw) / 2;
-                let ly = by + (btn_h / 2) - 4;
-                let text_color = if *label == "=" { 0xFF000000 } else { colors::TEXT_PRIMARY };
+                let lx = bx + (btn_w.saturating_sub(lw)) / 2;
+                let ly = by + (btn_h / 2).saturating_sub(5);
+                let text_color = if *label == "=" { 
+                    0xFF000000 
+                } else if is_operator { 
+                    GREEN_PRIMARY 
+                } else if is_clear {
+                    ACCENT_AMBER
+                } else { 
+                    TEXT_PRIMARY 
+                };
                 self.draw_text(lx as i32, ly as i32, label, text_color);
+                // Bold effect for operators
+                if is_operator || is_clear {
+                    self.draw_text(lx as i32 + 1, ly as i32, label, text_color);
+                }
             }
         }
-        
-        // Instructions at bottom
-        self.draw_text(cx as i32 + 4, (cy + ch - 14) as i32, "Keys: 0-9 +*/- = Enter C", GREEN_TERTIARY);
     }
     
     /// Draw Browser window content
@@ -12921,7 +13488,7 @@ pub fn create_window(title: &str, x: i32, y: i32, width: u32, height: u32) -> u3
 
 /// Create a terminal window
 pub fn create_terminal(x: i32, y: i32) -> u32 {
-    DESKTOP.lock().create_window("Terminal", x, y, 500, 350, WindowType::Terminal)
+    DESKTOP.lock().create_window("Terminal", x, y, 640, 440, WindowType::Terminal)
 }
 
 /// Create a system info window
@@ -13006,6 +13573,26 @@ pub fn run() {
         let mouse = crate::mouse::get_state();
         update_cursor(mouse.x, mouse.y);
         
+        // ── Scancode-level Alt+Tab detection (poll raw key state) ──
+        // This catches Alt+Tab even if VirtualBox or host OS eats the ASCII
+        {
+            let alt_held = crate::keyboard::is_key_pressed(0x38);
+            let win_held = crate::keyboard::is_key_pressed(0x5B);
+            let ctrl_held = crate::keyboard::is_key_pressed(0x1D);
+            let tab_held = crate::keyboard::is_key_pressed(0x0F);
+            static mut PREV_TAB_RAW: bool = false;
+            unsafe {
+                if (alt_held || win_held || ctrl_held) && tab_held && !PREV_TAB_RAW {
+                    if !engine::is_alt_tab_active() {
+                        engine::start_alt_tab();
+                    } else {
+                        engine::alt_tab_next();
+                    }
+                }
+                PREV_TAB_RAW = tab_held;
+            }
+        }
+        
         // Handle keyboard input
         // NOTE: read_char() returns ASCII values, NOT scancodes.
         // The interrupt handler converts scancodes→ASCII and strips releases.
@@ -13076,8 +13663,25 @@ pub fn run() {
                 continue;
             }
             
-            // Alt+Tab or Win+Tab (Tab = ASCII 9) → window switcher
-            if (alt || win) && key == 9 {
+            // F1 → toggle shortcut overlay
+            // F1 scancode 0x3B — check via is_key_pressed
+            {
+                static mut F1_HANDLED: bool = false;
+                let f1_down = crate::keyboard::is_key_pressed(0x3B);
+                unsafe {
+                    if f1_down && !alt && !win && !F1_HANDLED {
+                        F1_HANDLED = true;
+                        let mut d = DESKTOP.lock();
+                        d.show_shortcuts = !d.show_shortcuts;
+                        crate::serial_println!("[GUI] F1: shortcuts overlay = {}", d.show_shortcuts);
+                        drop(d);
+                    }
+                    if !f1_down { F1_HANDLED = false; }
+                }
+            }
+            
+            // Alt+Tab, Win+Tab, or Ctrl+Tab → window switcher
+            if (alt || win || _ctrl) && key == 9 {
                 if !engine::is_alt_tab_active() {
                     engine::start_alt_tab();
                 } else {
@@ -13121,7 +13725,7 @@ pub fn run() {
             
             // Win+E → open file manager
             if win && (key == b'e' || key == b'E') {
-                DESKTOP.lock().create_window("Files", 150, 100, 400, 350, WindowType::FileManager);
+                DESKTOP.lock().create_window("Files", 140, 80, 520, 420, WindowType::FileManager);
                 unsafe { WIN_USED_COMBO = true; }
                 crate::serial_println!("[GUI] Win+E: open file manager");
                 continue;
@@ -13184,12 +13788,12 @@ pub fn run() {
             handle_keyboard(key);
         }
         
-        // Handle Alt/Win release to finish Alt+Tab / Win+Tab
+        // Handle Alt/Win/Ctrl release to finish Alt+Tab / Win+Tab / Ctrl+Tab
         if engine::is_alt_tab_active() {
-            // Check if both Alt and Win are released → select the window
             let alt_held = crate::keyboard::is_key_pressed(0x38);
             let win_held = crate::keyboard::is_key_pressed(0x5B);
-            if !alt_held && !win_held {
+            let ctrl_held = crate::keyboard::is_key_pressed(0x1D);
+            if !alt_held && !win_held && !ctrl_held {
                 let selected = engine::finish_alt_tab();
                 DESKTOP.lock().focus_window_by_index(selected as usize);
             }
@@ -13271,6 +13875,42 @@ pub fn run() {
         }
         
         // ═══════════════════════════════════════════════════════════════
+        // Poll async JARVIS result
+        // ═══════════════════════════════════════════════════════════════
+        {
+            let result = {
+                let mut r = JARVIS_RESULT.lock();
+                r.take()
+            };
+            if let Some(lines) = result {
+                let mut d = DESKTOP.lock();
+                // Find the focused terminal window and append JARVIS output
+                if let Some(window) = d.windows.iter_mut().find(|w| w.window_type == WindowType::Terminal) {
+                    // Remove the cursor/prompt line before appending
+                    if window.content.last().map(|s| s.contains("$ ")).unwrap_or(false) {
+                        window.content.pop();
+                    }
+                    // Append result lines
+                    for line in &lines {
+                        window.content.push(line.clone());
+                    }
+                    // Re-add prompt
+                    window.content.push(Desktop::make_prompt("_"));
+                    // Auto-scroll to bottom
+                    let line_height = 16usize;
+                    let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT as usize + 16);
+                    let visible_lines = if line_height > 0 { content_area_h / line_height } else { 1 };
+                    if window.content.len() > visible_lines {
+                        window.scroll_offset = window.content.len() - visible_lines;
+                    } else {
+                        window.scroll_offset = 0;
+                    }
+                }
+                drop(d);
+            }
+        }
+
+        // ═══════════════════════════════════════════════════════════════
         // Rendering
         // ═══════════════════════════════════════════════════════════════
         
@@ -13287,6 +13927,16 @@ pub fn run() {
         // if engine::is_start_menu_open() {
         //     render_start_menu();
         // }
+        
+        // Render shortcut overlay if active
+        {
+            let d = DESKTOP.lock();
+            let show = d.show_shortcuts;
+            drop(d);
+            if show {
+                render_shortcut_overlay();
+            }
+        }
         
         // Render notifications
         render_notifications();
@@ -13311,6 +13961,17 @@ pub fn run() {
         // ═══════════════════════════════════════════════════════════════
         // VSync frame pacing (adaptive HLT sleep + spin for precision)
         // ═══════════════════════════════════════════════════════════════
+        let render_time_us = engine::now_us().saturating_sub(frame_start);
+        // Log FPS to serial every 120 frames for performance monitoring
+        {
+            let d = DESKTOP.lock();
+            let fc = d.frame_count;
+            drop(d);
+            if fc % 120 == 0 && fc > 0 {
+                let fps = crate::gui::vsync::fps();
+                crate::serial_println!("[PERF] frame={} render={}us fps={}", fc, render_time_us, fps);
+            }
+        }
         crate::gui::vsync::frame_end(frame_start);
     }
     
@@ -13332,53 +13993,262 @@ pub fn run() {
 }
 
 /// Snap direction for window snapping
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum SnapDir {
     Left,
     Right,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
 }
 
-/// Render Alt+Tab overlay
+/// Render Alt+Tab overlay — polished window switcher
 fn render_alt_tab_overlay() {
-    // Get window list
     let desktop = DESKTOP.lock();
-    let windows = desktop.get_window_titles();
-    if windows.is_empty() { return; }
+    let win_info = desktop.get_window_info();
+    if win_info.is_empty() { return; }
     
     let screen_w = desktop.width;
     let screen_h = desktop.height;
     drop(desktop);
     
     let selection = crate::gui::engine::alt_tab_selection();
-    let count = windows.len() as i32;
-    let idx = ((selection % count) + count) % count; // Wrap around
+    let count = win_info.len() as i32;
+    let idx = ((selection % count) + count) % count;
     
-    // Calculate overlay size
-    let item_w: u32 = 120;
-    let item_h: u32 = 80;
-    let padding: u32 = 10;
-    let total_w = windows.len() as u32 * (item_w + padding) + padding;
-    let total_h = item_h + padding * 2 + 20;
+    // Card dimensions
+    let card_w: u32 = 150;
+    let card_h: u32 = 100;
+    let gap: u32 = 12;
+    let max_visible: u32 = 6; // Max cards shown at once
+    let visible_count = (win_info.len() as u32).min(max_visible);
+    let total_w = visible_count * (card_w + gap) + gap;
+    let title_area: u32 = 30;
+    let total_h = card_h + gap * 2 + title_area + 14;
     
-    let x = (screen_w as i32 - total_w as i32) / 2;
-    let y = (screen_h as i32 - total_h as i32) / 2;
+    let ox = (screen_w as i32 - total_w as i32) / 2;
+    let oy = (screen_h as i32 - total_h as i32) / 2;
     
-    // Draw background
-    draw_rounded_rect(x, y, total_w, total_h, 8, 0xE0101520);
-    draw_rounded_rect(x + 1, y + 1, total_w - 2, total_h - 2, 7, 0xE0202530);
+    // ── Backdrop (dark glass) ──
+    draw_rounded_rect(ox - 2, oy - 2, total_w + 4, total_h + 4, 14, 0x40000000);
+    draw_rounded_rect(ox, oy, total_w, total_h, 12, 0xE8101420);
+    // Subtle border
+    draw_rounded_rect_border(ox, oy, total_w, total_h, 12, 0x3000FF66);
+    // Glass highlight (top edge)
+    fill_rect_signed(ox + 14, oy + 1, total_w as i32 - 28, 1, 0x20FFFFFF);
     
-    // Draw window previews
-    for (i, title) in windows.iter().enumerate() {
-        let ix = x + padding as i32 + i as i32 * (item_w + padding) as i32;
-        let iy = y + padding as i32;
+    // ── Title ──
+    draw_text_centered(ox + total_w as i32 / 2, oy + 8, "Switch Window", 0xFF888888);
+    
+    // ── Window cards ──
+    for (i, (title, wtype)) in win_info.iter().enumerate() {
+        if i as u32 >= max_visible { break; }
+        let cx = ox + gap as i32 + i as i32 * (card_w + gap) as i32;
+        let cy = oy + gap as i32 + 22;
         
-        // Highlight selected
-        let bg = if i as i32 == idx { 0xFF00CC55 } else { 0xFF303540 };
-        draw_rounded_rect(ix, iy, item_w, item_h, 4, bg);
+        let is_selected = i as i32 == idx;
         
-        // Window title (truncated)
-        let short: String = title.chars().take(12).collect();
-        draw_text_centered(ix + item_w as i32 / 2, iy + item_h as i32 + 5, &short, 0xFFFFFFFF);
+        // Card background
+        if is_selected {
+            // Glow behind selected
+            draw_rounded_rect(cx - 2, cy - 2, card_w + 4, card_h + 4, 8, 0x3000FF66);
+            draw_rounded_rect(cx, cy, card_w, card_h, 6, 0xFF1A2A20);
+            // Green accent border
+            draw_rounded_rect_border(cx, cy, card_w, card_h, 6, 0xFF00CC55);
+        } else {
+            draw_rounded_rect(cx, cy, card_w, card_h, 6, 0xFF1A1E28);
+            draw_rounded_rect_border(cx, cy, card_w, card_h, 6, 0xFF2A2E38);
+        }
+        
+        // Window type icon (centered in card, large)
+        let icon = window_type_icon(*wtype);
+        let icon_x = cx + (card_w as i32 - crate::graphics::scaling::measure_text_width(icon) as i32) / 2;
+        let icon_y = cy + 20;
+        let icon_color = if is_selected { 0xFF00FF66 } else { 0xFF667766 };
+        draw_text(icon_x, icon_y, icon, icon_color);
+        
+        // Type label (small, below icon)
+        let type_label = window_type_label(*wtype);
+        let label_color = if is_selected { 0xFF00CC55 } else { 0xFF555555 };
+        draw_text_centered(cx + card_w as i32 / 2, cy + card_h as i32 - 22, type_label, label_color);
+        
+        // Window title (below card)
+        let short: alloc::string::String = title.chars().take(16).collect();
+        let title_color = if is_selected { 0xFFFFFFFF } else { 0xFF999999 };
+        draw_text_centered(cx + card_w as i32 / 2, cy + card_h as i32 + 6, &short, title_color);
+    }
+    
+    // ── Navigation hint ──
+    if win_info.len() > 1 {
+        draw_text_centered(ox + total_w as i32 / 2, oy + total_h as i32 - 18, 
+            "Tab: next  |  Release Alt: select", 0xFF555555);
+    }
+}
+
+/// Render shortcut overlay — keyboard shortcut cheat sheet (F1 toggle)
+fn render_shortcut_overlay() {
+    let desktop = DESKTOP.lock();
+    let screen_w = desktop.width;
+    let screen_h = desktop.height;
+    drop(desktop);
+
+    // Shortcut categories with entries: (category, &[(key, description)])
+    let categories: &[(&str, &[(&str, &str)])] = &[
+        ("Navigation", &[
+            ("Win", "Toggle Start Menu"),
+            ("Alt+Tab", "Switch Windows"),
+            ("Win+D", "Show Desktop"),
+            ("Win+L", "Lock Screen"),
+            ("ESC", "Close Window / Menu"),
+            ("Alt+F4", "Force Close Window"),
+        ]),
+        ("Windows", &[
+            ("Win+Left", "Snap Left"),
+            ("Win+Right", "Snap Right"),
+            ("Win+Up", "Maximize"),
+            ("Win+Down", "Minimize"),
+        ]),
+        ("Apps", &[
+            ("Win+E", "File Manager"),
+            ("Win+I", "Settings"),
+            ("Win+H", "High Contrast"),
+        ]),
+        ("Editor", &[
+            ("Ctrl+S", "Save"),
+            ("Ctrl+F", "Find"),
+            ("Ctrl+G", "Go to Line"),
+            ("Ctrl+C/X/V", "Copy / Cut / Paste"),
+        ]),
+        ("File Manager", &[
+            ("N / D", "New File / New Folder"),
+            ("R", "Rename"),
+            ("Del", "Delete"),
+            ("V", "Toggle View"),
+        ]),
+    ];
+
+    // Layout: 2-column grid
+    let col_count: u32 = 2;
+    let col_w: u32 = 300;
+    let row_h: u32 = 18;
+    let cat_pad: u32 = 8;
+    let header_h: u32 = 40;
+    let footer_h: u32 = 24;
+    let margin: u32 = 20;
+
+    // Calculate total height
+    let mut total_rows: u32 = 0;
+    for (_, entries) in categories.iter() {
+        total_rows += 1 + entries.len() as u32; // category header + entries
+    }
+    // Split into 2 columns
+    let rows_per_col = (total_rows + 1) / 2;
+    let content_h = rows_per_col * row_h + ((categories.len() as u32 + 1) / 2) * cat_pad;
+    let panel_w = col_count * col_w + margin * 3;
+    let panel_h = header_h + content_h + footer_h + margin;
+
+    let ox = (screen_w as i32 - panel_w as i32) / 2;
+    let oy = (screen_h as i32 - panel_h as i32) / 2;
+
+    // ── Backdrop (dark glass) ──
+    draw_rounded_rect(ox - 2, oy - 2, panel_w + 4, panel_h + 4, 14, 0x50000000);
+    draw_rounded_rect(ox, oy, panel_w, panel_h, 12, 0xF0101420);
+    draw_rounded_rect_border(ox, oy, panel_w, panel_h, 12, 0x5000FF66);
+    // Glass highlight
+    fill_rect_signed(ox + 14, oy + 1, panel_w as i32 - 28, 1, 0x20FFFFFF);
+
+    // ── Title ──
+    draw_text_centered(ox + panel_w as i32 / 2, oy + 12, "Keyboard Shortcuts", 0xFF00FF66);
+    // Underline
+    fill_rect_signed(ox + margin as i32, oy + header_h as i32 - 6, panel_w as i32 - margin as i32 * 2, 1, 0x3000FF66);
+
+    // ── Content: 2-column layout ──
+    let mut col = 0u32;
+    let mut row_in_col = 0u32;
+    let mut cat_idx = 0usize;
+
+    for (cat_name, entries) in categories.iter() {
+        // Check if this category would overflow current column
+        let needed = 1 + entries.len() as u32;
+        if row_in_col + needed > rows_per_col && col < col_count - 1 {
+            col += 1;
+            row_in_col = 0;
+        }
+
+        let cx = ox + margin as i32 + col as i32 * (col_w as i32 + margin as i32);
+        let cy = oy + header_h as i32 + row_in_col as i32 * row_h as i32 + cat_idx as i32 * cat_pad as i32;
+
+        // Category header
+        draw_text(cx, cy, cat_name, 0xFF00CC55);
+        row_in_col += 1;
+
+        // Entries
+        for (key, desc) in entries.iter() {
+            let ey = oy + header_h as i32 + row_in_col as i32 * row_h as i32 + cat_idx as i32 * cat_pad as i32;
+            // Key badge
+            let key_w = crate::graphics::scaling::measure_text_width(key) as i32 + 10;
+            draw_rounded_rect(cx + 4, ey - 1, key_w as u32, 16, 4, 0xFF1A2A20);
+            draw_rounded_rect_border(cx + 4, ey - 1, key_w as u32, 16, 4, 0xFF00AA44);
+            draw_text(cx + 9, ey + 1, key, 0xFF00FF66);
+            // Description
+            draw_text(cx + key_w + 14, ey + 1, desc, 0xFFAAAAAA);
+            row_in_col += 1;
+        }
+        cat_idx += 1;
+    }
+
+    // ── Footer ──
+    draw_text_centered(ox + panel_w as i32 / 2, oy + panel_h as i32 - footer_h as i32 + 4,
+        "Press F1 to close", 0xFF555555);
+}
+
+/// Get icon for a window type
+fn window_type_icon(wtype: WindowType) -> &'static str {
+    match wtype {
+        WindowType::Terminal => ">_",
+        WindowType::SystemInfo => "[i]",
+        WindowType::About => "(?)",
+        WindowType::Calculator => "[#]",
+        WindowType::FileManager => "[/]",
+        WindowType::TextEditor => "[=]",
+        WindowType::NetworkInfo => "<~>",
+        WindowType::Settings => "{*}",
+        WindowType::ImageViewer => "[^]",
+        WindowType::Browser => "</>",
+        WindowType::Game => "[*]",
+        WindowType::Chess | WindowType::Chess3D => "[K]",
+        WindowType::ModelEditor => "[3D]",
+        WindowType::Game3D => "[3D]",
+        WindowType::MusicPlayer => "[~]",
+        WindowType::LabMode => "{L}",
+        WindowType::BinaryViewer => "0x",
+        _ => "[.]",
+    }
+}
+
+/// Get label for a window type
+fn window_type_label(wtype: WindowType) -> &'static str {
+    match wtype {
+        WindowType::Terminal => "Terminal",
+        WindowType::SystemInfo => "System",
+        WindowType::About => "About",
+        WindowType::Calculator => "Calc",
+        WindowType::FileManager => "Files",
+        WindowType::TextEditor => "Editor",
+        WindowType::NetworkInfo => "Network",
+        WindowType::Settings => "Settings",
+        WindowType::ImageViewer => "Images",
+        WindowType::Browser => "Browser",
+        WindowType::Game => "Snake",
+        WindowType::Chess => "Chess",
+        WindowType::Chess3D => "Chess 3D",
+        WindowType::ModelEditor => "3D Edit",
+        WindowType::Game3D => "FPS",
+        WindowType::MusicPlayer => "Music",
+        WindowType::LabMode => "Lab",
+        WindowType::BinaryViewer => "BinView",
+        _ => "Window",
     }
 }
 
@@ -13428,7 +14298,7 @@ fn render_start_menu() {
     draw_text(x + 25, search_y + 7, "Search apps...", 0xFF606060);
 }
 
-/// Render toast notifications
+/// Render toast notifications — polished with slide-in/fade-out
 fn render_notifications() {
     use crate::gui::engine::{get_notifications, NotifyPriority};
     
@@ -13437,38 +14307,87 @@ fn render_notifications() {
     drop(desktop);
     
     let notifs = get_notifications();
-    let mut y = 60; // Below taskbar
+    if notifs.is_empty() { return; }
+    
+    let mut y: i32 = 55; // Below any top UI
     
     for toast in notifs.iter() {
-        let w: u32 = 300;
-        let h: u32 = if toast.progress.is_some() { 70 } else { 60 };
-        let x = screen_w as i32 - w as i32 - 15;
+        let w: u32 = 320;
+        let has_progress = toast.progress.is_some();
+        let h: u32 = if has_progress { 78 } else { 64 };
+        let opacity = toast.opacity();
+        if opacity == 0 { continue; }
         
-        // Background
-        draw_rounded_rect(x, y, w, h, 8, 0xF0181C25);
+        // Slide-in from right: first 300ms slides from +40px offset
+        let elapsed = toast.elapsed_ms();
+        let slide_offset = if elapsed < 300 {
+            ((300 - elapsed) * 40 / 300) as i32
+        } else {
+            0
+        };
+        let x = screen_w as i32 - w as i32 - 15 + slide_offset;
         
-        // Accent bar
+        // Alpha-adjusted background
+        let bg_alpha = (opacity as u32 * 0xF0 / 255) << 24;
+        let bg_color = bg_alpha | 0x00141820;
+        
+        // Outer glow (subtle)
+        let glow_alpha = (opacity as u32 * 0x18 / 255) << 24;
+        draw_rounded_rect(x - 1, y - 1, w + 2, h + 2, 11, glow_alpha | 0x00000000);
+        
+        // Card background
+        draw_rounded_rect(x, y, w, h, 10, bg_color);
+        
+        // Glass highlight (top edge)
+        let glass_alpha = (opacity as u32 * 0x15 / 255) << 24;
+        fill_rect_signed(x + 12, y + 1, w as i32 - 24, 1, glass_alpha | 0x00FFFFFF);
+        
+        // Accent side bar (4px, rounded look via 2 rects)
         let accent_color = toast.get_color();
-        draw_rect(x, y, 4, h, accent_color);
+        let accent_alpha = (opacity as u32 * ((accent_color >> 24) & 0xFF) / 255) << 24;
+        let accent_rgb = accent_color & 0x00FFFFFF;
+        fill_rect_signed(x + 2, y + 8, 3, h as i32 - 16, accent_alpha | accent_rgb);
         
-        // Title
-        draw_text(x + 15, y + 10, &toast.title, accent_color);
+        // Priority icon
+        let icon = match toast.priority {
+            NotifyPriority::Info => "[i]",
+            NotifyPriority::Warning => "/!\\",
+            NotifyPriority::Error => "[X]",
+            NotifyPriority::Success => "[v]",
+        };
+        let icon_alpha = (opacity as u32 * 0xFF / 255) << 24;
+        draw_text(x + 14, y + 12, icon, icon_alpha | accent_rgb);
         
-        // Message
-        draw_text(x + 15, y + 30, &toast.message, 0xFFAAAAAA);
+        // Title (bold-ish, white)
+        let title_alpha = (opacity as u32 * 0xFF / 255) << 24;
+        let title_short: alloc::string::String = toast.title.chars().take(28).collect();
+        draw_text(x + 48, y + 12, &title_short, title_alpha | 0x00EEEEEE);
+        
+        // Message (dimmer)
+        let msg_alpha = (opacity as u32 * 0xBB / 255) << 24;
+        let msg_short: alloc::string::String = toast.message.chars().take(36).collect();
+        draw_text(x + 14, y + 34, &msg_short, msg_alpha | 0x00999999);
         
         // Progress bar if present
         if let Some(percent) = toast.progress {
-            let bar_y = y + 50;
-            let bar_w = w - 30;
-            draw_rounded_rect(x + 15, bar_y, bar_w, 8, 3, 0xFF303540);
-            let fill_w = (bar_w as u32 * percent as u32 / 100) as u32;
-            if fill_w > 0 {
-                draw_rounded_rect(x + 15, bar_y, fill_w.max(6), 8, 3, 0xFF00CC55);
+            let bar_y = y + 54;
+            let bar_w = w - 28;
+            let bar_alpha = (opacity as u32 * 0xFF / 255) << 24;
+            draw_rounded_rect(x + 14, bar_y, bar_w, 8, 3, bar_alpha | 0x00252A35);
+            let fill_w = (bar_w * percent as u32 / 100).max(1);
+            if fill_w > 4 {
+                draw_rounded_rect(x + 14, bar_y, fill_w, 8, 3, bar_alpha | 0x0000CC55);
             }
+            // Percentage text
+            let pct_str = alloc::format!("{}%", percent);
+            draw_text(x + w as i32 - 40, bar_y - 1, &pct_str, bar_alpha | 0x00777777);
         }
         
-        y += h as i32 + 10;
+        // Subtle bottom border
+        let border_alpha = (opacity as u32 * 0x10 / 255) << 24;
+        fill_rect_signed(x + 10, y + h as i32 - 1, w as i32 - 20, 1, border_alpha | 0x00FFFFFF);
+        
+        y += h as i32 + 8;
     }
 }
 

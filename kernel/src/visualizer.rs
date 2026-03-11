@@ -70,9 +70,9 @@ impl RainEffect {
 // Visualizer mode enum
 // ═══════════════════════════════════════
 
-pub const NUM_MODES: u8 = 8;
+pub const NUM_MODES: u8 = 13;
 
-pub const MODE_NAMES: [&str; 8] = [
+pub const MODE_NAMES: [&str; 13] = [
     "Sphere",
     "Morphing",
     "Lorenz",
@@ -80,8 +80,266 @@ pub const MODE_NAMES: [&str; 8] = [
     "Ribbon",
     "Starburst",
     "Image",
-    "FlowField",
+    "TorusKnot",
+    "DNA Helix",
+    "Tesseract",
+    "Vortex",
+    "PlasmaSphere",
+    "Galaxy",
 ];
+
+// ═══════════════════════════════════════
+// Color palettes
+// ═══════════════════════════════════════
+
+pub const NUM_PALETTES: u8 = 23;
+
+pub const PALETTE_NAMES: [&str; 23] = [
+    // ── Base single-color (0-12) ──
+    "Matrix",     // 0  green
+    "Cyber",      // 1  cyan/magenta
+    "Fire",       // 2  red/orange/yellow
+    "Ocean",      // 3  blue/teal
+    "Aurora",     // 4  green/purple
+    "Gold",       // 5  gold/amber
+    "Red",        // 6
+    "Blue",       // 7
+    "Purple",     // 8
+    "Pink",       // 9
+    "Yellow",     // 10
+    "Cyan",       // 11
+    "White",      // 12
+    // ── Multi-color combos (13-22) ──
+    "Rainbow",    // 13
+    "Neon Mix",   // 14  Cyber + Fire + Aurora
+    "Lava Sea",   // 15  Fire + Ocean + Gold
+    "Prism",      // 16  Cyber + Aurora + Ocean
+    "Sunset",     // 17  Red + Gold + Purple
+    "Arctic",     // 18  Cyan + Blue + White
+    "Toxic",      // 19  Matrix + Yellow + Cyan
+    "Vampire",    // 20  Red + Purple + Pink
+    "Nebula",     // 21  Blue + Purple + Pink
+    "Inferno",    // 22  Red + Fire + Yellow
+];
+
+/// Returns (r, g, b) target colors for a palette given frequency band dominance
+/// t = 0.0..1.0 interpolation within the palette gradient
+pub fn palette_color(palette: u8, t: f32) -> (f32, f32, f32) {
+    let t = t.max(0.0).min(1.0);
+    match palette {
+        0 => { // Matrix — classic green
+            let r = 20.0 + t * 80.0;
+            let g = 120.0 + t * 135.0;
+            let b = 20.0 + t * 60.0;
+            (r, g, b)
+        }
+        1 => { // Cyber — cyan / magenta / purple
+            if t < 0.33 {
+                let s = t / 0.33;
+                (20.0 + s * 60.0, 180.0 + s * 75.0, 255.0) // deep cyan → bright cyan
+            } else if t < 0.66 {
+                let s = (t - 0.33) / 0.33;
+                (80.0 + s * 175.0, 255.0 - s * 175.0, 255.0 - s * 55.0) // cyan → magenta
+            } else {
+                let s = (t - 0.66) / 0.34;
+                (255.0, 80.0 - s * 40.0, 200.0 + s * 55.0) // magenta → pink-white
+            }
+        }
+        2 => { // Fire — red / orange / yellow
+            if t < 0.4 {
+                let s = t / 0.4;
+                (180.0 + s * 75.0, 20.0 + s * 60.0, 0.0) // dark red → orange-red
+            } else if t < 0.75 {
+                let s = (t - 0.4) / 0.35;
+                (255.0, 80.0 + s * 120.0, s * 30.0) // orange-red → yellow
+            } else {
+                let s = (t - 0.75) / 0.25;
+                (255.0, 200.0 + s * 55.0, 30.0 + s * 200.0) // yellow → white-hot
+            }
+        }
+        3 => { // Ocean — deep blue / teal / aqua
+            if t < 0.5 {
+                let s = t / 0.5;
+                (0.0, 30.0 + s * 100.0, 120.0 + s * 135.0) // deep blue → teal
+            } else {
+                let s = (t - 0.5) / 0.5;
+                (s * 80.0, 130.0 + s * 125.0, 255.0) // teal → bright aqua
+            }
+        }
+        4 => { // Aurora — green / purple / pink
+            if t < 0.33 {
+                let s = t / 0.33;
+                (30.0 + s * 40.0, 200.0 + s * 55.0, 80.0 + s * 40.0) // green
+            } else if t < 0.66 {
+                let s = (t - 0.33) / 0.33;
+                (70.0 + s * 100.0, 255.0 - s * 155.0, 120.0 + s * 80.0) // green → purple
+            } else {
+                let s = (t - 0.66) / 0.34;
+                (170.0 + s * 85.0, 100.0 + s * 50.0, 200.0 + s * 55.0) // purple → pink
+            }
+        }
+        5 => { // Gold — gold / amber / white
+            if t < 0.5 {
+                let s = t / 0.5;
+                (180.0 + s * 75.0, 130.0 + s * 50.0, 10.0 + s * 20.0)
+            } else {
+                let s = (t - 0.5) / 0.5;
+                (255.0, 180.0 + s * 75.0, 30.0 + s * 225.0)
+            }
+        }
+        6 => { // Red — dark red → crimson → pinkish white
+            if t < 0.4 {
+                let s = t / 0.4;
+                (100.0 + s * 100.0, 5.0 + s * 15.0, 5.0 + s * 10.0)
+            } else if t < 0.75 {
+                let s = (t - 0.4) / 0.35;
+                (200.0 + s * 55.0, 20.0 + s * 40.0, 15.0 + s * 30.0)
+            } else {
+                let s = (t - 0.75) / 0.25;
+                (255.0, 60.0 + s * 160.0, 45.0 + s * 180.0)
+            }
+        }
+        7 => { // Blue — navy → electric blue → ice
+            if t < 0.4 {
+                let s = t / 0.4;
+                (5.0 + s * 15.0, 10.0 + s * 40.0, 100.0 + s * 100.0)
+            } else if t < 0.75 {
+                let s = (t - 0.4) / 0.35;
+                (20.0 + s * 40.0, 50.0 + s * 80.0, 200.0 + s * 55.0)
+            } else {
+                let s = (t - 0.75) / 0.25;
+                (60.0 + s * 160.0, 130.0 + s * 125.0, 255.0)
+            }
+        }
+        8 => { // Purple — deep purple → violet → lavender
+            if t < 0.4 {
+                let s = t / 0.4;
+                (60.0 + s * 50.0, 5.0 + s * 15.0, 100.0 + s * 60.0)
+            } else if t < 0.75 {
+                let s = (t - 0.4) / 0.35;
+                (110.0 + s * 60.0, 20.0 + s * 40.0, 160.0 + s * 60.0)
+            } else {
+                let s = (t - 0.75) / 0.25;
+                (170.0 + s * 70.0, 60.0 + s * 140.0, 220.0 + s * 35.0)
+            }
+        }
+        9 => { // Pink — deep magenta → hot pink → light pink
+            if t < 0.4 {
+                let s = t / 0.4;
+                (140.0 + s * 60.0, 10.0 + s * 20.0, 80.0 + s * 40.0)
+            } else if t < 0.75 {
+                let s = (t - 0.4) / 0.35;
+                (200.0 + s * 55.0, 30.0 + s * 50.0, 120.0 + s * 40.0)
+            } else {
+                let s = (t - 0.75) / 0.25;
+                (255.0, 80.0 + s * 130.0, 160.0 + s * 80.0)
+            }
+        }
+        10 => { // Yellow — dark amber → bright yellow → white-yellow
+            if t < 0.4 {
+                let s = t / 0.4;
+                (140.0 + s * 60.0, 100.0 + s * 50.0, 5.0 + s * 10.0)
+            } else if t < 0.75 {
+                let s = (t - 0.4) / 0.35;
+                (200.0 + s * 55.0, 150.0 + s * 75.0, 15.0 + s * 20.0)
+            } else {
+                let s = (t - 0.75) / 0.25;
+                (255.0, 225.0 + s * 30.0, 35.0 + s * 200.0)
+            }
+        }
+        11 => { // Cyan — deep teal → bright cyan → ice-white
+            if t < 0.4 {
+                let s = t / 0.4;
+                (5.0 + s * 10.0, 80.0 + s * 70.0, 100.0 + s * 60.0)
+            } else if t < 0.75 {
+                let s = (t - 0.4) / 0.35;
+                (15.0 + s * 30.0, 150.0 + s * 80.0, 160.0 + s * 95.0)
+            } else {
+                let s = (t - 0.75) / 0.25;
+                (45.0 + s * 180.0, 230.0 + s * 25.0, 255.0)
+            }
+        }
+        _ => { // White (12) — dark grey → silver → bright white
+            if t < 0.4 {
+                let s = t / 0.4;
+                let v = 60.0 + s * 60.0;
+                (v, v, v)
+            } else if t < 0.75 {
+                let s = (t - 0.4) / 0.35;
+                let v = 120.0 + s * 80.0;
+                (v, v + s * 10.0, v + s * 15.0) // slight cool tint
+            } else {
+                let s = (t - 0.75) / 0.25;
+                let v = 200.0 + s * 55.0;
+                (v, v, v)
+            }
+        }
+    }
+}
+
+/// Combo palette: blends 3 base palettes across the gradient
+/// Each palette occupies 1/3 of the t range with smooth crossfade
+fn combo_palette(p1: u8, p2: u8, p3: u8, t: f32) -> (f32, f32, f32) {
+    let t = t.max(0.0).min(1.0);
+    if t < 0.3 {
+        // Pure p1
+        palette_color(p1, t / 0.3)
+    } else if t < 0.45 {
+        // Crossfade p1 → p2
+        let s = (t - 0.3) / 0.15;
+        let (r1, g1, b1) = palette_color(p1, 0.8 + s * 0.2);
+        let (r2, g2, b2) = palette_color(p2, s * 0.2);
+        (r1 * (1.0 - s) + r2 * s, g1 * (1.0 - s) + g2 * s, b1 * (1.0 - s) + b2 * s)
+    } else if t < 0.65 {
+        // Pure p2
+        let s = (t - 0.45) / 0.2;
+        palette_color(p2, s)
+    } else if t < 0.8 {
+        // Crossfade p2 → p3
+        let s = (t - 0.65) / 0.15;
+        let (r1, g1, b1) = palette_color(p2, 0.8 + s * 0.2);
+        let (r2, g2, b2) = palette_color(p3, s * 0.2);
+        (r1 * (1.0 - s) + r2 * s, g1 * (1.0 - s) + g2 * s, b1 * (1.0 - s) + b2 * s)
+    } else {
+        // Pure p3
+        let s = (t - 0.8) / 0.2;
+        palette_color(p3, s)
+    }
+}
+
+/// Rainbow: full HSV color wheel across t=0..1
+fn rainbow_color(t: f32) -> (f32, f32, f32) {
+    let t = t.max(0.0).min(1.0);
+    // HSV to RGB: hue = t * 360°, full saturation, full value
+    let h = t * 6.0; // 0..6 (6 sextants)
+    let i = h as u8;
+    let f = h - i as f32;
+    match i {
+        0 => (255.0, f * 255.0, 0.0),                    // red → yellow
+        1 => (255.0 * (1.0 - f), 255.0, 0.0),            // yellow → green
+        2 => (0.0, 255.0, f * 255.0),                     // green → cyan
+        3 => (0.0, 255.0 * (1.0 - f), 255.0),            // cyan → blue
+        4 => (f * 255.0, 0.0, 255.0),                     // blue → magenta
+        _ => (255.0, 0.0, 255.0 * (1.0 - f)),            // magenta → red
+    }
+}
+
+/// Get color for any palette index (base 0-12, multi 13-22)
+pub fn get_palette_color(palette: u8, t: f32) -> (f32, f32, f32) {
+    match palette {
+        0..=12 => palette_color(palette, t),
+        13 => rainbow_color(t),                     // Rainbow
+        14 => combo_palette(1, 2, 4, t),            // Neon Mix: Cyber + Fire + Aurora
+        15 => combo_palette(2, 3, 5, t),            // Lava Sea: Fire + Ocean + Gold
+        16 => combo_palette(1, 4, 3, t),            // Prism: Cyber + Aurora + Ocean
+        17 => combo_palette(6, 5, 8, t),            // Sunset: Red + Gold + Purple
+        18 => combo_palette(11, 7, 12, t),          // Arctic: Cyan + Blue + White
+        19 => combo_palette(0, 10, 11, t),          // Toxic: Matrix + Yellow + Cyan
+        20 => combo_palette(6, 8, 9, t),            // Vampire: Red + Purple + Pink
+        21 => combo_palette(7, 8, 9, t),            // Nebula: Blue + Purple + Pink
+        _  => combo_palette(6, 2, 10, t),           // Inferno: Red + Fire + Yellow
+    }
+}
 
 // ═══════════════════════════════════════
 // State
@@ -155,6 +413,36 @@ pub struct VisualizerState {
     image_display_w: u32,
     image_display_h: u32,
 
+    // ── Mode 7: Torus Knot ──
+    torus_knot_base: Vec<V3>,
+    torus_knot_edges: Vec<Edge>,
+
+    // ── Mode 8: DNA Helix ──
+    dna_base: Vec<V3>,
+    dna_edges: Vec<Edge>,
+
+    // ── Mode 9: Tesseract (4D Hypercube) ──
+    tesseract_base: Vec<V3>,   // 16 verts of 4D cube projected to 3D
+    tesseract_edges: Vec<Edge>,
+    tesseract_w_angle: f32,    // 4th-dimension rotation angle
+
+    // ── Mode 10: Vortex Tunnel ──
+    vortex_base: Vec<V3>,
+    vortex_edges: Vec<Edge>,
+
+    // ── Mode 11: Plasma Sphere ──
+    plasma_base: Vec<V3>,
+    plasma_edges: Vec<Edge>,
+    plasma_tendrils: Vec<V3>,
+    plasma_tendril_edges: Vec<Edge>,
+
+    // ── Mode 12: Galaxy Spiral ──
+    galaxy_base: Vec<V3>,
+    galaxy_edges: Vec<Edge>,
+
+    // ── Shared: color palette ──
+    pub palette: u8,
+
     pub initialized: bool,
 }
 
@@ -193,6 +481,14 @@ impl VisualizerState {
             particles: Vec::new(), particle_timer: 0,
             image_offset_x: 0, image_offset_y: 0,
             image_display_w: 0, image_display_h: 0,
+            torus_knot_base: Vec::new(), torus_knot_edges: Vec::new(),
+            dna_base: Vec::new(), dna_edges: Vec::new(),
+            tesseract_base: Vec::new(), tesseract_edges: Vec::new(), tesseract_w_angle: 0.0,
+            vortex_base: Vec::new(), vortex_edges: Vec::new(),
+            plasma_base: Vec::new(), plasma_edges: Vec::new(),
+            plasma_tendrils: Vec::new(), plasma_tendril_edges: Vec::new(),
+            galaxy_base: Vec::new(), galaxy_edges: Vec::new(),
+            palette: 0,
             initialized: false,
         }
     }
@@ -403,6 +699,242 @@ fn gen_star() -> (Vec<V3>, Vec<Edge>) {
 }
 
 // ═══════════════════════════════════════
+// New 3D shape generators
+// ═══════════════════════════════════════
+
+/// Torus Knot — parametric trefoil knot on a torus
+fn gen_torus_knot(p_k: u32, q_k: u32, segments: usize) -> (Vec<V3>, Vec<Edge>) {
+    let mut verts = Vec::with_capacity(segments);
+    let mut edges = Vec::new();
+    let pi2: f32 = 6.28318;
+    let r_major: f32 = 0.7; // torus major radius
+    let r_minor: f32 = 0.3; // tube radius
+
+    for i in 0..segments {
+        let t = pi2 * i as f32 / segments as f32;
+        let r = r_major + r_minor * cosf(q_k as f32 * t);
+        let x = r * cosf(p_k as f32 * t);
+        let y = r * sinf(p_k as f32 * t);
+        let z = r_minor * sinf(q_k as f32 * t);
+        verts.push(V3::new(x, y, z));
+    }
+    // Connect sequential + wrap
+    for i in 0..segments {
+        let next = (i + 1) % segments;
+        edges.push(Edge(i as u16, next as u16));
+    }
+    // Cross-connections for web effect
+    for i in (0..segments).step_by(4) {
+        let cross = (i + segments / 3) % segments;
+        edges.push(Edge(i as u16, cross as u16));
+    }
+    (verts, edges)
+}
+
+/// DNA Double Helix
+fn gen_dna_helix(segments: usize, turns: f32) -> (Vec<V3>, Vec<Edge>) {
+    // Two helices offset by pi, connected by rungs
+    let mut verts = Vec::with_capacity(segments * 2);
+    let mut edges = Vec::new();
+    let pi2: f32 = 6.28318;
+    let helix_r: f32 = 0.5;
+    let height: f32 = 2.0;
+
+    // Strand A
+    for i in 0..segments {
+        let t = i as f32 / segments as f32;
+        let angle = pi2 * turns * t;
+        let y = -height / 2.0 + height * t;
+        verts.push(V3::new(helix_r * cosf(angle), y, helix_r * sinf(angle)));
+    }
+    // Strand B (offset by pi)
+    for i in 0..segments {
+        let t = i as f32 / segments as f32;
+        let angle = pi2 * turns * t + 3.14159;
+        let y = -height / 2.0 + height * t;
+        verts.push(V3::new(helix_r * cosf(angle), y, helix_r * sinf(angle)));
+    }
+    // Helix edges
+    for i in 0..(segments - 1) {
+        edges.push(Edge(i as u16, (i + 1) as u16)); // strand A
+        edges.push(Edge((segments + i) as u16, (segments + i + 1) as u16)); // strand B
+    }
+    // Rungs connecting the two strands
+    for i in (0..segments).step_by(3) {
+        edges.push(Edge(i as u16, (segments + i) as u16));
+    }
+    (verts, edges)
+}
+
+/// 4D Hypercube (Tesseract) — 16 vertices in 4D, projected to 3D
+fn gen_tesseract() -> (Vec<[f32; 4]>, Vec<Edge>) {
+    // 16 vertices: all combinations of ±1 in 4D
+    let mut verts4d: Vec<[f32; 4]> = Vec::with_capacity(16);
+    let s: f32 = 0.6;
+    for i in 0..16u8 {
+        let x = if i & 1 != 0 { s } else { -s };
+        let y = if i & 2 != 0 { s } else { -s };
+        let z = if i & 4 != 0 { s } else { -s };
+        let w = if i & 8 != 0 { s } else { -s };
+        verts4d.push([x, y, z, w]);
+    }
+    // 32 edges: connect vertices that differ in exactly one coordinate
+    let mut edges = Vec::new();
+    for i in 0..16u16 {
+        for bit in 0..4u16 {
+            let j = i ^ (1 << bit);
+            if j > i {
+                edges.push(Edge(i, j));
+            }
+        }
+    }
+    (verts4d, edges)
+}
+
+/// Project 4D point to 3D using perspective on the W axis
+fn project_4d_to_3d(v: [f32; 4], w_angle: f32) -> V3 {
+    // Rotate in XW plane
+    let cw = cosf(w_angle);
+    let sw = sinf(w_angle);
+    let x = v[0] * cw - v[3] * sw;
+    let w = v[0] * sw + v[3] * cw;
+    // Also rotate in YW plane for more 4D feel
+    let cw2 = cosf(w_angle * 0.7);
+    let sw2 = sinf(w_angle * 0.7);
+    let y = v[1] * cw2 - w * sw2;
+    let w2 = v[1] * sw2 + w * cw2;
+    // Perspective projection from 4D to 3D
+    let d4: f32 = 2.5;
+    let scale = d4 / (d4 + w2);
+    V3::new(x * scale, y * scale, v[2] * scale)
+}
+
+/// Vortex Tunnel — concentric rings at different depths, spiraling
+fn gen_vortex_tunnel(rings: usize, segments: usize) -> (Vec<V3>, Vec<Edge>) {
+    let mut verts = Vec::with_capacity(rings * segments);
+    let mut edges = Vec::new();
+    let pi2: f32 = 6.28318;
+
+    for ring in 0..rings {
+        let t = ring as f32 / rings as f32;
+        let z = -1.0 + 2.0 * t;
+        let r = 0.2 + 0.6 * (1.0 - t); // wider at front, narrower at back
+        let twist = t * 2.0; // spiral twist
+        for seg in 0..segments {
+            let angle = pi2 * seg as f32 / segments as f32 + twist;
+            let x = r * cosf(angle);
+            let y = r * sinf(angle);
+            verts.push(V3::new(x, y, z));
+        }
+    }
+    // Ring edges
+    for ring in 0..rings {
+        let base = ring * segments;
+        for seg in 0..segments {
+            let next = (seg + 1) % segments;
+            edges.push(Edge((base + seg) as u16, (base + next) as u16));
+        }
+    }
+    // Longitudinal edges connecting rings
+    for ring in 0..(rings - 1) {
+        let base = ring * segments;
+        let next_base = (ring + 1) * segments;
+        for seg in (0..segments).step_by(2) {
+            edges.push(Edge((base + seg) as u16, (next_base + seg) as u16));
+        }
+    }
+    (verts, edges)
+}
+
+/// Plasma Sphere — base sphere + animated tendrils that extend outward
+fn gen_plasma_sphere() -> (Vec<V3>, Vec<Edge>) {
+    // Core sphere (lower res)
+    let lat: usize = 6;
+    let lon: usize = 10;
+    let mut verts = Vec::with_capacity(lat * lon + 2);
+    let mut edges = Vec::new();
+    let pi: f32 = 3.14159;
+
+    verts.push(V3::new(0.0, -0.5, 0.0));
+    for la in 0..lat {
+        let frac = (la as f32 + 1.0) / (lat as f32 + 1.0);
+        let angle = -pi / 2.0 + pi * frac;
+        let y = sinf(angle) * 0.5;
+        let r = cosf(angle) * 0.5;
+        for lo in 0..lon {
+            let a = 6.28318 * lo as f32 / lon as f32;
+            verts.push(V3::new(r * cosf(a), y, r * sinf(a)));
+        }
+    }
+    verts.push(V3::new(0.0, 0.5, 0.0));
+    // Ring edges
+    for la in 0..lat {
+        let base = 1 + la * lon;
+        for lo in 0..lon {
+            let next = if lo + 1 < lon { lo + 1 } else { 0 };
+            edges.push(Edge((base + lo) as u16, (base + next) as u16));
+        }
+    }
+    // Meridian edges
+    for lo in 0..lon {
+        edges.push(Edge(0, (1 + lo) as u16));
+        for la in 0..(lat - 1) {
+            let a = 1 + la * lon + lo;
+            let b = 1 + (la + 1) * lon + lo;
+            edges.push(Edge(a as u16, b as u16));
+        }
+        let last = 1 + (lat - 1) * lon + lo;
+        edges.push(Edge(last as u16, (verts.len() - 1) as u16));
+    }
+    (verts, edges)
+}
+
+/// Galaxy Spiral — logarithmic spiral arms
+fn gen_galaxy(arms: usize, points_per_arm: usize) -> (Vec<V3>, Vec<Edge>) {
+    let mut verts = Vec::with_capacity(arms * points_per_arm + 1);
+    let mut edges = Vec::new();
+    let pi2: f32 = 6.28318;
+
+    // Central core
+    verts.push(V3::new(0.0, 0.0, 0.0));
+
+    for arm in 0..arms {
+        let arm_offset = pi2 * arm as f32 / arms as f32;
+        for i in 0..points_per_arm {
+            let t = (i as f32 + 1.0) / points_per_arm as f32;
+            let r = 0.1 + t * 0.9;
+            let angle = arm_offset + t * pi2 * 1.2; // 1.2 turns per arm
+            let x = r * cosf(angle);
+            let z = r * sinf(angle);
+            // Slight vertical variation for 3D depth
+            let y = sinf(angle * 2.0) * 0.08 * r;
+            verts.push(V3::new(x, y, z));
+        }
+    }
+    // Connect within each arm
+    for arm in 0..arms {
+        let base = 1 + arm * points_per_arm;
+        // Core to first point
+        edges.push(Edge(0, base as u16));
+        for i in 0..(points_per_arm - 1) {
+            edges.push(Edge((base + i) as u16, (base + i + 1) as u16));
+        }
+    }
+    // Cross-arm connections (dust lanes)
+    for arm in 0..arms {
+        let next_arm = (arm + 1) % arms;
+        for i in (0..points_per_arm).step_by(4) {
+            let a = 1 + arm * points_per_arm + i;
+            let b = 1 + next_arm * points_per_arm + i;
+            if a < verts.len() && b < verts.len() {
+                edges.push(Edge(a as u16, b as u16));
+            }
+        }
+    }
+    (verts, edges)
+}
+
+// ═══════════════════════════════════════
 // Initialization
 // ═══════════════════════════════════════
 
@@ -455,6 +987,34 @@ fn ensure_init(s: &mut VisualizerState) {
 
     // Mode 5: Particles
     s.particles = Vec::with_capacity(200);
+
+    // Mode 7: Torus Knot (2,3 trefoil)
+    let (tk_v, tk_e) = gen_torus_knot(2, 3, 120);
+    s.torus_knot_base = tk_v;
+    s.torus_knot_edges = tk_e;
+
+    // Mode 8: DNA Helix
+    let (dna_v, dna_e) = gen_dna_helix(60, 3.0);
+    s.dna_base = dna_v;
+    s.dna_edges = dna_e;
+
+    // Mode 9: Tesseract — store 4D verts, project per-frame
+    // (initialized in build_mode_9)
+
+    // Mode 10: Vortex Tunnel
+    let (vt_v, vt_e) = gen_vortex_tunnel(10, 12);
+    s.vortex_base = vt_v;
+    s.vortex_edges = vt_e;
+
+    // Mode 11: Plasma Sphere
+    let (ps_v, ps_e) = gen_plasma_sphere();
+    s.plasma_base = ps_v;
+    s.plasma_edges = ps_e;
+
+    // Mode 12: Galaxy
+    let (gal_v, gal_e) = gen_galaxy(4, 20);
+    s.galaxy_base = gal_v;
+    s.galaxy_edges = gal_e;
 
     s.initialized = true;
 }
@@ -723,6 +1283,211 @@ fn build_mode_6(s: &mut VisualizerState) {
     s.edges.clear();
 }
 
+fn build_mode_7(s: &mut VisualizerState) {
+    // Torus Knot — audio-reactive radius pulsation
+    let bass_pulse = s.beat_pulse * 0.3 + s.smooth_bass * 0.2;
+    let treble_jitter = s.smooth_treble * 0.15;
+    let time = s.frame as f32 * 0.02;
+
+    s.verts.clear();
+    for (i, bv) in s.torus_knot_base.iter().enumerate() {
+        let t = i as f32 / s.torus_knot_base.len().max(1) as f32;
+        // Audio-reactive radial breathing
+        let r = 1.0 + bass_pulse * 0.4 + sinf(t * 6.28 * 3.0 + time) * treble_jitter;
+        s.verts.push(V3::new(bv.x * r, bv.y * r, bv.z * r));
+    }
+    s.edges.clear();
+    s.edges.extend_from_slice(&s.torus_knot_edges);
+}
+
+fn build_mode_8(s: &mut VisualizerState) {
+    // DNA Helix — audio-reactive twist and breathing
+    let bass_pulse = s.beat_pulse * 0.25;
+    let mid_twist = s.smooth_mid * 0.3;
+    let time = s.frame as f32 * 0.015;
+    let segments = s.dna_base.len() / 2;
+
+    s.verts.clear();
+    for (i, bv) in s.dna_base.iter().enumerate() {
+        let t = (i % segments.max(1)) as f32 / segments.max(1) as f32;
+        // Breathing radius
+        let r = 1.0 + bass_pulse * 0.3;
+        // Extra twist based on mid frequencies
+        let extra_twist = mid_twist * sinf(t * 6.28 + time);
+        let ca = cosf(extra_twist);
+        let sa = sinf(extra_twist);
+        let nx = bv.x * ca - bv.z * sa;
+        let nz = bv.x * sa + bv.z * ca;
+        s.verts.push(V3::new(nx * r, bv.y * r, nz * r));
+    }
+    s.edges.clear();
+    s.edges.extend_from_slice(&s.dna_edges);
+}
+
+fn build_mode_9(s: &mut VisualizerState) {
+    // Tesseract (4D Hypercube) — rotate in 4D, project to 3D
+    s.tesseract_w_angle += 0.02 + s.smooth_bass * 0.05 + s.beat_pulse * 0.1;
+
+    let (verts4d, edges4d) = gen_tesseract();
+
+    s.verts.clear();
+    for v4 in &verts4d {
+        let v3 = project_4d_to_3d(*v4, s.tesseract_w_angle);
+        // Audio-reactive scale
+        let pulse = 1.0 + s.beat_pulse * 0.3;
+        s.verts.push(V3::new(v3.x * pulse, v3.y * pulse, v3.z * pulse));
+    }
+    s.edges.clear();
+    s.edges.extend_from_slice(&edges4d);
+}
+
+fn build_mode_10(s: &mut VisualizerState) {
+    // Vortex Tunnel — spinning rings with depth
+    let time = s.frame as f32 * 0.03;
+    let bass_pulse = s.beat_pulse * 0.4;
+    let rings = 10usize;
+    let segments = 12usize;
+
+    s.verts.clear();
+    for (i, bv) in s.vortex_base.iter().enumerate() {
+        let ring = i / segments;
+        let t = ring as f32 / rings as f32;
+        // Rings pulse on beat, inner rings more
+        let rpulse = 1.0 + bass_pulse * (1.0 - t) + s.smooth_sub_bass * 0.2;
+        // Spinning twist increases with time
+        let spin = time * (1.0 + t * 2.0);
+        let ca = cosf(spin);
+        let sa = sinf(spin);
+        let nx = bv.x * ca - bv.y * sa;
+        let ny = bv.x * sa + bv.y * ca;
+        s.verts.push(V3::new(nx * rpulse, ny * rpulse, bv.z));
+    }
+    s.edges.clear();
+    s.edges.extend_from_slice(&s.vortex_edges);
+}
+
+fn build_mode_11(s: &mut VisualizerState) {
+    // Plasma Sphere — core sphere with animated tendrils
+    let time = s.frame as f32 * 0.02;
+    let bass_pulse = s.beat_pulse * 0.5;
+    let energy = s.smooth_sub_bass + s.smooth_bass;
+
+    s.verts.clear();
+    // Core sphere breathing
+    for bv in s.plasma_base.iter() {
+        let r = 1.0 + bass_pulse * 0.3;
+        s.verts.push(V3::new(bv.x * r, bv.y * r, bv.z * r));
+    }
+    let core_count = s.plasma_base.len();
+
+    // Generate tendrils — lightning-like arms extending from sphere
+    let num_tendrils: usize = 6;
+    let tendril_segments: usize = 8;
+    let pi2: f32 = 6.28318;
+    for t in 0..num_tendrils {
+        let base_angle = pi2 * t as f32 / num_tendrils as f32 + time * 0.5;
+        let elev = sinf(time * 0.7 + t as f32 * 1.5) * 0.6;
+        let base_x = cosf(base_angle) * cosf(elev) * 0.5;
+        let base_y = sinf(elev) * 0.5;
+        let base_z = sinf(base_angle) * cosf(elev) * 0.5;
+
+        for seg in 0..tendril_segments {
+            let st = (seg as f32 + 1.0) / tendril_segments as f32;
+            // Tendril extends outward with audio-reactive length
+            let length = 0.5 + energy * 0.4 + bass_pulse * 0.3;
+            let jitter_x = sinf(time * 3.0 + seg as f32 * 2.0 + t as f32) * 0.08 * st;
+            let jitter_y = cosf(time * 2.5 + seg as f32 * 1.7 + t as f32) * 0.08 * st;
+            let jitter_z = sinf(time * 2.0 + seg as f32 * 2.3 + t as f32) * 0.08 * st;
+            s.verts.push(V3::new(
+                base_x * (1.0 + st * length) + jitter_x,
+                base_y * (1.0 + st * length) + jitter_y,
+                base_z * (1.0 + st * length) + jitter_z,
+            ));
+        }
+    }
+
+    s.edges.clear();
+    s.edges.extend_from_slice(&s.plasma_edges);
+    // Tendril edges
+    for t in 0..num_tendrils {
+        let base_idx = core_count + t * tendril_segments;
+        // Connect first tendril vertex to nearest sphere surface vertex
+        // (find closest core vertex)
+        if base_idx < s.verts.len() && core_count > 0 {
+            let tv = s.verts[base_idx];
+            let mut best_d = f32::MAX;
+            let mut best_i = 0u16;
+            for ci in 0..core_count {
+                let cv = s.verts[ci];
+                let dx = tv.x - cv.x; let dy = tv.y - cv.y; let dz = tv.z - cv.z;
+                let d = dx*dx + dy*dy + dz*dz;
+                if d < best_d { best_d = d; best_i = ci as u16; }
+            }
+            s.edges.push(Edge(best_i, base_idx as u16));
+        }
+        // Connect tendril segments
+        for seg in 0..(tendril_segments - 1) {
+            let a = base_idx + seg;
+            let b = base_idx + seg + 1;
+            if a < s.verts.len() && b < s.verts.len() {
+                s.edges.push(Edge(a as u16, b as u16));
+            }
+        }
+    }
+}
+
+fn build_mode_12(s: &mut VisualizerState) {
+    // Galaxy Spiral — audio-reactive arm extension and rotation
+    let time = s.frame as f32 * 0.01;
+    let bass_pulse = s.beat_pulse * 0.3;
+    let pi2: f32 = 6.28318;
+    let arms: usize = 4;
+    let points_per_arm: usize = 20;
+
+    s.verts.clear();
+    // Core
+    s.verts.push(V3::new(0.0, sinf(time * 2.0) * 0.05, 0.0));
+
+    for arm in 0..arms {
+        let arm_offset = pi2 * arm as f32 / arms as f32;
+        for i in 0..points_per_arm {
+            let t = (i as f32 + 1.0) / points_per_arm as f32;
+            let r = 0.1 + t * (0.9 + bass_pulse * 0.3);
+            let angle = arm_offset + t * pi2 * 1.2 + time;
+            let x = r * cosf(angle);
+            let z = r * sinf(angle);
+            // Vertical wave
+            let y = sinf(angle * 2.0 + time * 1.5) * 0.1 * r;
+            // Audio: treble makes outer stars twinkle
+            let jitter = s.smooth_treble * 0.05 * t;
+            let jx = sinf(time * 4.0 + i as f32) * jitter;
+            let jz = cosf(time * 3.5 + i as f32) * jitter;
+            s.verts.push(V3::new(x + jx, y, z + jz));
+        }
+    }
+
+    s.edges.clear();
+    // Arms
+    for arm in 0..arms {
+        let base = 1 + arm * points_per_arm;
+        s.edges.push(Edge(0, base as u16));
+        for i in 0..(points_per_arm - 1) {
+            s.edges.push(Edge((base + i) as u16, (base + i + 1) as u16));
+        }
+    }
+    // Cross-arm dust lanes
+    for arm in 0..arms {
+        let next_arm = (arm + 1) % arms;
+        for i in (0..points_per_arm).step_by(4) {
+            let a = 1 + arm * points_per_arm + i;
+            let b = 1 + next_arm * points_per_arm + i;
+            if a < s.verts.len() && b < s.verts.len() {
+                s.edges.push(Edge(a as u16, b as u16));
+            }
+        }
+    }
+}
+
 // ═══════════════════════════════════════
 // Main update (called once per frame)
 // ═══════════════════════════════════════
@@ -738,7 +1503,7 @@ pub fn update(
     ensure_init(state);
     state.frame = state.frame.wrapping_add(1);
     state.center_x = screen_w as i32 / 2;
-    state.center_y = screen_h as i32 / 3;
+    state.center_y = screen_h as i32 / 2;
 
     // ── Smooth audio ──
     let sm = 0.15f32;
@@ -800,6 +1565,12 @@ pub fn update(
         4 => build_mode_4(state),
         5 => build_mode_5(state),
         6 => build_mode_6(state),
+        7 => build_mode_7(state),
+        8 => build_mode_8(state),
+        9 => build_mode_9(state),
+        10 => build_mode_10(state),
+        11 => build_mode_11(state),
+        12 => build_mode_12(state),
         _ => build_mode_0(state),
     }
 
@@ -1219,100 +1990,229 @@ pub fn modulate_rain_color(
     fresnel: u8, specular: u8,
     ao: u8, bloom: u8, scanline: u8, inner_glow: u8, shadow: u8,
     beat: f32, energy: f32,
+    sub_bass: f32, bass: f32, mid: f32, treble: f32,
+    palette: u8,
 ) -> (u8, u8, u8) {
     let mut r = base_r as f32;
     let mut g = base_g as f32;
     let mut b = base_b as f32;
 
+    // Track zones
+    let on_edge = glow > 80;
+    let inside = inner_glow > 20 || glow > 40;
+
+    // ── depth_t: 0.0 = far face (dark), 1.0 = near face (bright) ──
+    let depth_t = depth as f32 / 255.0;
+
+    // ══════════════════════════════════════════════════════════════
+    // 1. Shadow below shape (floor shadow)
+    // ══════════════════════════════════════════════════════════════
     if shadow > 5 {
         let s = 1.0 - (shadow as f32 / 255.0) * 0.6;
         r *= s; g *= s; b *= s;
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // 2. Scanline rays below center
+    // ══════════════════════════════════════════════════════════════
     if scanline > 3 {
         let ray = scanline as f32 / 255.0;
-        r = (r + ray * 5.0).min(255.0);
-        g = (g + ray * 50.0).min(255.0);
-        b = (b + ray * 5.0).min(255.0);
+        // Tint scanlines with palette color
+        let (pr, pg, pb) = get_palette_color(palette, 0.3);
+        r = (r + ray * pr * 0.3).min(255.0);
+        g = (g + ray * pg * 0.3).min(255.0);
+        b = (b + ray * pb * 0.3).min(255.0);
     }
-    if ao > 0 && glow > 0 {
-        let ao_factor = 1.0 - (ao as f32 / 255.0) * 0.45;
-        r *= ao_factor; g *= ao_factor; b *= ao_factor;
-    }
-    if glow > 0 {
+
+    // ══════════════════════════════════════════════════════════════
+    // 3. EDGES → push toward WHITE (bright contours)
+    //    Wireframe edges are always white/near-white regardless of palette
+    // ══════════════════════════════════════════════════════════════
+    if on_edge {
         let g_f = glow as f32 / 255.0;
-        if glow > 80 {
-            let depth_scale = 0.4 + 0.6 * (depth as f32 / 255.0);
-            let g_f = g_f * depth_scale;
-            // Matrix palette: glow is green/white, NEVER yellow
-            let tr = (100.0 + energy * 40.0).min(180.0);
-            let tg = 255.0f32;
-            let tb = (100.0 + energy * 30.0).min(180.0);
-            r = (r * (1.0 - g_f) + tr * g_f).min(255.0);
-            g = (g * (1.0 - g_f) + tg * g_f).min(255.0);
-            b = (b * (1.0 - g_f) + tb * g_f).min(255.0);
-        } else {
-            let boost = g_f * 2.5;
-            // Only boost green channel significantly
-            r = (r * (1.0 + boost * 0.3)).min(255.0);
-            g = (g * (1.0 + boost)).min(255.0);
-            b = (b * (1.0 + boost * 0.3)).min(255.0);
+
+        // Depth-based edge brightness: near edges brighter, far edges dimmer
+        let edge_brightness = 0.55 + 0.45 * depth_t; // 0.55..1.0
+
+        // Strong push toward white for edges
+        let white_blend = g_f * edge_brightness;
+        r = (r * (1.0 - white_blend) + 255.0 * white_blend).min(255.0);
+        g = (g * (1.0 - white_blend) + 255.0 * white_blend).min(255.0);
+        b = (b * (1.0 - white_blend) + 255.0 * white_blend).min(255.0);
+
+        // Subtle palette tint on edges (just a hint, 15%) so they're not pure white
+        let (pr, pg, pb) = get_palette_color(palette, depth_t);
+        let tint = 0.15 * g_f;
+        r = (r * (1.0 - tint) + pr * tint).min(255.0);
+        g = (g * (1.0 - tint) + pg * tint).min(255.0);
+        b = (b * (1.0 - tint) + pb * tint).min(255.0);
+
+        // AO: darken at poles
+        if ao > 0 {
+            let ao_factor = 1.0 - (ao as f32 / 255.0) * 0.3;
+            r *= ao_factor; g *= ao_factor; b *= ao_factor;
         }
     }
-    if inner_glow > 20 {
+    // ══════════════════════════════════════════════════════════════
+    // 4. FACES → Palette gradient colored by DEPTH (shadow illusion)
+    //    Far faces (depth_t~0) = dark saturated palette start
+    //    Near faces (depth_t~1) = bright desaturated palette end
+    // ══════════════════════════════════════════════════════════════
+    else if inner_glow > 20 {
         let ig = (inner_glow as f32 - 20.0) / 235.0;
-        let ig = ig * ig;
-        // Interior color: deep inside the shape gets a vivid color tint
-        // Color varies by depth: near-face = bright cyan, far-face = deep green
-        let depth_t = depth as f32 / 255.0;
-        // Interior color palette: cyan-green gradient based on depth
-        let int_r = 0.0 + depth_t * 20.0;       // very little red
-        let int_g = 120.0 + depth_t * 100.0;     // strong green
-        let int_b = 80.0 + (1.0 - depth_t) * 80.0; // cyan bias for near faces
-        // Blend toward interior color (stronger for deeper inner_glow)
-        let blend = (ig * 0.65).min(0.65); // max 65% color blend
-        r = (r * (1.0 - blend) + int_r * blend).min(255.0);
-        g = (g * (1.0 - blend) + int_g * blend).min(255.0);
-        b = (b * (1.0 - blend) + int_b * blend).min(255.0);
-        // Also boost overall brightness inside shape
-        let bright_boost = ig * 40.0;
-        g = (g + bright_boost).min(255.0);
-        b = (b + bright_boost * 0.5).min(255.0);
+        let ig = ig * ig; // quadratic falloff
+
+        // ── Depth-based shadow: simulate light coming from front-top ──
+        // depth_t: 0 = far (shadows), 1 = near (lit)
+        // shadow_factor: 0.3 (deep shadow) to 1.0 (fully lit)
+        let shadow_factor = 0.3 + 0.7 * depth_t;
+
+        // ── Palette gradient across depth ──
+        // Near faces get bright end of palette, far faces get dark end
+        let (pr, pg, pb) = get_palette_color(palette, depth_t);
+
+        // Apply shadow factor to palette color
+        let lit_r = pr * shadow_factor;
+        let lit_g = pg * shadow_factor;
+        let lit_b = pb * shadow_factor;
+
+        // Blend strength: deeper inside = stronger color
+        let blend = (ig * 0.80).min(0.80);
+        r = (r * (1.0 - blend) + lit_r * blend).min(255.0);
+        g = (g * (1.0 - blend) + lit_g * blend).min(255.0);
+        b = (b * (1.0 - blend) + lit_b * blend).min(255.0);
+
+        // ── AO: extra darkening at top/bottom poles (ambient occlusion) ──
+        if ao > 0 {
+            let ao_factor = 1.0 - (ao as f32 / 255.0) * 0.5;
+            r *= ao_factor; g *= ao_factor; b *= ao_factor;
+        }
+
+        // ── Subtle brightness boost for very near faces (highlight rim) ──
+        if depth_t > 0.8 {
+            let near_boost = (depth_t - 0.8) / 0.2 * 30.0;
+            r = (r + near_boost).min(255.0);
+            g = (g + near_boost).min(255.0);
+            b = (b + near_boost).min(255.0);
+        }
     }
+    // ══════════════════════════════════════════════════════════════
+    // 5. Weak glow (near edges but not ON edge) — soft palette tint
+    // ══════════════════════════════════════════════════════════════
+    else if glow > 0 {
+        let g_f = glow as f32 / 255.0;
+        let (pr, pg, pb) = get_palette_color(palette, depth_t * 0.5 + 0.3);
+        let boost = g_f * 0.5;
+        r = (r + pr * boost).min(255.0);
+        g = (g + pg * boost).min(255.0);
+        b = (b + pb * boost).min(255.0);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // 6. FRESNEL → bright white silhouette edges (always white)
+    // ══════════════════════════════════════════════════════════════
     if fresnel > 120 {
         let f_t = (fresnel as f32 - 120.0) / 135.0;
-        // Edges push strongly toward white (contour effect)
-        let white_push = f_t * f_t; // quadratic for sharp edge
-        r = (r * (1.0 - white_push) + 220.0 * white_push).min(255.0);
+        let white_push = f_t * f_t;
+        r = (r * (1.0 - white_push) + 252.0 * white_push).min(255.0);
         g = (g * (1.0 - white_push) + 255.0 * white_push).min(255.0);
-        b = (b * (1.0 - white_push) + 220.0 * white_push).min(255.0);
+        b = (b * (1.0 - white_push) + 252.0 * white_push).min(255.0);
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // 7. SPECULAR → white hot spots (simulated light reflection)
+    // ══════════════════════════════════════════════════════════════
     if specular > 30 {
         let s_t = (specular as f32 - 30.0) / 225.0;
         let s_t = s_t * s_t;
-        // Specular highlights: near-white hot spots
-        r = (r + s_t * 160.0).min(255.0);
-        g = (g + s_t * 200.0).min(255.0);
-        b = (b + s_t * 160.0).min(255.0);
-    }
-    if bloom > 10 {
-        let bl = bloom as f32 / 255.0;
-        r = (r + bl * 15.0).min(255.0);
-        g = (g + bl * 55.0).min(255.0);
-        b = (b + bl * 15.0).min(255.0);
-    }
-    if ripple > 0 {
-        let rip = ripple as f32 / 255.0;
-        r = (r + 5.0 * rip).min(255.0);
-        g = (g + 35.0 * rip).min(255.0);
-        b = (b + 5.0 * rip).min(255.0);
+        // Specular goes toward white but with slight palette tint
+        let (pr, pg, pb) = get_palette_color(palette, 0.9);
+        r = (r + s_t * (200.0 + pr * 0.2)).min(255.0);
+        g = (g + s_t * (220.0 + pg * 0.1)).min(255.0);
+        b = (b + s_t * (200.0 + pb * 0.2)).min(255.0);
     }
 
-    // Matrix palette enforcement: R and B must never exceed G
-    // This guarantees pure white/green/dark-green/black — no yellow ever
-    let g_final = g as u8;
-    let r_final = (r as u8).min(g_final);
-    let b_final = (b as u8).min(g_final);
-    (r_final, g_final, b_final)
+    // ══════════════════════════════════════════════════════════════
+    // 8. BLOOM → soft glow halo with palette tint
+    // ══════════════════════════════════════════════════════════════
+    if bloom > 10 {
+        let bl = bloom as f32 / 255.0;
+        let (pr, pg, pb) = get_palette_color(palette, 0.5);
+        r = (r + bl * pr * 0.15).min(255.0);
+        g = (g + bl * pg * 0.15).min(255.0);
+        b = (b + bl * pb * 0.15).min(255.0);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // 9. RIPPLE → beat ring with palette color
+    // ══════════════════════════════════════════════════════════════
+    if ripple > 0 {
+        let rip = ripple as f32 / 255.0;
+        let (pr, pg, pb) = get_palette_color(palette, 0.6);
+        r = (r + rip * pr * 0.2).min(255.0);
+        g = (g + rip * pg * 0.2).min(255.0);
+        b = (b + rip * pb * 0.2).min(255.0);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // 10. Music-reactive color boost — intensifies palette on beat
+    // ══════════════════════════════════════════════════════════════
+    if inside && energy > 0.03 {
+        let max_band = sub_bass.max(bass).max(mid).max(treble);
+        if max_band > 0.10 {
+            let intensity = (energy * 0.8 + 0.1).min(0.55);
+
+            // Map frequency band to palette position
+            let band_t = if sub_bass >= max_band - 0.05 {
+                0.1f32
+            } else if bass >= max_band - 0.05 {
+                0.35
+            } else if mid >= max_band - 0.05 {
+                0.65
+            } else {
+                0.9
+            };
+
+            // Blend band color with depth position for richer variation
+            let mix_t = band_t * 0.6 + depth_t * 0.4;
+            let (tr, tg, tb) = get_palette_color(palette, mix_t);
+
+            let pulse = 1.0 + beat * 0.5;
+            let blend = (intensity * pulse).min(0.65);
+            r = (r * (1.0 - blend) + tr * blend).min(255.0);
+            g = (g * (1.0 - blend) + tg * blend).min(255.0);
+            b = (b * (1.0 - blend) + tb * blend).min(255.0);
+
+            // Beat kick: flash brighter
+            if beat > 0.5 {
+                let kick = (beat - 0.5) * 45.0;
+                r = (r + kick).min(255.0);
+                g = (g + kick).min(255.0);
+                b = (b + kick).min(255.0);
+            }
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // 11. Final output with palette-aware background tinting
+    // ══════════════════════════════════════════════════════════════
+    if inside {
+        (r.min(255.0) as u8, g.min(255.0) as u8, b.min(255.0) as u8)
+    } else if palette == 0 {
+        // Matrix: green-dominant outside
+        let g_final = g as u8;
+        let r_final = (r as u8).min(g_final);
+        let b_final = (b as u8).min(g_final);
+        (r_final, g_final, b_final)
+    } else {
+        // Other palettes: subtle tint on rain
+        let (pr, pg, pb) = get_palette_color(palette, 0.15);
+        let tint = 0.18f32;
+        let r_final = (r * (1.0 - tint) + pr * tint).min(255.0) as u8;
+        let g_final = (g * (1.0 - tint) + pg * tint).min(255.0) as u8;
+        let b_final = (b * (1.0 - tint) + pb * tint).min(255.0) as u8;
+        (r_final, g_final, b_final)
+    }
 }
 
 // ═══════════════════════════════════════

@@ -433,7 +433,10 @@ pub unsafe extern "C" fn ap_entry(smp_info: &limine::smp::Cpu) -> ! {
         PER_CPU[processor_id].work_completed = 0;
     }
     
-    // ── Step 1: Per-CPU GDT + TSS ──
+    // ── Step 1: Enable SSE/SSE2 (required before ANY Rust code using floats/SIMD) ──
+    crate::cpu::simd::enable_sse();
+    
+    // ── Step 2: Per-CPU GDT + TSS ──
     // Each AP needs its own TSS with a unique RSP0 (kernel stack)
     crate::gdt::init_ap(processor_id as u32);
     

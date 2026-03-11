@@ -10,3 +10,6 @@ path = "src/main.rs"
 [[bin]]
 name = "train-micro"
 path = "src/train_micro.rs"
+
+[dependencies]
+rayon = "1.10"

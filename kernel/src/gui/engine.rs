@@ -519,6 +519,26 @@ impl Toast {
         elapsed >= self.duration_ms
     }
     
+    /// Milliseconds since notification was created
+    pub fn elapsed_ms(&self) -> u64 {
+        (now_us() - self.created_at) / 1000
+    }
+    
+    /// Opacity 0-255 based on slide-in (first 300ms) and fade-out (last 500ms)
+    pub fn opacity(&self) -> u8 {
+        let elapsed = self.elapsed_ms();
+        // Slide in: 0→255 over 300ms
+        if elapsed < 300 {
+            return ((elapsed * 255) / 300).min(255) as u8;
+        }
+        // Fade out: last 500ms
+        if self.duration_ms > 500 && elapsed > self.duration_ms - 500 {
+            let remaining = self.duration_ms.saturating_sub(elapsed);
+            return ((remaining * 255) / 500).min(255) as u8;
+        }
+        255
+    }
+    
     pub fn get_color(&self) -> u32 {
         match self.priority {
             NotifyPriority::Info => 0xFF3498DB,    // Blue

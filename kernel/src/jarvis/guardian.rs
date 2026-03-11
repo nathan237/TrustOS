@@ -165,11 +165,11 @@ const MAX_AUDIT_ENTRIES: usize = 256;
 /// Nathan's passphrase hash — not stored in cleartext
 /// Using a simple approach since we're bare-metal: compare against known hash
 /// The passphrase itself is "trustos" (can be changed via guardian command)
-static NATHAN_PASSPHRASE_HASH: Mutex<u64> = Mutex::new(0x5472_7573_744F_5321); // "TrustOS!"
+static NATHAN_PASSPHRASE_HASH: Mutex<u64> = Mutex::new(0x10e8_f84e_bb88_0d57); // simple_hash("trustos")
 
 /// Copilot's authentication token — sent via MENTOR serial protocol
 /// MENTOR:GUARDIAN:AUTH:<token>
-static COPILOT_TOKEN_HASH: Mutex<u64> = Mutex::new(0x436F_7069_6C6F_7421); // "Copilot!"
+static COPILOT_TOKEN_HASH: Mutex<u64> = Mutex::new(0x8e39_bc46_43c3_f553); // simple_hash("copilot-mentor")
 
 /// Count of denied operations
 static DENIED_COUNT: AtomicU64 = AtomicU64::new(0);

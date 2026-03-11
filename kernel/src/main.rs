@@ -235,7 +235,8 @@ use core::alloc::Layout;
 use limine::request::{
     FramebufferRequest, MemoryMapRequest, HhdmRequest,
     RequestsStartMarker, RequestsEndMarker, ModuleRequest,
-    RsdpRequest, SmpRequest, KernelAddressRequest, KernelFileRequest
+    RsdpRequest, SmpRequest, KernelAddressRequest, KernelFileRequest,
+    StackSizeRequest,
 };
 use limine::BaseRevision;
 
@@ -295,6 +296,11 @@ static KERNEL_ADDRESS_REQUEST: KernelAddressRequest = KernelAddressRequest::new(
 #[used]
 #[unsafe(link_section = ".requests")]
 static KERNEL_FILE_REQUEST: KernelFileRequest = KernelFileRequest::new();
+
+/// Request larger stack (256 KB) from Limine to support deep desktop rendering + interrupts
+#[used]
+#[unsafe(link_section = ".requests")]
+static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new().with_size(256 * 1024);
 
 /// Limine requests end marker
 #[used]
@@ -383,6 +389,9 @@ pub unsafe extern "C" fn kmain() -> ! {
             serial_println!("Framebuffer: {}x{} @ {:p}", fb.width(), fb.height(), fb.addr());
         }
     }
+    
+    // === BOOT SPLASH: Draw logo + empty progress bar immediately ===
+    framebuffer::init_boot_splash();
     
     use framebuffer::BootStatus;
 
@@ -574,7 +583,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     signature::init_ed25519(&[0x54, 0x72, 0x75, 0x73, 0x74, 0x4f, 0x53]); // "TrustOS" seed
     
     // Now that heap is initialized, show boot banner
-    framebuffer::show_simple_boot_header();
+    framebuffer::update_boot_splash(0, "Memory management initialized");
     framebuffer::print_boot_status("Memory management initialized", BootStatus::Ok);
 
     // Phase 3.5: GDT with Ring 0/3 support (x86_64 only)
@@ -582,12 +591,14 @@ pub unsafe extern "C" fn kmain() -> ! {
     {
         serial_println!("Initializing GDT with Ring 0/3 support...");
         gdt::init();
+        framebuffer::update_boot_splash(1, "GDT initialized (Ring 0/3)");
         framebuffer::print_boot_status("GDT initialized (Ring 0/3)", BootStatus::Ok);
     }
     
     // Phase 3.51: Early interrupts (needed for page fault debugging)
     serial_println!("Initializing early interrupts...");
     interrupts::init();
+    framebuffer::update_boot_splash(2, "Interrupts initialized");
     framebuffer::print_boot_status("Interrupts (early)", BootStatus::Ok);
     
     // Phase 3.55–3.56: x86_64-specific hardware init (CPU, ACPI, APIC, SMP)
@@ -596,6 +607,7 @@ pub unsafe extern "C" fn kmain() -> ! {
         // CPU hardware exploitation (TSC, AES-NI, SIMD, SMP)
         serial_println!("Detecting CPU capabilities...");
         cpu::init();
+        framebuffer::update_boot_splash(3, "CPU capabilities detected");
         framebuffer::print_boot_status("CPU capabilities detected", BootStatus::Ok);
         
         // ACPI tables parsing
@@ -657,6 +669,7 @@ pub unsafe extern "C" fn kmain() -> ! {
             
             serial_println!("[SMP] {} of {} CPUs online", ready_count, cpu_count);
             cpu::smp::set_cpu_count(cpu_count as u32);
+            framebuffer::update_boot_splash(4, "SMP multi-core active");
             framebuffer::print_boot_status(&alloc::format!("SMP: {} cores active", ready_count), BootStatus::Ok);
         } else {
             serial_println!("[SMP] No SMP response from bootloader");
@@ -667,6 +680,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // Phase 3.6: Paging subsystem
     serial_println!("Initializing paging subsystem...");
     memory::paging::init();  // Saves kernel CR3, enables NX
+    framebuffer::update_boot_splash(5, "Paging & memory protection");
     framebuffer::print_boot_status("Paging initialized (NX enabled)", BootStatus::Ok);
     
     // PAT: Enable Write-Combining (WC) — standard GPU driver optimization
@@ -694,6 +708,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // Phase 3.8: Thread subsystem
     serial_println!("Initializing thread subsystem...");
     thread::init();
+    framebuffer::update_boot_splash(6, "Thread subsystem ready");
     framebuffer::print_boot_status("Thread subsystem ready", BootStatus::Ok);
     
     // Phase 3.9: Security subsystem (SMEP, SMAP, capabilities)
@@ -707,6 +722,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // Phase 4: Keyboard driver (interrupts already initialized early)
     keyboard::init_i8042();
     serial_println!("Keyboard driver ready");
+    framebuffer::update_boot_splash(7, "Keyboard & input devices");
     framebuffer::print_boot_status("Keyboard ready", BootStatus::Ok);
 
     // Full boot: initialize all subsystems
@@ -734,6 +750,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     mouse::init();
     let (fb_width, fb_height) = framebuffer::get_dimensions();
     mouse::set_screen_size(fb_width, fb_height);
+    framebuffer::update_boot_splash(8, "Mouse & touch input");
     framebuffer::print_boot_status("Mouse initialized", BootStatus::Ok);
     
     // Phase 7.1: Touch input driver
@@ -753,6 +770,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     framebuffer::print_boot_status("PCI bus scanning...", BootStatus::Info);
     if ENABLE_PCI {
         pci::init();
+        framebuffer::update_boot_splash(9, "PCI bus enumeration");
         framebuffer::print_boot_status("PCI bus scanned", BootStatus::Ok);
     } else {
         framebuffer::print_boot_status("PCI disabled", BootStatus::Skip);
@@ -764,6 +782,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     if ENABLE_TASKS {
         task::init();
         scheduler::init();
+        framebuffer::update_boot_splash(10, "Task scheduler");
         framebuffer::print_boot_status("Task scheduler ready", BootStatus::Ok);
     } else {
         framebuffer::print_boot_status("Task scheduler disabled", BootStatus::Skip);
@@ -832,6 +851,7 @@ pub unsafe extern "C" fn kmain() -> ! {
         drivers::init();
         // Probe storage controllers (AHCI, IDE)
         drivers::probe_storage();
+        framebuffer::update_boot_splash(12, "Driver framework");
         framebuffer::print_boot_status("Driver framework initialized", BootStatus::Ok);
         if drivers::has_storage() {
             framebuffer::print_boot_status("Persistent storage detected", BootStatus::Ok);
@@ -915,6 +935,7 @@ pub unsafe extern "C" fn kmain() -> ! {
                 }
             }
             
+            framebuffer::update_boot_splash(14, "Network stack ready");
             framebuffer::print_boot_status("Network ready", BootStatus::Ok);
             
             // Start network stack
@@ -944,6 +965,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[PHASE] VFS init start");
     vfs::init();
     serial_println!("[PHASE] VFS init done");
+    framebuffer::update_boot_splash(15, "Virtual filesystem (VFS)");
     framebuffer::print_boot_status("Virtual filesystem ready", BootStatus::Ok);
     
     // ========================================================================
@@ -1007,6 +1029,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // ========================================================================
     serial_println!("[PHASE] Process manager init start");
     process::init();
+    framebuffer::update_boot_splash(17, "Process manager");
     framebuffer::print_boot_status("Process manager ready", BootStatus::Ok);
     serial_println!("[PHASE] Process manager init done");
     
@@ -1016,6 +1039,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[PHASE] Auth system init");
     auth::init();
     auth::create_etc_files();
+    framebuffer::update_boot_splash(18, "Authentication system");
     framebuffer::print_boot_status("Authentication ready", BootStatus::Ok);
     
     // Phase 14b: TTY / PTY subsystem
@@ -1037,6 +1061,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // ========================================================================
     serial_println!("[PHASE] RAM filesystem init");
     ramfs::init();
+    framebuffer::update_boot_splash(19, "RAM filesystem");
     // Create standard directories
     ramfs::with_fs(|fs| {
         let _ = fs.mkdir("/tmp");
@@ -1072,6 +1097,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // ========================================================================
     serial_println!("[PHASE] Persistence init");
     persistence::init();
+    framebuffer::update_boot_splash(20, "Persistence layer");
     framebuffer::print_boot_status("Persistence system ready", BootStatus::Ok);
 
     // ========================================================================
@@ -1084,7 +1110,13 @@ pub unsafe extern "C" fn kmain() -> ! {
     // Phase 18b: Container Daemon (auto-starts default web container)
     serial_println!("[PHASE] Container daemon boot");
     sandbox::container::boot_daemon();
+    framebuffer::update_boot_splash(21, "System ready!");
     framebuffer::print_boot_status("Container daemon ready", BootStatus::Ok);
+
+    // === BOOT SPLASH: Fade out before transitioning to shell ===
+    // Brief pause to show 100% completion
+    for _ in 0..5_000_000u64 { core::hint::spin_loop(); }
+    framebuffer::fade_out_splash();
 
     // Final boot summary
     println!();

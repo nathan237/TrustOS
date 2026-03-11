@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""
+Prepare TrustOS data disk image with embedded audio (multi-track).
+
+Layout (raw sector image, 512 bytes/sector):
+  Sector 0       : Header — magic + file table
+  Sector 1..N1   : Track 0 WAV data
+  Sector N1+1..  : Track 1 WAV data
+  ...
+
+Header format v2 (512 bytes):
+  [0..4]    : Magic "TWAV"
+  [4..8]    : Version (u32 LE) = 2
+  [8..12]   : num_tracks (u32 LE)
+  [12..16]  : reserved
+  Per track entry (48 bytes each, starting at offset 16):
+    [0..8]   : wav_size (u64 LE) - raw WAV bytes
+    [8..12]  : start_lba (u32 LE)
+    [12..16] : sector_count (u32 LE)
+    [16..20] : crc32 (u32 LE)
+    [20..48] : name (28 bytes, null-padded UTF-8)
+  Max tracks: (512 - 16) / 48 = 10
+"""
+
+import struct
+import sys
+import os
+import zlib
+
+SECTOR_SIZE = 512
+DISK_SIZE_MB = 128
+DISK_SECTORS = DISK_SIZE_MB * 1024 * 1024 // SECTOR_SIZE
+MAX_TRACKS = 10
+ENTRY_SIZE = 48  # bytes per track entry in header
+
+def main():
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    out_path = os.path.join(script_dir, "trustos_data.img")
+
+    # Track list: (wav_path, display_name)
+    tracks = [
+        (os.path.join(script_dir, "kernel", "src", "trustdaw", "untitled2.wav"), "Untitled (2) - Lo-Fi"),
+        (os.path.join(script_dir, "kernel", "src", "trustdaw", "circuit_hearts.wav"), "Circuit Hearts - ogezaki"),
+    ]
+
+    # Validate
+    wav_datas = []
+    for wav_path, name in tracks:
+        if not os.path.exists(wav_path):
+            print(f"WARNING: WAV file not found, skipping: {wav_path}")
+            continue
+        with open(wav_path, "rb") as f:
+            data = f.read()
+        wav_datas.append((data, name))
+        print(f"Track {len(wav_datas)-1}: {name}")
+        print(f"  File: {wav_path}")
+        print(f"  Size: {len(data):,} bytes ({len(data)/1024/1024:.2f} MB)")
+
+    if not wav_datas:
+        print("ERROR: No WAV files found")
+        sys.exit(1)
+
+    num_tracks = len(wav_datas)
+    if num_tracks > MAX_TRACKS:
+        print(f"ERROR: Too many tracks ({num_tracks} > {MAX_TRACKS})")
+        sys.exit(1)
+
+    # Calculate LBAs
+    current_lba = 1  # sector 0 = header
+    entries = []
+    for data, name in wav_datas:
+        wav_size = len(data)
+        wav_sectors = (wav_size + SECTOR_SIZE - 1) // SECTOR_SIZE
+        crc = zlib.crc32(data) & 0xFFFFFFFF
+        entries.append((wav_size, current_lba, wav_sectors, crc, name))
+        print(f"  -> LBA {current_lba}, {wav_sectors} sectors, CRC32={crc:#010x}")
+        current_lba += wav_sectors
+
+    total_sectors = current_lba
+    print(f"\nTotal: {num_tracks} tracks, {total_sectors} sectors ({total_sectors * SECTOR_SIZE / 1024 / 1024:.1f} MB)")
+    print(f"Disk : {DISK_SIZE_MB} MB ({DISK_SECTORS} sectors)")
+
+    if total_sectors > DISK_SECTORS:
+        print(f"ERROR: Tracks exceed disk capacity!")
+        sys.exit(1)
+
+    # Build header sector (v2)
+    header = bytearray(SECTOR_SIZE)
+    header[0:4] = b"TWAV"
+    struct.pack_into("<I", header, 4, 2)           # version = 2
+    struct.pack_into("<I", header, 8, num_tracks)   # num_tracks
+
+    for i, (wav_size, start_lba, sector_count, crc, name) in enumerate(entries):
+        off = 16 + i * ENTRY_SIZE
+        struct.pack_into("<Q", header, off, wav_size)
+        struct.pack_into("<I", header, off + 8, start_lba)
+        struct.pack_into("<I", header, off + 12, sector_count)
+        struct.pack_into("<I", header, off + 16, crc)
+        # Name: 28 bytes null-padded
+        name_bytes = name.encode("utf-8")[:27]
+        header[off + 20:off + 20 + len(name_bytes)] = name_bytes
+
+    # Write raw disk image
+    with open(out_path, "wb") as f:
+        f.write(bytes(header))
+        for (data, _name), (_, _, wav_sectors, _, _) in zip(wav_datas, entries):
+            padded = data + b"\x00" * (wav_sectors * SECTOR_SIZE - len(data))
+            f.write(padded)
+        # Pad remaining
+        remaining = DISK_SECTORS - total_sectors
+        if remaining > 0:
+            chunk_sectors = 2048
+            while remaining > 0:
+                n = min(remaining, chunk_sectors)
+                f.write(b"\x00" * (n * SECTOR_SIZE))
+                remaining -= n
+
+    print(f"Output: {out_path} ({os.path.getsize(out_path) / 1024 / 1024:.1f} MB)")
+    print("Done!")
+
+
+if __name__ == "__main__":
+    main()

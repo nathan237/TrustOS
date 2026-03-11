@@ -1003,6 +1003,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         // -- desktop module: COSMIC, Showcase, Benchmark, Signature, Security --
         "benchmark" | "bench" => desktop::cmd_benchmark(args),
         "showcase" => desktop::cmd_showcase(args),
+        "showcase-jarvis" | "jarvis-showcase" | "jdemo" => desktop::cmd_showcase_jarvis(args),
         "showcase3d" | "demo3d" => desktop::cmd_showcase3d(),
         "demo" | "tutorial" | "tour" => desktop::cmd_demo(args),
         "filled3d" => desktop::cmd_filled3d(),

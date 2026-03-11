@@ -50,33 +50,51 @@ impl ThreadFlags {
 
 /// CPU context saved during context switch
 #[cfg(target_arch = "x86_64")]
-#[derive(Debug, Clone, Default)]
-#[repr(C)]
+#[derive(Debug, Clone)]
+#[repr(C, align(16))]
 pub struct ThreadContext {
     // Callee-saved registers (must be preserved across function calls)
-    pub rbx: u64,
-    pub rbp: u64,
-    pub r12: u64,
-    pub r13: u64,
-    pub r14: u64,
-    pub r15: u64,
+    pub rbx: u64,       // 0x00
+    pub rbp: u64,       // 0x08
+    pub r12: u64,       // 0x10
+    pub r13: u64,       // 0x18
+    pub r14: u64,       // 0x20
+    pub r15: u64,       // 0x28
     
     // Stack pointer
-    pub rsp: u64,
+    pub rsp: u64,       // 0x30
     
     // Instruction pointer (return address)
-    pub rip: u64,
+    pub rip: u64,       // 0x38
     
     // For userspace threads
-    pub user_rsp: u64,
-    pub user_rip: u64,
+    pub user_rsp: u64,  // 0x40
+    pub user_rip: u64,  // 0x48
     
     // Segment selectors (for ring transitions)
-    pub cs: u64,
-    pub ss: u64,
+    pub cs: u64,        // 0x50
+    pub ss: u64,        // 0x58
     
     // Flags
-    pub rflags: u64,
+    pub rflags: u64,    // 0x60
+    
+    // Padding to align fxsave_area to 16 bytes (offset 0x68 → 0x70)
+    pub _fpu_pad: u64,  // 0x68
+    
+    // FPU/SSE state (512 bytes, must be 16-byte aligned for FXSAVE/FXRSTOR)
+    pub fxsave_area: [u8; 512],  // 0x70
+}
+
+#[cfg(target_arch = "x86_64")]
+impl Default for ThreadContext {
+    fn default() -> Self {
+        Self {
+            rbx: 0, rbp: 0, r12: 0, r13: 0, r14: 0, r15: 0,
+            rsp: 0, rip: 0, user_rsp: 0, user_rip: 0,
+            cs: 0, ss: 0, rflags: 0, _fpu_pad: 0,
+            fxsave_area: [0; 512],
+        }
+    }
 }
 
 /// CPU context saved during context switch (aarch64)
@@ -154,7 +172,7 @@ pub struct Thread {
 }
 
 /// Kernel stack size per thread
-const KERNEL_STACK_SIZE: usize = 64 * 1024; // 64 KB
+const KERNEL_STACK_SIZE: usize = 256 * 1024; // 256 KB
 
 impl Thread {
     /// Create a new kernel thread
@@ -562,6 +580,28 @@ impl PerCpuQueue {
     fn len(&self) -> usize {
         self.queue.lock().len()
     }
+    
+    // IRQ-safe variants: use try_lock to avoid deadlock in interrupt context
+    fn try_push(&self, tid: Tid) -> bool {
+        if let Some(mut q) = self.queue.try_lock() {
+            q.push_back(tid);
+            true
+        } else {
+            false
+        }
+    }
+    
+    fn try_pop(&self) -> Option<Tid> {
+        self.queue.try_lock()?.pop_front()
+    }
+    
+    fn try_steal(&self) -> Option<Tid> {
+        self.queue.try_lock()?.pop_back()
+    }
+    
+    fn try_len(&self) -> usize {
+        self.queue.try_lock().map_or(0, |q| q.len())
+    }
 }
 
 /// Per-CPU run queues (indexed by cpu_id)
@@ -593,7 +633,7 @@ fn enqueue_thread(tid: Tid) {
     }
 }
 
-/// Try to steal work from the busiest other CPU
+/// Try to steal work from the busiest other CPU (IRQ-safe: uses try_lock)
 fn try_steal_work(my_cpu: usize) -> Option<Tid> {
     let num_cpus = crate::cpu::smp::ready_cpu_count().max(1) as usize;
     
@@ -603,7 +643,7 @@ fn try_steal_work(my_cpu: usize) -> Option<Tid> {
     
     for cpu in 0..num_cpus {
         if cpu == my_cpu { continue; }
-        let len = PER_CPU_QUEUES[cpu].len();
+        let len = PER_CPU_QUEUES[cpu].try_len();
         if len > best_len {
             best_len = len;
             best_cpu = cpu;
@@ -611,11 +651,11 @@ fn try_steal_work(my_cpu: usize) -> Option<Tid> {
     }
     
     if best_cpu < MAX_CPUS_SCHED && best_len > 1 {
-        return PER_CPU_QUEUES[best_cpu].steal();
+        return PER_CPU_QUEUES[best_cpu].try_steal();
     }
     
-    // Also check the legacy global queue
-    READY_QUEUE.lock().pop_front()
+    // Also check the legacy global queue (try_lock to avoid deadlock in IRQ)
+    READY_QUEUE.try_lock()?.pop_front()
 }
 
 /// Initialize thread subsystem (BSP only)
@@ -680,9 +720,11 @@ pub fn init_ap_scheduler(cpu_id: u32) {
 pub fn on_timer_tick() {
     let tid = current_tid();
     
-    // Increment CPU time for current thread
-    if let Some(thread) = THREADS.write().get_mut(&tid) {
-        thread.cpu_time += 1;
+    // Increment CPU time for current thread (skip if lock contended — safe in IRQ)
+    if let Some(mut threads) = THREADS.try_write() {
+        if let Some(thread) = threads.get_mut(&tid) {
+            thread.cpu_time += 1;
+        }
     }
     
     // Check if we should preempt (every 10 ticks = 100ms at 100Hz)
@@ -701,35 +743,53 @@ pub fn schedule() {
     let idle = idle_tid_for(cpu_id);
     
     // Put current thread back on this CPU's queue if still runnable
+    // Use try_read/try_write to avoid deadlock when called from interrupt context
     if current != TID_INVALID && !is_idle_tid(current) {
-        if let Some(thread) = THREADS.read().get(&current) {
-            if thread.state == ThreadState::Running {
-                if let Some(t) = THREADS.write().get_mut(&current) {
+        let should_requeue = if let Some(threads) = THREADS.try_read() {
+            threads.get(&current).map_or(false, |t| t.state == ThreadState::Running)
+        } else {
+            return; // lock contended, skip this scheduling tick
+        };
+        if should_requeue {
+            // Use try_push to avoid deadlock if queue lock is held
+            if !PER_CPU_QUEUES[cpu_id].try_push(current) {
+                return; // queue lock contended, skip this tick
+            }
+            if let Some(mut threads) = THREADS.try_write() {
+                if let Some(t) = threads.get_mut(&current) {
                     t.state = ThreadState::Ready;
                 }
-                PER_CPU_QUEUES[cpu_id].push(current);
             }
         }
     }
     
     // Try to get next thread from: 1) local queue, 2) work stealing, 3) global queue
     let next_tid = loop {
-        // 1. Try local per-CPU queue
-        if let Some(tid) = PER_CPU_QUEUES[cpu_id].pop() {
-            if let Some(thread) = THREADS.read().get(&tid) {
-                if thread.state == ThreadState::Ready || thread.state == ThreadState::Running {
-                    break Some(tid);
-                }
+        // 1. Try local per-CPU queue (try_pop to avoid deadlock in IRQ)
+        if let Some(tid) = PER_CPU_QUEUES[cpu_id].try_pop() {
+            let runnable = if let Some(threads) = THREADS.try_read() {
+                threads.get(&tid).map_or(false, |t| t.state == ThreadState::Ready || t.state == ThreadState::Running)
+            } else {
+                // Can't check — push it back and bail
+                let _ = PER_CPU_QUEUES[cpu_id].try_push(tid);
+                return;
+            };
+            if runnable {
+                break Some(tid);
             }
             continue; // skip non-runnable, try next
         }
         
         // 2. Try work stealing from other CPUs
         if let Some(tid) = try_steal_work(cpu_id) {
-            if let Some(thread) = THREADS.read().get(&tid) {
-                if thread.state == ThreadState::Ready || thread.state == ThreadState::Running {
-                    break Some(tid);
-                }
+            let runnable = if let Some(threads) = THREADS.try_read() {
+                threads.get(&tid).map_or(false, |t| t.state == ThreadState::Ready || t.state == ThreadState::Running)
+            } else {
+                let _ = PER_CPU_QUEUES[cpu_id].try_push(tid);
+                return;
+            };
+            if runnable {
+                break Some(tid);
             }
             continue;
         }
@@ -741,8 +801,14 @@ pub fn schedule() {
     match next_tid {
         Some(next) if next != current => {
             // Mark next thread as running
-            if let Some(thread) = THREADS.write().get_mut(&next) {
-                thread.state = ThreadState::Running;
+            if let Some(mut threads) = THREADS.try_write() {
+                if let Some(thread) = threads.get_mut(&next) {
+                    thread.state = ThreadState::Running;
+                }
+            } else {
+                // Lock contended — push thread back, try next tick
+                let _ = PER_CPU_QUEUES[cpu_id].try_push(next);
+                return;
             }
             
             // Perform context switch
@@ -764,13 +830,16 @@ fn context_switch(from: Tid, to: Tid) {
         return;
     }
     
-    // Get contexts
+    // Get contexts — use try_write to avoid deadlock in interrupt context
     let from_ctx_ptr: *mut ThreadContext;
     let to_ctx_ptr: *const ThreadContext;
     let to_kernel_stack: u64;
     
     {
-        let mut threads = THREADS.write();
+        let mut threads = match THREADS.try_write() {
+            Some(t) => t,
+            None => return, // lock contended, skip context switch
+        };
         
         let from_thread = match threads.get_mut(&from) {
             Some(t) => t as *mut Thread,
@@ -816,6 +885,9 @@ extern "C" fn switch_context(from: *mut ThreadContext, to: *const ThreadContext)
         // Save current context to 'from'
         // RDI = from, RSI = to
         
+        // Save FPU/SSE state (offset 0x70, 16-byte aligned)
+        "fxsave [rdi + 0x70]",
+        
         // Save callee-saved registers
         "mov [rdi + 0x00], rbx",
         "mov [rdi + 0x08], rbp",
@@ -833,6 +905,9 @@ extern "C" fn switch_context(from: *mut ThreadContext, to: *const ThreadContext)
         
         // Load new context from 'to'
         // RSI = to
+        
+        // Restore FPU/SSE state (offset 0x70, 16-byte aligned)
+        "fxrstor [rsi + 0x70]",
         
         // Load callee-saved registers
         "mov rbx, [rsi + 0x00]",

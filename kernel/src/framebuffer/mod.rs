@@ -49,6 +49,42 @@ static FRAME_BB_PTR: AtomicPtr<u32> = AtomicPtr::new(core::ptr::null_mut());
 static FRAME_BB_STRIDE: AtomicU64 = AtomicU64::new(0);
 static FRAME_BB_HEIGHT: AtomicU64 = AtomicU64::new(0);
 
+// ==================== CLIP RECTANGLE ====================
+// Global clip rect for window content rendering.
+// When enabled, all pixel writes are clipped to this rectangle.
+// Uses atomics for safety (accessed from rendering path which could be interrupted).
+use core::sync::atomic::AtomicU32;
+
+static CLIP_ACTIVE: AtomicBool = AtomicBool::new(false);
+static CLIP_X1: AtomicU32 = AtomicU32::new(0);
+static CLIP_Y1: AtomicU32 = AtomicU32::new(0);
+static CLIP_X2: AtomicU32 = AtomicU32::new(u32::MAX);
+static CLIP_Y2: AtomicU32 = AtomicU32::new(u32::MAX);
+
+/// Set the clip rectangle. All pixel writes will be clipped to this area.
+pub fn set_clip_rect(x: u32, y: u32, w: u32, h: u32) {
+    CLIP_X1.store(x, Ordering::Relaxed);
+    CLIP_Y1.store(y, Ordering::Relaxed);
+    CLIP_X2.store(x.saturating_add(w), Ordering::Relaxed);
+    CLIP_Y2.store(y.saturating_add(h), Ordering::Relaxed);
+    CLIP_ACTIVE.store(true, Ordering::Release);
+}
+
+/// Clear the clip rectangle (disable clipping).
+pub fn clear_clip_rect() {
+    CLIP_ACTIVE.store(false, Ordering::Release);
+}
+
+/// Check if a pixel is inside the current clip rectangle.
+#[inline(always)]
+pub fn clip_test(x: u32, y: u32) -> bool {
+    if !CLIP_ACTIVE.load(Ordering::Relaxed) {
+        return true;
+    }
+    x >= CLIP_X1.load(Ordering::Relaxed) && x < CLIP_X2.load(Ordering::Relaxed) &&
+    y >= CLIP_Y1.load(Ordering::Relaxed) && y < CLIP_Y2.load(Ordering::Relaxed)
+}
+
 /// Call at the start of each frame to cache the backbuffer pointer.
 /// All subsequent `put_pixel_fast`/`get_pixel_fast` calls will use this
 /// cached pointer with ZERO mutex overhead.
@@ -65,6 +101,17 @@ pub fn end_frame() {
     FRAME_BB_PTR.store(core::ptr::null_mut(), Ordering::Release);
 }
 
+/// Get raw frame context for batch pixel writes.
+/// Returns (ptr, stride_pixels, height) — caller must ensure begin_frame() was called.
+/// Eliminates per-pixel atomic loads when writing many pixels in a loop.
+#[inline(always)]
+pub fn frame_context() -> (*mut u32, u32, u32) {
+    let ptr = FRAME_BB_PTR.load(Ordering::Relaxed);
+    let stride = FRAME_BB_STRIDE.load(Ordering::Relaxed) as u32;
+    let height = FRAME_BB_HEIGHT.load(Ordering::Relaxed) as u32;
+    (ptr, stride, height)
+}
+
 /// Ultra-fast pixel write — uses cached backbuffer pointer, no mutex per call.
 /// Must be called between begin_frame() and end_frame().
 #[inline(always)]
@@ -74,6 +121,7 @@ pub fn put_pixel_fast(x: u32, y: u32, color: u32) {
     let stride = FRAME_BB_STRIDE.load(Ordering::Relaxed) as u32;
     let height = FRAME_BB_HEIGHT.load(Ordering::Relaxed) as u32;
     if x >= stride || y >= height { return; }
+    if !clip_test(x, y) { return; }
     unsafe { *ptr.add(y as usize * stride as usize + x as usize) = color; }
 }
 
@@ -362,6 +410,7 @@ pub fn put_pixel(x: u32, y: u32, color: u32) {
     if x >= width || y >= height {
         return;
     }
+    if !clip_test(x, y) { return; }
     
     // Write to backbuffer if enabled, otherwise direct to framebuffer
     if USE_BACKBUFFER.load(Ordering::SeqCst) {
@@ -631,10 +680,8 @@ pub fn swap_buffers() {
             }
             // DMA transfer + flush + swap (double-buffered when available)
             let _ = crate::drivers::virtio_gpu::present_frame_double_buffered();
-            // Also write to MMIO framebuffer for VGA fallback visibility
-            if !addr.is_null() {
-                swap_buffers_mmio(addr, width, height, pitch);
-            }
+            // Skip MMIO fallback — VirtIO GPU DMA is the display path;
+            // the redundant full-screen memcpy was halving frame rate.
             return;
         }
     }
@@ -1058,7 +1105,7 @@ pub fn draw_char_at(x: u32, y: u32, c: char, color: u32) {
                 for col in 0..CHAR_WIDTH {
                     if (bits >> (7 - col)) & 1 == 1 {
                         let px = x as usize + col;
-                        if px < width as usize {
+                        if px < width as usize && clip_test(px as u32, py as u32) {
                             let offset = row_offset + px;
                             if offset < buf.len() {
                                 buf[offset] = color;
@@ -1080,7 +1127,7 @@ pub fn draw_char_at(x: u32, y: u32, c: char, color: u32) {
             for col in 0..CHAR_WIDTH {
                 if (bits >> (7 - col)) & 1 == 1 {
                     let px = x as usize + col;
-                    if px < width as usize {
+                    if px < width as usize && clip_test(px as u32, py as u32) {
                         let offset = py * pitch + px * 4;
                         unsafe {
                             let ptr = addr.add(offset) as *mut u32;
@@ -1413,6 +1460,21 @@ pub enum BootStatus {
 /// Draw the boot splash screen with logo
 pub fn draw_boot_splash() {
     logo::draw_boot_splash();
+}
+
+/// Initialize the graphical boot splash (logo + progress bar frame)
+pub fn init_boot_splash() {
+    logo::init_boot_splash();
+}
+
+/// Update boot splash progress bar and phase message
+pub fn update_boot_splash(phase: u32, message: &str) {
+    logo::update_boot_splash(phase, message);
+}
+
+/// Fade out splash screen before transitioning to shell
+pub fn fade_out_splash() {
+    logo::fade_out_splash();
 }
 
 /// Clear screen and show Matrix-styled boot header
