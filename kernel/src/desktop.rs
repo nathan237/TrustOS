@@ -1719,6 +1719,21 @@ pub enum RenderMode {
     GpuAccelerated,
 }
 
+/// Adaptive desktop complexity tier — chosen based on host capabilities.
+/// Higher tiers unlock more visual effects; if FPS drops below 30 for
+/// 3 consecutive seconds the tier auto-downgrades.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum DesktopTier {
+    /// CLI only — returned to shell, no GUI launched (< 128 MB RAM or no FB)
+    CliOnly,
+    /// Minimal desktop: solid background, taskbar, windows — no rain, no effects
+    Minimal,
+    /// Standard desktop: matrix rain at low density, basic animations
+    Standard,
+    /// Full desktop: 4-layer matrix rain, visualizer, drone swarm, all effects
+    Full,
+}
+
 pub struct Desktop {
     pub windows: Vec<Window>,
     pub icons: Vec<DesktopIcon>,
@@ -1880,6 +1895,10 @@ pub struct Desktop {
     pub fps_current: u32,
     /// Show FPS overlay on desktop
     pub fps_display: bool,
+    /// Adaptive desktop complexity tier
+    pub desktop_tier: DesktopTier,
+    /// Consecutive low-FPS frames (for auto-downgrade)
+    fps_low_count: u32,
     /// Snap preview zone (shown while dragging a window near screen edges)
     snap_preview: Option<SnapDir>,
     /// Shortcut help overlay visible (F1 toggle)
@@ -2493,6 +2512,8 @@ impl Desktop {
             fps_frame_accum: 0,
             fps_current: 0,
             fps_display: true,
+            desktop_tier: DesktopTier::Full,
+            fps_low_count: 0,
             snap_preview: None,
             show_shortcuts: false,
         }
@@ -2596,9 +2617,12 @@ impl Desktop {
         // Initialize matrix rain
         self.init_matrix_rain();
         
+        // Detect optimal desktop tier based on host capabilities
+        self.detect_tier();
+        
         // Music player is available from the Start menu — not auto-opened
         
-        crate::serial_println!("[Desktop] init complete");
+        crate::serial_println!("[Desktop] init complete (tier={:?})", self.desktop_tier);
     }
     
     /// Initialize matrix rain background data (depth-parallax advancing effect)
@@ -2836,6 +2860,80 @@ struct AppConfig {
         if mode == RenderMode::OpenGL {
             // Sync windows to compositor
             self.sync_compositor_surfaces();
+        }
+    }
+    
+    /// Detect the optimal desktop tier based on host capabilities.
+    /// Called once during init; can also be re-evaluated at runtime.
+    pub fn detect_tier(&mut self) {
+        let phys_mb = crate::memory::total_physical_memory() / (1024 * 1024);
+        let heap_free_mb = crate::memory::heap::free() / (1024 * 1024);
+        let pixels = (self.width as u64) * (self.height as u64);
+        let cpus = crate::cpu::smp::cpu_count().max(1) as u64;
+        
+        // Estimate CPU speed via TSC (in MHz)
+        let tsc_mhz = crate::cpu::tsc_frequency() / 1_000_000;
+        
+        // Compute a capability score:
+        //   RAM contribution: 1 point per 128 MB
+        //   CPU contribution: 1 point per 500 MHz
+        //   Core contribution: 1 point per core
+        //   Resolution penalty: -1 per million pixels above 1M
+        let ram_score = (phys_mb / 128) as i64;
+        let cpu_score = if tsc_mhz > 0 { (tsc_mhz / 500) as i64 } else { 2 }; // assume moderate if unknown
+        let core_score = cpus as i64;
+        let res_penalty = ((pixels as i64) - 1_000_000) / 1_000_000;
+        let score = ram_score + cpu_score + core_score - res_penalty;
+        
+        let tier = if phys_mb < 128 || heap_free_mb < 8 {
+            DesktopTier::CliOnly
+        } else if score <= 3 || phys_mb < 256 {
+            DesktopTier::Minimal
+        } else if score <= 6 || phys_mb < 512 {
+            DesktopTier::Standard
+        } else {
+            DesktopTier::Full
+        };
+        
+        self.desktop_tier = tier;
+        self.fps_low_count = 0;
+        
+        crate::serial_println!(
+            "[Desktop] Tier={:?} (score={}, RAM={}MB, heap={}MB, CPUs={}, TSC={}MHz, {}x{})",
+            tier, score, phys_mb, heap_free_mb, cpus, tsc_mhz, self.width, self.height
+        );
+    }
+    
+    /// Auto-downgrade tier if FPS stays below 30 for ~3 seconds (180 frames at 60fps target).
+    /// Called once per frame from draw().
+    fn auto_adjust_tier(&mut self) {
+        if self.fps_current > 0 && self.fps_current < 30 {
+            self.fps_low_count += 1;
+        } else {
+            // Reset counter if we're above 30 fps
+            if self.fps_low_count > 0 {
+                self.fps_low_count = self.fps_low_count.saturating_sub(2);
+            }
+        }
+        
+        // ~3 seconds of sustained < 30 FPS → downgrade
+        if self.fps_low_count >= 180 {
+            let old = self.desktop_tier;
+            let new_tier = match old {
+                DesktopTier::Full => DesktopTier::Standard,
+                DesktopTier::Standard => DesktopTier::Minimal,
+                _ => old,
+            };
+            if new_tier != old {
+                self.desktop_tier = new_tier;
+                self.fps_low_count = 0;
+                self.needs_full_redraw = true;
+                self.background_cached = false;
+                crate::serial_println!(
+                    "[Desktop] Auto-downgrade: {:?} -> {:?} (FPS was {})",
+                    old, new_tier, self.fps_current
+                );
+            }
         }
     }
     
@@ -4913,10 +5011,13 @@ struct AppConfig {
                 WindowType::Browser => {
                     use crate::keyboard::{KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END, KEY_DELETE, KEY_PGUP, KEY_PGDOWN};
                     let ctrl = crate::keyboard::is_key_pressed(0x1D);
+                    crate::serial_println!("[BROWSER] Key received: {} (0x{:02X}) cursor={} url_len={}", 
+                        if key >= 0x20 && key < 0x7F { key as char } else { '?' }, key,
+                        self.browser_url_cursor, self.browser_url_input.len());
                     
                     // Don't process keys while loading (except Escape to cancel)
                     if self.browser_loading && key != 0x1B {
-                        // Skip input during navigation
+                        crate::serial_println!("[BROWSER] Key ignored: loading in progress");
                     } else {
                     match key {
                         0x08 => { // Backspace - delete char before cursor
@@ -6578,6 +6679,9 @@ struct AppConfig {
     pub fn draw(&mut self) {
         self.frame_count += 1;
         
+        // ── Auto-adjust tier based on sustained FPS ──
+        self.auto_adjust_tier();
+        
         // ── FPS measurement (tick-based, updated every ~1 second) ──
         self.fps_frame_accum += 1;
         let now_tick = crate::logger::get_ticks();
@@ -6837,12 +6941,15 @@ struct AppConfig {
             return;
         }
         
-        // OPTIMIZATION 1: Background caching
-        // Only draw background once, then cache it
-        // Matrix rain is animated — redraw background every frame
-        framebuffer::clear_backbuffer(0xFF000000);
+        // OPTIMIZATION 1: Background rendering — tier-adaptive
+        // Full: animated matrix rain every frame
+        // Standard: simplified background (every other frame for rain)
+        // Minimal: solid dark background only — no rain, no effects
+        framebuffer::clear_backbuffer(0xFF010200);
         framebuffer::begin_frame(); // Cache BB pointer — all put_pixel_fast calls are zero-lock
-        self.draw_background();
+        if self.desktop_tier >= DesktopTier::Standard {
+            self.draw_background();
+        }
         self.draw_desktop_icons();
         
         // Draw windows (these change, so always redraw)
@@ -6915,7 +7022,13 @@ struct AppConfig {
         // ── FPS overlay (top-right, above everything except cursor) ──
         if self.fps_display {
             let fps_val = self.fps_current;
-            let label = format!("{} FPS", fps_val);
+            let tier_tag = match self.desktop_tier {
+                DesktopTier::Minimal => " MIN",
+                DesktopTier::Standard => " STD",
+                DesktopTier::Full => "",
+                _ => " CLI",
+            };
+            let label = format!("{} FPS{}", fps_val, tier_tag);
             let badge_w = (label.len() as u32) * 9 + 16;
             let badge_h = 22u32;
             let bx = self.width.saturating_sub(badge_w + 8);
@@ -7754,10 +7867,11 @@ struct AppConfig {
         // ═══════════════════════════════════════════════════════════════
         // MATRIX RAIN — Multi-color, beat-synced, depth-layered
         // Logo: faithful chrome/silver rendering from bitmap
+        // Tier-adaptive: Standard=2 layers, Full=4 layers
         // ═══════════════════════════════════════════════════════════════
         const MATRIX_COLS: usize = 256;
         const MAX_TRAIL: usize = 40;
-        const NUM_LAYERS: usize = 4;
+        let num_layers: usize = if self.desktop_tier >= DesktopTier::Full { 4 } else { 2 };
         
         // ── Per-layer depth parameters (4 layers: far→near) ──
         // Layer 0 = FAR BG      (slow, dark, long trails)
@@ -7859,19 +7973,24 @@ struct AppConfig {
         if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} start", self.frame_count); }
         
         // ── Visualizer: update multi-mode 3D shape projection ──
-        // Always update (wireframe is faintly visible), deformation only when playing
-        crate::visualizer::update(
-            &mut self.visualizer,
-            width, height,
-            MATRIX_COLS,
-            m_beat, m_energy,
-            m_sub_bass, m_bass, m_mid, m_treble,
-            m_playing,
-        );
+        // Full tier only — wireframe deformation costs per-column trig
+        if self.desktop_tier >= DesktopTier::Full {
+            crate::visualizer::update(
+                &mut self.visualizer,
+                width, height,
+                MATRIX_COLS,
+                m_beat, m_energy,
+                m_sub_bass, m_bass, m_mid, m_treble,
+                m_playing,
+            );
+        }
         
         if self.frame_count < 5 { crate::serial_println!("[FRAME] #{} viz done", self.frame_count); }
         // ── Drone Swarm: advance choreography, project, render glow buffer ──
-        crate::drone_swarm::update(&mut self.drone_swarm);
+        // Full tier only — expensive per-drone physics + glow
+        if self.desktop_tier >= DesktopTier::Full {
+            crate::drone_swarm::update(&mut self.drone_swarm);
+        }
         
         // Logo centered vertically in the available space
         let logo_center_y = height / 2;
@@ -7890,7 +8009,7 @@ struct AppConfig {
         // Get raw framebuffer pointer once — eliminates 3 atomic loads per pixel
         let (fb_ptr, fb_stride, _fb_height) = framebuffer::frame_context();
         let has_any_overrides = !self.matrix_overrides.is_empty();
-        for layer in 0..NUM_LAYERS {
+        for layer in 0..num_layers {
         // ── Parallax sway: horizontal drift based on frame time ──
         // Each layer oscillates at a different frequency for organic motion
         let sway_amp = LAYER_SWAY[layer];
@@ -7913,11 +8032,11 @@ struct AppConfig {
         let glyph_w = if is_mobile { MOBILE_GLYPH_W[layer] } else { LAYER_GLYPH_W[layer] };
         let glyph_h = if is_mobile { MOBILE_GLYPH_H[layer] } else { LAYER_GLYPH_H[layer] };
         
-        for col in 0..MATRIX_COLS.min(self.matrix_heads.len() / NUM_LAYERS) {
+        for col in 0..MATRIX_COLS.min(self.matrix_heads.len() / num_layers.max(1)) {
             // Column density: skip columns based on layer
             if col_skip > 1 && (col % col_skip) != 0 { continue; }
             
-            let idx = col * NUM_LAYERS + layer;
+            let idx = col * num_layers.max(1) + layer;
             let speed = self.matrix_speeds[idx];
             let seed = self.matrix_seeds[idx];
             // Apply horizontal parallax sway to x position
@@ -7943,7 +8062,7 @@ struct AppConfig {
             
             // ── Per-column frequency band assignment (seeded) ──
             // Same band for all layers in a column (use layer-0 seed)
-            let freq_band = (self.matrix_seeds[col * NUM_LAYERS] >> 3) % 4;
+            let freq_band = (self.matrix_seeds[col * num_layers.max(1)] >> 3) % 4;
             // Get the amplitude for this column's band (0.0 - 1.0+)
             let (band_amp, band_r_base, band_g_base, band_b_base) = if m_playing {
                 match freq_band {
@@ -9688,7 +9807,7 @@ struct AppConfig {
             framebuffer::fill_rect_alpha(x as u32, y as u32, w, h, 0x0A0E0A, 235);
         }
         
-        // Thick border (3px — bold modern look)
+        // Thick border (4px — bold modern look)
         let border_color = if window.focused {
             hc(CHROME_MID, 0xFFFFFFFF)
         } else {
@@ -9696,14 +9815,16 @@ struct AppConfig {
         };
         let bright_border = if window.focused { GREEN_GHOST } else { CHROME_GHOST };
         if corner_radius > 0 {
-            // 3-layer border for thickness
+            // 4-layer border for thickness
             draw_rounded_rect_border(x, y, w, h, corner_radius, border_color);
             draw_rounded_rect_border(x + 1, y + 1, w.saturating_sub(2), h.saturating_sub(2), corner_radius.saturating_sub(1), bright_border);
             draw_rounded_rect_border(x + 2, y + 2, w.saturating_sub(4), h.saturating_sub(4), corner_radius.saturating_sub(2), border_color);
+            draw_rounded_rect_border(x + 3, y + 3, w.saturating_sub(6), h.saturating_sub(6), corner_radius.saturating_sub(3), bright_border);
         } else {
             framebuffer::draw_rect(x as u32, y as u32, w, h, border_color);
             framebuffer::draw_rect((x + 1) as u32, (y + 1) as u32, w.saturating_sub(2), h.saturating_sub(2), bright_border);
             framebuffer::draw_rect((x + 2) as u32, (y + 2) as u32, w.saturating_sub(4), h.saturating_sub(4), border_color);
+            framebuffer::draw_rect((x + 3) as u32, (y + 3) as u32, w.saturating_sub(6), h.saturating_sub(6), bright_border);
         }
         
         // Visual resize edge indicators (glow strips when hovering)
@@ -9711,7 +9832,7 @@ struct AppConfig {
             let edge = window.on_resize_edge(self.cursor_x, self.cursor_y);
             let glow_color = 0x00FF66u32;
             let glow_alpha = 40u32;
-            let gt = 3u32;
+            let gt = 4u32;
             let gh = if h > 4 { h - 4 } else { 1 };
             let gw = if w > 4 { w - 4 } else { 1 };
             match edge {
@@ -12735,292 +12856,421 @@ struct AppConfig {
         }
     }
     
-    /// Draw Browser window content
+    // ═══════════════════════════════════════════════════════════════════
+    // Browser layout constants (shared between draw & click)
+    // ═══════════════════════════════════════════════════════════════════
+    const BROWSER_TAB_BAR_H: u32 = 28;
+    const BROWSER_NAV_BAR_H: u32 = 38;
+    const BROWSER_STATUS_H: u32 = 20;
+    const BROWSER_PAD: u32 = 2; // inner window padding
+
+    /// Compute common browser layout geometry from a window.
+    /// Returns (bx, by, bw, bh, tab_y, nav_y, url_bar_x, url_bar_y, url_bar_w, url_bar_h, content_y, content_h, status_y, nav_btn_size)
+    fn browser_layout(&self, window: &Window)
+        -> (u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32)
+    {
+        let bx = window.x as u32 + Self::BROWSER_PAD;
+        let by = window.y as u32 + TITLE_BAR_HEIGHT;
+        let bw = window.width.saturating_sub(Self::BROWSER_PAD * 2);
+        let bh = window.height.saturating_sub(TITLE_BAR_HEIGHT + Self::BROWSER_PAD);
+
+        let tab_y = by;                                 // tab bar top
+        let nav_y = tab_y + Self::BROWSER_TAB_BAR_H;    // navigation bar top
+        let nav_btn_size: u32 = 28;                      // circular nav buttons
+        // 3 nav buttons + gaps = 3*28 + 3*6 = 102
+        let nav_btns_w = nav_btn_size * 3 + 6 * 3;
+        let url_bar_x = bx + 8 + nav_btns_w + 4;
+        let url_bar_y = nav_y + 4;
+        let url_bar_h = Self::BROWSER_NAV_BAR_H - 8;
+        let url_bar_w = bw.saturating_sub(nav_btns_w + 20 + 40); // 40 for menu btn on right
+
+        let content_y = nav_y + Self::BROWSER_NAV_BAR_H;
+        let content_h = bh.saturating_sub(Self::BROWSER_TAB_BAR_H + Self::BROWSER_NAV_BAR_H + Self::BROWSER_STATUS_H);
+        let status_y = content_y + content_h;
+
+        (bx, by, bw, bh, tab_y, nav_y, url_bar_x, url_bar_y, url_bar_w, url_bar_h, content_y, content_h, status_y, nav_btn_size)
+    }
+
+    /// Draw Browser window content — Chrome / Edge style
     fn draw_browser(&self, window: &Window) {
-        let toolbar_height: u32 = 36;
-        let browser_x = window.x as u32 + 4;
-        let browser_y = window.y as u32 + TITLE_BAR_HEIGHT + 4;
-        let browser_w = window.width.saturating_sub(8);
-        let browser_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
-        
-        if browser_w < 100 || browser_h < 80 {
-            return;
+        let (bx, _by, bw, bh, tab_y, nav_y,
+             url_bar_x, url_bar_y, url_bar_w, url_bar_h,
+             content_y, content_h, status_y, nav_btn_size)
+            = self.browser_layout(window);
+
+        if bw < 120 || bh < 100 { return; }
+
+        let cw = crate::graphics::scaling::char_width() as i32;
+        let ch = crate::graphics::scaling::char_height();
+
+        // ── Tab bar (dark, like Chrome's #202124) ──────────────────────
+        framebuffer::fill_rect(bx, tab_y, bw, Self::BROWSER_TAB_BAR_H, 0xFF202124);
+        // Active tab pill
+        let tab_x = bx + 8;
+        let tab_w: u32 = 200.min(bw.saturating_sub(60));
+        let tab_h = Self::BROWSER_TAB_BAR_H - 4;
+        // Rounded-ish tab: draw body + 1px lighter top corners
+        framebuffer::fill_rect(tab_x + 2, tab_y + 4, tab_w - 4, tab_h, 0xFF35363A);
+        framebuffer::fill_rect(tab_x, tab_y + 6, 2, tab_h - 2, 0xFF35363A);
+        framebuffer::fill_rect(tab_x + tab_w - 2, tab_y + 6, 2, tab_h - 2, 0xFF35363A);
+        // Tab title
+        let tab_title = if let Some(ref browser) = self.browser {
+            if let Some(ref doc) = browser.document {
+                if doc.title.is_empty() { alloc::string::String::from("New Tab") } else { doc.title.clone() }
+            } else { alloc::string::String::from("New Tab") }
+        } else { alloc::string::String::from("New Tab") };
+        let display_title: alloc::string::String = if tab_title.len() > 22 {
+            let s: alloc::string::String = tab_title.chars().take(20).collect();
+            alloc::format!("{}...", s)
+        } else { tab_title };
+        self.draw_text(tab_x as i32 + 10, (tab_y + 8) as i32, &display_title, 0xFFE8EAED);
+        // Close button on tab (tiny x)
+        self.draw_text((tab_x + tab_w - 18) as i32, (tab_y + 8) as i32, "x", 0xFF999999);
+        // "+" New tab button
+        let plus_x = tab_x + tab_w + 6;
+        framebuffer::fill_rect(plus_x, tab_y + 6, 24, tab_h, 0xFF2A2A2E);
+        self.draw_text(plus_x as i32 + 8, (tab_y + 8) as i32, "+", 0xFF999999);
+
+        // ── Navigation bar (slightly lighter #35363A) ─────────────────
+        framebuffer::fill_rect(bx, nav_y, bw, Self::BROWSER_NAV_BAR_H, 0xFF35363A);
+        // 1px separator between tab bar and nav bar
+        framebuffer::fill_rect(bx, nav_y, bw, 1, 0xFF4A4A4E);
+
+        // Circular nav buttons (back / forward / refresh)
+        let btn_cy = nav_y + Self::BROWSER_NAV_BAR_H / 2; // vertical center
+        let btn_r = nav_btn_size / 2;
+        let mut bx_cursor = bx + 12u32;
+        // Helper: draw a filled circle-ish button (octagon approx)
+        let draw_nav_btn = |cx: u32, cy: u32, r: u32, hover_col: u32| {
+            // Approximate circle: center rect + 4 corner rects
+            let inset = r / 3;
+            framebuffer::fill_rect(cx - r + inset, cy - r, (r - inset) * 2, r * 2, hover_col);
+            framebuffer::fill_rect(cx - r, cy - r + inset, r * 2, (r - inset) * 2, hover_col);
+        };
+        // Back ◀
+        let back_cx = bx_cursor + btn_r;
+        draw_nav_btn(back_cx, btn_cy, btn_r, 0xFF4A4A4E);
+        self.draw_text((back_cx - 4) as i32, (btn_cy - 6) as i32, "<", 0xFFE8EAED);
+        bx_cursor += nav_btn_size + 6;
+        // Forward ▶
+        let fwd_cx = bx_cursor + btn_r;
+        draw_nav_btn(fwd_cx, btn_cy, btn_r, 0xFF4A4A4E);
+        self.draw_text((fwd_cx - 4) as i32, (btn_cy - 6) as i32, ">", 0xFFE8EAED);
+        bx_cursor += nav_btn_size + 6;
+        // Refresh ⟳  (or stop X while loading)
+        let ref_cx = bx_cursor + btn_r;
+        draw_nav_btn(ref_cx, btn_cy, btn_r, 0xFF4A4A4E);
+        if self.browser_loading {
+            self.draw_text((ref_cx - 4) as i32, (btn_cy - 6) as i32, "X", 0xFFE8EAED);
+        } else {
+            self.draw_text((ref_cx - 4) as i32, (btn_cy - 6) as i32, "R", 0xFFE8EAED);
         }
-        
-        // Draw toolbar background
-        framebuffer::fill_rect(browser_x, browser_y, browser_w, toolbar_height, 0xFF303030);
-        
-        // Navigation buttons
-        let btn_y = browser_y + 6;
-        let btn_size: u32 = 24;
-        
-        // Back button (◀)
-        framebuffer::fill_rect(browser_x + 8, btn_y, btn_size, btn_size, 0xFF404040);
-        self.draw_text(browser_x as i32 + 14, btn_y as i32 + 4, "<", 0xFFCCCCCC);
-        
-        // Forward button (▶)
-        framebuffer::fill_rect(browser_x + 8 + btn_size + 4, btn_y, btn_size, btn_size, 0xFF404040);
-        self.draw_text(browser_x as i32 + 14 + btn_size as i32 + 4, btn_y as i32 + 4, ">", 0xFFCCCCCC);
-        
-        // Refresh button (⟳)
-        framebuffer::fill_rect(browser_x + 8 + (btn_size + 4) * 2, btn_y, btn_size, btn_size, 0xFF404040);
-        self.draw_text(browser_x as i32 + 14 + (btn_size as i32 + 4) * 2, btn_y as i32 + 4, "R", 0xFFCCCCCC);
-        
-        // Parse/Raw toggle button
-        let toggle_btn_x = browser_x + 8 + (btn_size + 4) * 3;
-        let toggle_btn_w: u32 = 40;
-        let is_raw = self.browser.as_ref().map(|b| b.show_raw_html).unwrap_or(false);
-        let toggle_color = if is_raw { 0xFF0066CC } else { 0xFF404040 };
-        framebuffer::fill_rect(toggle_btn_x, btn_y, toggle_btn_w, btn_size, toggle_color);
-        let toggle_text = if is_raw { "RAW" } else { "HTML" };
-        self.draw_text(toggle_btn_x as i32 + 6, btn_y as i32 + 4, toggle_text, 0xFFFFFFFF);
-        
-        // URL bar (after toggle button)
-        let url_bar_x = toggle_btn_x + toggle_btn_w + 8;
-        let url_bar_w = browser_w.saturating_sub(url_bar_x - browser_x + 8);
-        framebuffer::fill_rect(url_bar_x, btn_y, url_bar_w, btn_size, 0xFF1A1A1A);
-        
-        // Draw current URL or placeholder
+
+        // ── URL / Omnibox  (rounded, dark input field like Chrome) ────
+        // Rounded rect: body + left/right caps
+        let ur = url_bar_h / 2; // corner radius
+        framebuffer::fill_rect(url_bar_x + ur, url_bar_y, url_bar_w.saturating_sub(ur * 2), url_bar_h, 0xFF202124);
+        // Left cap
+        framebuffer::fill_rect(url_bar_x, url_bar_y + ur / 2, ur, url_bar_h - ur, 0xFF202124);
+        framebuffer::fill_rect(url_bar_x + 1, url_bar_y + ur / 4, ur - 1, ur / 2, 0xFF202124);
+        // Right cap
+        framebuffer::fill_rect(url_bar_x + url_bar_w - ur, url_bar_y + ur / 2, ur, url_bar_h - ur, 0xFF202124);
+        framebuffer::fill_rect(url_bar_x + url_bar_w - ur, url_bar_y + ur / 4, ur - 1, ur / 2, 0xFF202124);
+        // Focused: highlight border
+        if window.focused {
+            framebuffer::fill_rect(url_bar_x + ur, url_bar_y, url_bar_w.saturating_sub(ur * 2), 1, 0xFF8AB4F8);
+            framebuffer::fill_rect(url_bar_x + ur, url_bar_y + url_bar_h - 1, url_bar_w.saturating_sub(ur * 2), 1, 0xFF8AB4F8);
+        }
+
+        // Lock / info icon placeholder
+        let icon_x = url_bar_x as i32 + 12;
+        let text_y = url_bar_y as i32 + (url_bar_h as i32 - ch as i32) / 2;
+        let has_https = self.browser_url_input.starts_with("https://");
+        let icon_char = if has_https { "S" } else { "i" };
+        let icon_color = if has_https { 0xFF81C995 } else { 0xFF999999 };
+        self.draw_text(icon_x, text_y, icon_char, icon_color);
+
+        // URL text
+        let url_text_x = url_bar_x as i32 + 26;
         let url_text = if self.browser_url_input.is_empty() {
-            "Enter URL..."
+            "Search or enter URL"
         } else {
             &self.browser_url_input
         };
-        let text_color = if self.browser_url_input.is_empty() { 0xFF666666 } else { 0xFFFFFFFF };
-        
-        // Draw loading indicator
+        let text_color = if self.browser_url_input.is_empty() { 0xFF9AA0A6 } else { 0xFFE8EAED };
+
+        // Visible portion with scroll
+        let text_area_px = (url_bar_w as i32).saturating_sub(42);
+        let max_visible = if cw > 0 { (text_area_px / cw).max(1) as usize } else { 40 };
+        let url_len = url_text.len();
+        let scroll_off = if self.browser_url_cursor > max_visible {
+            self.browser_url_cursor - max_visible + 1
+        } else { 0 };
+        let vis_end = (scroll_off + max_visible).min(url_len);
+        let visible_text = if scroll_off < url_len { &url_text[scroll_off..vis_end] } else { "" };
+
         if self.browser_loading {
-            self.draw_text(url_bar_x as i32 + 8, btn_y as i32 + 4, "Loading...", 0xFF00CC66);
+            self.draw_text(url_text_x, text_y, "Loading...", 0xFF8AB4F8);
         } else {
-            self.draw_text(url_bar_x as i32 + 8, btn_y as i32 + 4, url_text, text_color);
+            self.draw_text(url_text_x, text_y, visible_text, text_color);
         }
-        
-        // Draw blinking cursor in URL bar
-        if !self.browser_loading && !self.browser_url_input.is_empty() || self.browser_url_input.is_empty() {
-            let ticks = crate::logger::get_ticks();
-            if (ticks / 500) % 2 == 0 { // Blink every 500ms
-                let cursor_x = url_bar_x as i32 + 8 + (self.browser_url_cursor as i32) * 7;
-                if cursor_x < (url_bar_x + url_bar_w - 4) as i32 {
-                    framebuffer::fill_rect(cursor_x as u32, btn_y + 3, 2, btn_size - 6, 0xFF00CC66);
+
+        // Blinking cursor
+        if !self.browser_loading && window.focused {
+            let blink = (self.frame_count / 30) % 2 == 0;
+            if blink {
+                let coff = self.browser_url_cursor.saturating_sub(scroll_off);
+                let cx = url_text_x + (coff as i32) * cw;
+                if cx >= url_text_x && cx < (url_bar_x + url_bar_w - 8) as i32 {
+                    framebuffer::fill_rect(cx as u32, url_bar_y + 5, 2, url_bar_h - 10, 0xFF8AB4F8);
                 }
             }
         }
-        
-        // Content area
-        let content_y = browser_y + toolbar_height + 2;
-        let content_h = browser_h.saturating_sub(toolbar_height + 4);
-        
-        // Draw browser content
+
+        // ── Menu button (3 dots) on the right ─────────────────────────
+        let menu_x = url_bar_x + url_bar_w + 6;
+        let menu_y = nav_y + 8;
+        let dot_size: u32 = 3;
+        let is_raw = self.browser.as_ref().map(|b| b.show_raw_html).unwrap_or(false);
+        let menu_col = if is_raw { 0xFF8AB4F8 } else { 0xFF999999 };
+        framebuffer::fill_rect(menu_x + 4, menu_y + 2, dot_size, dot_size, menu_col);
+        framebuffer::fill_rect(menu_x + 4, menu_y + 8, dot_size, dot_size, menu_col);
+        framebuffer::fill_rect(menu_x + 4, menu_y + 14, dot_size, dot_size, menu_col);
+
+        // ── Content area ──────────────────────────────────────────────
         if let Some(ref browser) = self.browser {
             if browser.show_raw_html && !browser.raw_html.is_empty() {
-                // RAW HTML view - display source code
-                framebuffer::fill_rect(browser_x, content_y, browser_w, content_h, 0xFF1A1A1A);
-                self.draw_raw_html_view(browser_x as i32, content_y as i32, browser_w, content_h, &browser.raw_html, browser.scroll_y);
+                framebuffer::fill_rect(bx, content_y, bw, content_h, 0xFF1E1E1E);
+                self.draw_raw_html_view(bx as i32, content_y as i32, bw, content_h, &browser.raw_html, browser.scroll_y);
             } else if let Some(ref doc) = browser.document {
-                // PARSED view - use the browser renderer
-                crate::browser::render_html(
-                    doc,
-                    browser_x as i32,
-                    content_y as i32,
-                    browser_w,
-                    content_h,
-                    browser.scroll_y,
-                );
+                crate::browser::render_html(doc, bx as i32, content_y as i32, bw, content_h, browser.scroll_y);
             } else {
-                // No document loaded - show welcome page
-                framebuffer::fill_rect(browser_x, content_y, browser_w, content_h, 0xFFFFFFFF);
-                
-                // Centered welcome text
-                let center_x = browser_x as i32 + browser_w as i32 / 2 - 100;
-                let center_y = content_y as i32 + content_h as i32 / 2 - 40;
-                
-                self.draw_text(center_x, center_y, "TrustBrowser", 0xFF000000);
-                self.draw_text(center_x - 20, center_y + 24, "Enter a URL to get started", 0xFF666666);
-                self.draw_text(center_x - 10, center_y + 48, "Try: http://example.com", 0xFF0066CC);
+                self.draw_browser_welcome(bx, content_y, bw, content_h);
             }
         } else {
-            // Browser not initialized - show blank page
-            framebuffer::fill_rect(browser_x, content_y, browser_w, content_h, 0xFFFFFFFF);
-            let center_x = browser_x as i32 + browser_w as i32 / 2 - 80;
-            let center_y = content_y as i32 + content_h as i32 / 2;
-            self.draw_text(center_x, center_y, "Welcome to TrustBrowser", 0xFF000000);
+            self.draw_browser_welcome(bx, content_y, bw, content_h);
         }
-        
-        // Status bar at bottom - show resources info
-        let status_y = browser_y + browser_h - 18;
-        framebuffer::fill_rect(browser_x, status_y, browser_w, 18, 0xFF2A2A2A);
-        
+
+        // ── Status bar ────────────────────────────────────────────────
+        framebuffer::fill_rect(bx, status_y, bw, Self::BROWSER_STATUS_H, 0xFF202124);
         let status_text = if let Some(ref browser) = self.browser {
-            let resources_info = if !browser.pending_resources.is_empty() {
-                alloc::format!(" | {} resources pending", browser.pending_resources.len())
-            } else if !browser.resources.is_empty() {
-                alloc::format!(" | {} resources loaded", browser.resources.len())
-            } else {
-                alloc::string::String::new()
-            };
             match &browser.status {
-                crate::browser::BrowserStatus::Idle => alloc::format!("Ready{}", resources_info),
-                crate::browser::BrowserStatus::Loading => alloc::format!("Loading...{}", resources_info),
-                crate::browser::BrowserStatus::Ready => alloc::format!("Done{}", resources_info),
+                crate::browser::BrowserStatus::Idle => alloc::string::String::from("Ready"),
+                crate::browser::BrowserStatus::Loading => alloc::string::String::from("Loading..."),
+                crate::browser::BrowserStatus::Ready => {
+                    if !browser.resources.is_empty() {
+                        alloc::format!("Done  ({} resources)", browser.resources.len())
+                    } else {
+                        alloc::string::String::from("Done")
+                    }
+                },
                 crate::browser::BrowserStatus::Error(e) => e.clone(),
             }
-        } else {
-            alloc::string::String::from("Ready")
-        };
-        self.draw_text(browser_x as i32 + 8, status_y as i32 + 2, &status_text, 0xFF999999);
-        
-        // Shortcuts hint on right side of status bar
-        let hint = "PgUp/Dn:Scroll  Ctrl+R:Refresh  Tab:http://  Esc:Clear";
-        let hint_x = (browser_x + browser_w) as i32 - (hint.len() as i32 * 7) - 8;
-        if hint_x > browser_x as i32 + 150 {
-            self.draw_text(hint_x, status_y as i32 + 2, hint, 0xFF666666);
+        } else { alloc::string::String::from("Ready") };
+        self.draw_text(bx as i32 + 8, status_y as i32 + 3, &status_text, 0xFF9AA0A6);
+    }
+
+    /// Chrome-style welcome / new-tab page
+    fn draw_browser_welcome(&self, bx: u32, cy: u32, bw: u32, ch: u32) {
+        // Soft off-white background
+        framebuffer::fill_rect(bx, cy, bw, ch, 0xFFFFFFFF);
+
+        let mid_x = bx as i32 + bw as i32 / 2;
+        let mid_y = cy as i32 + ch as i32 / 2 - 50;
+
+        // "TrustBrowser" title
+        let title = "TrustBrowser";
+        let tcw = crate::graphics::scaling::char_width() as i32;
+        let tx = mid_x - (title.len() as i32 * tcw) / 2;
+        self.draw_text(tx, mid_y, title, 0xFF202124);
+
+        // Fake search box (centered rounded rect)
+        let box_w: u32 = 360.min(bw.saturating_sub(40));
+        let box_h: u32 = 34;
+        let box_x = (mid_x - box_w as i32 / 2).max(bx as i32 + 4) as u32;
+        let box_y = (mid_y + 30) as u32;
+        framebuffer::fill_rect(box_x + 4, box_y, box_w - 8, box_h, 0xFFF1F3F4);
+        framebuffer::fill_rect(box_x, box_y + 4, 4, box_h - 8, 0xFFF1F3F4);
+        framebuffer::fill_rect(box_x + box_w - 4, box_y + 4, 4, box_h - 8, 0xFFF1F3F4);
+        // Border
+        framebuffer::fill_rect(box_x + 4, box_y, box_w - 8, 1, 0xFFDFE1E5);
+        framebuffer::fill_rect(box_x + 4, box_y + box_h - 1, box_w - 8, 1, 0xFFDFE1E5);
+        // Placeholder text
+        self.draw_text(box_x as i32 + 14, box_y as i32 + 9, "Search or type a URL", 0xFF9AA0A6);
+
+        // Quick links row
+        let links_y = box_y as i32 + box_h as i32 + 24;
+        let link_labels = ["example.com", "10.0.2.2", "google.com"];
+        let link_w: i32 = 100;
+        let total_w = link_labels.len() as i32 * link_w + (link_labels.len() as i32 - 1) * 12;
+        let mut lx = mid_x - total_w / 2;
+        for label in &link_labels {
+            // Rounded chip
+            framebuffer::fill_rect(lx as u32, links_y as u32, link_w as u32, 28, 0xFFF1F3F4);
+            framebuffer::fill_rect(lx as u32, links_y as u32, link_w as u32, 1, 0xFFDFE1E5);
+            framebuffer::fill_rect(lx as u32, (links_y + 27) as u32, link_w as u32, 1, 0xFFDFE1E5);
+            let tw = label.len() as i32 * tcw;
+            self.draw_text(lx + (link_w - tw) / 2, links_y + 7, label, 0xFF1A73E8);
+            lx += link_w + 12;
         }
     }
     
     /// Draw raw HTML source code view
     fn draw_raw_html_view(&self, x: i32, y: i32, width: u32, height: u32, html: &str, scroll_y: i32) {
-        let line_height = 14;
-        let char_width = 7;
-        let max_chars = (width as usize).saturating_sub(20) / char_width;
-        
+        let cw = crate::graphics::scaling::char_width() as i32;
+        let line_height = crate::graphics::scaling::char_height() as i32 + 2;
+        let max_chars = if cw > 0 { (width as usize).saturating_sub(56) / cw as usize } else { 60 };
+
         let mut draw_y = y + 8 - scroll_y;
         let max_y = y + height as i32 - 8;
         let mut line_num = 1;
-        
+
         for line in html.lines() {
-            if draw_y > max_y {
-                break;
-            }
-            
+            if draw_y > max_y { break; }
             if draw_y >= y - line_height {
-                // Line number (gray)
                 let line_str = alloc::format!("{:4} ", line_num);
-                self.draw_text(x + 4, draw_y, &line_str, 0xFF666666);
-                
-                // Truncate long lines
+                self.draw_text(x + 4, draw_y, &line_str, 0xFF6E7681);
                 let display_line: alloc::string::String = if line.len() > max_chars {
-                    let truncated: alloc::string::String = line.chars().take(max_chars.saturating_sub(3)).collect();
-                    alloc::format!("{}...", truncated)
-                } else {
-                    alloc::string::String::from(line)
-                };
-                
-                // Syntax highlight: tags in blue, attributes in green, strings in orange
-                self.draw_syntax_highlighted(x + 40, draw_y, &display_line);
+                    let t: alloc::string::String = line.chars().take(max_chars.saturating_sub(3)).collect();
+                    alloc::format!("{}...", t)
+                } else { alloc::string::String::from(line) };
+                self.draw_syntax_highlighted(x + 5 * cw + 8, draw_y, &display_line);
             }
-            
             draw_y += line_height;
             line_num += 1;
         }
     }
-    
+
     /// Draw syntax-highlighted HTML
     fn draw_syntax_highlighted(&self, x: i32, y: i32, line: &str) {
+        let cw = crate::graphics::scaling::char_width() as i32;
         let mut current_x = x;
-        let char_width = 7;
         let mut in_tag = false;
         let mut in_string = false;
         let mut in_attr = false;
         let mut string_char = '"';
-        
+
         let chars: alloc::vec::Vec<char> = line.chars().collect();
         let mut i = 0;
-        
         while i < chars.len() {
             let c = chars[i];
             let color = if in_string {
-                0xFFE9967A // Orange for strings
+                0xFFCE9178
             } else if c == '<' || c == '>' || c == '/' {
                 in_tag = c == '<';
                 if c == '>' { in_attr = false; }
-                0xFF569CD6 // Blue for < > /
+                0xFF569CD6
             } else if in_tag && c == '=' {
                 in_attr = true;
-                0xFF9CDCFE // Light blue for =
+                0xFF9CDCFE
             } else if in_tag && (c == '"' || c == '\'') {
                 in_string = true;
                 string_char = c;
-                0xFFE9967A // Orange
+                0xFFCE9178
             } else if in_attr && !c.is_whitespace() {
-                0xFF4EC9B0 // Teal for attribute names
+                0xFF4EC9B0
             } else if in_tag && !c.is_whitespace() && c != '=' {
-                0xFF569CD6 // Blue for tag names
+                0xFF569CD6
             } else {
-                0xFFD4D4D4 // Light gray for text
+                0xFFD4D4D4
             };
-            
-            // Check for end of string
             if in_string && i > 0 && c == string_char && chars[i-1] != '\\' {
                 in_string = false;
             }
-            
-            // Draw character
             let s = alloc::format!("{}", c);
             self.draw_text(current_x, y, &s, color);
-            current_x += char_width as i32;
+            current_x += cw;
             i += 1;
         }
     }
     
-    /// Handle mouse click inside browser window
+    /// Handle mouse click inside browser window (Chrome-style layout)
     fn handle_browser_click(&mut self, x: i32, y: i32, win_x: i32, win_y: i32, win_w: u32) {
-        let toolbar_height: u32 = 36;
-        let browser_x = win_x as u32 + 4;
-        let browser_y = win_y as u32 + TITLE_BAR_HEIGHT + 4;
-        let browser_w = win_w.saturating_sub(8);
-        
-        if browser_w < 100 {
+        // Build a dummy Window to reuse browser_layout geometry
+        // We only need x, y, width, height and focused fields
+        let tmp_win = Window {
+            id: 0, title: String::new(),
+            x: win_x, y: win_y,
+            width: win_w,
+            height: self.windows.iter()
+                .find(|w| w.x == win_x && w.y == win_y && w.width == win_w)
+                .map(|w| w.height).unwrap_or(500),
+            min_width: 0, min_height: 0,
+            visible: true, focused: true, minimized: false, maximized: false,
+            dragging: false, resizing: ResizeEdge::None,
+            drag_offset_x: 0, drag_offset_y: 0,
+            saved_x: 0, saved_y: 0, saved_width: 0, saved_height: 0,
+            window_type: WindowType::Browser,
+            content: Vec::new(), file_path: None,
+            selected_index: 0, scroll_offset: 0,
+            animation: WindowAnimation::new(), pending_close: false,
+        };
+        let (_bx, _by, bw, _bh, _tab_y, nav_y,
+             url_bar_x, url_bar_y, url_bar_w, url_bar_h,
+             _content_y, _content_h, _status_y, nav_btn_size)
+            = self.browser_layout(&tmp_win);
+
+        if bw < 120 { return; }
+
+        let cx = x as u32;
+        let cy = y as u32;
+
+        // ── Navigation buttons (in nav bar row) ──
+        let btn_r = nav_btn_size / 2;
+        let btn_cy = nav_y + Self::BROWSER_NAV_BAR_H / 2;
+        let mut btn_x = _bx + 12 + btn_r;
+        // Check circular hit (use square approximation)
+        let hit_btn = |bx_c: u32| -> bool {
+            let dx = (cx as i32 - bx_c as i32).unsigned_abs();
+            let dy = (cy as i32 - btn_cy as i32).unsigned_abs();
+            dx <= btn_r && dy <= btn_r
+        };
+        // Back
+        if hit_btn(btn_x) {
+            crate::serial_println!("[BROWSER] Back button clicked");
+            if let Some(ref mut browser) = self.browser { let _ = browser.back(); }
             return;
         }
-        
-        let btn_y = browser_y + 6;
-        let btn_size: u32 = 24;
-        
-        let click_x = x as u32;
-        let click_y = y as u32;
-        
-        // Check if click is in toolbar area
-        if click_y >= btn_y && click_y < btn_y + btn_size {
-            // Back button
-            let back_x = browser_x + 8;
-            if click_x >= back_x && click_x < back_x + btn_size {
-                crate::serial_println!("[BROWSER] Back button clicked");
-                if let Some(ref mut browser) = self.browser {
-                    let _ = browser.back();
-                }
-                return;
+        btn_x += nav_btn_size + 6;
+        // Forward
+        if hit_btn(btn_x) {
+            crate::serial_println!("[BROWSER] Forward button clicked");
+            if let Some(ref mut browser) = self.browser { let _ = browser.forward(); }
+            return;
+        }
+        btn_x += nav_btn_size + 6;
+        // Refresh
+        if hit_btn(btn_x) {
+            crate::serial_println!("[BROWSER] Refresh button clicked");
+            if let Some(ref mut browser) = self.browser { let _ = browser.refresh(); }
+            return;
+        }
+
+        // ── URL bar click — full rectangle hit area ──
+        if cx >= url_bar_x && cx < url_bar_x + url_bar_w
+            && cy >= url_bar_y && cy < url_bar_y + url_bar_h
+        {
+            let cw = crate::graphics::scaling::char_width();
+            if cw > 0 {
+                // 26px is the inset for the icon in draw_browser
+                let text_start_x = url_bar_x + 26;
+                let rel_x = cx.saturating_sub(text_start_x);
+                let char_pos = (rel_x / cw) as usize;
+                self.browser_url_cursor = char_pos.min(self.browser_url_input.len());
+                crate::serial_println!("[BROWSER] URL bar clicked, cursor={}", self.browser_url_cursor);
             }
-            
-            // Forward button
-            let fwd_x = browser_x + 8 + btn_size + 4;
-            if click_x >= fwd_x && click_x < fwd_x + btn_size {
-                crate::serial_println!("[BROWSER] Forward button clicked");
-                if let Some(ref mut browser) = self.browser {
-                    let _ = browser.forward();
-                }
-                return;
+            return;
+        }
+
+        // ── Menu button (three dots) — toggle RAW/HTML view ──
+        let menu_x = url_bar_x + url_bar_w + 6;
+        let menu_y = nav_y + 8;
+        if cx >= menu_x && cx < menu_x + 16 && cy >= menu_y && cy < menu_y + 22 {
+            crate::serial_println!("[BROWSER] Menu (view toggle) clicked");
+            if let Some(ref mut browser) = self.browser {
+                browser.toggle_view_mode();
             }
-            
-            // Refresh button
-            let refresh_x = browser_x + 8 + (btn_size + 4) * 2;
-            if click_x >= refresh_x && click_x < refresh_x + btn_size {
-                crate::serial_println!("[BROWSER] Refresh button clicked");
-                if let Some(ref mut browser) = self.browser {
-                    let _ = browser.refresh();
-                }
-                return;
-            }
-            
-            // Parse/Raw toggle button
-            let toggle_btn_x = browser_x + 8 + (btn_size + 4) * 3;
-            let toggle_btn_w: u32 = 40;
-            if click_x >= toggle_btn_x && click_x < toggle_btn_x + toggle_btn_w {
-                crate::serial_println!("[BROWSER] View toggle clicked");
-                if let Some(ref mut browser) = self.browser {
-                    browser.toggle_view_mode();
-                }
-                return;
-            }
+            return;
         }
     }
     
@@ -13644,6 +13894,17 @@ pub fn run() {
                                 editor.handle_key(27);
                             }
                         }
+                        drop(d);
+                        continue;
+                    }
+                    // If focused window is Browser, route ESC to browser handler
+                    // (cancel loading or clear URL) instead of closing
+                    let browser_needs_esc = {
+                        let focused = d.windows.iter().find(|w| w.focused && !w.minimized);
+                        focused.map(|w| w.window_type == WindowType::Browser).unwrap_or(false)
+                    };
+                    if browser_needs_esc {
+                        d.handle_keyboard_input(27);
                         drop(d);
                         continue;
                     }

@@ -597,15 +597,90 @@ fn main() {
                 }
             }
         }
+        "compile" | "native" => {
+            // Native x86_64 compilation and execution
+            let filename = match args.get(1) {
+                Some(f) => *f,
+                None => { crate::println!("Usage: trustlang compile <file.tl>"); return; }
+            };
+            let path = if filename.starts_with('/') {
+                alloc::string::String::from(filename)
+            } else {
+                alloc::format!("/{}", filename)
+            };
+            let source = match crate::ramfs::with_fs(|fs| fs.read_file(&path).map(|d| d.to_vec())) {
+                Ok(data) => match alloc::string::String::from_utf8(data) {
+                    Ok(s) => s,
+                    Err(_) => { crate::println!("Error: file is not valid UTF-8"); return; }
+                },
+                Err(_) => { crate::println!("Error: file '{}' not found", filename); return; }
+            };
+            crate::println!("\x1b[36m[TrustLang Native]\x1b[0m Compiling {} to x86_64...", filename);
+            fn native_builtin(id: u8, argc: usize, argv: *const i64) -> i64 {
+                // Bridge: route builtin calls to the TrustLang output system
+                match id {
+                    0 | 1 => { // print / println
+                        if argc > 0 {
+                            let val = unsafe { *argv };
+                            crate::print!("{}", val);
+                        }
+                        if id == 1 { crate::println!(); }
+                        0
+                    }
+                    _ => 0,
+                }
+            }
+            match crate::trustlang::compile_and_run_native(&source, native_builtin) {
+                Ok(result) => {
+                    crate::println!("\x1b[32m[TrustLang Native]\x1b[0m Program returned: {}", result);
+                }
+                Err(e) => crate::println!("\x1b[31m[TrustLang Native Error]\x1b[0m {}", e),
+            }
+        }
+        "test" => {
+            // Run the native backend test suite
+            crate::println!("\x1b[1;36m══════ TrustLang Native x86_64 Test Suite ══════\x1b[0m\n");
+            let (passed, failed, details) = crate::trustlang::run_native_tests();
+            crate::print!("{}", details);
+            crate::println!();
+            if failed == 0 {
+                crate::println!("\x1b[1;32m  ALL {} TESTS PASSED\x1b[0m", passed);
+            } else {
+                crate::println!("\x1b[1;31m  {}/{} tests failed\x1b[0m", failed, passed + failed);
+            }
+        }
+        "bench" => {
+            // Native backend benchmark
+            crate::println!("\x1b[1;36m── TrustLang Native Benchmark ──\x1b[0m");
+            crate::println!("  Computing fib(25) natively...");
+            let (result, cycles) = crate::trustlang::tests::bench_fibonacci();
+            crate::println!("  Result: fib(25) = {}", result);
+            crate::println!("  Cycles: {} (~{} µs @ 3GHz)", cycles, cycles / 3000);
+
+            // Compare with bytecode VM
+            crate::println!("  Computing fib(25) via bytecode VM...");
+            let vm_src = "fn fib(n: i64) -> i64 { if n <= 1 { return n; } return fib(n - 1) + fib(n - 2); } fn main() { let r = fib(25); println(to_string(r)); }";
+            let start = unsafe { core::arch::x86_64::_rdtsc() };
+            let _ = crate::trustlang::run(vm_src);
+            let end = unsafe { core::arch::x86_64::_rdtsc() };
+            let vm_cycles = end - start;
+            crate::println!("  VM Cycles: {} (~{} µs @ 3GHz)", vm_cycles, vm_cycles / 3000);
+            if vm_cycles > 0 {
+                crate::println!("  \x1b[1;32mNative speedup: {:.1}x\x1b[0m", vm_cycles as f64 / cycles as f64);
+            }
+        }
         _ => {
             crate::println!("\x1b[1;36mTrustLang\x1b[0m -- Integrated Programming Language");
-            crate::println!("  Rust-inspired syntax, bytecode VM, zero dependencies\n");
+            crate::println!("  Rust-inspired syntax, bytecode VM + native x86_64 compiler\n");
             crate::println!("Commands:");
-            crate::println!("  trustlang run <file.tl>    Compile & execute a file");
-            crate::println!("  trustlang check <file.tl>  Syntax check only");
-            crate::println!("  trustlang eval <code>      Evaluate inline code");
-            crate::println!("  trustlang repl             Interactive REPL");
-            crate::println!("  trustlang demo             Create & run demo program");
+            crate::println!("  trustlang run <file.tl>        Compile & execute (bytecode VM)");
+            crate::println!("  trustlang compile <file.tl>    Compile to native x86_64 & execute");
+            crate::println!("  trustlang check <file.tl>      Syntax check only");
+            crate::println!("  trustlang eval <code>          Evaluate inline code");
+            crate::println!("  trustlang repl                 Interactive REPL");
+            crate::println!("  trustlang demo                 Create & run demo program");
+            crate::println!("  trustlang test                 Run native backend test suite");
+            crate::println!("  trustlang bench                Benchmark native vs bytecode VM");
             crate::println!("\nExample:");
             crate::println!("  trustlang eval println(\"Hello TrustOS!\")");
             crate::println!("  trustlang eval \"let x = 42; println(to_string(x * 2))\"");

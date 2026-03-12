@@ -756,7 +756,7 @@ pub(super) fn cmd_cat_vfs(path: &str) -> Option<alloc::string::String> {
 
 pub(super) fn cmd_head(args: &[&str], piped: Option<&str>) {
     let lines: usize = if args.len() > 1 { args[1].parse().unwrap_or(10) }
-                        else if args.len() == 1 && args[0].starts_with('-') { args[0][1..].parse().unwrap_or(10) }
+                        else if args.len() == 1 && args[0].starts_with('-') && args[0].len() > 1 { args[0][1..].parse().unwrap_or(10) }
                         else { 10 };
     
     let content_str = if let Some(input) = piped {
@@ -2358,6 +2358,16 @@ fn main() {
                 crate::println_color!(COLOR_RED, "[FAIL] {}", e);
                 failed += 1;
             }
+        }
+
+        // Native x86_64 compiler smoke test
+        crate::print!("  native x86_64 compile... ");
+        if crate::trustlang::tests::smoke_test() {
+            crate::println_color!(COLOR_GREEN, "[OK] native compile+exec works");
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL] native backend broken");
+            failed += 1;
         }
     }
 
@@ -4411,6 +4421,83 @@ pub(super) fn cmd_neural(args: &[&str]) {
         _ => {
             crate::println_color!(COLOR_RED, "Unknown: neural {}", args[0]);
             crate::println!("Use 'neural' for help");
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// cmd_gpufw — GPU Firmware management (load, status, reload)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub(super) fn cmd_gpufw(args: &[&str]) {
+    use crate::drivers::amdgpu::firmware;
+
+    const COLOR_CYAN: u32 = 0xFF00FFFF;
+    const COLOR_GREEN: u32 = 0xFF00FF00;
+    const COLOR_RED: u32 = 0xFFFF4444;
+    const COLOR_YELLOW: u32 = 0xFFFFFF00;
+
+    if args.is_empty() {
+        crate::println_color!(COLOR_CYAN, "╔══════════════════════════════════════════════╗");
+        crate::println_color!(COLOR_CYAN, "║     GPU Firmware Manager — Navi 10 RDNA      ║");
+        crate::println_color!(COLOR_CYAN, "╠══════════════════════════════════════════════╣");
+        crate::println!("║ Usage:                                       ║");
+        crate::println!("║   gpufw status       Show firmware status     ║");
+        crate::println!("║   gpufw load         Load/reload firmware     ║");
+        crate::println!("║   gpufw info         Required firmware files  ║");
+        crate::println_color!(COLOR_CYAN, "╚══════════════════════════════════════════════╝");
+        crate::println!("");
+        crate::println!("Firmware files go in: /lib/firmware/amdgpu/");
+        crate::println!("Get them from: linux-firmware (navi10_*.bin)");
+        return;
+    }
+
+    match args[0] {
+        "status" | "stat" => {
+            crate::println_color!(COLOR_CYAN, "GPU Firmware Status:");
+            crate::println!("{}", firmware::summary());
+            crate::println!("");
+            for line in firmware::status_lines() {
+                crate::println!("  {}", line);
+            }
+            crate::println!("");
+            if firmware::is_loaded() {
+                crate::println_color!(COLOR_GREEN, "Firmware active — GPU engines should be operational");
+            } else {
+                crate::println_color!(COLOR_YELLOW, "No firmware loaded — GPU compute uses CPU fallback");
+            }
+        }
+        "load" | "reload" => {
+            if !crate::drivers::amdgpu::is_detected() {
+                crate::println_color!(COLOR_RED, "No AMD GPU detected");
+                return;
+            }
+            if let Some(info) = crate::drivers::amdgpu::get_info() {
+                crate::println!("Reloading firmware for {}...", info.gpu_name());
+                firmware::reload(info.mmio_base_virt);
+                crate::println_color!(COLOR_GREEN, "Done. {}", firmware::summary());
+            }
+        }
+        "info" | "files" => {
+            crate::println_color!(COLOR_CYAN, "Required firmware files for Navi 10 (RX 5600 XT):");
+            crate::println!("");
+            crate::println!("  /lib/firmware/amdgpu/navi10_rlc.bin     RLC (Run List Controller)");
+            crate::println!("  /lib/firmware/amdgpu/navi10_pfp.bin     PFP (Pre-Fetch Parser)");
+            crate::println!("  /lib/firmware/amdgpu/navi10_me.bin      ME  (Micro Engine GFX)");
+            crate::println!("  /lib/firmware/amdgpu/navi10_ce.bin      CE  (Constant Engine)");
+            crate::println!("  /lib/firmware/amdgpu/navi10_mec.bin     MEC (Compute Engine 1)");
+            crate::println!("  /lib/firmware/amdgpu/navi10_mec2.bin    MEC (Compute Engine 2)");
+            crate::println!("  /lib/firmware/amdgpu/navi10_sdma.bin    SDMA0 (DMA Engine 0)");
+            crate::println!("  /lib/firmware/amdgpu/navi10_sdma1.bin   SDMA1 (DMA Engine 1)");
+            crate::println!("");
+            crate::println!("Source: https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/tree/amdgpu");
+            crate::println!("");
+            crate::println!("To load: copy .bin files to /lib/firmware/amdgpu/ then run 'gpufw load'");
+            crate::println!("Or: add as Limine boot modules in limine.conf");
+        }
+        _ => {
+            crate::println_color!(COLOR_RED, "Unknown: gpufw {}", args[0]);
+            crate::println!("Use 'gpufw' for help");
         }
     }
 }

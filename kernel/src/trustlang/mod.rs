@@ -2,19 +2,24 @@
 //!
 //! A Rust-inspired language with:
 //! - Familiar syntax (fn, let, if/else, while, for, return, struct)
-//! - Stack-based bytecode VM
+//! - Stack-based bytecode VM + native x86_64 compiler
 //! - No borrow checker (GC-free, manual memory via stack)
 //! - Builtin I/O: print(), read_line(), file_read(), file_write()
 //!
 //! Usage:
-//!   trustlang run file.tl    — compile and execute
-//!   trustlang repl           — interactive REPL
-//!   trustlang check file.tl  — syntax check only
+//!   trustlang run file.tl       — compile and execute (bytecode VM)
+//!   trustlang compile file.tl   — compile to native x86_64 and execute
+//!   trustlang repl              — interactive REPL
+//!   trustlang check file.tl     — syntax check only
+//!   trustlang test              — run native backend test suite
 
 pub mod lexer;
 pub mod parser;
 pub mod vm;
 pub mod compiler;
+pub mod x86asm;
+pub mod native;
+pub mod tests;
 
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -45,4 +50,16 @@ pub fn eval_line(line: &str) -> Result<String, String> {
     // Wrap in main()
     let wrapped = format!("fn main() {{ {} }}", line);
     run(&wrapped)
+}
+
+/// Compile TrustLang source to native x86_64 and execute it.
+/// Returns the i64 return value of main().
+pub fn compile_and_run_native(source: &str, builtin_cb: native::BuiltinFn) -> Result<i64, String> {
+    let program = native::compile_native(source)?;
+    unsafe { native::execute_native(&program, builtin_cb) }
+}
+
+/// Run the native backend test suite.
+pub fn run_native_tests() -> (usize, usize, String) {
+    tests::run_all_tests()
 }
