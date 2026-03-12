@@ -805,6 +805,106 @@ enum CursorMode {
 pub enum FileManagerViewMode {
     List,
     IconGrid,
+    Details,
+    Tiles,
+}
+
+/// File manager sidebar section
+#[derive(Clone, Copy, PartialEq)]
+pub enum FmSidebarSection {
+    QuickAccess,
+    ThisPC,
+}
+
+/// File manager state — Windows Explorer-like persistent state per window
+pub struct FileManagerState {
+    /// Navigation history (paths visited)
+    pub history: Vec<String>,
+    /// Current index in history (for back/forward)
+    pub history_idx: usize,
+    /// Sidebar collapsed or not
+    pub sidebar_collapsed: bool,
+    /// Sidebar width in pixels
+    pub sidebar_width: u32,
+    /// Sidebar scroll offset
+    pub sidebar_scroll: usize,
+    /// Selected sidebar item (-1 = none)
+    pub sidebar_selected: i32,
+    /// Quick access pinned paths
+    pub quick_access: Vec<(String, String)>, // (display_name, path)
+    /// Sort column (0=name, 1=type, 2=size, 3=program)
+    pub sort_column: u8,
+    /// Sort ascending
+    pub sort_ascending: bool,
+    /// Hover row index (for mouse hover highlight)
+    pub hover_index: Option<usize>,
+    /// Search query (for the search box)
+    pub search_query: String,
+    /// Search box focused 
+    pub search_focused: bool,
+    /// Column widths (resizable) - name, type, size, program
+    pub col_widths: [u32; 4],
+}
+
+impl FileManagerState {
+    pub fn new() -> Self {
+        Self {
+            history: Vec::new(),
+            history_idx: 0,
+            sidebar_collapsed: false,
+            sidebar_width: 180,
+            sidebar_scroll: 0,
+            sidebar_selected: -1,
+            quick_access: vec![
+                (String::from("Desktop"), String::from("/")),
+                (String::from("Documents"), String::from("/documents")),
+                (String::from("Downloads"), String::from("/downloads")),
+                (String::from("Music"), String::from("/music")),
+                (String::from("Pictures"), String::from("/pictures")),
+            ],
+            sort_column: 0,
+            sort_ascending: true,
+            hover_index: None,
+            search_query: String::new(),
+            search_focused: false,
+            col_widths: [200, 80, 80, 120],
+        }
+    }
+    
+    pub fn push_history(&mut self, path: &str) {
+        // Trim forward history when navigating to new path
+        if self.history_idx + 1 < self.history.len() {
+            self.history.truncate(self.history_idx + 1);
+        }
+        self.history.push(String::from(path));
+        self.history_idx = self.history.len() - 1;
+    }
+    
+    pub fn can_go_back(&self) -> bool {
+        self.history_idx > 0
+    }
+    
+    pub fn can_go_forward(&self) -> bool {
+        self.history_idx + 1 < self.history.len()
+    }
+    
+    pub fn go_back(&mut self) -> Option<&str> {
+        if self.history_idx > 0 {
+            self.history_idx -= 1;
+            Some(&self.history[self.history_idx])
+        } else {
+            None
+        }
+    }
+    
+    pub fn go_forward(&mut self) -> Option<&str> {
+        if self.history_idx + 1 < self.history.len() {
+            self.history_idx += 1;
+            Some(&self.history[self.history_idx])
+        } else {
+            None
+        }
+    }
 }
 
 /// Image viewer state — holds decoded pixel data for BMP display
@@ -1772,6 +1872,7 @@ pub struct Desktop {
     pub browser_url_input: String,
     pub browser_url_cursor: usize,
     pub browser_loading: bool,
+    pub browser_url_select_all: bool,
     // Editor states (window_id -> EditorState)
     pub editor_states: BTreeMap<u32, EditorState>,
     // Model editor states (window_id -> ModelEditorState)
@@ -1858,6 +1959,8 @@ pub struct Desktop {
     // ══════ NEW FEATURES ══════
     /// File manager view mode per window (window_id -> mode)
     pub fm_view_modes: BTreeMap<u32, FileManagerViewMode>,
+    /// File manager explorer states per window (window_id -> FileManagerState)
+    pub fm_states: BTreeMap<u32, FileManagerState>,
     /// Image viewer states per window (window_id -> state with pixel data)
     pub image_viewer_states: BTreeMap<u32, ImageViewerState>,
     /// File clipboard for copy/paste in file manager
@@ -2437,6 +2540,7 @@ impl Desktop {
             browser_url_input: String::new(),
             browser_url_cursor: 0,
             browser_loading: false,
+            browser_url_select_all: false,
             editor_states: BTreeMap::new(),
             model_editor_states: BTreeMap::new(),
             calculator_states: BTreeMap::new(),
@@ -2492,6 +2596,7 @@ impl Desktop {
             clipboard_icon: None,
             // New features
             fm_view_modes: BTreeMap::new(),
+            fm_states: BTreeMap::new(),
             image_viewer_states: BTreeMap::new(),
             file_clipboard: None,
             drag_state: None,
@@ -2548,6 +2653,7 @@ impl Desktop {
         self.browser_url_input.clear();
         self.browser_url_cursor = 0;
         self.browser_loading = false;
+        self.browser_url_select_all = false;
         // Input / UI state
         self.input_buffer.clear();
         self.start_menu_open = false;
@@ -3062,9 +3168,13 @@ struct AppConfig {
                 window.content.push(String::from("  Name              Type       Size    Program"));
                 window.content.push(String::from("  ────────────────────────────────────────────"));
                 window.file_path = Some(String::from("/"));
+                // Initialize Explorer-style state
+                let mut fm_state = FileManagerState::new();
+                fm_state.push_history("/");
+                self.fm_states.insert(window.id, fm_state);
                 // List actual files from ramfs with file type info
                 if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(Some("/"))) {
-                    for (name, ftype, size) in entries.iter().take(12) {
+                    for (name, ftype, size) in entries.iter().take(50) {
                         let icon = if *ftype == crate::ramfs::FileType::Directory { 
                             "[D]" 
                         } else { 
@@ -3614,6 +3724,7 @@ struct AppConfig {
                     
                     // Handle browser content clicks
                     if self.windows[i].window_type == WindowType::Browser {
+                        crate::serial_println!("[CLICK-DBG] Browser window {} clicked at ({},{})", self.windows[i].id, x, y);
                         let bx = self.windows[i].x;
                         let by = self.windows[i].y;
                         let bw = self.windows[i].width;
@@ -4683,7 +4794,7 @@ struct AppConfig {
                 self.create_window("Terminal", x, y, 640, 440, WindowType::Terminal);
             },
             1 => { // Files
-                self.create_window("Files", 140, 80, 520, 420, WindowType::FileManager);
+                self.create_window("File Explorer", 100, 60, 780, 520, WindowType::FileManager);
             },
             2 => { // Calculator
                 self.create_window("Calculator", 350, 100, 300, 380, WindowType::Calculator);
@@ -4762,6 +4873,8 @@ struct AppConfig {
     /// Handle keyboard input for the focused window
     pub fn handle_keyboard_input(&mut self, key: u8) {
         use crate::keyboard::{KEY_UP, KEY_DOWN};
+        crate::serial_println!("[KBD-DBG] handle_keyboard_input key={} (0x{:02X}) lock={} start_menu={}",
+            key, key, self.lock_screen_active, self.start_menu_open);
         
         // If lock screen is active, route all keys there
         if self.lock_screen_active {
@@ -4841,6 +4954,8 @@ struct AppConfig {
 
         // Extract type and id to avoid borrow conflict
         let focused_info = self.windows.iter().find(|w| w.focused).map(|w| (w.window_type, w.id));
+        crate::serial_println!("[KBD-DBG] focused_info={:?} n_windows={}",
+            focused_info.map(|(_, id)| id), self.windows.len());
         
         if let Some((wtype, win_id)) = focused_info {
             match wtype {
@@ -4862,15 +4977,19 @@ struct AppConfig {
                         self.file_clipboard_paste();
                         return;
                     }
-                    // V to toggle view mode
+                    // V to toggle view mode (cycle: List -> Grid -> Details -> Tiles)
                     if key == b'v' || key == b'V' {
                         let current = self.fm_view_modes.get(&win_id).copied().unwrap_or(FileManagerViewMode::List);
                         let new_mode = match current {
                             FileManagerViewMode::List => FileManagerViewMode::IconGrid,
-                            FileManagerViewMode::IconGrid => FileManagerViewMode::List,
+                            FileManagerViewMode::IconGrid => FileManagerViewMode::Details,
+                            FileManagerViewMode::Details => FileManagerViewMode::Tiles,
+                            FileManagerViewMode::Tiles => FileManagerViewMode::List,
                         };
                         self.fm_view_modes.insert(win_id, new_mode);
-                        crate::serial_println!("[FM] Toggled view mode for window {}", win_id);
+                        crate::serial_println!("[FM] View mode: {:?}-like for window {}", 
+                            match new_mode { FileManagerViewMode::List => "List", FileManagerViewMode::IconGrid => "Grid", FileManagerViewMode::Details => "Details", FileManagerViewMode::Tiles => "Tiles" },
+                            win_id);
                         return;
                     }
                     self.handle_filemanager_key(key);
@@ -5011,9 +5130,50 @@ struct AppConfig {
                 WindowType::Browser => {
                     use crate::keyboard::{KEY_LEFT, KEY_RIGHT, KEY_HOME, KEY_END, KEY_DELETE, KEY_PGUP, KEY_PGDOWN};
                     let ctrl = crate::keyboard::is_key_pressed(0x1D);
-                    crate::serial_println!("[BROWSER] Key received: {} (0x{:02X}) cursor={} url_len={}", 
+                    crate::serial_println!("[BROWSER] Key received: {} (0x{:02X}) cursor={} url_len={} sel={}", 
                         if key >= 0x20 && key < 0x7F { key as char } else { '?' }, key,
-                        self.browser_url_cursor, self.browser_url_input.len());
+                        self.browser_url_cursor, self.browser_url_input.len(), self.browser_url_select_all);
+                    
+                    // If all text is selected, handle replacement
+                    if self.browser_url_select_all {
+                        match key {
+                            0x08 | _ if key == KEY_DELETE => {
+                                // Backspace/Delete with select-all → clear all
+                                self.browser_url_input.clear();
+                                self.browser_url_cursor = 0;
+                                self.browser_url_select_all = false;
+                                return;
+                            },
+                            0x1B => {
+                                // Escape → just deselect
+                                self.browser_url_select_all = false;
+                                return;
+                            },
+                            0x0D | 0x0A => {
+                                // Enter → navigate (deselect, fall through)
+                                self.browser_url_select_all = false;
+                            },
+                            32..=126 => {
+                                // Printable char → replace entire URL with this char
+                                self.browser_url_input.clear();
+                                self.browser_url_input.push(key as char);
+                                self.browser_url_cursor = 1;
+                                self.browser_url_select_all = false;
+                                return;
+                            },
+                            _ => {
+                                // Arrow keys etc. → just deselect, fall through
+                                self.browser_url_select_all = false;
+                            }
+                        }
+                    }
+                    
+                    // Ctrl+A: select all
+                    if ctrl && (key == b'a' || key == b'A') {
+                        self.browser_url_select_all = true;
+                        self.browser_url_cursor = self.browser_url_input.len();
+                        return;
+                    }
                     
                     // Don't process keys while loading (except Escape to cancel)
                     if self.browser_loading && key != 0x1B {
@@ -5113,7 +5273,8 @@ struct AppConfig {
                             }
                         },
                         _ if ctrl && (key == b'l' || key == b'L') => {
-                            // Ctrl+L: select all URL text
+                            // Ctrl+L: select all URL text (focus omnibox)
+                            self.browser_url_select_all = true;
                             self.browser_url_cursor = self.browser_url_input.len();
                         },
                         _ if ctrl && (key == b'r' || key == b'R') => {
@@ -5123,7 +5284,8 @@ struct AppConfig {
                             }
                         },
                         _ if ctrl && (key == b'a' || key == b'A') => {
-                            // Ctrl+A: select all (move cursor to end)
+                            // Ctrl+A: select all — handled above, but fallback
+                            self.browser_url_select_all = true;
                             self.browser_url_cursor = self.browser_url_input.len();
                         },
                         _ if key == b'\t' => {
@@ -5425,7 +5587,7 @@ struct AppConfig {
             // List actual files from ramfs
             let path_arg = if new_path == "/" { Some("/") } else { Some(new_path.as_str()) };
             if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(path_arg)) {
-                for (name, ftype, size) in entries.iter().take(20) {
+                for (name, ftype, size) in entries.iter().take(200) {
                     let icon = if *ftype == crate::ramfs::FileType::Directory { 
                         "[D]" 
                     } else { 
@@ -5446,9 +5608,15 @@ struct AppConfig {
             window.content.push(String::from(""));
             window.content.push(String::from("  [Del] Delete | [N] New File | [D] New Folder | [R] Rename"));
             
-            window.file_path = Some(new_path);
+            window.file_path = Some(new_path.clone());
             window.selected_index = 0;
             window.scroll_offset = 0;
+            
+            // Track navigation history
+            let wid = window.id;
+            if let Some(fm) = self.fm_states.get_mut(&wid) {
+                fm.push_history(&new_path);
+            }
         }
     }
     
@@ -6902,8 +7070,8 @@ struct AppConfig {
         }
         }
         
-        // Toggle cursor blink every ~45 frames (slower for readability)
-        if self.frame_count % 45 == 0 {
+        // Toggle cursor blink every ~9 frames (~500ms at 18fps)
+        if self.frame_count % 9 == 0 {
             self.cursor_blink = !self.cursor_blink;
         }
         
@@ -7017,55 +7185,6 @@ struct AppConfig {
         // Draw lock screen if active (covers everything)
         if self.lock_screen_active {
             self.draw_lock_screen();
-        }
-        
-        // ── FPS overlay (top-right, above everything except cursor) ──
-        if self.fps_display {
-            let fps_val = self.fps_current;
-            let tier_tag = match self.desktop_tier {
-                DesktopTier::Minimal => " MIN",
-                DesktopTier::Standard => " STD",
-                DesktopTier::Full => "",
-                _ => " CLI",
-            };
-            let label = format!("{} FPS{}", fps_val, tier_tag);
-            let badge_w = (label.len() as u32) * 9 + 16;
-            let badge_h = 22u32;
-            let bx = self.width.saturating_sub(badge_w + 8);
-            let by = 6u32;
-            // Background pill
-            let bg_color = if fps_val >= 55 { 0xC0001A0A } else if fps_val >= 30 { 0xC01A1A00 } else { 0xC01A0000 };
-            let bg_r = (bg_color >> 16) & 0xFF;
-            let bg_g = (bg_color >> 8) & 0xFF;
-            let bg_b = bg_color & 0xFF;
-            let bg_a = ((bg_color >> 24) & 0xFF) as u32;
-            for py in by..by + badge_h {
-                for px in bx..bx + badge_w {
-                    if px < self.width && py < self.height {
-                        let existing = framebuffer::get_pixel_fast(px, py);
-                        let er = (existing >> 16) & 0xFF;
-                        let eg = (existing >> 8) & 0xFF;
-                        let eb = existing & 0xFF;
-                        let nr = (bg_r * bg_a + er * (255 - bg_a)) / 255;
-                        let ng = (bg_g * bg_a + eg * (255 - bg_a)) / 255;
-                        let nb = (bg_b * bg_a + eb * (255 - bg_a)) / 255;
-                        framebuffer::put_pixel_fast(px, py, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
-                    }
-                }
-            }
-            // Border
-            let border_c = if fps_val >= 55 { GREEN_PRIMARY } else if fps_val >= 30 { ACCENT_AMBER } else { ACCENT_RED };
-            framebuffer::draw_hline(bx, by, badge_w, border_c);
-            framebuffer::draw_hline(bx, by + badge_h - 1, badge_w, border_c);
-            for py in by..by + badge_h {
-                framebuffer::put_pixel_fast(bx, py, border_c);
-                if bx + badge_w - 1 < self.width {
-                    framebuffer::put_pixel_fast(bx + badge_w - 1, py, border_c);
-                }
-            }
-            // Text
-            let text_c = if fps_val >= 55 { GREEN_PRIMARY } else if fps_val >= 30 { ACCENT_AMBER } else { ACCENT_RED };
-            self.draw_text_smooth((bx + 8) as i32, (by + 5) as i32, &label, text_c);
         }
 
         // Draw cursor last
@@ -8623,7 +8742,7 @@ struct AppConfig {
                     
                     if a < 20 { continue; }
                     let luminance = (r * 77 + g * 150 + b * 29) >> 8;
-                    if luminance < 18 { continue; }
+                    if luminance < 30 { continue; }
                     
                     let px = logo_x + lx;
                     let py = logo_y + ly;
@@ -9610,7 +9729,7 @@ struct AppConfig {
         } else {
             self.draw_text_smooth(search_text_x, search_y + 12, &self.start_menu_search, GREEN_PRIMARY);
             let cursor_x = search_text_x + (self.start_menu_search.len() as i32 * 8);
-            if (self.frame_count / 30) % 2 == 0 {
+            if self.cursor_blink {
                 framebuffer::fill_rect(cursor_x as u32, (search_y + 10) as u32, 2, 16, GREEN_PRIMARY);
             }
         }
@@ -11405,60 +11524,115 @@ struct AppConfig {
         let content_y_start = wy + TITLE_BAR_HEIGHT as i32;
         let safe_x = if wx < 0 { 0u32 } else { wx as u32 };
         
+        // Sidebar offset
+        let sidebar_w = self.fm_states.get(&window.id).map(|f| if f.sidebar_collapsed { 0u32 } else { f.sidebar_width }).unwrap_or(180);
+        let grid_x = wx + sidebar_w as i32;
+        let grid_w = ww.saturating_sub(sidebar_w);
+        
         // Colors
-        let bg_dark = 0xFF0C1410u32;
-        let bg_toolbar = 0xFF0A1A12u32;
-        let bg_selected = 0xFF0A3A1Au32;
+        let bg_dark = 0xFF0A120Cu32;
+        let bg_toolbar = 0xFF0C140Cu32;
+        let bg_sidebar = 0xFF081008u32;
+        let bg_selected = 0xFF0A3818u32;
         let text_file = 0xFF80CC90u32;
         let icon_folder = 0xFFDDAA30u32;
         let icon_file = 0xFF60AA80u32;
-        let separator = 0xFF1A2A1Au32;
+        let separator = 0xFF142014u32;
         
-        // ── Toolbar (same as list view) ──
-        let toolbar_h = 32u32;
-        framebuffer::fill_rect_alpha(safe_x + 2, content_y_start as u32, ww.saturating_sub(4), toolbar_h, 0x0A1A12, 230);
+        // ── Toolbar (same as list view — reuse draw logic) ──
+        let toolbar_h = 36u32;
+        framebuffer::fill_rect(safe_x, content_y_start as u32, ww, toolbar_h, bg_toolbar);
         
-        let btn_y = content_y_start + 6;
-        let btn_size = 20u32;
-        if btn_y > 0 {
-            draw_rounded_rect(wx + 8, btn_y, btn_size, btn_size, 3, 0xFF1A2A1A);
-            draw_rounded_rect_border(wx + 8, btn_y, btn_size, btn_size, 3, GREEN_GHOST);
-            self.draw_text(wx + 13, btn_y + 3, "<", GREEN_SUBTLE);
-            draw_rounded_rect(wx + 32, btn_y, btn_size, btn_size, 3, 0xFF1A2A1A);
-            draw_rounded_rect_border(wx + 32, btn_y, btn_size, btn_size, 3, GREEN_GHOST);
-            self.draw_text(wx + 37, btn_y + 3, "^", GREEN_SUBTLE);
-            
-            // View mode toggle button [Grid] → highlight active
-            let view_btn_x = wx + ww as i32 - 60;
-            draw_rounded_rect(view_btn_x, btn_y, 50, btn_size, 3, 0xFF1A3A1A);
-            draw_rounded_rect_border(view_btn_x, btn_y, 50, btn_size, 3, GREEN_PRIMARY);
-            self.draw_text(view_btn_x + 6, btn_y + 3, "List", GREEN_PRIMARY);
-        }
+        let btn_y = content_y_start + 7;
+        let btn_sz = 22u32;
+        // Back/Forward/Up buttons
+        let can_back = self.fm_states.get(&window.id).map(|f| f.can_go_back()).unwrap_or(false);
+        let back_c = if can_back { GREEN_SECONDARY } else { 0xFF1A2A1A };
+        draw_rounded_rect(wx + 8, btn_y, btn_sz, btn_sz, 4, 0xFF101810);
+        self.draw_text(wx + 14, btn_y + 4, "<", back_c);
+        
+        let can_fwd = self.fm_states.get(&window.id).map(|f| f.can_go_forward()).unwrap_or(false);
+        let fwd_c = if can_fwd { GREEN_SECONDARY } else { 0xFF1A2A1A };
+        draw_rounded_rect(wx + 34, btn_y, btn_sz, btn_sz, 4, 0xFF101810);
+        self.draw_text(wx + 40, btn_y + 4, ">", fwd_c);
+        
+        draw_rounded_rect(wx + 60, btn_y, btn_sz, btn_sz, 4, 0xFF101810);
+        draw_rounded_rect_border(wx + 60, btn_y, btn_sz, btn_sz, 4, GREEN_GHOST);
+        self.draw_text(wx + 66, btn_y + 4, "^", GREEN_SUBTLE);
         
         // Path bar
-        let path_x = wx + 58;
-        let path_w = (ww as i32).saturating_sub(126);
-        if path_w > 10 && btn_y > 0 {
-            draw_rounded_rect(path_x, btn_y, path_w as u32, btn_size, 4, 0xFF081208);
-            draw_rounded_rect_border(path_x, btn_y, path_w as u32, btn_size, 4, GREEN_GHOST);
+        let path_x = wx + 90;
+        let path_w = (ww as i32).saturating_sub(106);
+        if path_w > 10 {
+            draw_rounded_rect(path_x, btn_y, path_w as u32, btn_sz, 6, 0xFF080E08);
+            draw_rounded_rect_border(path_x, btn_y, path_w as u32, btn_sz, 6, separator);
             let current_path = window.file_path.as_deref().unwrap_or("/");
-            self.draw_text_smooth(path_x + 8, btn_y + 4, current_path, GREEN_PRIMARY);
+            self.draw_text_smooth(path_x + 10, btn_y + 5, current_path, GREEN_PRIMARY);
         }
         
-        // Toolbar separator
-        let grid_start_y = content_y_start as u32 + toolbar_h + 1;
-        framebuffer::draw_hline(safe_x + 2, grid_start_y.saturating_sub(1), ww.saturating_sub(4), separator);
+        framebuffer::draw_hline(safe_x, (content_y_start + toolbar_h as i32) as u32, ww, separator);
+        
+        // ── Sidebar (same as list view) ──
+        let body_y = content_y_start + toolbar_h as i32 + 1;
+        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h + 1 + 26);
+        
+        if sidebar_w > 0 && body_h > 20 {
+            framebuffer::fill_rect(safe_x, body_y as u32, sidebar_w, body_h, bg_sidebar);
+            let mut sy = body_y + 8;
+            let item_h = 24i32;
+            let sx = wx + 6;
+            let siw = sidebar_w.saturating_sub(12);
+            
+            self.draw_text_smooth(sx + 4, sy, "Quick Access", 0xFF3A7A4A);
+            sy += 20;
+            if let Some(fm) = self.fm_states.get(&window.id) {
+                for (name, path) in fm.quick_access.iter() {
+                    if sy + item_h > body_y + body_h as i32 - 40 { break; }
+                    let is_current = window.file_path.as_deref() == Some(path.as_str());
+                    if is_current {
+                        draw_rounded_rect(sx, sy - 2, siw, item_h as u32, 4, 0xFF0C2810);
+                        framebuffer::fill_rect(safe_x + 2, sy as u32, 3, (item_h - 4) as u32, GREEN_PRIMARY);
+                    }
+                    let ic_x = (sx + 12) as u32;
+                    let ic_y = (sy + 2) as u32;
+                    framebuffer::fill_rect(ic_x, ic_y, 6, 2, icon_folder);
+                    framebuffer::fill_rect(ic_x, ic_y + 2, 12, 8, icon_folder);
+                    let c = if is_current { GREEN_PRIMARY } else { 0xFF50AA60 };
+                    self.draw_text_smooth(sx + 30, sy + 3, name, c);
+                    sy += item_h;
+                }
+            }
+            sy += 6;
+            framebuffer::draw_hline(safe_x + 10, sy as u32, sidebar_w.saturating_sub(20), separator);
+            sy += 10;
+            self.draw_text_smooth(sx + 4, sy, "This PC", 0xFF3A7A4A);
+            sy += 20;
+            let drives = [("Local Disk (C:)", "/"), ("RAM Disk", "/tmp"), ("Devices", "/dev"), ("System", "/proc")];
+            for (name, path) in &drives {
+                if sy + item_h > body_y + body_h as i32 - 4 { break; }
+                let is_current = window.file_path.as_deref() == Some(*path);
+                if is_current {
+                    draw_rounded_rect(sx, sy - 2, siw, item_h as u32, 4, 0xFF0C2810);
+                    framebuffer::fill_rect(safe_x + 2, sy as u32, 3, (item_h - 4) as u32, GREEN_PRIMARY);
+                }
+                let c = if is_current { GREEN_PRIMARY } else { 0xFF50AA60 };
+                self.draw_text_smooth(sx + 30, sy + 3, name, c);
+                sy += item_h;
+            }
+            framebuffer::fill_rect(safe_x + sidebar_w - 1, body_y as u32, 1, body_h, separator);
+        }
         
         // ── Grid area ──
-        let grid_area_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h + 30);
+        let grid_start_y = body_y as u32;
+        let grid_area_h = body_h.saturating_sub(2);
         if grid_area_h < 8 { return; }
-        framebuffer::fill_rect(safe_x + 2, grid_start_y, ww.saturating_sub(4), grid_area_h, bg_dark);
+        framebuffer::fill_rect(grid_x.max(0) as u32, grid_start_y, grid_w, grid_area_h, bg_dark);
         
         // Grid parameters
         let icon_cell_w = 90u32;
         let icon_cell_h = 80u32;
-        let cols = ((ww.saturating_sub(20)) / icon_cell_w).max(1);
-        let padding_x = (ww.saturating_sub(cols * icon_cell_w)) / 2;
+        let cols = ((grid_w.saturating_sub(20)) / icon_cell_w).max(1);
+        let padding_x = (grid_w.saturating_sub(cols * icon_cell_w)) / 2;
         
         // Parse file entries
         let file_start_idx = 5usize.min(window.content.len());
@@ -11468,7 +11642,7 @@ struct AppConfig {
         } else { Vec::new() };
         
         if file_entries.is_empty() {
-            self.draw_text_smooth(wx + 40, grid_start_y as i32 + 30, "(empty)", GREEN_GHOST);
+            self.draw_text_smooth(grid_x + 40, grid_start_y as i32 + 30, "This folder is empty.", GREEN_GHOST);
         }
         
         let max_visible_rows = (grid_area_h / icon_cell_h).max(1) as usize;
@@ -11483,7 +11657,7 @@ struct AppConfig {
             let display_row = row - scroll_row;
             if display_row >= max_visible_rows { break; }
             
-            let cell_x = safe_x + padding_x + col as u32 * icon_cell_w;
+            let cell_x = grid_x.max(0) as u32 + padding_x + col as u32 * icon_cell_w;
             let cell_y = grid_start_y + display_row as u32 * icon_cell_h;
             if cell_y + icon_cell_h > grid_start_y + grid_area_h { break; }
             
@@ -11546,11 +11720,11 @@ struct AppConfig {
         
         // ── Status bar ──
         let status_y = (wy + wh as i32).saturating_sub(24) as u32;
-        framebuffer::fill_rect(safe_x + 2, status_y, ww.saturating_sub(4), 20, bg_toolbar);
-        framebuffer::draw_hline(safe_x + 2, status_y, ww.saturating_sub(4), separator);
+        framebuffer::fill_rect(safe_x, status_y, ww, 24, bg_toolbar);
+        framebuffer::draw_hline(safe_x, status_y, ww, separator);
         let item_count = file_entries.len();
-        let status_text = alloc::format!("{} items | V:toggle view | Ctrl+C/X/V:clipboard", item_count);
-        self.draw_text_smooth(wx + 10, status_y as i32 + 4, &status_text, GREEN_SUBTLE);
+        let status_text = if item_count == 1 { String::from("1 item") } else { alloc::format!("{} items", item_count) };
+        self.draw_text_smooth(grid_x + 10, status_y as i32 + 6, &status_text, 0xFF406850);
     }
     
     fn extract_name_from_entry(entry: &str) -> &str {
@@ -11575,38 +11749,96 @@ struct AppConfig {
             } else { return; }
         };
         
-        let content_y_start = wy + TITLE_BAR_HEIGHT as i32;
-        let toolbar_h = 32i32;
+        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let toolbar_h = 36i32;
+        let sidebar_w = self.fm_states.get(&window_id).map(|f| if f.sidebar_collapsed { 0i32 } else { f.sidebar_width as i32 }).unwrap_or(180);
         
-        // Check toolbar buttons
-        let btn_y = content_y_start + 6;
-        let btn_size = 20i32;
+        // ── Toolbar buttons ──
+        let btn_y = content_y + 7;
+        let btn_sz = 22i32;
         
-        // Back button
-        if x >= wx + 8 && x < wx + 8 + btn_size && y >= btn_y && y < btn_y + btn_size {
+        // Back button (◄)
+        if x >= wx + 8 && x < wx + 8 + btn_sz && y >= btn_y && y < btn_y + btn_sz {
+            // Use history-based back navigation
+            let back_path = self.fm_states.get_mut(&window_id).and_then(|f| f.go_back().map(|s| String::from(s)));
+            if let Some(path) = back_path {
+                self.navigate_file_manager_to(window_id, &path);
+            }
+            return;
+        }
+        // Forward button (►)
+        if x >= wx + 34 && x < wx + 34 + btn_sz && y >= btn_y && y < btn_y + btn_sz {
+            let fwd_path = self.fm_states.get_mut(&window_id).and_then(|f| f.go_forward().map(|s| String::from(s)));
+            if let Some(path) = fwd_path {
+                self.navigate_file_manager_to(window_id, &path);
+            }
+            return;
+        }
+        // Up button (▲)
+        if x >= wx + 60 && x < wx + 60 + btn_sz && y >= btn_y && y < btn_y + btn_sz {
             self.navigate_file_manager("..");
             return;
         }
-        // Up button
-        if x >= wx + 32 && x < wx + 32 + btn_size && y >= btn_y && y < btn_y + btn_size {
-            self.navigate_file_manager("..");
-            return;
+        
+        // ── Status bar view mode buttons (bottom-right) ──
+        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h as u32 + 1 + 26);
+        let status_y = content_y + toolbar_h + 1 + body_h as i32;
+        if y >= status_y && y < status_y + 24 && ww > 300 {
+            let vb_x = wx + ww as i32 - 120;
+            let vb_w = 24i32;
+            // List button
+            if x >= vb_x && x < vb_x + vb_w {
+                self.fm_view_modes.insert(window_id, FileManagerViewMode::List);
+                return;
+            }
+            // Grid button
+            if x >= vb_x + vb_w + 4 && x < vb_x + vb_w * 2 + 4 {
+                self.fm_view_modes.insert(window_id, FileManagerViewMode::IconGrid);
+                return;
+            }
+            // Details button
+            if x >= vb_x + (vb_w + 4) * 2 && x < vb_x + (vb_w + 4) * 2 + vb_w {
+                self.fm_view_modes.insert(window_id, FileManagerViewMode::Details);
+                return;
+            }
         }
         
-        // View mode toggle button (top-right)
-        let view_btn_x = wx + ww as i32 - 60;
-        if x >= view_btn_x && x < view_btn_x + 50 && y >= btn_y && y < btn_y + btn_size {
-            let current = self.fm_view_modes.get(&window_id).copied().unwrap_or(FileManagerViewMode::List);
-            let new_mode = match current {
-                FileManagerViewMode::List => FileManagerViewMode::IconGrid,
-                FileManagerViewMode::IconGrid => FileManagerViewMode::List,
-            };
-            self.fm_view_modes.insert(window_id, new_mode);
-            crate::serial_println!("[FM] Toggled view mode");
-            return;
+        // ── Sidebar clicks (Quick Access and This PC) ──
+        let body_y = content_y + toolbar_h + 1;
+        if sidebar_w > 0 && x >= wx && x < wx + sidebar_w {
+            let item_h = 24i32;
+            let mut sy = body_y + 28; // After "Quick Access" header
+            
+            // Quick Access items
+            if let Some(fm) = self.fm_states.get(&window_id) {
+                let qa_paths: Vec<String> = fm.quick_access.iter().map(|(_, p)| p.clone()).collect();
+                for (i, path) in qa_paths.iter().enumerate() {
+                    if y >= sy && y < sy + item_h {
+                        crate::serial_println!("[FM] Sidebar click: Quick Access -> {}", path);
+                        self.navigate_file_manager_to(window_id, path);
+                        return;
+                    }
+                    sy += item_h;
+                }
+            }
+            
+            // Skip separator space
+            sy += 36; // gap + "This PC" header
+            
+            // This PC drive items
+            let drives = ["/", "/tmp", "/dev", "/proc"];
+            for path in &drives {
+                if y >= sy && y < sy + item_h {
+                    crate::serial_println!("[FM] Sidebar click: Drive -> {}", path);
+                    self.navigate_file_manager_to(window_id, path);
+                    return;
+                }
+                sy += item_h;
+            }
+            return; // Click was in sidebar but didn't hit an item
         }
         
-        // Click on file in content area
+        // ── Click on file in content area ──
         let is_grid = self.fm_view_modes.get(&window_id).copied().unwrap_or(FileManagerViewMode::List) == FileManagerViewMode::IconGrid;
         let file_start_idx = 5usize.min(content_len);
         let file_end_idx = if content_len > file_start_idx + 2 { content_len - 2 } else { content_len };
@@ -11614,13 +11846,15 @@ struct AppConfig {
         
         if is_grid {
             // Grid view click
-            let grid_start_y = content_y_start + toolbar_h + 1;
+            let grid_start_y = content_y + toolbar_h + 1;
             let icon_cell_w = 90i32;
             let icon_cell_h = 80i32;
-            let cols = ((ww as i32 - 20) / icon_cell_w).max(1);
-            let padding_x = (ww as i32 - cols * icon_cell_w) / 2;
+            let content_x = wx + sidebar_w;
+            let grid_w = ww as i32 - sidebar_w;
+            let cols = ((grid_w - 20) / icon_cell_w).max(1);
+            let padding_x = (grid_w - cols * icon_cell_w) / 2;
             
-            let rel_x = x - wx - padding_x;
+            let rel_x = x - content_x - padding_x;
             let rel_y = y - grid_start_y;
             if rel_x >= 0 && rel_y >= 0 {
                 let col = rel_x / icon_cell_w;
@@ -11628,41 +11862,58 @@ struct AppConfig {
                 let idx = row * cols + col;
                 if idx >= 0 && (idx as usize) < file_count {
                     let click_idx = idx as usize;
-                    // Double-click to open
                     if click_idx == selected_idx && crate::mouse::is_double_click() {
-                        // Open the file/dir
                         self.open_selected_file_at(window_id, click_idx);
                         return;
                     }
-                    // Single click — select
                     if let Some(w) = self.windows.iter_mut().find(|w| w.id == window_id) {
                         w.selected_index = click_idx;
                     }
                 }
             }
         } else {
-            // List view click
-            let header_y = content_y_start + toolbar_h;
-            let col_header_h = 22i32;
-            let list_start_y = header_y + col_header_h + 1;
-            let row_h = 24i32;
+            // List/Details view click
+            let content_x = wx + sidebar_w;
+            let col_h = 24i32;
+            let list_start_y = body_y + col_h + 1;
+            let row_h = 26i32;
             
             let rel_y = y - list_start_y;
-            if rel_y >= 0 {
+            if rel_y >= 0 && x >= content_x {
                 let scroll_offset = self.windows.iter().find(|w| w.id == window_id).map(|w| w.scroll_offset).unwrap_or(0);
                 let click_idx = scroll_offset + (rel_y / row_h) as usize;
                 if click_idx < file_count {
-                    // Double-click to open
                     if click_idx == selected_idx && crate::mouse::is_double_click() {
                         self.open_selected_file_at(window_id, click_idx);
                         return;
                     }
-                    // Single click — select
                     if let Some(w) = self.windows.iter_mut().find(|w| w.id == window_id) {
                         w.selected_index = click_idx;
                     }
                 }
             }
+        }
+    }
+    
+    /// Navigate a specific file manager window to a path (by window id)
+    fn navigate_file_manager_to(&mut self, window_id: u32, path: &str) {
+        // Focus this window, then use navigate logic
+        let was_focused: Vec<u32> = self.windows.iter().filter(|w| w.focused).map(|w| w.id).collect();
+        for w in &mut self.windows {
+            w.focused = w.id == window_id;
+        }
+        // Set path directly and refresh
+        if let Some(window) = self.windows.iter_mut().find(|w| w.id == window_id) {
+            window.file_path = Some(String::from(path));
+        }
+        self.refresh_file_manager(path);
+        // Push history
+        if let Some(fm) = self.fm_states.get_mut(&window_id) {
+            fm.push_history(path);
+        }
+        // Restore focus
+        for w in &mut self.windows {
+            w.focused = was_focused.contains(&w.id);
         }
     }
     
@@ -12077,7 +12328,7 @@ struct AppConfig {
         self.draw_text((bat_x + bat_w + 5) as i32, bat_y as i32, &bat_str, GREEN_GHOST);
     }
 
-    /// Draw Windows Explorer-style file manager
+    /// Draw Windows Explorer-style file manager — full redesign
     fn draw_file_manager_gui(&self, window: &Window) {
         // Check view mode — dispatch to grid view if needed
         let view_mode = self.fm_view_modes.get(&window.id).copied().unwrap_or(FileManagerViewMode::List);
@@ -12091,150 +12342,272 @@ struct AppConfig {
         let ww = window.width;
         let wh = window.height;
         
-        // Guard against too-small windows
-        if ww < 80 || wh < 100 {
-            return;
-        }
+        if ww < 120 || wh < 140 { return; }
         
-        let content_y_start = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let safe_x = wx.max(0) as u32;
         
-        // ── Colors ──
-        let bg_dark = 0xFF0C1410u32;
-        let bg_toolbar = 0xFF0A1A12u32;
-        let bg_header = 0xFF0E1E14u32;
-        let bg_row_even = 0xFF0A140Fu32;
-        let bg_row_odd = 0xFF0C180Fu32;
-        let bg_selected = 0xFF0A3A1Au32;
-        let text_header = 0xFF60CC80u32;
-        let text_file = 0xFF80CC90u32;
-        let text_path = GREEN_PRIMARY;
-        let icon_folder = 0xFFDDAA30u32;
-        let icon_file = 0xFF60AA80u32;
-        let separator = 0xFF1A2A1Au32;
+        // ════════════════ COLORS (Windows 11-inspired + TrustOS green) ════════════════
+        let bg_sidebar     = 0xFF081008u32;  // Very dark green-black sidebar
+        let bg_sidebar_sel = 0xFF0C2810u32;  // Sidebar selected item
+        let bg_sidebar_hov = 0xFF0A1C0Cu32;  // Sidebar hover
+        let bg_content     = 0xFF0A120Cu32;  // Main content area
+        let bg_toolbar     = 0xFF0C140Cu32;  // Toolbar bg
+        let bg_header      = 0xFF0C180Eu32;  // Column header
+        let bg_row_even    = 0xFF0A120Cu32;
+        let bg_row_odd     = 0xFF0C140Cu32;
+        let bg_row_hover   = 0xFF0E1E10u32;  // Row hover highlight
+        let bg_selected    = 0xFF0A3818u32;  // Selected row
+        let bg_search      = 0xFF060C06u32;  // Search box bg
+        let text_sidebar   = 0xFF50AA60u32;
+        let text_sidebar_h = 0xFF3A7A4Au32;  // Section header
+        let text_header    = 0xFF50CC70u32;
+        let text_file      = 0xFF80CC90u32;
+        let text_dim       = 0xFF406850u32;
+        let icon_folder    = 0xFFDDAA30u32;
+        let icon_file      = 0xFF60AA80u32;
+        let sep_color      = 0xFF142014u32;
+        let accent         = GREEN_PRIMARY;
         
-        // Safe u32 coordinate helpers
-        let safe_x = if wx < 0 { 0u32 } else { wx as u32 };
-        let safe_y = if wy < 0 { 0u32 } else { wy as u32 };
+        // Get FM state
+        let fm = self.fm_states.get(&window.id);
+        let sidebar_w = fm.map(|f| if f.sidebar_collapsed { 0u32 } else { f.sidebar_width }).unwrap_or(180);
+        let hover_idx = fm.and_then(|f| f.hover_index);
         
-        // ── Toolbar area (path bar + nav buttons) ──
-        let toolbar_h = 32u32;
-        framebuffer::fill_rect_alpha(safe_x + 2, content_y_start as u32, ww.saturating_sub(4), toolbar_h, 0x0A1A12, 230);
+        // ════════════════ TOOLBAR (Windows 11 style nav bar) ════════════════
+        let toolbar_h = 36u32;
+        framebuffer::fill_rect(safe_x, content_y as u32, ww, toolbar_h, bg_toolbar);
         
-        // Back button [<]
-        let btn_y = content_y_start + 6;
-        let btn_size = 20u32;
-        if btn_y > 0 {
-            draw_rounded_rect(wx + 8, btn_y, btn_size, btn_size, 3, 0xFF1A2A1A);
-            draw_rounded_rect_border(wx + 8, btn_y, btn_size, btn_size, 3, GREEN_GHOST);
-            self.draw_text(wx + 13, btn_y + 3, "<", GREEN_SUBTLE);
-            
-            // Up button [^]
-            draw_rounded_rect(wx + 32, btn_y, btn_size, btn_size, 3, 0xFF1A2A1A);
-            draw_rounded_rect_border(wx + 32, btn_y, btn_size, btn_size, 3, GREEN_GHOST);
-            self.draw_text(wx + 37, btn_y + 3, "^", GREEN_SUBTLE);
-            
-            // View mode toggle button [Grid]
-            let view_btn_x = wx + ww as i32 - 60;
-            draw_rounded_rect(view_btn_x, btn_y, 50, btn_size, 3, 0xFF1A2A1A);
-            draw_rounded_rect_border(view_btn_x, btn_y, 50, btn_size, 3, GREEN_GHOST);
-            self.draw_text(view_btn_x + 6, btn_y + 3, "Grid", GREEN_SUBTLE);
-        }
+        let btn_y = content_y + 7;
+        let btn_sz = 22u32;
         
-        // Path bar (breadcrumb style)
-        let path_x = wx + 58;
-        let path_w = (ww as i32).saturating_sub(126);
-        if path_w > 10 && btn_y > 0 {
-            draw_rounded_rect(path_x, btn_y, path_w as u32, btn_size, 4, 0xFF081208);
-            draw_rounded_rect_border(path_x, btn_y, path_w as u32, btn_size, 4, GREEN_GHOST);
-            let current_path = window.file_path.as_deref().unwrap_or("/");
-            let mut px = path_x + 8;
-            let parts: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
-            if parts.is_empty() {
-                self.draw_text_smooth(px, btn_y + 4, "/", text_path);
-            } else {
-                self.draw_text_smooth(px, btn_y + 4, "/", GREEN_GHOST);
-                px += 10;
-                for (i, part) in parts.iter().enumerate() {
-                    if px > path_x + path_w - 16 { break; } // don't overflow path bar
-                    let is_last = i == parts.len() - 1;
-                    let color = if is_last { text_path } else { GREEN_SUBTLE };
-                    self.draw_text_smooth(px, btn_y + 4, part, color);
-                    px += (part.len() as i32) * 8 + 4;
-                    if !is_last {
-                        self.draw_text_smooth(px, btn_y + 4, ">", GREEN_GHOST);
-                        px += 12;
-                    }
+        // ── Back button ◄
+        let can_back = fm.map(|f| f.can_go_back()).unwrap_or(false);
+        let back_color = if can_back { GREEN_SECONDARY } else { 0xFF1A2A1A };
+        draw_rounded_rect(wx + 8, btn_y, btn_sz, btn_sz, 4, 0xFF101810);
+        if can_back { draw_rounded_rect_border(wx + 8, btn_y, btn_sz, btn_sz, 4, GREEN_GHOST); }
+        self.draw_text(wx + 14, btn_y + 4, "<", back_color);
+        
+        // ── Forward button ►
+        let can_fwd = fm.map(|f| f.can_go_forward()).unwrap_or(false);
+        let fwd_color = if can_fwd { GREEN_SECONDARY } else { 0xFF1A2A1A };
+        draw_rounded_rect(wx + 34, btn_y, btn_sz, btn_sz, 4, 0xFF101810);
+        if can_fwd { draw_rounded_rect_border(wx + 34, btn_y, btn_sz, btn_sz, 4, GREEN_GHOST); }
+        self.draw_text(wx + 40, btn_y + 4, ">", fwd_color);
+        
+        // ── Up button ▲
+        draw_rounded_rect(wx + 60, btn_y, btn_sz, btn_sz, 4, 0xFF101810);
+        draw_rounded_rect_border(wx + 60, btn_y, btn_sz, btn_sz, 4, GREEN_GHOST);
+        self.draw_text(wx + 66, btn_y + 4, "^", GREEN_SUBTLE);
+        
+        // ── Breadcrumb path bar (Windows 11 style)
+        let path_x = wx + 90;
+        let search_w = if ww > 400 { 180i32 } else if ww > 300 { 120i32 } else { 0i32 };
+        let path_w = (ww as i32 - 100 - search_w - 10).max(60);
+        
+        draw_rounded_rect(path_x, btn_y, path_w as u32, btn_sz, 6, 0xFF080E08);
+        draw_rounded_rect_border(path_x, btn_y, path_w as u32, btn_sz, 6, sep_color);
+        
+        // Draw breadcrumb path segments
+        let current_path = window.file_path.as_deref().unwrap_or("/");
+        let mut px = path_x + 10;
+        let parts: Vec<&str> = current_path.split('/').filter(|s| !s.is_empty()).collect();
+        
+        // Root icon
+        self.draw_text_smooth(px, btn_y + 5, "\x07", 0xFF40AA50); // "drive" icon
+        px += 12;
+        
+        if parts.is_empty() {
+            self.draw_text_smooth(px, btn_y + 5, "This PC", accent);
+        } else {
+            self.draw_text_smooth(px, btn_y + 5, "This PC", GREEN_SUBTLE);
+            px += 56;
+            for (i, part) in parts.iter().enumerate() {
+                if px > path_x + path_w - 30 { 
+                    self.draw_text_smooth(px, btn_y + 5, "...", GREEN_GHOST);
+                    break; 
                 }
+                // Separator chevron ›
+                self.draw_text_smooth(px, btn_y + 5, ">", 0xFF2A4A30);
+                px += 12;
+                let is_last = i == parts.len() - 1;
+                let c = if is_last { accent } else { GREEN_SUBTLE };
+                self.draw_text_smooth(px, btn_y + 5, part, c);
+                px += (part.len() as i32) * 8 + 6;
             }
         }
         
-        // Toolbar bottom separator
-        let header_y = content_y_start as u32 + toolbar_h;
-        framebuffer::draw_hline(safe_x + 2, header_y, ww.saturating_sub(4), separator);
+        // ── Search box (Windows 11 style, right side)
+        if search_w > 0 {
+            let sx = wx + ww as i32 - search_w - 8;
+            draw_rounded_rect(sx, btn_y, search_w as u32, btn_sz, 6, bg_search);
+            draw_rounded_rect_border(sx, btn_y, search_w as u32, btn_sz, 6, sep_color);
+            // Search icon (magnifying glass)
+            self.draw_text_smooth(sx + 8, btn_y + 5, "\x0F", GREEN_GHOST); // search icon
+            let query = fm.map(|f| f.search_query.as_str()).unwrap_or("");
+            if query.is_empty() {
+                self.draw_text_smooth(sx + 22, btn_y + 5, "Search", text_dim);
+            } else {
+                self.draw_text_smooth(sx + 22, btn_y + 5, query, text_file);
+            }
+        }
         
-        // ── Column headers ──
-        let col_header_h = 22u32;
-        framebuffer::fill_rect(safe_x + 2, header_y + 1, ww.saturating_sub(4), col_header_h, bg_header);
+        // ── Toolbar bottom separator
+        framebuffer::draw_hline(safe_x, (content_y + toolbar_h as i32) as u32, ww, sep_color);
         
-        let col_name_x = wx + 34;
-        let col_type_x = wx + (ww as i32 * 55 / 100);
-        let col_size_x = wx + (ww as i32 * 72 / 100);
-        let col_prog_x = wx + (ww as i32 * 85 / 100);
+        // ════════════════ SIDEBAR (Windows 11 Navigation Pane) ════════════════
+        let body_y = content_y + toolbar_h as i32 + 1;
+        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h + 1 + 26); // 26 = status bar
         
-        let hy = (header_y + 4) as i32;
+        if sidebar_w > 0 && body_h > 20 {
+            framebuffer::fill_rect(safe_x, body_y as u32, sidebar_w, body_h, bg_sidebar);
+            
+            let mut sy = body_y + 8;
+            let item_h = 24i32;
+            let sidebar_x = wx + 6;
+            let sidebar_inner_w = sidebar_w.saturating_sub(12);
+            
+            // ── Quick Access section
+            self.draw_text_smooth(sidebar_x + 4, sy, "Quick Access", text_sidebar_h);
+            // Expand/collapse chevron
+            self.draw_text_smooth(sidebar_x as i32 + sidebar_inner_w as i32 - 8, sy, "v", text_sidebar_h);
+            sy += 20;
+            
+            if let Some(fm_s) = fm {
+                for (i, (name, path)) in fm_s.quick_access.iter().enumerate() {
+                    if sy + item_h > body_y + body_h as i32 - 40 { break; }
+                    
+                    let is_current = window.file_path.as_deref() == Some(path.as_str());
+                    let is_hovered = fm_s.sidebar_selected == i as i32;
+                    
+                    // Highlight current/hovered
+                    let row_bg = if is_current { bg_sidebar_sel } else if is_hovered { bg_sidebar_hov } else { bg_sidebar };
+                    if is_current || is_hovered {
+                        draw_rounded_rect(sidebar_x, sy - 2, sidebar_inner_w, item_h as u32, 4, row_bg);
+                    }
+                    // Left accent bar for current
+                    if is_current {
+                        framebuffer::fill_rect(safe_x + 2, sy as u32, 3, (item_h - 4) as u32, accent);
+                    }
+                    
+                    // Folder icon (small)
+                    let ic_x = (sidebar_x + 12) as u32;
+                    let ic_y = (sy + 2) as u32;
+                    framebuffer::fill_rect(ic_x, ic_y, 6, 2, icon_folder);
+                    framebuffer::fill_rect(ic_x, ic_y + 2, 12, 8, icon_folder);
+                    framebuffer::fill_rect(ic_x + 1, ic_y + 4, 10, 5, 0xFF0A0A04);
+                    
+                    let name_color = if is_current { accent } else { text_sidebar };
+                    self.draw_text_smooth(sidebar_x + 30, sy + 3, name, name_color);
+                    
+                    sy += item_h;
+                }
+            }
+            
+            // ── Separator
+            sy += 6;
+            framebuffer::draw_hline(safe_x + 10, sy as u32, sidebar_w.saturating_sub(20), sep_color);
+            sy += 10;
+            
+            // ── This PC section
+            self.draw_text_smooth(sidebar_x + 4, sy, "This PC", text_sidebar_h);
+            sy += 20;
+            
+            // Drive items
+            let drives = [
+                ("\x07", "Local Disk (C:)", "/"),
+                ("\x07", "RAM Disk",        "/tmp"),
+                ("\x07", "Devices",         "/dev"),
+                ("\x07", "System",          "/proc"),
+            ];
+            
+            for (icon, name, path) in &drives {
+                if sy + item_h > body_y + body_h as i32 - 4 { break; }
+                let is_current = window.file_path.as_deref() == Some(*path);
+                
+                if is_current {
+                    draw_rounded_rect(sidebar_x, sy - 2, sidebar_inner_w, item_h as u32, 4, bg_sidebar_sel);
+                    framebuffer::fill_rect(safe_x + 2, sy as u32, 3, (item_h - 4) as u32, accent);
+                }
+                
+                // Drive icon (small disk)
+                let ic_x = (sidebar_x + 12) as u32;
+                let ic_y = (sy + 2) as u32;
+                framebuffer::fill_rect(ic_x, ic_y, 12, 10, 0xFF406050);
+                framebuffer::fill_rect(ic_x + 1, ic_y + 1, 10, 3, 0xFF60AA80);
+                framebuffer::fill_rect(ic_x + 4, ic_y + 5, 4, 3, 0xFF80CC90);
+                
+                let c = if is_current { accent } else { text_sidebar };
+                self.draw_text_smooth(sidebar_x + 30, sy + 3, name, c);
+                sy += item_h;
+            }
+            
+            // ── Vertical separator line between sidebar and content
+            framebuffer::fill_rect(safe_x + sidebar_w - 1, body_y as u32, 1, body_h, sep_color);
+        }
+        
+        // ════════════════ MAIN CONTENT AREA ════════════════
+        let content_x = wx + sidebar_w as i32;
+        let content_w = ww.saturating_sub(sidebar_w);
+        
+        // ── Column headers (Windows 11 style)
+        let col_h = 24u32;
+        framebuffer::fill_rect((content_x.max(0)) as u32, body_y as u32, content_w, col_h, bg_header);
+        
+        // Column positions (proportional)
+        let col_name_x = content_x + 36;
+        let col_type_x = content_x + (content_w as i32 * 52 / 100);
+        let col_size_x = content_x + (content_w as i32 * 68 / 100);
+        let col_date_x = content_x + (content_w as i32 * 82 / 100);
+        
+        let hy = body_y + 5;
+        
+        // Sort indicator
+        let sort_col = fm.map(|f| f.sort_column).unwrap_or(0);
+        let sort_asc = fm.map(|f| f.sort_ascending).unwrap_or(true);
+        let sort_arrow = if sort_asc { "v" } else { "^" };
+        
+        // Name header
         self.draw_text_smooth(col_name_x, hy, "Name", text_header);
-        if ww > 200 {
+        if sort_col == 0 { self.draw_text_smooth(col_name_x + 40, hy, sort_arrow, GREEN_GHOST); }
+        
+        if content_w > 200 {
+            framebuffer::fill_rect(col_type_x as u32 - 2, body_y as u32 + 4, 1, col_h - 8, sep_color);
             self.draw_text_smooth(col_type_x, hy, "Type", text_header);
+            if sort_col == 1 { self.draw_text_smooth(col_type_x + 36, hy, sort_arrow, GREEN_GHOST); }
         }
-        if ww > 280 {
+        if content_w > 300 {
+            framebuffer::fill_rect(col_size_x as u32 - 2, body_y as u32 + 4, 1, col_h - 8, sep_color);
             self.draw_text_smooth(col_size_x, hy, "Size", text_header);
+            if sort_col == 2 { self.draw_text_smooth(col_size_x + 36, hy, sort_arrow, GREEN_GHOST); }
         }
-        if ww > 360 {
-            self.draw_text_smooth(col_prog_x, hy, "Open with", text_header);
-        }
-        
-        // Header bottom separator + column separators
-        let list_start_y = header_y + col_header_h + 1;
-        framebuffer::draw_hline(safe_x + 2, list_start_y.saturating_sub(1), ww.saturating_sub(4), separator);
-        if ww > 200 && col_type_x > 4 {
-            framebuffer::fill_rect(col_type_x as u32 - 4, header_y + 1, 1, col_header_h, separator);
-        }
-        if ww > 280 && col_size_x > 4 {
-            framebuffer::fill_rect(col_size_x as u32 - 4, header_y + 1, 1, col_header_h, separator);
-        }
-        if ww > 360 && col_prog_x > 4 {
-            framebuffer::fill_rect(col_prog_x as u32 - 4, header_y + 1, 1, col_header_h, separator);
+        if content_w > 420 {
+            framebuffer::fill_rect(col_date_x as u32 - 2, body_y as u32 + 4, 1, col_h - 8, sep_color);
+            self.draw_text_smooth(col_date_x, hy, "Open with", text_header);
         }
         
-        // ── File list area ──
-        let list_area_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h + col_header_h + 30);
-        if list_area_h < 8 { return; }
-        framebuffer::fill_rect(safe_x + 2, list_start_y, ww.saturating_sub(4), list_area_h, bg_dark);
+        framebuffer::draw_hline((content_x.max(0)) as u32, (body_y + col_h as i32) as u32, content_w, sep_color);
         
-        let row_h = 24u32;
-        let max_visible = (list_area_h / row_h).max(1) as usize;
+        // ── File list area
+        let list_y = body_y + col_h as i32 + 1;
+        let list_h = body_h.saturating_sub(col_h + 27); // reserve for status bar
+        if list_h < 8 { return; }
         
-        // Parse file entries from content (skip header lines, last 2 footer)
-        // Guard: ensure content has enough lines
+        framebuffer::fill_rect((content_x.max(0)) as u32, list_y as u32, content_w, list_h, bg_content);
+        
+        let row_h = 26u32; // Slightly taller rows like Windows 11
+        let max_visible = (list_h / row_h).max(1) as usize;
+        
+        // Parse file entries
         let file_start_idx = 5usize.min(window.content.len());
-        let file_end_idx = if window.content.len() > file_start_idx + 2 { 
-            window.content.len() - 2 
-        } else { 
-            window.content.len() 
-        };
-        
+        let file_end_idx = if window.content.len() > file_start_idx + 2 { window.content.len() - 2 } else { window.content.len() };
         let file_entries: Vec<&str> = if file_end_idx > file_start_idx {
-            window.content[file_start_idx..file_end_idx]
-                .iter()
-                .map(|s| s.as_str())
-                .collect()
-        } else {
-            Vec::new()
-        };
+            window.content[file_start_idx..file_end_idx].iter().map(|s| s.as_str()).collect()
+        } else { Vec::new() };
         
         if file_entries.is_empty() {
-            // Show empty directory message
-            self.draw_text_smooth(wx + 40, list_start_y as i32 + 20, "(empty)", GREEN_GHOST);
+            self.draw_text_smooth(content_x + 30, list_y + 30, "This folder is empty.", text_dim);
+            self.draw_text_smooth(content_x + 30, list_y + 50, "Press N to create a file, D for a folder.", GREEN_GHOST);
         }
         
         let scroll = window.scroll_offset;
@@ -12244,123 +12617,238 @@ struct AppConfig {
             let entry_idx = scroll + vi;
             if entry_idx >= file_entries.len() { break; }
             let line = file_entries[entry_idx];
-            let ry = list_start_y + (vi as u32) * row_h;
-            if ry + row_h > list_start_y + list_area_h { break; }
+            let ry = list_y as u32 + (vi as u32) * row_h;
+            if ry + row_h > list_y as u32 + list_h { break; }
             
             let is_selected = entry_idx == window.selected_index;
             let is_dir = line.contains("[D]");
+            let is_hovered = hover_idx == Some(entry_idx);
             
-            // Row background
+            // ── Row background
             let row_bg = if is_selected {
                 bg_selected
+            } else if is_hovered {
+                bg_row_hover
             } else if vi % 2 == 0 {
                 bg_row_even
             } else {
                 bg_row_odd
             };
-            framebuffer::fill_rect(safe_x + 2, ry, ww.saturating_sub(4), row_h, row_bg);
+            framebuffer::fill_rect((content_x.max(0)) as u32, ry, content_w, row_h, row_bg);
             
-            // Selection indicator
+            // ── Selection highlight (Windows 11: subtle rounded highlight + left accent)
             if is_selected {
-                framebuffer::fill_rect(safe_x + 2, ry, 3, row_h, GREEN_PRIMARY);
-                draw_rounded_rect_border(wx + 2, ry as i32, ww.saturating_sub(4), row_h, 2, 0xFF1A5A2A);
+                // Left accent bar (blue in Windows, green in TrustOS)
+                framebuffer::fill_rect((content_x.max(0)) as u32, ry + 3, 3, row_h - 6, accent);
+                // Subtle border around selected row
+                draw_rounded_rect_border(content_x, ry as i32, content_w, row_h, 3, 0xFF1A4A28);
             }
             
-            let text_y = (ry + 5) as i32;
-            let row_text_color = if is_selected { GREEN_PRIMARY } else { text_file };
+            let text_y = (ry + 6) as i32;
+            let row_text_color = if is_selected { accent } else { text_file };
             
-            // ── Draw folder/file icon ──
-            let ix = safe_x + 10;
+            // ── Draw icon (Windows 11 style: larger, more detailed)
+            let ix = (content_x + 10).max(0) as u32;
             let iy = ry + 3;
+            let icon_sz = 20u32;
+            
             if is_dir {
-                let fc = if is_selected { 0xFFEEBB40 } else { icon_folder };
-                framebuffer::fill_rect(ix, iy, 8, 3, fc);
-                framebuffer::fill_rect(ix, iy + 3, 16, 11, fc);
-                framebuffer::fill_rect(ix + 1, iy + 5, 14, 7, 0xFF0A0A04);
-                framebuffer::fill_rect(ix + 3, iy + 7, 8, 1, 0xFF302A10);
-                framebuffer::fill_rect(ix + 3, iy + 9, 6, 1, 0xFF302A10);
+                // Folder icon — Windows 11 style yellow folder
+                let fc = if is_selected { 0xFFEECC50 } else { icon_folder };
+                let fc_dark = if is_selected { 0xFFCCAA30 } else { 0xFFBB8820 };
+                // Tab part
+                framebuffer::fill_rect(ix, iy, icon_sz / 2, 4, fc);
+                // Body  
+                framebuffer::fill_rect(ix, iy + 4, icon_sz, icon_sz - 4, fc);
+                // Inner shadow
+                framebuffer::fill_rect(ix + 2, iy + 7, icon_sz - 4, icon_sz - 10, fc_dark);
+                // Doc line hints
+                framebuffer::fill_rect(ix + 4, iy + 9, icon_sz - 8, 1, 0xFF0A0A04);
+                framebuffer::fill_rect(ix + 4, iy + 12, icon_sz / 2, 1, 0xFF0A0A04);
             } else {
-                let fc = if is_selected { 0xFF80DD99 } else { icon_file };
-                framebuffer::fill_rect(ix, iy, 14, 16, fc);
-                framebuffer::fill_rect(ix + 9, iy, 5, 5, 0xFF0A140A);
-                framebuffer::fill_rect(ix + 9, iy, 1, 5, fc);
-                framebuffer::fill_rect(ix + 9, iy + 4, 5, 1, fc);
-                framebuffer::fill_rect(ix + 2, iy + 6, 10, 8, 0xFF040A04);
-                framebuffer::fill_rect(ix + 3, iy + 7, 8, 1, 0xFF203020);
-                framebuffer::fill_rect(ix + 3, iy + 9, 6, 1, 0xFF203020);
-                framebuffer::fill_rect(ix + 3, iy + 11, 7, 1, 0xFF203020);
+                // File icon — Windows 11 style document
+                let fc = if is_selected { 0xFF80DDAA } else { icon_file };
+                let fc_dark = 0xFF0A140A;
+                // Main body
+                framebuffer::fill_rect(ix + 2, iy, icon_sz - 6, icon_sz, fc);
+                // Folded corner (top-right)
+                framebuffer::fill_rect(ix + icon_sz - 8, iy, 4, 6, fc_dark);
+                framebuffer::fill_rect(ix + icon_sz - 8, iy, 1, 6, fc);
+                framebuffer::fill_rect(ix + icon_sz - 8, iy + 5, 4, 1, fc);
+                // Inner area  
+                framebuffer::fill_rect(ix + 4, iy + 8, icon_sz - 10, icon_sz - 10, fc_dark);
+                // Text lines inside file
+                framebuffer::fill_rect(ix + 5, iy + 10, 8, 1, 0xFF1A3A1A);
+                framebuffer::fill_rect(ix + 5, iy + 13, 6, 1, 0xFF1A3A1A);
+                framebuffer::fill_rect(ix + 5, iy + 16, 7, 1, 0xFF1A3A1A);
+                
+                // File type color badge (small colored square for extension)
+                let ext_name = Self::extract_name_from_entry(line);
+                let badge_color = if ext_name.ends_with(".rs") { 0xFFFF6633 }       // Rust orange
+                    else if ext_name.ends_with(".txt") { 0xFF4488CC }               // Blue text
+                    else if ext_name.ends_with(".md") { 0xFF5599DD }                // Markdown blue
+                    else if ext_name.ends_with(".toml") { 0xFF8866BB }              // Purple config
+                    else if ext_name.ends_with(".json") { 0xFFDDAA00 }              // Yellow json
+                    else if ext_name.ends_with(".html") || ext_name.ends_with(".htm") { 0xFFEE6633 }
+                    else if ext_name.ends_with(".css") { 0xFF3399EE }
+                    else if ext_name.ends_with(".png") || ext_name.ends_with(".jpg") || ext_name.ends_with(".bmp") { 0xFF33BB66 }
+                    else if ext_name.ends_with(".mp3") || ext_name.ends_with(".wav") { 0xFFEE55AA }
+                    else { 0xFF446644 };
+                framebuffer::fill_rect(ix + 3, iy + icon_sz - 5, 6, 4, badge_color);
             }
             
-            // ── Parse entry fields ──
+            // ── Parse entry fields
             let trimmed = line.trim();
-            let name_str;
-            let type_str;
-            let size_str;
-            let prog_str;
-            
-            if let Some(bracket_end) = trimmed.find(']') {
+            let (name_str, type_str, size_str, prog_str) = if let Some(bracket_end) = trimmed.find(']') {
                 let after_icon = if bracket_end + 1 < trimmed.len() { &trimmed[bracket_end + 1..] } else { "" };
                 let parts: Vec<&str> = after_icon.split_whitespace().collect();
-                name_str = if !parts.is_empty() { parts[0] } else { "???" };
-                type_str = if parts.len() > 1 { parts[1] } else { "" };
-                size_str = if parts.len() > 2 { parts[2] } else { "" };
-                prog_str = if parts.len() > 3 { parts[3] } else { "" };
+                (
+                    if !parts.is_empty() { parts[0] } else { "???" },
+                    if parts.len() > 1 { parts[1] } else { "" },
+                    if parts.len() > 2 { parts[2] } else { "" },
+                    if parts.len() > 3 { parts[3] } else { "" },
+                )
             } else {
-                name_str = trimmed;
-                type_str = "";
-                size_str = "";
-                prog_str = "";
+                (trimmed, "", "", "")
+            };
+            
+            // ── Draw columns
+            // Name (with extension dimmed like Windows)
+            let name_x = content_x + 36;
+            if let Some(dot_pos) = name_str.rfind('.') {
+                let base = &name_str[..dot_pos];
+                let ext = &name_str[dot_pos..];
+                self.draw_text_smooth(name_x, text_y, base, row_text_color);
+                let ext_x = name_x + (base.len() as i32) * 8;
+                self.draw_text_smooth(ext_x, text_y, ext, if is_selected { GREEN_SUBTLE } else { text_dim });
+            } else {
+                self.draw_text_smooth(name_x, text_y, name_str, row_text_color);
             }
             
-            // Draw columns
-            self.draw_text_smooth(col_name_x, text_y, name_str, row_text_color);
-            if ww > 200 {
-                let type_color = if is_dir { 0xFF55AA70 } else { 0xFF558866 };
-                self.draw_text_smooth(col_type_x, text_y, type_str, if is_selected { GREEN_PRIMARY } else { type_color });
-            }
-            if ww > 280 {
-                self.draw_text_smooth(col_size_x, text_y, size_str, if is_selected { GREEN_SUBTLE } else { 0xFF558866 });
-            }
-            if ww > 360 {
-                self.draw_text_smooth(col_prog_x, text_y, prog_str, if is_selected { GREEN_SUBTLE } else { 0xFF446655 });
+            // Type column
+            if content_w > 200 {
+                let type_label = if is_dir { "File folder" } else {
+                    match name_str.rsplit('.').next() {
+                        Some("rs") => "Rust Source",
+                        Some("txt") => "Text Document",
+                        Some("md") => "Markdown",
+                        Some("toml") => "TOML Config",
+                        Some("json") => "JSON File",
+                        Some("html") | Some("htm") => "HTML Document",
+                        Some("css") => "Stylesheet",
+                        Some("png") | Some("jpg") | Some("bmp") => "Image",
+                        Some("mp3") | Some("wav") => "Audio",
+                        Some("sh") => "Shell Script",
+                        _ => type_str,
+                    }
+                };
+                let tc = if is_selected { GREEN_SUBTLE } else { 0xFF50886A };
+                self.draw_text_smooth(col_type_x, text_y, type_label, tc);
             }
             
-            // Row bottom separator
-            framebuffer::draw_hline(safe_x + 6, ry + row_h - 1, ww.saturating_sub(12), 0xFF0E1A12);
+            // Size column (human-readable like Windows)
+            if content_w > 300 {
+                let size_display = if is_dir {
+                    String::from("")
+                } else if let Ok(bytes) = size_str.parse::<u64>() {
+                    if bytes < 1024 { alloc::format!("{} B", bytes) }
+                    else if bytes < 1024 * 1024 { alloc::format!("{} KB", bytes / 1024) }
+                    else { alloc::format!("{:.1} MB", bytes as f64 / (1024.0 * 1024.0)) }
+                } else {
+                    String::from(size_str)
+                };
+                let sc = if is_selected { GREEN_SUBTLE } else { 0xFF50886A };
+                self.draw_text_smooth(col_size_x, text_y, &size_display, sc);
+            }
+            
+            // Open-with column
+            if content_w > 420 {
+                let pc = if is_selected { GREEN_GHOST } else { 0xFF406050 };
+                self.draw_text_smooth(col_date_x, text_y, prog_str, pc);
+            }
+            
+            // ── Row bottom line (very subtle, every row)
+            framebuffer::draw_hline((content_x.max(0)) as u32, ry + row_h - 1, content_w, 0xFF0E160E);
         }
         
-        // ── Scrollbar ──
-        if file_entries.len() > max_visible && list_area_h > 20 {
-            let sb_w = 6u32;
-            let sb_x = safe_x + ww.saturating_sub(sb_w + 4);
-            framebuffer::fill_rect(sb_x, list_start_y + 2, sb_w, list_area_h.saturating_sub(4), 0xFF0A1A0F);
+        // ── Scrollbar (Windows 11 thin style)
+        if file_entries.len() > max_visible && list_h > 20 {
+            let sb_w = 5u32;
+            let sb_x = (content_x as u32 + content_w).saturating_sub(sb_w + 2);
+            let track_h = list_h.saturating_sub(4);
+            framebuffer::fill_rect(sb_x, list_y as u32 + 2, sb_w, track_h, 0xFF0A160C);
             let total = file_entries.len() as u32;
             let visible = max_visible as u32;
-            let track_h = list_area_h.saturating_sub(4);
-            let thumb_h = ((visible * track_h) / total.max(1)).max(16).min(track_h);
+            let thumb_h = ((visible * track_h) / total.max(1)).max(20).min(track_h);
             let max_scroll = total.saturating_sub(visible);
             let thumb_y = if max_scroll > 0 {
-                list_start_y + 2 + ((scroll as u32 * track_h.saturating_sub(thumb_h)) / max_scroll)
+                list_y as u32 + 2 + ((scroll as u32 * track_h.saturating_sub(thumb_h)) / max_scroll)
             } else {
-                list_start_y + 2
+                list_y as u32 + 2
             };
-            draw_rounded_rect(sb_x as i32, thumb_y as i32, sb_w, thumb_h, 2, GREEN_MUTED);
+            draw_rounded_rect(sb_x as i32, thumb_y as i32, sb_w, thumb_h, 2, 0xFF204030);
         }
         
-        // ── Status bar at bottom ──
-        let status_y = safe_y + wh.saturating_sub(24);
-        framebuffer::fill_rect(safe_x + 2, status_y, ww.saturating_sub(4), 20, bg_toolbar);
-        framebuffer::draw_hline(safe_x + 2, status_y, ww.saturating_sub(4), separator);
+        // ════════════════ STATUS BAR (Windows 11 style) ════════════════
+        let status_y = (body_y + body_h as i32) as u32;
+        let status_h = 24u32;
+        framebuffer::fill_rect(safe_x, status_y, ww, status_h, bg_toolbar);
+        framebuffer::draw_hline(safe_x, status_y, ww, sep_color);
         
+        // Item count
         let item_count = file_entries.len();
         let status_text = if item_count == 1 {
             String::from("1 item")
         } else {
             alloc::format!("{} items", item_count)
         };
-        self.draw_text_smooth(wx + 10, status_y as i32 + 4, &status_text, GREEN_SUBTLE);
-        if ww > 280 {
-            self.draw_text_smooth(wx + ww as i32 - 300, status_y as i32 + 4, "V:View Ctrl+C/X/V:Clip Enter:Open Bksp:Up", GREEN_GHOST);
+        self.draw_text_smooth(wx + sidebar_w as i32 + 10, status_y as i32 + 6, &status_text, text_dim);
+        
+        // Selected item info
+        if window.selected_index < file_entries.len() {
+            let sel_name = Self::extract_name_from_entry(file_entries[window.selected_index]);
+            if sel_name != ".." {
+                let sel_info = alloc::format!("| {}", sel_name);
+                self.draw_text_smooth(wx + sidebar_w as i32 + 80, status_y as i32 + 6, &sel_info, GREEN_GHOST);
+            }
+        }
+        
+        // View mode buttons (right side of status bar) — List/Grid/Details/Tiles
+        if ww > 300 {
+            let vb_y = status_y as i32 + 3;
+            let vb_x = wx + ww as i32 - 120;
+            let vb_w = 24i32;
+            
+            // List view button
+            let list_active = view_mode == FileManagerViewMode::List;
+            let list_c = if list_active { accent } else { GREEN_GHOST };
+            draw_rounded_rect(vb_x, vb_y, vb_w as u32, 18, 3, if list_active { 0xFF102810 } else { 0xFF0A140A });
+            // List icon (3 horizontal lines)
+            framebuffer::fill_rect((vb_x + 5) as u32, (vb_y + 4) as u32, 14, 2, list_c);
+            framebuffer::fill_rect((vb_x + 5) as u32, (vb_y + 8) as u32, 14, 2, list_c);
+            framebuffer::fill_rect((vb_x + 5) as u32, (vb_y + 12) as u32, 14, 2, list_c);
+            
+            // Grid view button  
+            let grid_active = view_mode == FileManagerViewMode::IconGrid;
+            let grid_c = if grid_active { accent } else { GREEN_GHOST };
+            draw_rounded_rect(vb_x + vb_w + 4, vb_y, vb_w as u32, 18, 3, if grid_active { 0xFF102810 } else { 0xFF0A140A });
+            // Grid icon (4 squares)
+            framebuffer::fill_rect((vb_x + vb_w + 8) as u32, (vb_y + 4) as u32, 6, 5, grid_c);
+            framebuffer::fill_rect((vb_x + vb_w + 16) as u32, (vb_y + 4) as u32, 6, 5, grid_c);
+            framebuffer::fill_rect((vb_x + vb_w + 8) as u32, (vb_y + 11) as u32, 6, 5, grid_c);
+            framebuffer::fill_rect((vb_x + vb_w + 16) as u32, (vb_y + 11) as u32, 6, 5, grid_c);
+            
+            // Details view button
+            let det_active = view_mode == FileManagerViewMode::Details;
+            let det_c = if det_active { accent } else { GREEN_GHOST };
+            draw_rounded_rect(vb_x + (vb_w + 4) * 2, vb_y, vb_w as u32, 18, 3, if det_active { 0xFF102810 } else { 0xFF0A140A });
+            // Details icon (lines with dots)
+            framebuffer::fill_rect((vb_x + (vb_w + 4) * 2 + 5) as u32, (vb_y + 4) as u32, 3, 2, det_c);
+            framebuffer::fill_rect((vb_x + (vb_w + 4) * 2 + 10) as u32, (vb_y + 4) as u32, 8, 2, det_c);
+            framebuffer::fill_rect((vb_x + (vb_w + 4) * 2 + 5) as u32, (vb_y + 8) as u32, 3, 2, det_c);
+            framebuffer::fill_rect((vb_x + (vb_w + 4) * 2 + 10) as u32, (vb_y + 8) as u32, 8, 2, det_c);
+            framebuffer::fill_rect((vb_x + (vb_w + 4) * 2 + 5) as u32, (vb_y + 12) as u32, 3, 2, det_c);
+            framebuffer::fill_rect((vb_x + (vb_w + 4) * 2 + 10) as u32, (vb_y + 12) as u32, 8, 2, det_c);
         }
     }
 
@@ -13015,14 +13503,23 @@ struct AppConfig {
             self.draw_text(url_text_x, text_y, visible_text, text_color);
         }
 
+        // Selection highlight (select-all draws blue background behind text)
+        if !self.browser_loading && self.browser_url_select_all && !self.browser_url_input.is_empty() {
+            let sel_w = (visible_text.len() as u32) * cw as u32;
+            if sel_w > 0 {
+                framebuffer::fill_rect(url_text_x as u32, url_bar_y + 3, sel_w.min(url_bar_w - 34), url_bar_h - 6, 0xFF3574E0);
+                // Redraw text on top of selection in white
+                self.draw_text(url_text_x, text_y, visible_text, 0xFFFFFFFF);
+            }
+        }
+
         // Blinking cursor
         if !self.browser_loading && window.focused {
-            let blink = (self.frame_count / 30) % 2 == 0;
-            if blink {
+            if self.cursor_blink {
                 let coff = self.browser_url_cursor.saturating_sub(scroll_off);
                 let cx = url_text_x + (coff as i32) * cw;
                 if cx >= url_text_x && cx < (url_bar_x + url_bar_w - 8) as i32 {
-                    framebuffer::fill_rect(cx as u32, url_bar_y + 5, 2, url_bar_h - 10, 0xFF8AB4F8);
+                    framebuffer::fill_rect(cx as u32, url_bar_y + 4, 2, url_bar_h - 8, 0xFF8AB4F8);
                 }
             }
         }
@@ -13186,6 +13683,8 @@ struct AppConfig {
     
     /// Handle mouse click inside browser window (Chrome-style layout)
     fn handle_browser_click(&mut self, x: i32, y: i32, win_x: i32, win_y: i32, win_w: u32) {
+        crate::serial_println!("[BROWSER-DBG] handle_browser_click x={} y={} win_x={} win_y={} win_w={}",
+            x, y, win_x, win_y, win_w);
         // Build a dummy Window to reuse browser_layout geometry
         // We only need x, y, width, height and focused fields
         let tmp_win = Window {
@@ -13209,6 +13708,9 @@ struct AppConfig {
              url_bar_x, url_bar_y, url_bar_w, url_bar_h,
              _content_y, _content_h, _status_y, nav_btn_size)
             = self.browser_layout(&tmp_win);
+
+        crate::serial_println!("[BROWSER-DBG] layout: url_bar=({},{} {}x{}) nav_y={} bw={} click=({},{})",
+            url_bar_x, url_bar_y, url_bar_w, url_bar_h, nav_y, bw, x, y);
 
         if bw < 120 { return; }
 
@@ -13250,9 +13752,18 @@ struct AppConfig {
         if cx >= url_bar_x && cx < url_bar_x + url_bar_w
             && cy >= url_bar_y && cy < url_bar_y + url_bar_h
         {
+            // Double-click → select all URL text
+            if crate::mouse::is_double_click() {
+                crate::mouse::reset_click_count();
+                self.browser_url_select_all = true;
+                self.browser_url_cursor = self.browser_url_input.len();
+                crate::serial_println!("[BROWSER] URL bar double-clicked, select all");
+                return;
+            }
+            // Single click → position cursor
+            self.browser_url_select_all = false;
             let cw = crate::graphics::scaling::char_width();
             if cw > 0 {
-                // 26px is the inset for the icon in draw_browser
                 let text_start_x = url_bar_x + 26;
                 let rel_x = cx.saturating_sub(text_start_x);
                 let char_pos = (rel_x / cw) as usize;
@@ -13848,6 +14359,7 @@ pub fn run() {
         // The interrupt handler converts scancodes→ASCII and strips releases.
         // Use keyboard::is_key_pressed(scancode) to check modifier/key state.
         while let Some(key) = crate::keyboard::read_char() {
+            crate::serial_println!("[INPUT-DBG] key={} (0x{:02X})", key, key);
             // Check modifier state from interrupt handler (tracks raw scancodes)
             let alt = crate::keyboard::is_key_pressed(0x38);
             let _ctrl = crate::keyboard::is_key_pressed(0x1D);
@@ -13986,7 +14498,7 @@ pub fn run() {
             
             // Win+E → open file manager
             if win && (key == b'e' || key == b'E') {
-                DESKTOP.lock().create_window("Files", 140, 80, 520, 420, WindowType::FileManager);
+                DESKTOP.lock().create_window("File Explorer", 100, 60, 780, 520, WindowType::FileManager);
                 unsafe { WIN_USED_COMBO = true; }
                 crate::serial_println!("[GUI] Win+E: open file manager");
                 continue;
@@ -14046,6 +14558,7 @@ pub fn run() {
             }
             
             // Pass key to focused window
+            crate::serial_println!("[MAIN-DBG] passing key {} (0x{:02X}) to handle_keyboard", key, key);
             handle_keyboard(key);
         }
         
@@ -14091,6 +14604,9 @@ pub fn run() {
         let left = mouse.left_button;
         unsafe {
             if left != LAST_LEFT {
+                if left {
+                    crate::serial_println!("[INPUT-DBG] mouse click at ({},{})", mouse.x, mouse.y);
+                }
                 // Close start menu on click outside
                 if left {
                     let mut d = DESKTOP.lock();

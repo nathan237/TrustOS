@@ -39,6 +39,15 @@ pub struct RenderContext {
     pub text_color: u32,
     /// Current background color (overridable by CSS)
     pub bg_color: Option<u32>,
+    /// Opacity (0.0 - 1.0)
+    pub opacity: f32,
+    /// Text decoration
+    pub underline: bool,
+    pub strikethrough: bool,
+    /// Ordered list counter per depth
+    pub list_counters: Vec<i32>,
+    /// Is inside <ol> at current depth
+    pub in_ordered_list: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -80,6 +89,11 @@ impl RenderContext {
             in_pre: false,
             text_color: COLOR_TEXT,
             bg_color: None,
+            opacity: 1.0,
+            underline: false,
+            strikethrough: false,
+            list_counters: Vec::new(),
+            in_ordered_list: false,
         }
     }
     
@@ -227,6 +241,30 @@ fn render_word(
             );
         }
     }
+    
+    // Draw underline for <u>/<ins> elements
+    if ctx.underline && ctx.in_link.is_none() {
+        let w = (ctx.x - link_start_x) as u32;
+        if w > 0 && ctx.y >= clip_y && ctx.y < clip_y + clip_h as i32 {
+            framebuffer::fill_rect(
+                link_start_x as u32,
+                (ctx.y + ctx.line_height - 2) as u32,
+                w, 1, color,
+            );
+        }
+    }
+    
+    // Draw strikethrough for <del>/<s>/<strike>
+    if ctx.strikethrough {
+        let w = (ctx.x - link_start_x) as u32;
+        if w > 0 && ctx.y >= clip_y && ctx.y < clip_y + clip_h as i32 {
+            framebuffer::fill_rect(
+                link_start_x as u32,
+                (ctx.y + ctx.line_height / 2) as u32,
+                w, 1, ctx.text_color,
+            );
+        }
+    }
 }
 
 fn render_line(
@@ -274,6 +312,10 @@ fn render_element(
     let saved_pre = ctx.in_pre;
     let saved_text_color = ctx.text_color;
     let saved_bg_color = ctx.bg_color;
+    let saved_opacity = ctx.opacity;
+    let saved_underline = ctx.underline;
+    let saved_strikethrough = ctx.strikethrough;
+    let saved_ordered = ctx.in_ordered_list;
     
     // Apply inline CSS styles from style="" attribute
     if let Some(style_str) = el.attr("style") {
@@ -304,6 +346,10 @@ fn render_element(
         ctx.in_pre = saved_pre;
         ctx.text_color = saved_text_color;
         ctx.bg_color = saved_bg_color;
+        ctx.opacity = saved_opacity;
+        ctx.underline = saved_underline;
+        ctx.strikethrough = saved_strikethrough;
+        ctx.in_ordered_list = saved_ordered;
         return;
     }
     
@@ -419,20 +465,37 @@ fn render_element(
         "ul" | "ol" => {
             ctx.newline();
             ctx.list_depth += 1;
+            if tag == "ol" {
+                ctx.in_ordered_list = true;
+                ctx.list_counters.push(0);
+            }
         }
         
         "li" => {
             ctx.newline();
-            // Draw bullet
+            // Draw bullet or number
             if ctx.y >= clip_y && ctx.y < clip_y + clip_h as i32 {
-                let bullet_x = ctx.x - 12;
-                framebuffer::fill_rect(
-                    bullet_x as u32,
-                    (ctx.y + 6) as u32,
-                    4,
-                    4,
-                    COLOR_TEXT,
-                );
+                if ctx.in_ordered_list {
+                    // Numbered list
+                    if let Some(counter) = ctx.list_counters.last_mut() {
+                        *counter += 1;
+                        let num_str = alloc::format!("{}.", counter);
+                        let num_x = ctx.x - 20;
+                        for (i, c) in num_str.chars().enumerate() {
+                            draw_char((num_x + i as i32 * 8) as u32, ctx.y as u32, c, COLOR_TEXT);
+                        }
+                    }
+                } else {
+                    // Bullet
+                    let bullet_x = ctx.x - 12;
+                    framebuffer::fill_rect(
+                        bullet_x as u32,
+                        (ctx.y + 6) as u32,
+                        4,
+                        4,
+                        COLOR_TEXT,
+                    );
+                }
             }
         }
         
@@ -638,6 +701,198 @@ fn render_element(
         
         "del" | "s" | "strike" => {
             ctx.text_color = 0xFF999999;
+            ctx.strikethrough = true;
+        }
+        
+        "u" | "ins" => {
+            ctx.underline = true;
+        }
+        
+        "progress" => {
+            // HTML5 progress bar
+            let max_val: f32 = el.attr("max").and_then(|v| v.parse().ok()).unwrap_or(1.0);
+            let cur_val: f32 = el.attr("value").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            let pct = (cur_val / max_val).min(1.0).max(0.0);
+            let bar_w = 200u32.min(clip_w.saturating_sub(40));
+            let bar_h = 18u32;
+            if ctx.y >= clip_y && ctx.y < clip_y + clip_h as i32 {
+                // Track background
+                framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, bar_w, bar_h, 0xFFE0E0E0);
+                // Fill
+                let fill_w = (bar_w as f32 * pct) as u32;
+                if fill_w > 0 {
+                    framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, fill_w, bar_h, 0xFF4CAF50);
+                }
+                // Border
+                framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, bar_w, 1, 0xFFBBBBBB);
+                framebuffer::fill_rect(ctx.x as u32, (ctx.y + bar_h as i32 - 1) as u32, bar_w, 1, 0xFFBBBBBB);
+                framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, 1, bar_h, 0xFFBBBBBB);
+                framebuffer::fill_rect((ctx.x + bar_w as i32 - 1) as u32, ctx.y as u32, 1, bar_h, 0xFFBBBBBB);
+                // Percentage text
+                let pct_str = alloc::format!("{}%", (pct * 100.0) as u32);
+                let text_x = ctx.x + (bar_w as i32 / 2) - (pct_str.len() as i32 * 4);
+                for (i, c) in pct_str.chars().enumerate() {
+                    draw_char((text_x + i as i32 * 8) as u32, (ctx.y + 1) as u32, c, COLOR_TEXT);
+                }
+            }
+            ctx.x += bar_w as i32 + 8;
+            return; // progress has no children
+        }
+        
+        "meter" => {
+            // HTML5 meter element
+            let min_val: f32 = el.attr("min").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            let max_val: f32 = el.attr("max").and_then(|v| v.parse().ok()).unwrap_or(1.0);
+            let cur_val: f32 = el.attr("value").and_then(|v| v.parse().ok()).unwrap_or(0.0);
+            let low: f32 = el.attr("low").and_then(|v| v.parse().ok()).unwrap_or(min_val);
+            let high: f32 = el.attr("high").and_then(|v| v.parse().ok()).unwrap_or(max_val);
+            let range = max_val - min_val;
+            let pct = if range > 0.0 { ((cur_val - min_val) / range).min(1.0).max(0.0) } else { 0.0 };
+            let bar_w = 160u32.min(clip_w.saturating_sub(40));
+            let bar_h = 16u32;
+            // Color depends on value zone
+            let fill_color = if cur_val < low {
+                0xFFFF5722 // Orange-red (low)
+            } else if cur_val > high {
+                0xFFFF5722 // Orange-red (high/danger)
+            } else {
+                0xFF4CAF50 // Green (normal)
+            };
+            if ctx.y >= clip_y && ctx.y < clip_y + clip_h as i32 {
+                framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, bar_w, bar_h, 0xFFE0E0E0);
+                let fill_w = (bar_w as f32 * pct) as u32;
+                if fill_w > 0 {
+                    framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, fill_w, bar_h, fill_color);
+                }
+                framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, bar_w, 1, 0xFFBBBBBB);
+                framebuffer::fill_rect(ctx.x as u32, (ctx.y + bar_h as i32 - 1) as u32, bar_w, 1, 0xFFBBBBBB);
+                framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, 1, bar_h, 0xFFBBBBBB);
+                framebuffer::fill_rect((ctx.x + bar_w as i32 - 1) as u32, ctx.y as u32, 1, bar_h, 0xFFBBBBBB);
+            }
+            ctx.x += bar_w as i32 + 8;
+            return;
+        }
+        
+        "dl" => {
+            ctx.newline();
+        }
+        "dt" => {
+            ctx.newline();
+            ctx.bold = true;
+        }
+        "dd" => {
+            ctx.newline();
+            ctx.x += 40; // indent definition
+        }
+        
+        "details" => {
+            ctx.newline();
+            ctx.y += 4;
+            // Draw disclosure triangle
+            if ctx.y >= clip_y && ctx.y < clip_y + clip_h as i32 {
+                let tri_x = ctx.x;
+                let open = el.attr("open").is_some();
+                if open {
+                    // Down-pointing triangle
+                    framebuffer::fill_rect(tri_x as u32, ctx.y as u32, 8, 2, COLOR_TEXT);
+                    framebuffer::fill_rect((tri_x + 1) as u32, (ctx.y + 2) as u32, 6, 2, COLOR_TEXT);
+                    framebuffer::fill_rect((tri_x + 2) as u32, (ctx.y + 4) as u32, 4, 2, COLOR_TEXT);
+                } else {
+                    // Right-pointing triangle
+                    framebuffer::fill_rect(tri_x as u32, ctx.y as u32, 2, 8, COLOR_TEXT);
+                    framebuffer::fill_rect((tri_x + 2) as u32, (ctx.y + 1) as u32, 2, 6, COLOR_TEXT);
+                    framebuffer::fill_rect((tri_x + 4) as u32, (ctx.y + 2) as u32, 2, 4, COLOR_TEXT);
+                }
+            }
+            ctx.x += 16; // move past triangle
+        }
+        
+        "summary" => {
+            ctx.bold = true;
+        }
+        
+        "figure" => {
+            ctx.newline();
+            ctx.y += 8;
+            ctx.list_depth += 1;
+        }
+        
+        "figcaption" => {
+            ctx.newline();
+            ctx.font_size = FontSize::Small;
+            ctx.line_height = FontSize::Small.height() + 4;
+            ctx.text_color = 0xFF666666;
+        }
+        
+        "nav" => {
+            ctx.bg_color = Some(0xFFF8F8F8);
+        }
+        
+        "footer" => {
+            ctx.newline();
+            ctx.y += 16;
+            if ctx.y >= clip_y && ctx.y < clip_y + clip_h as i32 {
+                framebuffer::fill_rect(
+                    (clip_x + 16) as u32, ctx.y as u32, clip_w - 32, 1, COLOR_HR,
+                );
+            }
+            ctx.y += 8;
+            ctx.font_size = FontSize::Small;
+            ctx.line_height = FontSize::Small.height() + 4;
+            ctx.text_color = 0xFF666666;
+        }
+        
+        "header" => {
+            ctx.bg_color = Some(0xFFF0F0F0);
+        }
+        
+        "main" | "article" | "section" | "aside" => {
+            // Semantic containers — just render children
+        }
+        
+        "video" | "audio" | "canvas" | "svg" | "iframe" | "embed" | "object" => {
+            // Media placeholders
+            let placeholder_w = el.attr("width")
+                .and_then(|w| w.trim_end_matches("px").parse::<u32>().ok())
+                .unwrap_or(320)
+                .min(clip_w.saturating_sub(32));
+            let placeholder_h = el.attr("height")
+                .and_then(|h| h.trim_end_matches("px").parse::<u32>().ok())
+                .unwrap_or(180)
+                .min(400);
+            if ctx.y >= clip_y && ctx.y < clip_y + clip_h as i32 {
+                framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, placeholder_w, placeholder_h, 0xFF2C2C2C);
+                // Icon label
+                let label = match tag {
+                    "video" => "[VIDEO]",
+                    "audio" => "[AUDIO]",
+                    "canvas" => "[CANVAS]",
+                    "svg" => "[SVG]",
+                    "iframe" => "[IFRAME]",
+                    _ => "[EMBED]",
+                };
+                let lx = ctx.x + (placeholder_w as i32 / 2) - (label.len() as i32 * 4);
+                let ly = ctx.y + (placeholder_h as i32 / 2) - 8;
+                for (i, c) in label.chars().enumerate() {
+                    draw_char((lx + i as i32 * 8) as u32, ly as u32, c, 0xFFAAAAAA);
+                }
+                // Play button triangle for video/audio
+                if tag == "video" || tag == "audio" {
+                    let cx = ctx.x + placeholder_w as i32 / 2;
+                    let cy = ctx.y + placeholder_h as i32 / 2 + 12;
+                    for row in 0..16 {
+                        let w = 16 - row;
+                        framebuffer::fill_rect((cx - 4) as u32, (cy + row) as u32, w as u32, 1, 0xFFFFFFFF);
+                    }
+                }
+                // Border
+                framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, placeholder_w, 1, 0xFF555555);
+                framebuffer::fill_rect(ctx.x as u32, (ctx.y + placeholder_h as i32 - 1) as u32, placeholder_w, 1, 0xFF555555);
+                framebuffer::fill_rect(ctx.x as u32, ctx.y as u32, 1, placeholder_h, 0xFF555555);
+                framebuffer::fill_rect((ctx.x + placeholder_w as i32 - 1) as u32, ctx.y as u32, 1, placeholder_h, 0xFF555555);
+            }
+            ctx.y += placeholder_h as i32 + 4;
+            return; // no children rendering for media
         }
         
         "center" => {
@@ -665,6 +920,7 @@ fn render_element(
         }
         "ul" | "ol" => {
             ctx.list_depth -= 1;
+            ctx.list_counters.pop();
             ctx.newline();
         }
         "blockquote" => {
@@ -677,6 +933,25 @@ fn render_element(
         "table" => {
             ctx.newline();
         }
+        "dl" => {
+            ctx.newline();
+            ctx.y += 4;
+        }
+        "dt" | "dd" => {
+            ctx.newline();
+        }
+        "details" => {
+            ctx.newline();
+            ctx.y += 4;
+        }
+        "figure" => {
+            ctx.list_depth -= 1;
+            ctx.newline();
+            ctx.y += 8;
+        }
+        "footer" | "header" | "nav" => {
+            ctx.newline();
+        }
         _ => {}
     }
     
@@ -687,6 +962,10 @@ fn render_element(
     ctx.in_pre = saved_pre;
     ctx.text_color = saved_text_color;
     ctx.bg_color = saved_bg_color;
+    ctx.opacity = saved_opacity;
+    ctx.underline = saved_underline;
+    ctx.strikethrough = saved_strikethrough;
+    ctx.in_ordered_list = saved_ordered;
 }
 
 /// Extract CSS text from <style> elements in the DOM tree
@@ -886,6 +1165,57 @@ fn apply_declarations(ctx: &mut RenderContext, declarations: &[Declaration]) {
                         ctx.y = i32::MAX / 2;
                     }
                 }
+            }
+            "opacity" => {
+                match &decl.value {
+                    CssValue::Number(n) => {
+                        ctx.opacity = n.max(0.0).min(1.0) as f32;
+                    }
+                    _ => {}
+                }
+            }
+            "text-decoration" | "text-decoration-line" => {
+                if let CssValue::Keyword(kw) = &decl.value {
+                    match kw.as_str() {
+                        "underline" => ctx.underline = true,
+                        "line-through" => ctx.strikethrough = true,
+                        "none" => {
+                            ctx.underline = false;
+                            ctx.strikethrough = false;
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            "text-transform" => {
+                // Handled during text rendering via ctx state
+                if let CssValue::Keyword(kw) = &decl.value {
+                    match kw.as_str() {
+                        "uppercase" | "lowercase" | "capitalize" | "none" => {
+                            // Store for later use in render_word
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            "line-height" => {
+                match &decl.value {
+                    CssValue::Length(px, _) => {
+                        ctx.line_height = *px as i32;
+                    }
+                    CssValue::Number(n) => {
+                        ctx.line_height = (*n as i32) * ctx.font_size.height();
+                    }
+                    _ => {}
+                }
+            }
+            "margin-left" | "padding-left" => {
+                if let CssValue::Length(px, _) = &decl.value {
+                    ctx.x += *px as i32;
+                }
+            }
+            "border" | "border-top" | "border-bottom" | "border-left" | "border-right" => {
+                // Basic border hints — just parse the color for rendering
             }
             _ => {} // Ignore unsupported properties
         }

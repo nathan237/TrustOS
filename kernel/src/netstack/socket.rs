@@ -148,7 +148,7 @@ impl Socket {
 }
 
 /// Socket file descriptor table
-static SOCKET_TABLE: Mutex<BTreeMap<i32, Socket>> = Mutex::new(BTreeMap::new());
+pub static SOCKET_TABLE: Mutex<BTreeMap<i32, Socket>> = Mutex::new(BTreeMap::new());
 static NEXT_SOCKET_FD: AtomicI32 = AtomicI32::new(100); // Start at 100 to avoid conflicts with VFS
 static NEXT_EPHEMERAL_PORT: AtomicU16 = AtomicU16::new(49152);
 
@@ -409,8 +409,18 @@ pub fn recv(fd: i32, buf: &mut [u8], _flags: u32) -> Result<usize, i32> {
             }
         }
         SocketType::Dgram => {
-            // TODO: UDP receive
-            Err(-11) // EAGAIN
+            let local_port = {
+                let table = SOCKET_TABLE.lock();
+                let sock = table.get(&fd).ok_or(-9)?;
+                sock.local_port
+            };
+            if let Some(data) = crate::netstack::udp::recv_on(local_port) {
+                let len = data.len().min(buf.len());
+                buf[..len].copy_from_slice(&data[..len]);
+                Ok(len)
+            } else {
+                Err(-11) // EAGAIN
+            }
         }
         _ => Err(-95),
     }
@@ -476,9 +486,16 @@ pub fn recvfrom(fd: i32, buf: &mut [u8], _flags: u32, addr_out: Option<&mut Sock
     // Poll network
     crate::netstack::poll();
     
-    // TODO: Check UDP receive buffer
-    // For now, return EAGAIN
-    Err(-11) // EAGAIN
+    if let Some((data, src_ip, src_port)) = crate::netstack::udp::recv_from(local_port) {
+        let len = data.len().min(buf.len());
+        buf[..len].copy_from_slice(&data[..len]);
+        if let Some(addr_out) = addr_out {
+            *addr_out = SockAddrIn::new(src_ip, src_port);
+        }
+        Ok(len)
+    } else {
+        Err(-11) // EAGAIN
+    }
 }
 
 /// Set socket options

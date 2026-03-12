@@ -386,7 +386,7 @@ fn filter_chain(chain: Chain, proto: u8, src: [u8; 4], dst: [u8; 4], sport: u16,
                 }
                 Action::Reject => {
                     PACKETS_DROPPED.fetch_add(1, Ordering::Relaxed);
-                    // TODO: send ICMP unreachable or TCP RST
+                    send_reject(proto, src, dst, sport, dport);
                     return false;
                 }
                 Action::Log => {
@@ -529,4 +529,67 @@ fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
     let c: u8 = parts[2].parse().ok()?;
     let d: u8 = parts[3].parse().ok()?;
     Some([a, b, c, d])
+}
+
+/// Send rejection response: TCP RST for TCP, ICMP Unreachable for others
+fn send_reject(proto: u8, src: [u8; 4], dst: [u8; 4], sport: u16, dport: u16) {
+    if proto == 6 {
+        // TCP RST: swap src/dst, set RST flag, use seq=0 ack=0
+        send_tcp_rst(src, dst, sport, dport);
+    } else {
+        // ICMP Destination Unreachable, Code 13 (Communication Administratively Prohibited)
+        send_icmp_unreachable(src, dst);
+    }
+}
+
+/// Send a TCP RST packet
+fn send_tcp_rst(remote_ip: [u8; 4], local_ip: [u8; 4], remote_port: u16, local_port: u16) {
+    // TCP header: 20 bytes minimum
+    let mut seg = [0u8; 20];
+    // Source port (our port)
+    seg[0..2].copy_from_slice(&local_port.to_be_bytes());
+    // Destination port (remote port)
+    seg[2..4].copy_from_slice(&remote_port.to_be_bytes());
+    // Sequence number = 0
+    // Acknowledgment number = 0
+    // Data offset (5 words = 20 bytes) + RST+ACK flags
+    seg[12] = 0x50; // data offset = 5 (20 bytes)
+    seg[13] = 0x14; // RST(0x04) + ACK(0x10)
+    // Window = 0
+    // Checksum placeholder
+    // Urgent pointer = 0
+
+    // Compute TCP checksum with pseudo-header
+    let csum = super::tcp::tcp_checksum_external(local_ip, remote_ip, &seg);
+    seg[16..18].copy_from_slice(&csum.to_be_bytes());
+
+    let _ = super::ip::send_packet(remote_ip, 6, &seg);
+}
+
+/// Send ICMP Destination Unreachable (Type 3, Code 13 = Admin Prohibited)
+fn send_icmp_unreachable(remote_ip: [u8; 4], _local_ip: [u8; 4]) {
+    // ICMP Destination Unreachable: 8 bytes header
+    let mut pkt = [0u8; 8];
+    pkt[0] = 3;  // Type 3 = Destination Unreachable
+    pkt[1] = 13; // Code 13 = Communication Administratively Prohibited
+    // Checksum at [2..4], computed below
+    // Unused/Next-hop MTU at [4..8] = 0
+
+    // Compute ICMP checksum
+    let mut sum: u32 = 0;
+    for i in (0..pkt.len()).step_by(2) {
+        let word = if i + 1 < pkt.len() {
+            ((pkt[i] as u16) << 8) | (pkt[i + 1] as u16)
+        } else {
+            (pkt[i] as u16) << 8
+        };
+        sum += word as u32;
+    }
+    while sum >> 16 != 0 {
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+    let csum = !(sum as u16);
+    pkt[2..4].copy_from_slice(&csum.to_be_bytes());
+
+    let _ = super::ip::send_packet(remote_ip, 1, &pkt);
 }

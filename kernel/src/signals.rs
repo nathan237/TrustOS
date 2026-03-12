@@ -359,7 +359,7 @@ fn handle_default_action(pid: u32, signo: u32) {
         // Signals that terminate with core dump
         sig::SIGQUIT | sig::SIGILL | sig::SIGABRT | sig::SIGFPE |
         sig::SIGSEGV | sig::SIGBUS | sig::SIGSYS => {
-            // TODO: Generate core dump
+            generate_core_dump(pid, signo);
             crate::process::terminate(pid);
         }
         
@@ -591,4 +591,87 @@ pub fn sigreturn_restore(
         frame.saved_rip, frame.saved_rsp, frame.saved_rax as i64);
     
     frame.saved_rax as i64
+}
+
+/// Generate a minimal ELF core dump for a crashed process
+fn generate_core_dump(pid: u32, signo: u32) {
+    use alloc::format;
+    use alloc::vec;
+
+    let ctx = match crate::process::get_context(pid) {
+        Some(c) => c,
+        None => return,
+    };
+
+    // Build minimal ELF core dump:
+    // ELF header + one PT_NOTE segment with register state
+    let mut core = vec![0u8; 0];
+
+    // ELF header (64-byte)
+    core.extend_from_slice(&[0x7f, b'E', b'L', b'F']); // e_ident magic
+    core.push(2); // EI_CLASS = ELFCLASS64
+    core.push(1); // EI_DATA = ELFDATA2LSB
+    core.push(1); // EI_VERSION = EV_CURRENT
+    core.push(0); // EI_OSABI = ELFOSABI_NONE
+    core.extend_from_slice(&[0u8; 8]); // padding
+    core.extend_from_slice(&4u16.to_le_bytes()); // e_type = ET_CORE
+    core.extend_from_slice(&0x3Eu16.to_le_bytes()); // e_machine = EM_X86_64
+    core.extend_from_slice(&1u32.to_le_bytes()); // e_version
+    core.extend_from_slice(&0u64.to_le_bytes()); // e_entry
+    core.extend_from_slice(&64u64.to_le_bytes()); // e_phoff (phdr right after ehdr)
+    core.extend_from_slice(&0u64.to_le_bytes()); // e_shoff
+    core.extend_from_slice(&0u32.to_le_bytes()); // e_flags
+    core.extend_from_slice(&64u16.to_le_bytes()); // e_ehsize
+    core.extend_from_slice(&56u16.to_le_bytes()); // e_phentsize
+    core.extend_from_slice(&1u16.to_le_bytes()); // e_phnum = 1 (PT_NOTE)
+    core.extend_from_slice(&0u16.to_le_bytes()); // e_shentsize
+    core.extend_from_slice(&0u16.to_le_bytes()); // e_shnum
+    core.extend_from_slice(&0u16.to_le_bytes()); // e_shstrndx
+
+    // Note content: prstatus with registers
+    let note_name = b"CORE\0\0\0\0"; // 8 bytes aligned
+    let mut note_desc = vec![0u8; 0];
+    // Simplified prstatus: signal + registers
+    note_desc.extend_from_slice(&signo.to_le_bytes()); // si_signo
+    note_desc.extend_from_slice(&pid.to_le_bytes());   // pr_pid
+    // Register dump (same order as UserRegs)
+    for &reg in &[
+        ctx.r15, ctx.r14, ctx.r13, ctx.r12, ctx.rbp, ctx.rbx,
+        ctx.r11, ctx.r10, ctx.r9, ctx.r8, ctx.rax, ctx.rcx,
+        ctx.rdx, ctx.rsi, ctx.rdi, ctx.rax, // orig_rax
+        ctx.rip, ctx.cs, ctx.rflags, ctx.rsp, ctx.ss,
+    ] {
+        note_desc.extend_from_slice(&reg.to_le_bytes());
+    }
+
+    let note_name_sz = 5u32; // "CORE\0"
+    let note_desc_sz = note_desc.len() as u32;
+    let nt_prstatus = 1u32;
+
+    let note_offset = 64 + 56; // after ehdr + 1 phdr
+    let note_size = 12 + 8 + note_desc.len(); // namesz+descsz+type + name_aligned + desc
+
+    // Program header: PT_NOTE
+    core.extend_from_slice(&4u32.to_le_bytes()); // p_type = PT_NOTE
+    core.extend_from_slice(&0u32.to_le_bytes()); // p_flags
+    core.extend_from_slice(&(note_offset as u64).to_le_bytes()); // p_offset
+    core.extend_from_slice(&0u64.to_le_bytes()); // p_vaddr
+    core.extend_from_slice(&0u64.to_le_bytes()); // p_paddr
+    core.extend_from_slice(&(note_size as u64).to_le_bytes()); // p_filesz
+    core.extend_from_slice(&(note_size as u64).to_le_bytes()); // p_memsz
+    core.extend_from_slice(&4u64.to_le_bytes()); // p_align
+
+    // Note header
+    core.extend_from_slice(&note_name_sz.to_le_bytes());
+    core.extend_from_slice(&note_desc_sz.to_le_bytes());
+    core.extend_from_slice(&nt_prstatus.to_le_bytes());
+    core.extend_from_slice(note_name);
+    core.extend_from_slice(&note_desc);
+
+    // Write to /tmp/core.<pid>
+    let path = format!("/tmp/core.{}", pid);
+    let _ = crate::vfs::write_file(&path, &core);
+
+    crate::serial_println!("[COREDUMP] PID {} signal {} -> {} ({} bytes)",
+        pid, signal_name(signo), path, core.len());
 }

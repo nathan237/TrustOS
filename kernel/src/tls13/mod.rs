@@ -161,6 +161,12 @@ pub struct TlsSession {
     
     /// Send buffer
     tx_buffer: Vec<u8>,
+    
+    /// Server certificate public key (extracted during Certificate parsing)
+    pub server_pubkey: Vec<u8>,
+    
+    /// Server certificate public key algorithm OID
+    pub server_pubkey_algo: Vec<u8>,
 }
 
 impl TlsSession {
@@ -196,6 +202,8 @@ impl TlsSession {
             ecdhe_public,
             rx_buffer: Vec::new(),
             tx_buffer: Vec::new(),
+            server_pubkey: Vec::new(),
+            server_pubkey_algo: Vec::new(),
         }
     }
     

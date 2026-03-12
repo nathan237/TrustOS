@@ -391,6 +391,23 @@ pub(super) fn launch_desktop_env(initial_window: Option<(&str, crate::desktop::W
     let mut d = desktop::DESKTOP.lock();
     d.init(width, height);
     
+    // If host resources are too low, stay in CLI
+    if d.desktop_tier == desktop::DesktopTier::CliOnly {
+        crate::println_color!(COLOR_YELLOW, "Insufficient resources for desktop (< 128 MB RAM).");
+        crate::println_color!(COLOR_YELLOW, "Staying in command-line mode. Increase RAM to 256 MB+ (-m 256M).");
+        drop(d);
+        return;
+    }
+    
+    // Show tier info
+    let tier_name = match d.desktop_tier {
+        desktop::DesktopTier::Minimal  => "Minimal (solid bg, no effects)",
+        desktop::DesktopTier::Standard => "Standard (2-layer rain, basic effects)",
+        desktop::DesktopTier::Full     => "Full (4-layer rain, visualizer, all effects)",
+        _ => "CLI",
+    };
+    crate::serial_println!("[Desktop] Launching in {} mode", tier_name);
+    
     // Auto-select GPU-accelerated mode when VirtIO GPU is available
     if crate::drivers::virtio_gpu::is_available() {
         d.render_mode = desktop::RenderMode::GpuAccelerated;

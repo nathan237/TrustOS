@@ -20,6 +20,7 @@ pub mod dcn;
 pub mod compute;
 pub mod sdma;
 pub mod neural;
+pub mod firmware;
 
 use alloc::string::String;
 use alloc::format;
@@ -655,13 +656,16 @@ pub fn init() {
     GPU_DETECTED.store(true, Ordering::SeqCst);
     drop(state);
     
-    // Phase 2: Initialize DCN display engine
+    // Phase 2: Load GPU firmware (RLC, CP, MEC, SDMA microcode)
+    firmware::init(mmio_virt);
+    
+    // Phase 3: Initialize DCN display engine
     dcn::init(mmio_virt);
     
-    // Phase 3: Initialize SDMA engines (bare-metal DMA transfers)
+    // Phase 4: Initialize SDMA engines (bare-metal DMA transfers)
     sdma::init(mmio_virt);
     
-    // Phase 4: Initialize compute engine (bare-metal RDNA dispatch)
+    // Phase 5: Initialize compute engine (bare-metal RDNA dispatch)
     compute::init(mmio_virt);
 }
 

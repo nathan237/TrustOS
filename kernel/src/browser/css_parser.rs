@@ -91,7 +91,98 @@ pub struct ComputedStyle {
     pub border_radius: f32,
     pub width: Option<f32>,
     pub height: Option<f32>,
+    pub max_width: Option<f32>,
+    pub min_width: Option<f32>,
     pub line_height: f32,
+    pub opacity: f32,
+    pub overflow: Overflow,
+    pub position: Position,
+    pub white_space: WhiteSpace,
+    pub word_break: WordBreak,
+    pub cursor: CursorStyle,
+    pub box_shadow: Option<BoxShadow>,
+    pub text_transform: TextTransform,
+    pub letter_spacing: f32,
+    pub list_style_type: ListStyleType,
+}
+
+/// Overflow behavior
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Overflow {
+    Visible,
+    Hidden,
+    Scroll,
+    Auto,
+}
+
+/// Position property
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Position {
+    Static,
+    Relative,
+    Absolute,
+    Fixed,
+    Sticky,
+}
+
+/// White-space handling
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WhiteSpace {
+    Normal,
+    Nowrap,
+    Pre,
+    PreWrap,
+    PreLine,
+}
+
+/// Word break
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WordBreak {
+    Normal,
+    BreakAll,
+    KeepAll,
+    BreakWord,
+}
+
+/// Cursor style
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CursorStyle {
+    Default,
+    Pointer,
+    Text,
+    Move,
+    NotAllowed,
+    Crosshair,
+    Wait,
+}
+
+/// Box shadow
+#[derive(Debug, Clone, Copy)]
+pub struct BoxShadow {
+    pub offset_x: f32,
+    pub offset_y: f32,
+    pub blur: f32,
+    pub spread: f32,
+    pub color: u32,
+}
+
+/// Text transform
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum TextTransform {
+    None,
+    Uppercase,
+    Lowercase,
+    Capitalize,
+}
+
+/// List style type
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ListStyleType {
+    Disc,
+    Circle,
+    Square,
+    Decimal,
+    None,
 }
 
 /// Display modes
@@ -152,8 +243,8 @@ impl Default for ComputedStyle {
     fn default() -> Self {
         Self {
             display: Display::Block,
-            color: 0xFF000000,           // Black
-            background_color: 0x00000000, // Transparent
+            color: 0xFF000000,
+            background_color: 0x00000000,
             font_size: 16.0,
             font_weight: FontWeight::Normal,
             font_style: FontStyle::Normal,
@@ -166,7 +257,19 @@ impl Default for ComputedStyle {
             border_radius: 0.0,
             width: None,
             height: None,
+            max_width: None,
+            min_width: None,
             line_height: 1.2,
+            opacity: 1.0,
+            overflow: Overflow::Visible,
+            position: Position::Static,
+            white_space: WhiteSpace::Normal,
+            word_break: WordBreak::Normal,
+            cursor: CursorStyle::Default,
+            box_shadow: None,
+            text_transform: TextTransform::None,
+            letter_spacing: 0.0,
+            list_style_type: ListStyleType::Disc,
         }
     }
 }
@@ -183,29 +286,153 @@ pub fn parse_inline_style(style: &str) -> Vec<Declaration> {
     parser.parse_declarations()
 }
 
-/// Parse a color value
+/// Parse a color value — full CSS3 named color palette + hex + rgb/rgba + hsl/hsla
 pub fn parse_color(value: &str) -> Option<u32> {
     let value = value.trim().to_lowercase();
     
-    // Named colors
+    // Full CSS3 named colors (147 colors)
     match value.as_str() {
+        "aliceblue" => return Some(0xFFF0F8FF),
+        "antiquewhite" => return Some(0xFFFAEBD7),
+        "aqua" => return Some(0xFF00FFFF),
+        "aquamarine" => return Some(0xFF7FFFD4),
+        "azure" => return Some(0xFFF0FFFF),
+        "beige" => return Some(0xFFF5F5DC),
+        "bisque" => return Some(0xFFFFE4C4),
         "black" => return Some(0xFF000000),
-        "white" => return Some(0xFFFFFFFF),
-        "red" => return Some(0xFFFF0000),
-        "green" => return Some(0xFF00FF00),
+        "blanchedalmond" => return Some(0xFFFFEBCD),
         "blue" => return Some(0xFF0000FF),
-        "yellow" => return Some(0xFFFFFF00),
-        "cyan" | "aqua" => return Some(0xFF00FFFF),
-        "magenta" | "fuchsia" => return Some(0xFFFF00FF),
+        "blueviolet" => return Some(0xFF8A2BE2),
+        "brown" => return Some(0xFFA52A2A),
+        "burlywood" => return Some(0xFFDEB887),
+        "cadetblue" => return Some(0xFF5F9EA0),
+        "chartreuse" => return Some(0xFF7FFF00),
+        "chocolate" => return Some(0xFFD2691E),
+        "coral" => return Some(0xFFFF7F50),
+        "cornflowerblue" => return Some(0xFF6495ED),
+        "cornsilk" => return Some(0xFFFFF8DC),
+        "crimson" => return Some(0xFFDC143C),
+        "cyan" => return Some(0xFF00FFFF),
+        "darkblue" => return Some(0xFF00008B),
+        "darkcyan" => return Some(0xFF008B8B),
+        "darkgoldenrod" => return Some(0xFFB8860B),
+        "darkgray" | "darkgrey" => return Some(0xFFA9A9A9),
+        "darkgreen" => return Some(0xFF006400),
+        "darkkhaki" => return Some(0xFFBDB76B),
+        "darkmagenta" => return Some(0xFF8B008B),
+        "darkolivegreen" => return Some(0xFF556B2F),
+        "darkorange" => return Some(0xFFFF8C00),
+        "darkorchid" => return Some(0xFF9932CC),
+        "darkred" => return Some(0xFF8B0000),
+        "darksalmon" => return Some(0xFFE9967A),
+        "darkseagreen" => return Some(0xFF8FBC8F),
+        "darkslateblue" => return Some(0xFF483D8B),
+        "darkslategray" | "darkslategrey" => return Some(0xFF2F4F4F),
+        "darkturquoise" => return Some(0xFF00CED1),
+        "darkviolet" => return Some(0xFF9400D3),
+        "deeppink" => return Some(0xFFFF1493),
+        "deepskyblue" => return Some(0xFF00BFFF),
+        "dimgray" | "dimgrey" => return Some(0xFF696969),
+        "dodgerblue" => return Some(0xFF1E90FF),
+        "firebrick" => return Some(0xFFB22222),
+        "floralwhite" => return Some(0xFFFFFAF0),
+        "forestgreen" => return Some(0xFF228B22),
+        "fuchsia" => return Some(0xFFFF00FF),
+        "gainsboro" => return Some(0xFFDCDCDC),
+        "ghostwhite" => return Some(0xFFF8F8FF),
+        "gold" => return Some(0xFFFFD700),
+        "goldenrod" => return Some(0xFFDAA520),
         "gray" | "grey" => return Some(0xFF808080),
-        "silver" => return Some(0xFFC0C0C0),
+        "green" => return Some(0xFF008000),
+        "greenyellow" => return Some(0xFFADFF2F),
+        "honeydew" => return Some(0xFFF0FFF0),
+        "hotpink" => return Some(0xFFFF69B4),
+        "indianred" => return Some(0xFFCD5C5C),
+        "indigo" => return Some(0xFF4B0082),
+        "ivory" => return Some(0xFFFFFFF0),
+        "khaki" => return Some(0xFFF0E68C),
+        "lavender" => return Some(0xFFE6E6FA),
+        "lavenderblush" => return Some(0xFFFFF0F5),
+        "lawngreen" => return Some(0xFF7CFC00),
+        "lemonchiffon" => return Some(0xFFFFFACD),
+        "lightblue" => return Some(0xFFADD8E6),
+        "lightcoral" => return Some(0xFFF08080),
+        "lightcyan" => return Some(0xFFE0FFFF),
+        "lightgoldenrodyellow" => return Some(0xFFFAFAD2),
+        "lightgray" | "lightgrey" => return Some(0xFFD3D3D3),
+        "lightgreen" => return Some(0xFF90EE90),
+        "lightpink" => return Some(0xFFFFB6C1),
+        "lightsalmon" => return Some(0xFFFFA07A),
+        "lightseagreen" => return Some(0xFF20B2AA),
+        "lightskyblue" => return Some(0xFF87CEFA),
+        "lightslategray" | "lightslategrey" => return Some(0xFF778899),
+        "lightsteelblue" => return Some(0xFFB0C4DE),
+        "lightyellow" => return Some(0xFFFFFFE0),
+        "lime" => return Some(0xFF00FF00),
+        "limegreen" => return Some(0xFF32CD32),
+        "linen" => return Some(0xFFFAF0E6),
+        "magenta" => return Some(0xFFFF00FF),
         "maroon" => return Some(0xFF800000),
-        "olive" => return Some(0xFF808000),
+        "mediumaquamarine" => return Some(0xFF66CDAA),
+        "mediumblue" => return Some(0xFF0000CD),
+        "mediumorchid" => return Some(0xFFBA55D3),
+        "mediumpurple" => return Some(0xFF9370DB),
+        "mediumseagreen" => return Some(0xFF3CB371),
+        "mediumslateblue" => return Some(0xFF7B68EE),
+        "mediumspringgreen" => return Some(0xFF00FA9A),
+        "mediumturquoise" => return Some(0xFF48D1CC),
+        "mediumvioletred" => return Some(0xFFC71585),
+        "midnightblue" => return Some(0xFF191970),
+        "mintcream" => return Some(0xFFF5FFFA),
+        "mistyrose" => return Some(0xFFFFE4E1),
+        "moccasin" => return Some(0xFFFFE4B5),
+        "navajowhite" => return Some(0xFFFFDEAD),
         "navy" => return Some(0xFF000080),
-        "teal" => return Some(0xFF008080),
-        "purple" => return Some(0xFF800080),
+        "oldlace" => return Some(0xFFFDF5E6),
+        "olive" => return Some(0xFF808000),
+        "olivedrab" => return Some(0xFF6B8E23),
         "orange" => return Some(0xFFFFA500),
+        "orangered" => return Some(0xFFFF4500),
+        "orchid" => return Some(0xFFDA70D6),
+        "palegoldenrod" => return Some(0xFFEEE8AA),
+        "palegreen" => return Some(0xFF98FB98),
+        "paleturquoise" => return Some(0xFFAFEEEE),
+        "palevioletred" => return Some(0xFFDB7093),
+        "papayawhip" => return Some(0xFFFFEFD5),
+        "peachpuff" => return Some(0xFFFFDAB9),
+        "peru" => return Some(0xFFCD853F),
         "pink" => return Some(0xFFFFC0CB),
+        "plum" => return Some(0xFFDDA0DD),
+        "powderblue" => return Some(0xFFB0E0E6),
+        "purple" => return Some(0xFF800080),
+        "rebeccapurple" => return Some(0xFF663399),
+        "red" => return Some(0xFFFF0000),
+        "rosybrown" => return Some(0xFFBC8F8F),
+        "royalblue" => return Some(0xFF4169E1),
+        "saddlebrown" => return Some(0xFF8B4513),
+        "salmon" => return Some(0xFFFA8072),
+        "sandybrown" => return Some(0xFFF4A460),
+        "seagreen" => return Some(0xFF2E8B57),
+        "seashell" => return Some(0xFFFFF5EE),
+        "sienna" => return Some(0xFFA0522D),
+        "silver" => return Some(0xFFC0C0C0),
+        "skyblue" => return Some(0xFF87CEEB),
+        "slateblue" => return Some(0xFF6A5ACD),
+        "slategray" | "slategrey" => return Some(0xFF708090),
+        "snow" => return Some(0xFFFFFAFA),
+        "springgreen" => return Some(0xFF00FF7F),
+        "steelblue" => return Some(0xFF4682B4),
+        "tan" => return Some(0xFFD2B48C),
+        "teal" => return Some(0xFF008080),
+        "thistle" => return Some(0xFFD8BFD8),
+        "tomato" => return Some(0xFFFF6347),
+        "turquoise" => return Some(0xFF40E0D0),
+        "violet" => return Some(0xFFEE82EE),
+        "wheat" => return Some(0xFFF5DEB3),
+        "white" => return Some(0xFFFFFFFF),
+        "whitesmoke" => return Some(0xFFF5F5F5),
+        "yellow" => return Some(0xFFFFFF00),
+        "yellowgreen" => return Some(0xFF9ACD32),
         "transparent" => return Some(0x00000000),
         _ => {}
     }
@@ -215,11 +442,18 @@ pub fn parse_color(value: &str) -> Option<u32> {
         let hex = &value[1..];
         return match hex.len() {
             3 => {
-                // #RGB -> #RRGGBB
                 let r = u8::from_str_radix(&hex[0..1], 16).ok()?;
                 let g = u8::from_str_radix(&hex[1..2], 16).ok()?;
                 let b = u8::from_str_radix(&hex[2..3], 16).ok()?;
                 Some(0xFF000000 | ((r as u32 * 17) << 16) | ((g as u32 * 17) << 8) | (b as u32 * 17))
+            }
+            4 => {
+                // #RGBA
+                let r = u8::from_str_radix(&hex[0..1], 16).ok()?;
+                let g = u8::from_str_radix(&hex[1..2], 16).ok()?;
+                let b = u8::from_str_radix(&hex[2..3], 16).ok()?;
+                let a = u8::from_str_radix(&hex[3..4], 16).ok()?;
+                Some(((a as u32 * 17) << 24) | ((r as u32 * 17) << 16) | ((g as u32 * 17) << 8) | (b as u32 * 17))
             }
             6 => {
                 let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
@@ -228,7 +462,6 @@ pub fn parse_color(value: &str) -> Option<u32> {
                 Some(0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32))
             }
             8 => {
-                // #RRGGBBAA
                 let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
                 let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
                 let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
@@ -260,7 +493,52 @@ pub fn parse_color(value: &str) -> Option<u32> {
         }
     }
     
+    // hsl() / hsla()
+    if value.starts_with("hsl") {
+        let start = value.find('(')?;
+        let end = value.find(')')?;
+        let inner = &value[start + 1..end];
+        let parts: Vec<&str> = inner.split(',').collect();
+        if parts.len() >= 3 {
+            let h: f32 = parts[0].trim().trim_end_matches("deg").parse::<f32>().ok()?;
+            let s: f32 = parts[1].trim().trim_end_matches('%').parse::<f32>().ok()? / 100.0;
+            let l: f32 = parts[2].trim().trim_end_matches('%').parse::<f32>().ok()? / 100.0;
+            let a: f32 = if parts.len() >= 4 {
+                parts[3].trim().parse::<f32>().ok()?
+            } else {
+                1.0
+            };
+            let (r, g, b) = hsl_to_rgb(h, s, l);
+            let alpha = (a * 255.0) as u8;
+            return Some(((alpha as u32) << 24) | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32));
+        }
+    }
+    
     None
+}
+
+/// Convert HSL to RGB
+fn hsl_to_rgb(h: f32, s: f32, l: f32) -> (u8, u8, u8) {
+    if s == 0.0 {
+        let v = (l * 255.0) as u8;
+        return (v, v, v);
+    }
+    let hue = ((h % 360.0) + 360.0) % 360.0 / 360.0;
+    let q = if l < 0.5 { l * (1.0 + s) } else { l + s - l * s };
+    let p = 2.0 * l - q;
+    let r = hue_to_rgb(p, q, hue + 1.0 / 3.0);
+    let g = hue_to_rgb(p, q, hue);
+    let b = hue_to_rgb(p, q, hue - 1.0 / 3.0);
+    ((r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8)
+}
+
+fn hue_to_rgb(p: f32, q: f32, mut t: f32) -> f32 {
+    if t < 0.0 { t += 1.0; }
+    if t > 1.0 { t -= 1.0; }
+    if t < 1.0 / 6.0 { return p + (q - p) * 6.0 * t; }
+    if t < 1.0 / 2.0 { return q; }
+    if t < 2.0 / 3.0 { return p + (q - p) * (2.0 / 3.0 - t) * 6.0; }
+    p
 }
 
 /// CSS Parser

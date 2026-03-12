@@ -297,31 +297,16 @@ fn blend_colors(color1: u32, color2: u32, alpha: u32) -> u32 {
 /// Draw the complete boot splash screen
 pub fn draw_boot_splash() {
     let (width, height) = super::get_dimensions();
-    
-    // Clear screen to black
-    super::clear();
-    
-    // Calculate center position for logo
-    let logo_scale = if width >= 800 { 2 } else { 1 };
-    let logo_w = 64 * logo_scale;
-    let logo_h = 80 * logo_scale;
-    
-    let logo_x = (width - logo_w) / 2;
-    let logo_y = height / 4;
-    
-    // Draw logo
-    draw_logo_scaled(logo_x, logo_y, logo_scale);
-    
-    // Draw "TRust-OS" text below logo
-    let text_y = logo_y + logo_h + 20;
-    draw_title_text(width / 2, text_y, logo_scale);
-    
-    // Draw tagline
-    let tagline_y = text_y + 30 * logo_scale;
-    draw_tagline(width / 2, tagline_y, logo_scale);
-    
-    // Draw Matrix-style rain effect (simplified)
-    draw_matrix_rain(width, height);
+
+    // Clear screen to dark background
+    super::fill_rect(0, 0, width, height, SPLASH_BG);
+
+    // Draw the desktop logo centered
+    let logo_w = crate::logo_bitmap::LOGO_W as u32;
+    let logo_h = crate::logo_bitmap::LOGO_H as u32;
+    let logo_x = (width / 2).saturating_sub(logo_w / 2);
+    let logo_y = (height / 2).saturating_sub(logo_h / 2);
+    crate::logo_bitmap::draw_logo(logo_x, logo_y);
 }
 
 /// Draw the "TRust-OS" title
@@ -430,120 +415,80 @@ const SPLASH_TEXT_DIM: u32 = 0xFF558866;
 const SPLASH_TEXT_BRIGHT: u32 = 0xFFCCEEDD;
 const SPLASH_VERSION: u32 = 0xFF00AA44;
 
-/// Initialize and draw the boot splash screen (logo + empty progress bar)
-/// Called once after framebuffer is ready, before any boot phases
+/// Initialize and draw the boot splash screen
+/// Draws the full-color desktop logo centered, with a progress bar on the left.
+/// Called once after framebuffer is ready, before any boot phases.
 pub fn init_boot_splash() {
     let (width, height) = super::get_dimensions();
     if width == 0 || height == 0 { return; }
-    
-    // Fill background with deep dark color
+
+    // Fill background
     super::fill_rect(0, 0, width, height, SPLASH_BG);
-    
-    // Draw subtle matrix rain on sides (decorative)
-    draw_matrix_rain(width, height);
-    
-    // Calculate logo position — centered, upper third
-    let logo_scale = if width >= 1024 { 3 } else if width >= 800 { 2 } else { 1 };
-    let logo_w = 64 * logo_scale;
-    let logo_h = 80 * logo_scale;
-    let logo_x = (width - logo_w) / 2;
-    let logo_y = height / 5;
-    
-    // Draw the shield logo
-    draw_logo_procedural(logo_x, logo_y, logo_scale);
-    
-    // Draw "TRust-OS" title below logo
-    let title_y = logo_y + logo_h + 20;
-    let title = "T R u s t - O S";
-    let title_px = title.len() as u32 * 8;
-    let title_x = (width.saturating_sub(title_px)) / 2;
-    for (i, c) in title.chars().enumerate() {
-        let px = title_x + (i as u32) * 8;
-        draw_char_at(c, px as usize, title_y as usize, LOGO_GREEN_BRIGHT, SPLASH_BG);
-    }
-    
-    // Draw version below title
-    let ver_y = title_y + 22;
-    let version = "v0.7.0  |  100% Rust  |  Zero C";
-    let ver_px = version.len() as u32 * 8;
-    let ver_x = (width.saturating_sub(ver_px)) / 2;
-    for (i, c) in version.chars().enumerate() {
-        let px = ver_x + (i as u32) * 8;
-        draw_char_at(c, px as usize, ver_y as usize, SPLASH_VERSION, SPLASH_BG);
-    }
-    
-    // Draw the empty progress bar frame
-    let bar_w = if width >= 1024 { 500 } else { width * 2 / 3 };
-    let bar_h: u32 = 10;
-    let bar_x = (width - bar_w) / 2;
-    let bar_y = ver_y + 50;
-    
+
+    // ── Desktop logo centered ──────────────────────────────────────
+    let logo_w = crate::logo_bitmap::LOGO_W as u32; // 400
+    let logo_h = crate::logo_bitmap::LOGO_H as u32; // 400
+    let logo_x = (width / 2).saturating_sub(logo_w / 2);
+    let logo_y = (height / 2).saturating_sub(logo_h / 2);
+    crate::logo_bitmap::draw_logo(logo_x, logo_y);
+
+    // ── Progress bar on the left side ──────────────────────────────
+    let bar_w: u32 = 200;
+    let bar_h: u32 = 8;
+    let bar_x: u32 = 40;
+    let bar_y = height - 60;
+
     // Bar background track
     super::fill_rect(bar_x, bar_y, bar_w, bar_h, SPLASH_BAR_BG);
     // Bar outline
     super::draw_rect(bar_x.saturating_sub(1), bar_y.saturating_sub(1), bar_w + 2, bar_h + 2, LOGO_GREEN_DARK);
-    
-    // Draw "Initializing..." text below bar
+
+    // "Initializing..." below the bar
     let init_text = "Initializing...";
-    let init_px = init_text.len() as u32 * 8;
-    let init_x = (width.saturating_sub(init_px)) / 2;
-    let init_y = bar_y + bar_h + 16;
+    let init_y = bar_y + bar_h + 8;
     for (i, c) in init_text.chars().enumerate() {
-        let px = init_x + (i as u32) * 8;
+        let px = bar_x + (i as u32) * 8;
         draw_char_at(c, px as usize, init_y as usize, SPLASH_TEXT_DIM, SPLASH_BG);
     }
 }
 
-/// Update the splash progress bar and phase message
-/// `phase`: current phase number (0-based) 
+/// Update the splash progress bar and phase message (left side layout)
+/// `phase`: current phase number (0-based)
 /// `message`: short description of what's being initialized
 pub fn update_boot_splash(phase: u32, message: &str) {
-    let (width, height) = super::get_dimensions();
-    if width == 0 || height == 0 { return; }
-    
-    // Calculate layout (must match init_boot_splash)
-    let logo_scale = if width >= 1024 { 3 } else if width >= 800 { 2 } else { 1 };
-    let logo_h = 80 * logo_scale;
-    let logo_y = height / 5;
-    let title_y = logo_y + logo_h + 20;
-    let ver_y = title_y + 22;
-    
-    let bar_w = if width >= 1024 { 500 } else { width * 2 / 3 };
-    let bar_h: u32 = 10;
-    let bar_x = (width - bar_w) / 2;
-    let bar_y = ver_y + 50;
-    
+    let (_width, height) = super::get_dimensions();
+    if _width == 0 || height == 0 { return; }
+
+    // Layout must match init_boot_splash
+    let bar_w: u32 = 200;
+    let bar_h: u32 = 8;
+    let bar_x: u32 = 40;
+    let bar_y = height - 60;
+
     // Calculate progress percentage
     let progress = ((phase + 1) * 100) / BOOT_TOTAL_PHASES;
     let filled_w = (bar_w * progress.min(100)) / 100;
-    
-    // Draw filled portion with glow effect
+
+    // Draw filled portion
     if filled_w > 0 {
-        // Main bar fill
         super::fill_rect(bar_x, bar_y, filled_w, bar_h, SPLASH_BAR_FG);
-        // Subtle glow line on top
         super::fill_rect(bar_x, bar_y, filled_w, 2, SPLASH_BAR_GLOW);
     }
-    
-    // Clear the message area below bar
-    let msg_y = bar_y + bar_h + 16;
-    let msg_clear_w = width * 2 / 3;
-    let msg_clear_x = (width - msg_clear_w) / 2;
-    super::fill_rect(msg_clear_x, msg_y, msg_clear_w, 18, SPLASH_BG);
-    
-    // Draw phase message centered
-    let msg_px = message.len() as u32 * 8;
-    let msg_x = (width.saturating_sub(msg_px)) / 2;
+
+    // Clear message area below bar
+    let msg_y = bar_y + bar_h + 8;
+    super::fill_rect(bar_x, msg_y, 400, 18, SPLASH_BG);
+
+    // Draw phase message
     for (i, c) in message.chars().enumerate() {
-        let px = msg_x + (i as u32) * 8;
+        let px = bar_x + (i as u32) * 8;
         draw_char_at(c, px as usize, msg_y as usize, SPLASH_TEXT_BRIGHT, SPLASH_BG);
     }
-    
-    // Draw percentage on right side of bar
+
+    // Draw percentage right of bar
     let pct_text = if progress >= 100 {
         "100%"
     } else {
-        // We can't use format! here reliably before heap, use static buffer approach
         static mut PCT_BUF: [u8; 5] = [0; 5];
         let buf = unsafe { &mut PCT_BUF };
         let tens = (progress / 10) as u8;

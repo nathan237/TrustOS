@@ -197,6 +197,9 @@ pub mod draw_utils;
 // Developer tools (profiler, dmesg, memdbg, devpanel, peek/poke)
 mod devtools;
 
+// Hardware debug toolkit (POST codes, backtrace, crash dump, watchdog)
+mod debug;
+
 // TrustSynth — polyphonic audio synthesizer engine
 mod audio;
 
@@ -358,6 +361,7 @@ pub unsafe extern "C" fn kmain() -> ! {
 
     // Phase 1: Early init - serial port for debug output
     serial::init();
+    debug::checkpoint(debug::POST_SERIAL_INIT, "Serial port initialized");
     serial_println!("T-RustOs Kernel v0.2.0");
     serial_println!("Limine protocol supported");
 
@@ -432,6 +436,20 @@ pub unsafe extern "C" fn kmain() -> ! {
                 entry.length,
                 kind
             );
+            
+            // Store for debug diagnostics
+            let type_code = match entry.entry_type {
+                limine::memory_map::EntryType::USABLE => 0u8,
+                limine::memory_map::EntryType::RESERVED => 1,
+                limine::memory_map::EntryType::ACPI_RECLAIMABLE => 2,
+                limine::memory_map::EntryType::ACPI_NVS => 3,
+                limine::memory_map::EntryType::BAD_MEMORY => 4,
+                limine::memory_map::EntryType::BOOTLOADER_RECLAIMABLE => 5,
+                limine::memory_map::EntryType::EXECUTABLE_AND_MODULES => 6,
+                limine::memory_map::EntryType::FRAMEBUFFER => 7,
+                _ => 0xFF,
+            };
+            memory::store_memory_region(entry.base, entry.length, type_code);
             
             // Track end of kernel/modules and bootloader reclaimable regions
             if entry.entry_type == limine::memory_map::EntryType::EXECUTABLE_AND_MODULES
@@ -589,6 +607,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // Phase 3.5: GDT with Ring 0/3 support (x86_64 only)
     #[cfg(target_arch = "x86_64")]
     {
+        debug::checkpoint(debug::POST_GDT, "GDT init");
         serial_println!("Initializing GDT with Ring 0/3 support...");
         gdt::init();
         framebuffer::update_boot_splash(1, "GDT initialized (Ring 0/3)");
@@ -596,6 +615,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     }
     
     // Phase 3.51: Early interrupts (needed for page fault debugging)
+    debug::checkpoint(debug::POST_IDT, "IDT/interrupts init");
     serial_println!("Initializing early interrupts...");
     interrupts::init();
     framebuffer::update_boot_splash(2, "Interrupts initialized");
@@ -605,12 +625,14 @@ pub unsafe extern "C" fn kmain() -> ! {
     #[cfg(target_arch = "x86_64")]
     {
         // CPU hardware exploitation (TSC, AES-NI, SIMD, SMP)
+        debug::checkpoint(debug::POST_CPU_DETECT, "CPU detection");
         serial_println!("Detecting CPU capabilities...");
         cpu::init();
         framebuffer::update_boot_splash(3, "CPU capabilities detected");
         framebuffer::print_boot_status("CPU capabilities detected", BootStatus::Ok);
         
         // ACPI tables parsing
+        debug::checkpoint(debug::POST_ACPI, "ACPI tables parsing");
         serial_println!("Parsing ACPI tables...");
         if let Some(rsdp_response) = RSDP_REQUEST.get_response() {
             let rsdp_ptr = rsdp_response.address();
@@ -630,6 +652,7 @@ pub unsafe extern "C" fn kmain() -> ! {
         }
         
         // APIC initialization — replaces legacy PIC
+        debug::checkpoint(debug::POST_APIC, "APIC init");
         serial_println!("Initializing APIC...");
         if apic::init() {
             framebuffer::print_boot_status("APIC initialized (LAPIC + IOAPIC)", BootStatus::Ok);
@@ -646,6 +669,7 @@ pub unsafe extern "C" fn kmain() -> ! {
         }
 
         // SMP initialization - Start all CPU cores!
+        debug::checkpoint(debug::POST_SMP, "SMP multi-core init");
         serial_println!("Initializing SMP...");
         cpu::smp::init();
         
@@ -766,6 +790,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     const ENABLE_NETWORK: bool = true;
 
     // Phase 8: PCI Bus Enumeration (BEFORE device drivers)
+    debug::checkpoint(debug::POST_PCI, "PCI bus enumeration");
     serial_println!("[PHASE] PCI init start");
     framebuffer::print_boot_status("PCI bus scanning...", BootStatus::Info);
     if ENABLE_PCI {
@@ -790,6 +815,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[PHASE] Task scheduler init done");
     
     // Phase 10: Disk I/O
+    debug::checkpoint(debug::POST_DISK, "Disk I/O init");
     serial_println!("[PHASE] Disk init start");
     framebuffer::print_boot_status("Disk subsystem...", BootStatus::Info);
     if ENABLE_DISK {
@@ -898,6 +924,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     }
     
     // Phase 12: Network (with universal driver system)
+    debug::checkpoint(debug::POST_NETWORK, "Network init");
     serial_println!("[PHASE] Network init start");
     framebuffer::print_boot_status("Network subsystem...", BootStatus::Info);
     if ENABLE_NETWORK {
@@ -962,6 +989,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // ========================================================================
     // Phase 12: VFS Initialization
     // ========================================================================
+    debug::checkpoint(debug::POST_VFS, "VFS init");
     serial_println!("[PHASE] VFS init start");
     vfs::init();
     serial_println!("[PHASE] VFS init done");
@@ -1027,6 +1055,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // ========================================================================
     // Phase 13: Process Manager
     // ========================================================================
+    debug::checkpoint(debug::POST_PROCESS, "Process manager init");
     serial_println!("[PHASE] Process manager init start");
     process::init();
     framebuffer::update_boot_splash(17, "Process manager");
@@ -1140,6 +1169,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[BOOT] Crypto self-tests complete");
 
     // Start shell (runs forever)
+    debug::checkpoint(debug::POST_SHELL_READY, "Shell ready — boot complete");
     serial_println!("Starting shell...");
     shell::run();
 }
@@ -1169,7 +1199,13 @@ fn alloc_error(layout: Layout) -> ! {
 /// Panic handler - called on unrecoverable errors
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    // Try to output panic info via serial
+    // POST code 0xFF = panic
+    debug::post_code(debug::POST_PANIC);
+    
+    // Full crash dump to serial (registers, backtrace, stack, checkpoints)
+    debug::panic_dump();
+    
+    // Also print the panic message itself
     serial_println!("\n!!! KERNEL PANIC !!!");
     serial_println!("{}", info);
     
@@ -1178,6 +1214,14 @@ fn panic(info: &PanicInfo) -> ! {
         framebuffer::set_fg_color(framebuffer::COLOR_RED);
         println!("\n!!! KERNEL PANIC !!!");
         println!("{}", info);
+        framebuffer::set_fg_color(0xFFAAAAAA);
+        println!("Full crash dump sent to serial port (115200 8N1).");
+        println!("Connect serial cable and reboot to capture output.");
+        // Show backtrace on screen too
+        let bt = debug::format_backtrace(8);
+        for line in &bt {
+            println!("{}", line);
+        }
     }
     
     halt_loop();

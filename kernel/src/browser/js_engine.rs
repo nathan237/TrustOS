@@ -97,19 +97,76 @@ impl JsContext {
         console.insert("log".to_string(), JsValue::NativeFunction("console.log".to_string()));
         console.insert("warn".to_string(), JsValue::NativeFunction("console.warn".to_string()));
         console.insert("error".to_string(), JsValue::NativeFunction("console.error".to_string()));
+        console.insert("info".to_string(), JsValue::NativeFunction("console.log".to_string()));
+        console.insert("debug".to_string(), JsValue::NativeFunction("console.log".to_string()));
         self.global.insert("console".to_string(), JsValue::Object(console));
         
         // Math object
         let mut math = BTreeMap::new();
         math.insert("PI".to_string(), JsValue::Number(core::f64::consts::PI));
         math.insert("E".to_string(), JsValue::Number(core::f64::consts::E));
+        math.insert("LN2".to_string(), JsValue::Number(core::f64::consts::LN_2));
+        math.insert("LN10".to_string(), JsValue::Number(core::f64::consts::LN_10));
+        math.insert("SQRT2".to_string(), JsValue::Number(core::f64::consts::SQRT_2));
         math.insert("random".to_string(), JsValue::NativeFunction("Math.random".to_string()));
         math.insert("floor".to_string(), JsValue::NativeFunction("Math.floor".to_string()));
         math.insert("ceil".to_string(), JsValue::NativeFunction("Math.ceil".to_string()));
         math.insert("round".to_string(), JsValue::NativeFunction("Math.round".to_string()));
         math.insert("abs".to_string(), JsValue::NativeFunction("Math.abs".to_string()));
         math.insert("sqrt".to_string(), JsValue::NativeFunction("Math.sqrt".to_string()));
+        math.insert("min".to_string(), JsValue::NativeFunction("Math.min".to_string()));
+        math.insert("max".to_string(), JsValue::NativeFunction("Math.max".to_string()));
+        math.insert("pow".to_string(), JsValue::NativeFunction("Math.pow".to_string()));
+        math.insert("sin".to_string(), JsValue::NativeFunction("Math.sin".to_string()));
+        math.insert("cos".to_string(), JsValue::NativeFunction("Math.cos".to_string()));
+        math.insert("tan".to_string(), JsValue::NativeFunction("Math.tan".to_string()));
+        math.insert("log".to_string(), JsValue::NativeFunction("Math.log".to_string()));
+        math.insert("sign".to_string(), JsValue::NativeFunction("Math.sign".to_string()));
+        math.insert("trunc".to_string(), JsValue::NativeFunction("Math.trunc".to_string()));
         self.global.insert("Math".to_string(), JsValue::Object(math));
+        
+        // JSON object
+        let mut json = BTreeMap::new();
+        json.insert("parse".to_string(), JsValue::NativeFunction("JSON.parse".to_string()));
+        json.insert("stringify".to_string(), JsValue::NativeFunction("JSON.stringify".to_string()));
+        self.global.insert("JSON".to_string(), JsValue::Object(json));
+        
+        // document object (stub DOM)
+        let mut document = BTreeMap::new();
+        document.insert("getElementById".to_string(), JsValue::NativeFunction("document.getElementById".to_string()));
+        document.insert("querySelector".to_string(), JsValue::NativeFunction("document.querySelector".to_string()));
+        document.insert("querySelectorAll".to_string(), JsValue::NativeFunction("document.querySelectorAll".to_string()));
+        document.insert("createElement".to_string(), JsValue::NativeFunction("document.createElement".to_string()));
+        document.insert("createTextNode".to_string(), JsValue::NativeFunction("document.createTextNode".to_string()));
+        document.insert("write".to_string(), JsValue::NativeFunction("document.write".to_string()));
+        document.insert("title".to_string(), JsValue::String("TrustOS Browser".to_string()));
+        document.insert("readyState".to_string(), JsValue::String("complete".to_string()));
+        
+        // document.body stub
+        let mut body = BTreeMap::new();
+        body.insert("innerHTML".to_string(), JsValue::String(String::new()));
+        body.insert("textContent".to_string(), JsValue::String(String::new()));
+        body.insert("className".to_string(), JsValue::String(String::new()));
+        body.insert("style".to_string(), JsValue::Object(BTreeMap::new()));
+        body.insert("appendChild".to_string(), JsValue::NativeFunction("element.appendChild".to_string()));
+        body.insert("children".to_string(), JsValue::Array(Vec::new()));
+        body.insert("tagName".to_string(), JsValue::String("BODY".to_string()));
+        document.insert("body".to_string(), JsValue::Object(body));
+        self.global.insert("document".to_string(), JsValue::Object(document));
+        
+        // window object
+        let mut window = BTreeMap::new();
+        window.insert("innerWidth".to_string(), JsValue::Number(1024.0));
+        window.insert("innerHeight".to_string(), JsValue::Number(768.0));
+        window.insert("location".to_string(), JsValue::Object(BTreeMap::new()));
+        window.insert("navigator".to_string(), JsValue::Object({
+            let mut nav = BTreeMap::new();
+            nav.insert("userAgent".to_string(), JsValue::String("TrustOS/1.0".to_string()));
+            nav.insert("platform".to_string(), JsValue::String("TrustOS".to_string()));
+            nav.insert("language".to_string(), JsValue::String("en-US".to_string()));
+            nav
+        }));
+        self.global.insert("window".to_string(), JsValue::Object(window));
         
         // Global functions
         self.global.insert("parseInt".to_string(), JsValue::NativeFunction("parseInt".to_string()));
@@ -117,6 +174,17 @@ impl JsContext {
         self.global.insert("isNaN".to_string(), JsValue::NativeFunction("isNaN".to_string()));
         self.global.insert("isFinite".to_string(), JsValue::NativeFunction("isFinite".to_string()));
         self.global.insert("alert".to_string(), JsValue::NativeFunction("alert".to_string()));
+        self.global.insert("setTimeout".to_string(), JsValue::NativeFunction("setTimeout".to_string()));
+        self.global.insert("setInterval".to_string(), JsValue::NativeFunction("setInterval".to_string()));
+        self.global.insert("clearTimeout".to_string(), JsValue::NativeFunction("clearTimeout".to_string()));
+        self.global.insert("clearInterval".to_string(), JsValue::NativeFunction("clearInterval".to_string()));
+        self.global.insert("encodeURIComponent".to_string(), JsValue::NativeFunction("encodeURIComponent".to_string()));
+        self.global.insert("decodeURIComponent".to_string(), JsValue::NativeFunction("decodeURIComponent".to_string()));
+        self.global.insert("String".to_string(), JsValue::NativeFunction("String".to_string()));
+        self.global.insert("Number".to_string(), JsValue::NativeFunction("Number".to_string()));
+        self.global.insert("Boolean".to_string(), JsValue::NativeFunction("Boolean".to_string()));
+        self.global.insert("Array".to_string(), JsValue::NativeFunction("Array".to_string()));
+        self.global.insert("Object".to_string(), JsValue::NativeFunction("Object".to_string()));
     }
     
     /// Execute JavaScript code
@@ -211,33 +279,91 @@ impl JsContext {
                 self.eval_unary_op(op, val)
             }
             Expr::Call(callee, args) => {
-                let func = self.eval_expr(callee)?;
+                // Handle method calls (obj.method(args)) by passing obj as receiver
+                let (func, receiver) = if let Expr::Member(obj_expr, _prop) = callee.as_ref() {
+                    let recv = self.eval_expr(obj_expr)?;
+                    let f = self.eval_expr(callee)?;
+                    (f, Some(recv))
+                } else {
+                    (self.eval_expr(callee)?, None)
+                };
                 let mut arg_vals = Vec::new();
                 for arg in args {
                     arg_vals.push(self.eval_expr(arg)?);
                 }
-                self.call_function(func, arg_vals)
+                self.call_function_with_receiver(func, arg_vals, receiver)
             }
             Expr::Member(obj, prop) => {
                 let obj_val = self.eval_expr(obj)?;
-                match obj_val {
+                match &obj_val {
                     JsValue::Object(map) => {
-                        map.get(prop).cloned().ok_or_else(|| "Property not found".to_string())
+                        Ok(map.get(prop).cloned().unwrap_or(JsValue::Undefined))
                     }
                     JsValue::Array(arr) => {
-                        if prop == "length" {
-                            Ok(JsValue::Number(arr.len() as f64))
-                        } else if let Ok(idx) = prop.parse::<usize>() {
-                            Ok(arr.get(idx).cloned().unwrap_or(JsValue::Undefined))
-                        } else {
-                            Ok(JsValue::Undefined)
+                        match prop.as_str() {
+                            "length" => Ok(JsValue::Number(arr.len() as f64)),
+                            "push" => Ok(JsValue::NativeFunction("Array.push".to_string())),
+                            "pop" => Ok(JsValue::NativeFunction("Array.pop".to_string())),
+                            "shift" => Ok(JsValue::NativeFunction("Array.shift".to_string())),
+                            "unshift" => Ok(JsValue::NativeFunction("Array.unshift".to_string())),
+                            "join" => Ok(JsValue::NativeFunction("Array.join".to_string())),
+                            "reverse" => Ok(JsValue::NativeFunction("Array.reverse".to_string())),
+                            "indexOf" => Ok(JsValue::NativeFunction("Array.indexOf".to_string())),
+                            "includes" => Ok(JsValue::NativeFunction("Array.includes".to_string())),
+                            "slice" => Ok(JsValue::NativeFunction("Array.slice".to_string())),
+                            "concat" => Ok(JsValue::NativeFunction("Array.concat".to_string())),
+                            "map" => Ok(JsValue::NativeFunction("Array.map".to_string())),
+                            "filter" => Ok(JsValue::NativeFunction("Array.filter".to_string())),
+                            "forEach" => Ok(JsValue::NativeFunction("Array.forEach".to_string())),
+                            "find" => Ok(JsValue::NativeFunction("Array.find".to_string())),
+                            "some" => Ok(JsValue::NativeFunction("Array.some".to_string())),
+                            "every" => Ok(JsValue::NativeFunction("Array.every".to_string())),
+                            "sort" => Ok(JsValue::NativeFunction("Array.sort".to_string())),
+                            "fill" => Ok(JsValue::NativeFunction("Array.fill".to_string())),
+                            "flat" => Ok(JsValue::NativeFunction("Array.flat".to_string())),
+                            "reduce" => Ok(JsValue::NativeFunction("Array.reduce".to_string())),
+                            _ => {
+                                if let Ok(idx) = prop.parse::<usize>() {
+                                    Ok(arr.get(idx).cloned().unwrap_or(JsValue::Undefined))
+                                } else {
+                                    Ok(JsValue::Undefined)
+                                }
+                            }
                         }
                     }
                     JsValue::String(s) => {
-                        if prop == "length" {
-                            Ok(JsValue::Number(s.len() as f64))
-                        } else {
-                            Ok(JsValue::Undefined)
+                        match prop.as_str() {
+                            "length" => Ok(JsValue::Number(s.len() as f64)),
+                            "toUpperCase" => Ok(JsValue::NativeFunction("String.toUpperCase".to_string())),
+                            "toLowerCase" => Ok(JsValue::NativeFunction("String.toLowerCase".to_string())),
+                            "trim" => Ok(JsValue::NativeFunction("String.trim".to_string())),
+                            "trimStart" | "trimLeft" => Ok(JsValue::NativeFunction("String.trimStart".to_string())),
+                            "trimEnd" | "trimRight" => Ok(JsValue::NativeFunction("String.trimEnd".to_string())),
+                            "includes" => Ok(JsValue::NativeFunction("String.includes".to_string())),
+                            "indexOf" => Ok(JsValue::NativeFunction("String.indexOf".to_string())),
+                            "lastIndexOf" => Ok(JsValue::NativeFunction("String.lastIndexOf".to_string())),
+                            "startsWith" => Ok(JsValue::NativeFunction("String.startsWith".to_string())),
+                            "endsWith" => Ok(JsValue::NativeFunction("String.endsWith".to_string())),
+                            "slice" => Ok(JsValue::NativeFunction("String.slice".to_string())),
+                            "substring" => Ok(JsValue::NativeFunction("String.substring".to_string())),
+                            "replace" => Ok(JsValue::NativeFunction("String.replace".to_string())),
+                            "split" => Ok(JsValue::NativeFunction("String.split".to_string())),
+                            "charAt" => Ok(JsValue::NativeFunction("String.charAt".to_string())),
+                            "charCodeAt" => Ok(JsValue::NativeFunction("String.charCodeAt".to_string())),
+                            "repeat" => Ok(JsValue::NativeFunction("String.repeat".to_string())),
+                            "padStart" => Ok(JsValue::NativeFunction("String.padStart".to_string())),
+                            "padEnd" => Ok(JsValue::NativeFunction("String.padEnd".to_string())),
+                            "concat" => Ok(JsValue::NativeFunction("String.concat".to_string())),
+                            "match" => Ok(JsValue::NativeFunction("String.match".to_string())),
+                            "search" => Ok(JsValue::NativeFunction("String.search".to_string())),
+                            _ => Ok(JsValue::Undefined),
+                        }
+                    }
+                    JsValue::Number(_n) => {
+                        match prop.as_str() {
+                            "toFixed" => Ok(JsValue::NativeFunction("Number.toFixed".to_string())),
+                            "toString" => Ok(JsValue::NativeFunction("Number.toString".to_string())),
+                            _ => Ok(JsValue::Undefined),
                         }
                     }
                     _ => Ok(JsValue::Undefined),
@@ -351,25 +477,27 @@ impl JsContext {
         }
     }
     
-    fn call_function(&mut self, func: JsValue, args: Vec<JsValue>) -> Result<JsValue, String> {
+    fn call_function_with_receiver(&mut self, func: JsValue, args: Vec<JsValue>, receiver: Option<JsValue>) -> Result<JsValue, String> {
         match func {
-            JsValue::NativeFunction(name) => self.call_native(&name, args),
+            JsValue::NativeFunction(name) => self.call_native_with_receiver(&name, args, receiver),
             JsValue::Function(_name, params, body) => {
-                // Simple function call - set parameters
                 for (i, param) in params.iter().enumerate() {
                     let val = args.get(i).cloned().unwrap_or(JsValue::Undefined);
                     self.global.insert(param.clone(), val);
                 }
-                // Parse and execute body
-                // This is simplified - a full implementation would handle scope properly
                 self.execute(&body)
             }
             _ => Err("TypeError: not a function".to_string()),
         }
     }
+
+    fn call_function(&mut self, func: JsValue, args: Vec<JsValue>) -> Result<JsValue, String> {
+        self.call_function_with_receiver(func, args, None)
+    }
     
-    fn call_native(&mut self, name: &str, args: Vec<JsValue>) -> Result<JsValue, String> {
+    fn call_native_with_receiver(&mut self, name: &str, args: Vec<JsValue>, receiver: Option<JsValue>) -> Result<JsValue, String> {
         match name {
+            // ── Console ────────────────────────────────────────────────
             "console.log" | "console.warn" | "console.error" => {
                 let output: Vec<String> = args.iter().map(|v| v.to_string()).collect();
                 let line = output.join(" ");
@@ -382,8 +510,13 @@ impl JsContext {
                 }
                 Ok(JsValue::Undefined)
             }
+
+            // ── Timers (stubs — no real async in bare-metal) ───────────
+            "setTimeout" | "setInterval" => Ok(JsValue::Number(0.0)),
+            "clearTimeout" | "clearInterval" => Ok(JsValue::Undefined),
+
+            // ── Math ───────────────────────────────────────────────────
             "Math.random" => {
-                // Simple PRNG
                 let seed = crate::cpu::tsc::read_tsc();
                 let rand = ((seed >> 16) as f64) / 65536.0;
                 Ok(JsValue::Number(rand % 1.0))
@@ -408,6 +541,49 @@ impl JsContext {
                 let n = args.first().map(|v| v.to_number()).unwrap_or(0.0);
                 Ok(JsValue::Number(sqrt(n)))
             }
+            "Math.min" => {
+                if args.is_empty() { return Ok(JsValue::Number(f64::INFINITY)); }
+                let mut m = args[0].to_number();
+                for a in &args[1..] { let v = a.to_number(); if v < m { m = v; } }
+                Ok(JsValue::Number(m))
+            }
+            "Math.max" => {
+                if args.is_empty() { return Ok(JsValue::Number(f64::NEG_INFINITY)); }
+                let mut m = args[0].to_number();
+                for a in &args[1..] { let v = a.to_number(); if v > m { m = v; } }
+                Ok(JsValue::Number(m))
+            }
+            "Math.pow" => {
+                let base = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                let exp = args.get(1).map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::pow(base, exp)))
+            }
+            "Math.sin" => {
+                let n = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::sin(n)))
+            }
+            "Math.cos" => {
+                let n = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::cos(n)))
+            }
+            "Math.tan" => {
+                let n = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::tan(n)))
+            }
+            "Math.log" => {
+                let n = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(libm::log(n)))
+            }
+            "Math.sign" => {
+                let n = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(if n > 0.0 { 1.0 } else if n < 0.0 { -1.0 } else { 0.0 }))
+            }
+            "Math.trunc" => {
+                let n = args.first().map(|v| v.to_number()).unwrap_or(0.0);
+                Ok(JsValue::Number(trunc(n)))
+            }
+
+            // ── parseInt / parseFloat / isNaN / isFinite ───────────────
             "parseInt" => {
                 let s = args.first().map(|v| v.to_string()).unwrap_or_default();
                 let n: f64 = s.trim().parse().unwrap_or(f64::NAN);
@@ -426,7 +602,449 @@ impl JsContext {
                 let n = args.first().map(|v| v.to_number()).unwrap_or(f64::NAN);
                 Ok(JsValue::Boolean(n.is_finite()))
             }
+
+            // ── Type conversion constructors ───────────────────────────
+            "String" => Ok(JsValue::String(args.first().map(|v| v.to_string()).unwrap_or_default())),
+            "Number" => Ok(JsValue::Number(args.first().map(|v| v.to_number()).unwrap_or(0.0))),
+            "Boolean" => Ok(JsValue::Boolean(args.first().map(|v| v.to_bool()).unwrap_or(false))),
+            "Array" => Ok(JsValue::Array(args)),
+            "Object" => Ok(JsValue::Object(BTreeMap::new())),
+
+            // ── encodeURIComponent / decodeURIComponent ────────────────
+            "encodeURIComponent" => {
+                let s = args.first().map(|v| v.to_string()).unwrap_or_default();
+                let mut encoded = String::new();
+                for b in s.bytes() {
+                    if b.is_ascii_alphanumeric() || b"-_.!~*'()".contains(&b) {
+                        encoded.push(b as char);
+                    } else {
+                        encoded.push_str(&format!("%{:02X}", b));
+                    }
+                }
+                Ok(JsValue::String(encoded))
+            }
+            "decodeURIComponent" => {
+                let s = args.first().map(|v| v.to_string()).unwrap_or_default();
+                let mut decoded = Vec::new();
+                let bytes = s.as_bytes();
+                let mut i = 0;
+                while i < bytes.len() {
+                    if bytes[i] == b'%' && i + 2 < bytes.len() {
+                        if let Ok(b) = u8::from_str_radix(core::str::from_utf8(&bytes[i+1..i+3]).unwrap_or("00"), 16) {
+                            decoded.push(b);
+                            i += 3;
+                            continue;
+                        }
+                    }
+                    decoded.push(bytes[i]);
+                    i += 1;
+                }
+                Ok(JsValue::String(String::from_utf8(decoded).unwrap_or_default()))
+            }
+
+            // ── JSON ───────────────────────────────────────────────────
+            "JSON.parse" => {
+                let s = args.first().map(|v| v.to_string()).unwrap_or_default();
+                Ok(self.parse_json(&s))
+            }
+            "JSON.stringify" => {
+                let val = args.first().cloned().unwrap_or(JsValue::Undefined);
+                Ok(JsValue::String(self.stringify_json(&val)))
+            }
+
+            // ── Document DOM ───────────────────────────────────────────
+            "document.getElementById" | "document.querySelector" | "document.querySelectorAll" => {
+                // Return a stub DOM element
+                let _selector = args.first().map(|v| v.to_string()).unwrap_or_default();
+                let mut el = BTreeMap::new();
+                el.insert("innerHTML".to_string(), JsValue::String(String::new()));
+                el.insert("textContent".to_string(), JsValue::String(String::new()));
+                el.insert("className".to_string(), JsValue::String(String::new()));
+                el.insert("id".to_string(), JsValue::String(String::new()));
+                el.insert("tagName".to_string(), JsValue::String("DIV".to_string()));
+                el.insert("style".to_string(), JsValue::Object(BTreeMap::new()));
+                el.insert("children".to_string(), JsValue::Array(Vec::new()));
+                el.insert("parentNode".to_string(), JsValue::Null);
+                el.insert("setAttribute".to_string(), JsValue::NativeFunction("element.setAttribute".to_string()));
+                el.insert("getAttribute".to_string(), JsValue::NativeFunction("element.getAttribute".to_string()));
+                el.insert("appendChild".to_string(), JsValue::NativeFunction("element.appendChild".to_string()));
+                el.insert("removeChild".to_string(), JsValue::NativeFunction("element.removeChild".to_string()));
+                el.insert("addEventListener".to_string(), JsValue::NativeFunction("element.addEventListener".to_string()));
+                el.insert("classList".to_string(), JsValue::Object({
+                    let mut cl = BTreeMap::new();
+                    cl.insert("add".to_string(), JsValue::NativeFunction("classList.add".to_string()));
+                    cl.insert("remove".to_string(), JsValue::NativeFunction("classList.remove".to_string()));
+                    cl.insert("toggle".to_string(), JsValue::NativeFunction("classList.toggle".to_string()));
+                    cl.insert("contains".to_string(), JsValue::NativeFunction("classList.contains".to_string()));
+                    cl
+                }));
+                if name == "document.querySelectorAll" {
+                    Ok(JsValue::Array(vec![JsValue::Object(el)]))
+                } else {
+                    Ok(JsValue::Object(el))
+                }
+            }
+            "document.createElement" => {
+                let tag = args.first().map(|v| v.to_string()).unwrap_or("div".to_string());
+                let mut el = BTreeMap::new();
+                el.insert("tagName".to_string(), JsValue::String(tag.to_uppercase()));
+                el.insert("innerHTML".to_string(), JsValue::String(String::new()));
+                el.insert("textContent".to_string(), JsValue::String(String::new()));
+                el.insert("className".to_string(), JsValue::String(String::new()));
+                el.insert("style".to_string(), JsValue::Object(BTreeMap::new()));
+                el.insert("children".to_string(), JsValue::Array(Vec::new()));
+                el.insert("appendChild".to_string(), JsValue::NativeFunction("element.appendChild".to_string()));
+                el.insert("addEventListener".to_string(), JsValue::NativeFunction("element.addEventListener".to_string()));
+                Ok(JsValue::Object(el))
+            }
+            "document.createTextNode" => {
+                let text = args.first().map(|v| v.to_string()).unwrap_or_default();
+                Ok(JsValue::String(text))
+            }
+            "document.write" => {
+                let text = args.first().map(|v| v.to_string()).unwrap_or_default();
+                self.console_output.push(format!("[document.write] {}", text));
+                Ok(JsValue::Undefined)
+            }
+
+            // ── Element methods (stubs) ─────────────────────────────
+            "element.appendChild" | "element.removeChild" | "element.setAttribute" |
+            "element.getAttribute" | "element.addEventListener" |
+            "classList.add" | "classList.remove" | "classList.toggle" => Ok(JsValue::Undefined),
+            "classList.contains" => Ok(JsValue::Boolean(false)),
+
+            // ── String prototype methods ─────────────────────────────
+            "String.toUpperCase" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref().or(args.first()) {
+                    Ok(JsValue::String(s.to_uppercase()))
+                } else { Ok(JsValue::Undefined) }
+            }
+            "String.toLowerCase" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref().or(args.first()) {
+                    Ok(JsValue::String(s.to_lowercase()))
+                } else { Ok(JsValue::Undefined) }
+            }
+            "String.trim" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref().or(args.first()) {
+                    Ok(JsValue::String(s.trim().to_string()))
+                } else { Ok(JsValue::Undefined) }
+            }
+            "String.trimStart" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref().or(args.first()) {
+                    Ok(JsValue::String(s.trim_start().to_string()))
+                } else { Ok(JsValue::Undefined) }
+            }
+            "String.trimEnd" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref().or(args.first()) {
+                    Ok(JsValue::String(s.trim_end().to_string()))
+                } else { Ok(JsValue::Undefined) }
+            }
+            "String.includes" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let search = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::Boolean(s.contains(&search)))
+                } else { Ok(JsValue::Boolean(false)) }
+            }
+            "String.indexOf" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let search = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::Number(s.find(&search).map(|i| i as f64).unwrap_or(-1.0)))
+                } else { Ok(JsValue::Number(-1.0)) }
+            }
+            "String.lastIndexOf" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let search = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::Number(s.rfind(&search).map(|i| i as f64).unwrap_or(-1.0)))
+                } else { Ok(JsValue::Number(-1.0)) }
+            }
+            "String.startsWith" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let prefix = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::Boolean(s.starts_with(&prefix)))
+                } else { Ok(JsValue::Boolean(false)) }
+            }
+            "String.endsWith" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let suffix = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::Boolean(s.ends_with(&suffix)))
+                } else { Ok(JsValue::Boolean(false)) }
+            }
+            "String.slice" | "String.substring" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let start = args.first().map(|v| v.to_number() as i64).unwrap_or(0);
+                    let end = args.get(1).map(|v| v.to_number() as i64);
+                    let len = s.len() as i64;
+                    let start = if start < 0 { (len + start).max(0) as usize } else { (start as usize).min(s.len()) };
+                    let end = match end {
+                        Some(e) if e < 0 => (len + e).max(0) as usize,
+                        Some(e) => (e as usize).min(s.len()),
+                        None => s.len(),
+                    };
+                    if start <= end {
+                        Ok(JsValue::String(s[start..end].to_string()))
+                    } else {
+                        Ok(JsValue::String(String::new()))
+                    }
+                } else { Ok(JsValue::String(String::new())) }
+            }
+            "String.replace" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let from = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    let to = args.get(1).map(|v| v.to_string()).unwrap_or_default();
+                    Ok(JsValue::String(s.replacen(&from, &to, 1)))
+                } else { Ok(JsValue::String(String::new())) }
+            }
+            "String.split" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let sep = args.first().map(|v| v.to_string()).unwrap_or_default();
+                    let parts: Vec<JsValue> = if sep.is_empty() {
+                        s.chars().map(|c| JsValue::String(c.to_string())).collect()
+                    } else {
+                        s.split(&sep).map(|p| JsValue::String(p.to_string())).collect()
+                    };
+                    Ok(JsValue::Array(parts))
+                } else { Ok(JsValue::Array(Vec::new())) }
+            }
+            "String.charAt" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let idx = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
+                    Ok(JsValue::String(s.chars().nth(idx).map(|c| c.to_string()).unwrap_or_default()))
+                } else { Ok(JsValue::String(String::new())) }
+            }
+            "String.charCodeAt" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let idx = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
+                    Ok(JsValue::Number(s.chars().nth(idx).map(|c| c as u32 as f64).unwrap_or(f64::NAN)))
+                } else { Ok(JsValue::Number(f64::NAN)) }
+            }
+            "String.repeat" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let count = args.first().map(|v| v.to_number() as usize).unwrap_or(0).min(10000);
+                    Ok(JsValue::String(s.repeat(count)))
+                } else { Ok(JsValue::String(String::new())) }
+            }
+            "String.padStart" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let target_len = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
+                    let pad = args.get(1).map(|v| v.to_string()).unwrap_or(" ".to_string());
+                    let mut result = s.clone();
+                    while result.len() < target_len { result = format!("{}{}", pad, result); }
+                    Ok(JsValue::String(result[result.len().saturating_sub(target_len)..].to_string()))
+                } else { Ok(JsValue::String(String::new())) }
+            }
+            "String.padEnd" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let target_len = args.first().map(|v| v.to_number() as usize).unwrap_or(0);
+                    let pad = args.get(1).map(|v| v.to_string()).unwrap_or(" ".to_string());
+                    let mut result = s.clone();
+                    while result.len() < target_len { result.push_str(&pad); }
+                    result.truncate(target_len);
+                    Ok(JsValue::String(result))
+                } else { Ok(JsValue::String(String::new())) }
+            }
+            "String.concat" => {
+                if let Some(JsValue::String(s)) = receiver.as_ref() {
+                    let mut result = s.clone();
+                    for a in &args { result.push_str(&a.to_string()); }
+                    Ok(JsValue::String(result))
+                } else { Ok(JsValue::String(String::new())) }
+            }
+            "String.match" | "String.search" => Ok(JsValue::Null), // no regex support
+
+            // ── Number prototype methods ─────────────────────────────
+            "Number.toFixed" => {
+                if let Some(JsValue::Number(n)) = receiver.as_ref() {
+                    let digits = args.first().map(|v| v.to_number() as usize).unwrap_or(0).min(20);
+                    // Simple fixed-point formatting
+                    let factor = libm::pow(10.0, digits as f64);
+                    let rounded = round(*n * factor) / factor;
+                    Ok(JsValue::String(format!("{:.prec$}", rounded, prec = digits)))
+                } else { Ok(JsValue::String("NaN".to_string())) }
+            }
+            "Number.toString" => {
+                if let Some(JsValue::Number(n)) = receiver.as_ref() {
+                    Ok(JsValue::String(format!("{}", n)))
+                } else { Ok(JsValue::String(String::new())) }
+            }
+
+            // ── Array prototype methods ──────────────────────────────
+            "Array.push" => {
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    let mut new_arr = arr.clone();
+                    for a in args { new_arr.push(a); }
+                    let len = new_arr.len() as f64;
+                    Ok(JsValue::Number(len))
+                } else { Ok(JsValue::Number(0.0)) }
+            }
+            "Array.pop" => {
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    let mut new_arr = arr.clone();
+                    Ok(new_arr.pop().unwrap_or(JsValue::Undefined))
+                } else { Ok(JsValue::Undefined) }
+            }
+            "Array.shift" => {
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    if arr.is_empty() { return Ok(JsValue::Undefined); }
+                    Ok(arr[0].clone())
+                } else { Ok(JsValue::Undefined) }
+            }
+            "Array.unshift" => {
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    Ok(JsValue::Number((arr.len() + args.len()) as f64))
+                } else { Ok(JsValue::Number(0.0)) }
+            }
+            "Array.join" => {
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    let sep = args.first().map(|v| v.to_string()).unwrap_or(",".to_string());
+                    let parts: Vec<String> = arr.iter().map(|v| v.to_string()).collect();
+                    Ok(JsValue::String(parts.join(&sep)))
+                } else { Ok(JsValue::String(String::new())) }
+            }
+            "Array.reverse" => {
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    let mut new_arr = arr.clone();
+                    new_arr.reverse();
+                    Ok(JsValue::Array(new_arr))
+                } else { Ok(JsValue::Array(Vec::new())) }
+            }
+            "Array.indexOf" => {
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    let search = args.first().cloned().unwrap_or(JsValue::Undefined);
+                    let search_str = search.to_string();
+                    for (i, item) in arr.iter().enumerate() {
+                        if item.to_string() == search_str { return Ok(JsValue::Number(i as f64)); }
+                    }
+                    Ok(JsValue::Number(-1.0))
+                } else { Ok(JsValue::Number(-1.0)) }
+            }
+            "Array.includes" => {
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    let search = args.first().cloned().unwrap_or(JsValue::Undefined);
+                    let search_str = search.to_string();
+                    Ok(JsValue::Boolean(arr.iter().any(|v| v.to_string() == search_str)))
+                } else { Ok(JsValue::Boolean(false)) }
+            }
+            "Array.slice" => {
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    let start = args.first().map(|v| v.to_number() as i64).unwrap_or(0);
+                    let end = args.get(1).map(|v| v.to_number() as i64);
+                    let len = arr.len() as i64;
+                    let start = if start < 0 { (len + start).max(0) as usize } else { (start as usize).min(arr.len()) };
+                    let end = match end {
+                        Some(e) if e < 0 => (len + e).max(0) as usize,
+                        Some(e) => (e as usize).min(arr.len()),
+                        None => arr.len(),
+                    };
+                    Ok(JsValue::Array(arr[start..end].to_vec()))
+                } else { Ok(JsValue::Array(Vec::new())) }
+            }
+            "Array.concat" => {
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    let mut result = arr.clone();
+                    for a in args {
+                        if let JsValue::Array(other) = a { result.extend(other); }
+                        else { result.push(a); }
+                    }
+                    Ok(JsValue::Array(result))
+                } else { Ok(JsValue::Array(Vec::new())) }
+            }
+            "Array.map" | "Array.filter" | "Array.forEach" | "Array.find" |
+            "Array.some" | "Array.every" | "Array.sort" | "Array.fill" |
+            "Array.flat" | "Array.reduce" => {
+                // These need callback support — return copy/identity for now
+                if let Some(JsValue::Array(arr)) = receiver.as_ref() {
+                    Ok(JsValue::Array(arr.clone()))
+                } else { Ok(JsValue::Array(Vec::new())) }
+            }
+
             _ => Err(format!("Unknown native function: {}", name)),
+        }
+    }
+
+    /// Simple JSON parser (subset)
+    fn parse_json(&self, s: &str) -> JsValue {
+        let s = s.trim();
+        if s.is_empty() { return JsValue::Null; }
+        match s.as_bytes()[0] {
+            b'"' => {
+                // String
+                if s.len() >= 2 && s.ends_with('"') {
+                    JsValue::String(s[1..s.len()-1].to_string())
+                } else { JsValue::Null }
+            }
+            b'{' => {
+                // Object — simplified parser
+                let mut map = BTreeMap::new();
+                let inner = &s[1..s.len().saturating_sub(1)];
+                let mut depth = 0i32;
+                let mut start = 0;
+                let mut entries = Vec::new();
+                for (i, c) in inner.chars().enumerate() {
+                    match c {
+                        '{' | '[' => depth += 1,
+                        '}' | ']' => depth -= 1,
+                        ',' if depth == 0 => { entries.push(&inner[start..i]); start = i + 1; }
+                        _ => {}
+                    }
+                }
+                if start < inner.len() { entries.push(&inner[start..]); }
+                for entry in entries {
+                    let entry = entry.trim();
+                    if let Some(colon) = entry.find(':') {
+                        let key = entry[..colon].trim().trim_matches('"');
+                        let val = entry[colon+1..].trim();
+                        map.insert(key.to_string(), self.parse_json(val));
+                    }
+                }
+                JsValue::Object(map)
+            }
+            b'[' => {
+                // Array
+                let inner = &s[1..s.len().saturating_sub(1)];
+                let mut depth = 0i32;
+                let mut start = 0;
+                let mut items = Vec::new();
+                for (i, c) in inner.chars().enumerate() {
+                    match c {
+                        '{' | '[' => depth += 1,
+                        '}' | ']' => depth -= 1,
+                        ',' if depth == 0 => { items.push(&inner[start..i]); start = i + 1; }
+                        _ => {}
+                    }
+                }
+                if !inner.trim().is_empty() { items.push(&inner[start..]); }
+                JsValue::Array(items.iter().map(|i| self.parse_json(i.trim())).collect())
+            }
+            b't' => JsValue::Boolean(true),
+            b'f' => JsValue::Boolean(false),
+            b'n' => JsValue::Null,
+            _ => {
+                // Number
+                if let Ok(n) = s.parse::<f64>() {
+                    JsValue::Number(n)
+                } else { JsValue::Null }
+            }
+        }
+    }
+
+    /// JSON stringify
+    fn stringify_json(&self, val: &JsValue) -> String {
+        match val {
+            JsValue::Undefined | JsValue::Null => "null".to_string(),
+            JsValue::Boolean(b) => if *b { "true" } else { "false" }.to_string(),
+            JsValue::Number(n) => format!("{}", n),
+            JsValue::String(s) => format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")),
+            JsValue::Array(arr) => {
+                let items: Vec<String> = arr.iter().map(|v| self.stringify_json(v)).collect();
+                format!("[{}]", items.join(","))
+            }
+            JsValue::Object(map) => {
+                let entries: Vec<String> = map.iter()
+                    .map(|(k, v)| format!("\"{}\":{}", k, self.stringify_json(v)))
+                    .collect();
+                format!("{{{}}}", entries.join(","))
+            }
+            JsValue::Function(..) | JsValue::NativeFunction(_) => "null".to_string(),
         }
     }
 }

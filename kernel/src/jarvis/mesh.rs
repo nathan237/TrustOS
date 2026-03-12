@@ -351,12 +351,17 @@ fn build_packet(msg_type: MsgType) -> [u8; PACKET_SIZE] {
     let steps = super::TRAINING_STEPS.load(Ordering::SeqCst) as u32;
     pkt[28..32].copy_from_slice(&steps.to_be_bytes());
 
-    // CPU cores (use 1 as minimum)
-    let cores: u16 = 1; // TODO: detect from SMP
+    // CPU cores — detect from SMP subsystem
+    let cores: u16 = {
+        #[cfg(target_arch = "x86_64")]
+        { crate::cpu::smp::cpu_count() as u16 }
+        #[cfg(not(target_arch = "x86_64"))]
+        { 1 }
+    };
     pkt[32..34].copy_from_slice(&cores.to_be_bytes());
 
-    // RAM MB (rough estimate from heap)
-    let ram_mb: u32 = 256; // TODO: detect from memory subsystem
+    // RAM MB — detect from memory subsystem
+    let ram_mb: u32 = (crate::memory::total_physical_memory() / (1024 * 1024)) as u32;
     pkt[34..38].copy_from_slice(&ram_mb.to_be_bytes());
 
     // RPC port

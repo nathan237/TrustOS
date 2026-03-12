@@ -10,9 +10,51 @@ pub mod cow;
 pub mod swap;
 pub mod vma;
 
+use alloc::vec::Vec;
 use core::sync::atomic::{AtomicUsize, AtomicU64, Ordering};
+use spin::Mutex;
 
 pub use paging::{AddressSpace, PageFlags, validate_user_ptr, is_user_address, is_kernel_address};
+
+// ── Boot memory map storage (for debug diagnostics) ─────────────────────────
+/// Stored memory map from Limine: (base, length, type_code)
+/// Type codes: 0=USABLE, 1=RESERVED, 2=ACPI_RECLAIM, 3=ACPI_NVS,
+///             4=BAD, 5=BOOTLOADER, 6=KERNEL, 7=FRAMEBUFFER
+const MAX_MEMORY_REGIONS: usize = 64;
+
+struct BootMemoryMap {
+    entries: [(u64, u64, u8); MAX_MEMORY_REGIONS],
+    count: usize,
+}
+
+impl BootMemoryMap {
+    const fn new() -> Self {
+        Self { entries: [(0, 0, 0); MAX_MEMORY_REGIONS], count: 0 }
+    }
+    fn push(&mut self, base: u64, length: u64, type_code: u8) {
+        if self.count < MAX_MEMORY_REGIONS {
+            self.entries[self.count] = (base, length, type_code);
+            self.count += 1;
+        }
+    }
+    fn as_slice(&self) -> &[(u64, u64, u8)] {
+        &self.entries[..self.count]
+    }
+}
+
+static BOOT_MEMORY_MAP: Mutex<BootMemoryMap> = Mutex::new(BootMemoryMap::new());
+
+/// Store a memory map entry (call during boot from main.rs)
+pub fn store_memory_region(base: u64, length: u64, type_code: u8) {
+    if let Some(mut map) = BOOT_MEMORY_MAP.try_lock() {
+        map.push(base, length, type_code);
+    }
+}
+
+/// Get the stored memory map
+pub fn get_memory_regions() -> Vec<(u64, u64, u8)> {
+    BOOT_MEMORY_MAP.lock().as_slice().to_vec()
+}
 
 /// Heap start address (set during init)
 static HEAP_START: AtomicUsize = AtomicUsize::new(0);

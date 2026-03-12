@@ -27,6 +27,52 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::collections::BTreeMap;
 
+/// Cookie storage
+#[derive(Clone)]
+pub struct Cookie {
+    pub name: String,
+    pub value: String,
+    pub domain: String,
+    pub path: String,
+    pub secure: bool,
+    pub http_only: bool,
+}
+
+/// A single browser tab
+pub struct BrowserTab {
+    pub url: String,
+    pub title: String,
+    pub document: Option<HtmlDocument>,
+    pub scroll_y: i32,
+    pub links: Vec<HtmlLink>,
+    pub raw_html: String,
+    pub show_raw_html: bool,
+    pub history: Vec<String>,
+    pub history_index: usize,
+    pub status: BrowserStatus,
+    pub resources: BTreeMap<String, Resource>,
+    pub pending_resources: Vec<String>,
+}
+
+impl BrowserTab {
+    pub fn new() -> Self {
+        Self {
+            url: String::new(),
+            title: String::from("New Tab"),
+            document: None,
+            scroll_y: 0,
+            links: Vec::new(),
+            raw_html: String::new(),
+            show_raw_html: false,
+            history: Vec::new(),
+            history_index: 0,
+            status: BrowserStatus::Idle,
+            resources: BTreeMap::new(),
+            pending_resources: Vec::new(),
+        }
+    }
+}
+
 /// Browser state
 pub struct Browser {
     pub current_url: String,
@@ -46,6 +92,20 @@ pub struct Browser {
     pub resources: BTreeMap<String, Resource>,
     /// Resources currently being loaded
     pub pending_resources: Vec<String>,
+    /// Cookie jar
+    pub cookies: Vec<Cookie>,
+    /// Browser tabs
+    pub tabs: Vec<BrowserTab>,
+    /// Active tab index
+    pub active_tab: usize,
+    /// Bookmarks list
+    pub bookmarks: Vec<(String, String)>, // (url, title)
+    /// JavaScript console output
+    pub js_console: Vec<String>,
+    /// Form input values (keyed by input name)
+    pub form_inputs: BTreeMap<String, String>,
+    /// Currently focused input name
+    pub focused_input: Option<String>,
 }
 
 /// External resource (image, CSS, etc.)
@@ -85,6 +145,7 @@ pub struct HtmlLink {
 
 impl Browser {
     pub fn new(width: u32, height: u32) -> Self {
+        let first_tab = BrowserTab::new();
         Self {
             current_url: String::new(),
             history: Vec::new(),
@@ -99,6 +160,13 @@ impl Browser {
             show_raw_html: false,
             resources: BTreeMap::new(),
             pending_resources: Vec::new(),
+            cookies: Vec::new(),
+            tabs: alloc::vec![first_tab],
+            active_tab: 0,
+            bookmarks: Vec::new(),
+            js_console: Vec::new(),
+            form_inputs: BTreeMap::new(),
+            focused_input: None,
         }
     }
     
@@ -193,8 +261,14 @@ impl Browser {
         let html = core::str::from_utf8(&body).unwrap_or("");
         self.raw_html = html.to_string();
         
+        // Parse cookies from response
+        self.process_set_cookies(&headers, &full_url);
+        
         // Parse HTML
         self.document = Some(parse_html(html));
+        
+        // Execute inline scripts
+        self.execute_scripts();
         
         // Extract and queue external resources
         self.extract_resources(&full_url);
@@ -311,6 +385,261 @@ impl Browser {
         }
         None
     }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // TAB MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Create a new tab and switch to it
+    pub fn new_tab(&mut self) {
+        // Save current state to active tab
+        self.save_to_active_tab();
+        let tab = BrowserTab::new();
+        self.tabs.push(tab);
+        self.active_tab = self.tabs.len() - 1;
+        self.load_from_active_tab();
+        crate::serial_println!("[BROWSER] New tab #{}", self.active_tab);
+    }
+
+    /// Switch to tab by index
+    pub fn switch_tab(&mut self, index: usize) {
+        if index >= self.tabs.len() || index == self.active_tab {
+            return;
+        }
+        self.save_to_active_tab();
+        self.active_tab = index;
+        self.load_from_active_tab();
+        crate::serial_println!("[BROWSER] Switched to tab #{}", index);
+    }
+
+    /// Close active tab
+    pub fn close_tab(&mut self) {
+        if self.tabs.len() <= 1 {
+            return; // Keep at least one tab
+        }
+        self.tabs.remove(self.active_tab);
+        if self.active_tab >= self.tabs.len() {
+            self.active_tab = self.tabs.len() - 1;
+        }
+        self.load_from_active_tab();
+    }
+
+    /// Get tab count
+    pub fn tab_count(&self) -> usize {
+        self.tabs.len()
+    }
+
+    /// Get tab titles for rendering the tab bar
+    pub fn tab_titles(&self) -> Vec<(String, bool)> {
+        self.tabs.iter().enumerate()
+            .map(|(i, tab)| (tab.title.clone(), i == self.active_tab))
+            .collect()
+    }
+
+    fn save_to_active_tab(&mut self) {
+        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+            tab.url = self.current_url.clone();
+            tab.document = self.document.take();
+            tab.scroll_y = self.scroll_y;
+            tab.links = core::mem::take(&mut self.links);
+            tab.raw_html = core::mem::take(&mut self.raw_html);
+            tab.show_raw_html = self.show_raw_html;
+            tab.history = self.history.clone();
+            tab.history_index = self.history_index;
+            tab.status = self.status.clone();
+            tab.resources = core::mem::take(&mut self.resources);
+            tab.pending_resources = core::mem::take(&mut self.pending_resources);
+            // Extract title from document
+            if let Some(ref doc) = tab.document {
+                if !doc.title.is_empty() {
+                    tab.title = doc.title.clone();
+                }
+            }
+        }
+    }
+
+    fn load_from_active_tab(&mut self) {
+        if let Some(tab) = self.tabs.get_mut(self.active_tab) {
+            self.current_url = tab.url.clone();
+            self.document = tab.document.take();
+            self.scroll_y = tab.scroll_y;
+            self.links = core::mem::take(&mut tab.links);
+            self.raw_html = core::mem::take(&mut tab.raw_html);
+            self.show_raw_html = tab.show_raw_html;
+            self.history = tab.history.clone();
+            self.history_index = tab.history_index;
+            self.status = tab.status.clone();
+            self.resources = core::mem::take(&mut tab.resources);
+            self.pending_resources = core::mem::take(&mut tab.pending_resources);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // COOKIES
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Parse Set-Cookie headers from HTTP response and store cookies
+    pub fn process_set_cookies(&mut self, headers: &[(String, String)], url: &str) {
+        let domain = extract_domain(url);
+        for (key, value) in headers {
+            if key.to_lowercase() == "set-cookie" {
+                if let Some(cookie) = parse_set_cookie(value, &domain) {
+                    // Replace existing cookie with same name+domain
+                    self.cookies.retain(|c| !(c.name == cookie.name && c.domain == cookie.domain));
+                    self.cookies.push(cookie);
+                }
+            }
+        }
+    }
+
+    /// Build Cookie header value for a given URL
+    pub fn cookie_header(&self, url: &str) -> Option<String> {
+        let domain = extract_domain(url);
+        let is_secure = url.starts_with("https://");
+        let path = extract_path(url);
+
+        let matching: Vec<String> = self.cookies.iter()
+            .filter(|c| {
+                domain.ends_with(&c.domain) &&
+                path.starts_with(&c.path) &&
+                (!c.secure || is_secure)
+            })
+            .map(|c| alloc::format!("{}={}", c.name, c.value))
+            .collect();
+
+        if matching.is_empty() { None } else { Some(matching.join("; ")) }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // BOOKMARKS
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Add current page as bookmark
+    pub fn add_bookmark(&mut self) {
+        let title = self.document.as_ref()
+            .map(|d| d.title.clone())
+            .unwrap_or_else(|| self.current_url.clone());
+        if !self.current_url.is_empty() {
+            self.bookmarks.push((self.current_url.clone(), title));
+            crate::serial_println!("[BROWSER] Bookmarked: {}", self.current_url);
+        }
+    }
+
+    /// Remove bookmark by index
+    pub fn remove_bookmark(&mut self, index: usize) {
+        if index < self.bookmarks.len() {
+            self.bookmarks.remove(index);
+        }
+    }
+
+    /// Check if current page is bookmarked
+    pub fn is_bookmarked(&self) -> bool {
+        self.bookmarks.iter().any(|(url, _)| url == &self.current_url)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // FORM SUBMISSION
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Submit a form (collects input values and POSTs or GETs)
+    pub fn submit_form(&mut self, action: &str, method: &str) -> Result<(), &'static str> {
+        let full_url = normalize_url(action, &self.current_url);
+        
+        // Build form data from stored inputs
+        let mut form_data = String::new();
+        for (name, value) in &self.form_inputs {
+            if !form_data.is_empty() { form_data.push('&'); }
+            form_data.push_str(&url_encode(name));
+            form_data.push('=');
+            form_data.push_str(&url_encode(value));
+        }
+
+        crate::serial_println!("[BROWSER] Form submit: {} {} data={}", method, full_url, form_data);
+
+        if method.eq_ignore_ascii_case("post") {
+            // POST request
+            match crate::netstack::http::post(&full_url, "application/x-www-form-urlencoded", form_data.as_bytes()) {
+                Ok(r) => {
+                    // Store cookies from response
+                    self.process_set_cookies(&r.headers, &full_url);
+
+                    if r.status_code >= 300 && r.status_code < 400 {
+                        if let Some(loc) = r.headers.iter()
+                            .find(|(k, _)| k.to_lowercase() == "location")
+                            .map(|(_, v)| v.clone())
+                        {
+                            return self.navigate(&loc);
+                        }
+                    }
+
+                    let html = core::str::from_utf8(&r.body).unwrap_or("");
+                    self.raw_html = html.to_string();
+                    self.document = Some(parse_html(html));
+                    self.current_url = full_url;
+                    self.scroll_y = 0;
+                    self.status = BrowserStatus::Ready;
+                    self.form_inputs.clear();
+                    Ok(())
+                }
+                Err(e) => {
+                    self.status = BrowserStatus::Error(alloc::format!("POST error: {}", e));
+                    Err("POST failed")
+                }
+            }
+        } else {
+            // GET — append query string
+            let url_with_query = if form_data.is_empty() {
+                full_url
+            } else if full_url.contains('?') {
+                alloc::format!("{}&{}", full_url, form_data)
+            } else {
+                alloc::format!("{}?{}", full_url, form_data)
+            };
+            self.navigate(&url_with_query)
+        }
+    }
+
+    /// Set a form input value
+    pub fn set_input(&mut self, name: &str, value: &str) {
+        self.form_inputs.insert(name.to_string(), value.to_string());
+    }
+
+    /// Type a character into the focused input
+    pub fn type_char(&mut self, c: char) {
+        if let Some(ref name) = self.focused_input.clone() {
+            let val = self.form_inputs.entry(name.clone()).or_insert_with(String::new);
+            val.push(c);
+        }
+    }
+
+    /// Backspace in focused input
+    pub fn backspace_input(&mut self) {
+        if let Some(ref name) = self.focused_input.clone() {
+            if let Some(val) = self.form_inputs.get_mut(name) {
+                val.pop();
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // JAVASCRIPT EXECUTION
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Execute JavaScript from the page's <script> tags
+    pub fn execute_scripts(&mut self) {
+        if let Some(ref doc) = self.document {
+            let scripts = collect_script_content(&doc.nodes);
+            if !scripts.is_empty() {
+                let mut js = js_engine::JsContext::new();
+                for script in scripts {
+                    if let Err(e) = js.execute(&script) {
+                        crate::serial_println!("[BROWSER JS ERROR] {}", e);
+                    }
+                }
+                self.js_console.extend(js.console_output);
+            }
+        }
+    }
 }
 
 /// Normalize a URL (handle relative URLs)
@@ -418,3 +747,97 @@ fn collect_resources(nodes: &[HtmlNode]) -> Vec<(String, String)> {
 }
 
 use alloc::string::ToString;
+
+/// Extract domain from URL
+fn extract_domain(url: &str) -> String {
+    let without_scheme = url.strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+    without_scheme.split('/').next().unwrap_or("").split(':').next().unwrap_or("").to_string()
+}
+
+/// Extract path from URL
+fn extract_path(url: &str) -> String {
+    let without_scheme = url.strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+        .unwrap_or(url);
+    match without_scheme.find('/') {
+        Some(i) => without_scheme[i..].split('?').next().unwrap_or("/").to_string(),
+        None => "/".to_string(),
+    }
+}
+
+/// URL-encode a string
+fn url_encode(s: &str) -> String {
+    let mut encoded = String::new();
+    for b in s.bytes() {
+        if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) {
+            encoded.push(b as char);
+        } else if b == b' ' {
+            encoded.push('+');
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(b"0123456789ABCDEF"[(b >> 4) as usize]));
+            encoded.push(char::from(b"0123456789ABCDEF"[(b & 0xF) as usize]));
+        }
+    }
+    encoded
+}
+
+/// Parse a Set-Cookie header value
+fn parse_set_cookie(header: &str, default_domain: &str) -> Option<Cookie> {
+    let mut parts = header.split(';');
+    let name_value = parts.next()?.trim();
+    let eq = name_value.find('=')?;
+    let name = name_value[..eq].trim().to_string();
+    let value = name_value[eq + 1..].trim().to_string();
+    
+    if name.is_empty() { return None; }
+
+    let mut cookie = Cookie {
+        name,
+        value,
+        domain: default_domain.to_string(),
+        path: "/".to_string(),
+        secure: false,
+        http_only: false,
+    };
+
+    for attr in parts {
+        let attr = attr.trim().to_lowercase();
+        if attr.starts_with("domain=") {
+            cookie.domain = attr[7..].trim_start_matches('.').to_string();
+        } else if attr.starts_with("path=") {
+            cookie.path = attr[5..].to_string();
+        } else if attr == "secure" {
+            cookie.secure = true;
+        } else if attr == "httponly" {
+            cookie.http_only = true;
+        }
+        // Ignore Max-Age, Expires, SameSite for now
+    }
+
+    Some(cookie)
+}
+
+/// Collect inline <script> text content from DOM tree
+fn collect_script_content(nodes: &[HtmlNode]) -> Vec<String> {
+    let mut scripts = Vec::new();
+    for node in nodes {
+        if let HtmlNode::Element(el) = node {
+            if el.tag == "script" && el.attr("src").is_none() {
+                let mut text = String::new();
+                for child in &el.children {
+                    if let HtmlNode::Text(t) = child {
+                        text.push_str(t);
+                    }
+                }
+                if !text.trim().is_empty() {
+                    scripts.push(text);
+                }
+            }
+            scripts.extend(collect_script_content(&el.children));
+        }
+    }
+    scripts
+}

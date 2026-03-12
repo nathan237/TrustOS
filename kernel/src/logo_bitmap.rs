@@ -10450,6 +10450,12 @@ pub fn draw_logo(px: u32, py: u32) {
             let argb = LOGO_PIXELS[y * LOGO_W + x];
             let a = (argb >> 24) & 0xFF;
             if a < 8 { continue; } // skip fully transparent
+            let r = (argb >> 16) & 0xFF;
+            let g = (argb >> 8) & 0xFF;
+            let b = argb & 0xFF;
+            // Skip near-black pixels (baked-in black background)
+            let luminance = (r * 77 + g * 150 + b * 29) >> 8;
+            if luminance < 30 { continue; }
             let dx = px + x as u32;
             let dy = py + y as u32;
             if a >= 240 {

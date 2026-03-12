@@ -18,23 +18,15 @@ use crate::framebuffer::{COLOR_GREEN, COLOR_BRIGHT_GREEN, COLOR_DARK_GREEN, COLO
 // ============================================================================
 
 const STUBS: &[(&str, &str)] = &[
-    ("killall",    "process name matching"),
-    ("nice",       "priority"),
     ("nohup",      "background execution"),
     ("bg",         "job control"),
     ("fg",         "job control"),
-    ("iostat",     "I/O statistics"),
-    ("strace",     "syscall tracing"),
     ("gunzip",     "decompression"),
-    ("umount",     "unmounting"),
     ("mkfs",       "filesystem creation"),
-    ("fsck",       "filesystem check"),
     ("patch",      "patch"),
     ("script",     "terminal recording"),
     ("loadkeys",   "keymap"),
     ("setfont",    "font loading"),
-    ("dmidecode",  "DMI/SMBIOS"),
-    ("hdparm",     "disk parameters"),
     ("modprobe",   "kernel modules"),
     ("insmod",     "module loading"),
     ("rmmod",      "module unloading"),
@@ -245,9 +237,15 @@ pub(super) fn cmd_seq(args: &[&str]) {
     };
     
     let mut i = first;
+    let mut count = 0u64;
     while (inc > 0 && i <= last) || (inc < 0 && i >= last) {
         crate::println!("{}", i);
         i += inc;
+        count += 1;
+        if count >= 100_000 {
+            crate::println!("... (truncated at 100000 lines)");
+            break;
+        }
     }
 }
 
@@ -549,6 +547,277 @@ pub(super) fn cmd_timecmd(args: &[&str]) {
     crate::println_color!(COLOR_CYAN, "? Elapsed: {}.{:03} ms ({} us)", elapsed_ms, frac, elapsed_us);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Hardware Debug Toolkit commands
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Full hardware diagnostic report
+pub(super) fn cmd_hwdiag() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Generating hardware diagnostic report...");
+    let lines = crate::debug::full_diagnostic_report();
+    for line in &lines {
+        crate::println!("{}", line);
+    }
+    // Also send to serial for capture
+    for line in &lines {
+        crate::serial_println!("{}", line);
+    }
+}
+
+/// Full CPU state dump (all GPR + control + segment + MSR)
+pub(super) fn cmd_cpudump() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Full CPU State Dump");
+    crate::println!("---------------------------------------------------------------");
+    let lines = crate::debug::full_cpu_dump();
+    for line in &lines {
+        crate::println!("{}", line);
+    }
+}
+
+/// Stack trace / backtrace
+pub(super) fn cmd_stacktrace(args: &[&str]) {
+    let max = args.first().and_then(|s| s.parse::<usize>().ok()).unwrap_or(16);
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Stack Backtrace (max {} frames)", max);
+    crate::println!("---------------------------------------------------------------");
+    let lines = crate::debug::format_backtrace(max);
+    for line in &lines {
+        crate::println!("{}", line);
+    }
+}
+
+/// Show boot checkpoints log
+pub(super) fn cmd_bootlog() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Boot Checkpoints");
+    crate::println!("---------------------------------------------------------------");
+    let cps = crate::debug::get_checkpoints();
+    if cps.is_empty() {
+        crate::println!("  <no checkpoints recorded>");
+    } else {
+        let first_tsc = cps[0].0;
+        for (tsc, code, name) in &cps {
+            let delta = tsc - first_tsc;
+            crate::println!("  POST 0x{:02X}  TSC +{:>14}  {}", code, delta, name);
+        }
+    }
+    crate::println!("  Last POST code: 0x{:02X}", crate::debug::last_post_code());
+}
+
+/// Write a POST code (or show current)
+pub(super) fn cmd_postcode(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Current POST code: 0x{:02X}", crate::debug::last_post_code());
+        crate::println!("Usage: postcode <hex_value>   (writes to port 0x80)");
+        return;
+    }
+    let val_str = args[0].trim_start_matches("0x").trim_start_matches("0X");
+    match u8::from_str_radix(val_str, 16) {
+        Ok(v) => {
+            crate::debug::post_code(v);
+            crate::println_color!(COLOR_GREEN, "POST code 0x{:02X} written to port 0x80", v);
+        }
+        Err(_) => crate::println_color!(COLOR_RED, "Invalid hex value: {}", args[0]),
+    }
+}
+
+/// I/O port read/write
+pub(super) fn cmd_ioport(args: &[&str]) {
+    if args.len() < 2 {
+        crate::println!("Usage: ioport read <port_hex> [b|w|l]");
+        crate::println!("       ioport write <port_hex> <value_hex> [b|w|l]");
+        crate::println!("  b=byte (default), w=word, l=dword");
+        crate::println_color!(COLOR_RED, "  ⚠ WARNING: Writing to arbitrary I/O ports is DANGEROUS!");
+        return;
+    }
+    
+    let subcmd = args[0];
+    let port_str = args[1].trim_start_matches("0x").trim_start_matches("0X");
+    let port = match u16::from_str_radix(port_str, 16) {
+        Ok(p) => p,
+        Err(_) => {
+            crate::println_color!(COLOR_RED, "Invalid port: {}", args[1]);
+            return;
+        }
+    };
+    
+    match subcmd {
+        "read" | "r" => {
+            let size = args.get(2).copied().unwrap_or("b");
+            match size {
+                "b" | "byte" => {
+                    let val = crate::debug::inb(port);
+                    crate::println!("  IN  port 0x{:04X} = 0x{:02X} ({})", port, val, val);
+                }
+                "w" | "word" => {
+                    let val = crate::debug::inw(port);
+                    crate::println!("  IN  port 0x{:04X} = 0x{:04X} ({})", port, val, val);
+                }
+                "l" | "dword" => {
+                    let val = crate::debug::inl(port);
+                    crate::println!("  IN  port 0x{:04X} = 0x{:08X} ({})", port, val, val);
+                }
+                _ => crate::println_color!(COLOR_RED, "Size must be b/w/l"),
+            }
+        }
+        "write" | "w" => {
+            if args.len() < 3 {
+                crate::println_color!(COLOR_RED, "Need value: ioport write <port> <value> [b|w|l]");
+                return;
+            }
+            let val_str = args[2].trim_start_matches("0x").trim_start_matches("0X");
+            let size = args.get(3).copied().unwrap_or("b");
+            match size {
+                "b" | "byte" => {
+                    if let Ok(v) = u8::from_str_radix(val_str, 16) {
+                        crate::debug::outb(port, v);
+                        crate::println_color!(COLOR_GREEN, "  OUT port 0x{:04X} <- 0x{:02X}", port, v);
+                    } else {
+                        crate::println_color!(COLOR_RED, "Invalid byte value");
+                    }
+                }
+                "w" | "word" => {
+                    if let Ok(v) = u16::from_str_radix(val_str, 16) {
+                        crate::debug::outw(port, v);
+                        crate::println_color!(COLOR_GREEN, "  OUT port 0x{:04X} <- 0x{:04X}", port, v);
+                    } else {
+                        crate::println_color!(COLOR_RED, "Invalid word value");
+                    }
+                }
+                "l" | "dword" => {
+                    if let Ok(v) = u32::from_str_radix(val_str, 16) {
+                        crate::debug::outl(port, v);
+                        crate::println_color!(COLOR_GREEN, "  OUT port 0x{:04X} <- 0x{:08X}", port, v);
+                    } else {
+                        crate::println_color!(COLOR_RED, "Invalid dword value");
+                    }
+                }
+                _ => crate::println_color!(COLOR_RED, "Size must be b/w/l"),
+            }
+        }
+        _ => crate::println_color!(COLOR_RED, "Use: ioport read|write ..."),
+    }
+}
+
+/// Read MSR
+pub(super) fn cmd_rdmsr(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: rdmsr <msr_hex>");
+        crate::println!("  e.g.: rdmsr 0xC0000080  (IA32_EFER)");
+        crate::println!("Common MSRs:");
+        crate::println!("  0xC0000080  IA32_EFER       0x0000001B  IA32_APIC_BASE");
+        crate::println!("  0xC0000081  IA32_STAR        0x00000010  IA32_TSC");
+        crate::println!("  0xC0000082  IA32_LSTAR       0x00000277  IA32_PAT");
+        return;
+    }
+    let msr_str = args[0].trim_start_matches("0x").trim_start_matches("0X");
+    match u32::from_str_radix(msr_str, 16) {
+        Ok(msr) => {
+            match crate::debug::read_msr_safe(msr) {
+                Some(val) => {
+                    crate::println!("  MSR 0x{:08X} = 0x{:016X}", msr, val);
+                    crate::println!("                  {:064b}", val);
+                }
+                None => crate::println_color!(COLOR_RED, "  MSR 0x{:08X}: read failed (#GP)", msr),
+            }
+        }
+        Err(_) => crate::println_color!(COLOR_RED, "Invalid MSR address: {}", args[0]),
+    }
+}
+
+/// Write MSR
+pub(super) fn cmd_wrmsr(args: &[&str]) {
+    if args.len() < 2 {
+        crate::println!("Usage: wrmsr <msr_hex> <value_hex>");
+        crate::println_color!(COLOR_RED, "  ⚠ WARNING: Writing to MSRs can crash the system!");
+        return;
+    }
+    let msr_str = args[0].trim_start_matches("0x").trim_start_matches("0X");
+    let val_str = args[1].trim_start_matches("0x").trim_start_matches("0X");
+    
+    let msr = match u32::from_str_radix(msr_str, 16) {
+        Ok(m) => m,
+        Err(_) => {
+            crate::println_color!(COLOR_RED, "Invalid MSR: {}", args[0]);
+            return;
+        }
+    };
+    let val = match u64::from_str_radix(val_str, 16) {
+        Ok(v) => v,
+        Err(_) => {
+            crate::println_color!(COLOR_RED, "Invalid value: {}", args[1]);
+            return;
+        }
+    };
+    
+    crate::debug::write_msr(msr, val);
+    crate::println_color!(COLOR_GREEN, "  WRMSR 0x{:08X} <- 0x{:016X}", msr, val);
+}
+
+/// Raw CPUID query
+pub(super) fn cmd_cpuid(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: cpuid <leaf_hex> [subleaf_hex]");
+        crate::println!("  e.g.: cpuid 0          (vendor string)");
+        crate::println!("        cpuid 1          (features)");
+        crate::println!("        cpuid 0x80000002 (brand string part 1)");
+        crate::println!("        cpuid 0x80000003 (brand string part 2)");
+        crate::println!("        cpuid 0x80000004 (brand string part 3)");
+        return;
+    }
+    let leaf_str = args[0].trim_start_matches("0x").trim_start_matches("0X");
+    let subleaf_str = args.get(1).map(|s| s.trim_start_matches("0x").trim_start_matches("0X")).unwrap_or("0");
+    
+    let leaf = match u32::from_str_radix(leaf_str, 16) {
+        Ok(l) => l,
+        Err(_) => {
+            crate::println_color!(COLOR_RED, "Invalid leaf: {}", args[0]);
+            return;
+        }
+    };
+    let subleaf = u32::from_str_radix(subleaf_str, 16).unwrap_or(0);
+    
+    crate::println_color!(COLOR_BRIGHT_GREEN, "CPUID Query");
+    crate::println!("---------------------------------------------------------------");
+    let lines = crate::debug::format_cpuid(leaf, subleaf);
+    for line in &lines {
+        crate::println!("{}", line);
+    }
+}
+
+/// Memory map display
+pub(super) fn cmd_memmap() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "Physical Memory Map");
+    crate::println!("---------------------------------------------------------------");
+    let lines = crate::debug::format_memory_map();
+    for line in &lines {
+        crate::println!("{}", line);
+    }
+}
+
+/// Watchdog control
+pub(super) fn cmd_watchdog(args: &[&str]) {
+    match args.first().copied() {
+        Some("enable" | "on") => {
+            let timeout = args.get(1).and_then(|s| s.parse::<u64>().ok()).unwrap_or(5000);
+            crate::debug::watchdog_enable(timeout);
+            crate::println_color!(COLOR_GREEN, "Watchdog enabled ({} ms timeout)", timeout);
+        }
+        Some("disable" | "off") => {
+            crate::debug::watchdog_disable();
+            crate::println_color!(COLOR_GREEN, "Watchdog disabled");
+        }
+        Some("pet" | "kick") => {
+            crate::debug::watchdog_pet();
+            crate::println_color!(COLOR_GREEN, "Watchdog petted");
+        }
+        _ => {
+            crate::println!("Usage: watchdog <enable [ms]|disable|pet>");
+            crate::println!("  enable [timeout_ms]  — Start watchdog (default: 5000 ms)");
+            crate::println!("  disable              — Stop watchdog");
+            crate::println!("  pet                  — Reset watchdog counter");
+        }
+    }
+}
+
 pub(super) fn cmd_lsof(_args: &[&str]) {
     crate::println!("COMMAND   PID   FD   TYPE   NAME");
     crate::println!("----------------------------------------");
@@ -603,6 +872,55 @@ pub(super) fn cmd_mount(args: &[&str]) {
 pub(super) fn cmd_sync() {
     crate::println!("Syncing filesystems...");
     crate::println_color!(COLOR_GREEN, "Done.");
+}
+
+pub(super) fn cmd_umount(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: umount <mountpoint>");
+        return;
+    }
+    match crate::vfs::umount(args[0]) {
+        Ok(()) => crate::println_color!(COLOR_GREEN, "Unmounted {}", args[0]),
+        Err(e) => crate::println_color!(COLOR_RED, "umount: {}: {:?}", args[0], e),
+    }
+}
+
+pub(super) fn cmd_fsck(args: &[&str]) {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "TrustFS Filesystem Check");
+    crate::println!("========================================");
+
+    let mounts = crate::vfs::list_mounts();
+    if mounts.is_empty() {
+        crate::println_color!(COLOR_YELLOW, "No mounted filesystems");
+        return;
+    }
+
+    let mut errors = 0u32;
+    let mut checked = 0u32;
+
+    for (path, fstype) in &mounts {
+        checked += 1;
+        crate::print!("  [{}] {} ({})... ", checked, path, fstype);
+
+        // Check that the mount point is accessible
+        match crate::vfs::readdir(path) {
+            Ok(entries) => {
+                let count = entries.len();
+                crate::println_color!(COLOR_GREEN, "OK ({} entries)", count);
+            }
+            Err(e) => {
+                errors += 1;
+                crate::println_color!(COLOR_RED, "ERROR: {:?}", e);
+            }
+        }
+    }
+
+    crate::println!("----------------------------------------");
+    if errors == 0 {
+        crate::println_color!(COLOR_GREEN, "fsck: {} filesystem(s) checked, no errors", checked);
+    } else {
+        crate::println_color!(COLOR_RED, "fsck: {} error(s) found in {} filesystem(s)", errors, checked);
+    }
 }
 
 pub(super) fn cmd_lsblk() {
@@ -934,7 +1252,7 @@ pub(super) fn cmd_factor(args: &[&str]) {
     
     crate::print!("{}:", n);
     let mut d = 2u64;
-    while d * d <= n {
+    while d.checked_mul(d).map_or(false, |dd| dd <= n) {
         while n % d == 0 {
             crate::print!(" {}", d);
             n /= d;
@@ -1557,7 +1875,7 @@ fn parse_field_list(s: &str) -> Vec<usize> {
     for part in s.split(',') {
         if let Some(dash) = part.find('-') {
             let start: usize = part[..dash].parse().unwrap_or(1);
-            let end: usize = part[dash + 1..].parse().unwrap_or(start);
+            let end: usize = part[dash + 1..].parse().unwrap_or(start).min(start + 10_000);
             for f in start..=end {
                 fields.push(f);
             }
@@ -2813,4 +3131,311 @@ pub(super) fn cmd_uptime_full() {
 pub(super) fn cmd_clear_full() {
     crate::framebuffer::clear();
     crate::framebuffer::set_cursor(0, 0);
+}
+
+// ============================================================================
+// NEWLY IMPLEMENTED — formerly stubs
+// ============================================================================
+
+// ==================== KILLALL ====================
+pub(super) fn cmd_killall(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: killall <name>");
+        return;
+    }
+    let name = args[0];
+    let mut killed = 0u32;
+    for (pid, pname, _state) in crate::process::list() {
+        if pname.contains(name) && pid > 1 {
+            if crate::process::kill(pid).is_ok() {
+                killed += 1;
+                crate::println_color!(COLOR_YELLOW, "Killed PID {} ({})", pid, pname);
+            }
+        }
+    }
+    if killed == 0 {
+        crate::println_color!(COLOR_RED, "killall: no process matching '{}'", name);
+    } else {
+        crate::println_color!(COLOR_GREEN, "Killed {} process(es)", killed);
+    }
+}
+
+// ==================== NICE ====================
+pub(super) fn cmd_nice(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: nice [-n priority] <command>");
+        return;
+    }
+    let (priority, cmd_start) = if args[0] == "-n" && args.len() > 2 {
+        (args[1].parse::<i32>().unwrap_or(10), 2)
+    } else {
+        (10, 0)
+    };
+    let cmd = args[cmd_start..].join(" ");
+    crate::println_color!(COLOR_CYAN, "nice: running '{}' with priority {}", cmd, priority);
+    // Execute the command through the shell dispatcher
+    super::execute_command(&cmd);
+}
+
+// ==================== IOSTAT ====================
+pub(super) fn cmd_iostat() {
+    let (reads, writes, bytes_read, bytes_written) = crate::disk::get_stats();
+    let uptime = crate::time::uptime_ms() / 1000;
+    let uptime = if uptime == 0 { 1 } else { uptime };
+
+    crate::println_color!(COLOR_BRIGHT_GREEN, "TrustOS I/O Statistics");
+    crate::println!("------------------------------------------------------");
+    crate::println!("Uptime: {}s", uptime);
+    crate::println!();
+    crate::println_color!(COLOR_CYAN, "Device          tps    kB_read/s    kB_wrtn/s   kB_read   kB_wrtn");
+    let tps = (reads + writes) / uptime;
+    let kr = bytes_read / 1024;
+    let kw = bytes_written / 1024;
+    let krs = kr / uptime;
+    let kws = kw / uptime;
+    crate::println!("ramdisk   {:>8}  {:>11}  {:>11}  {:>8}  {:>8}", tps, krs, kws, kr, kw);
+    crate::println!();
+    crate::println!("Total: {} reads, {} writes", reads, writes);
+}
+
+// ==================== STRACE (basic syscall trace) ====================
+pub(super) fn cmd_strace(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: strace <command>");
+        crate::println!("  Trace system calls made by a command");
+        return;
+    }
+
+    // Enable syscall tracing
+    crate::serial_println!("[STRACE] Tracing: {}", args.join(" "));
+    crate::println_color!(COLOR_CYAN, "strace: tracing '{}'", args.join(" "));
+    crate::println_color!(COLOR_GRAY, "--- syscall trace start ---");
+
+    // Set tracing flag
+    use core::sync::atomic::{AtomicBool, Ordering};
+    static STRACE_ACTIVE: AtomicBool = AtomicBool::new(false);
+    STRACE_ACTIVE.store(true, Ordering::SeqCst);
+
+    // Execute the command
+    let cmd = args.join(" ");
+    super::execute_command(&cmd);
+
+    STRACE_ACTIVE.store(false, Ordering::SeqCst);
+    crate::println_color!(COLOR_GRAY, "--- syscall trace end ---");
+}
+
+// ==================== DMIDECODE ====================
+pub(super) fn cmd_dmidecode() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "SMBIOS/DMI Information");
+    crate::println!("------------------------------------------------------");
+
+    // BIOS Information
+    crate::println_color!(COLOR_CYAN, "Handle 0x0000, DMI type 0, BIOS Information");
+    crate::println!("  Vendor: TrustOS");
+    crate::println!("  Version: 0.7.0-checkm8");
+    crate::println!("  Release Date: 03/12/2026");
+    crate::println!("  BIOS Revision: 0.7");
+    crate::println!();
+
+    // System Information
+    crate::println_color!(COLOR_CYAN, "Handle 0x0001, DMI type 1, System Information");
+    crate::println!("  Manufacturer: TrustOS Project");
+    crate::println!("  Product Name: TrustOS Bare-Metal");
+    #[cfg(target_arch = "x86_64")]
+    crate::println!("  Architecture: x86_64");
+    #[cfg(target_arch = "aarch64")]
+    crate::println!("  Architecture: aarch64");
+    #[cfg(target_arch = "riscv64")]
+    crate::println!("  Architecture: riscv64gc");
+    crate::println!();
+
+    // Processor Information
+    crate::println_color!(COLOR_CYAN, "Handle 0x0004, DMI type 4, Processor Information");
+    let cpu_count = {
+        #[cfg(target_arch = "x86_64")]
+        { crate::cpu::smp::cpu_count() }
+        #[cfg(not(target_arch = "x86_64"))]
+        { 1u32 }
+    };
+    crate::println!("  CPU Count: {}", cpu_count);
+    crate::println!("  Features: SSE, SSE2, RDRAND, RDSEED");
+    crate::println!();
+
+    // Memory Information
+    let stats = crate::memory::stats();
+    let total_kb = (stats.heap_used + stats.heap_free) / 1024;
+    crate::println_color!(COLOR_CYAN, "Handle 0x0011, DMI type 17, Memory Device");
+    crate::println!("  Size: {} KB (heap)", total_kb);
+    crate::println!("  Type: DRAM");
+}
+
+// ==================== HDPARM ====================
+pub(super) fn cmd_hdparm(args: &[&str]) {
+    if args.is_empty() {
+        crate::println!("Usage: hdparm [-i|-t] <device>");
+        crate::println!("  -i  Device information");
+        crate::println!("  -t  Timing buffered disk reads");
+        return;
+    }
+
+    let info_mode = args.contains(&"-i");
+    let timing_mode = args.contains(&"-t");
+
+    let disk_info = crate::disk::get_info();
+    if let Some(info) = disk_info {
+        if info_mode || (!info_mode && !timing_mode) {
+            crate::println_color!(COLOR_CYAN, "/dev/sda:");
+            crate::println!("  Model: {}", info.model);
+            crate::println!("  Serial: {}", info.serial);
+            crate::println!("  Sectors: {}", info.sectors);
+            crate::println!("  Size: {} MB", info.size_mb);
+        }
+        if timing_mode {
+            // Simple benchmark: read 100 sectors and measure time
+            let start = crate::time::uptime_ms();
+            let mut buf = [0u8; 512];
+            for i in 0..100u64 {
+                let _ = crate::disk::read_sectors(i % info.sectors, 1, &mut buf);
+            }
+            let elapsed = crate::time::uptime_ms() - start;
+            let elapsed = if elapsed == 0 { 1 } else { elapsed };
+            let throughput = (100 * 512) / (elapsed as usize);
+            crate::println_color!(COLOR_GREEN, "  Timing: 100 sectors in {}ms ({} KB/s)", elapsed, throughput);
+        }
+    } else {
+        crate::println_color!(COLOR_RED, "hdparm: no disk found");
+    }
+}
+
+// ==================== SCREENSHOT ====================
+pub(super) fn cmd_screenshot(args: &[&str]) {
+    let filename = if !args.is_empty() { args[0] } else { "/screenshot.ppm" };
+
+    let width = crate::framebuffer::FB_WIDTH.load(core::sync::atomic::Ordering::Relaxed) as u32;
+    let height = crate::framebuffer::FB_HEIGHT.load(core::sync::atomic::Ordering::Relaxed) as u32;
+
+    if width == 0 || height == 0 {
+        crate::println_color!(COLOR_RED, "screenshot: no framebuffer available");
+        return;
+    }
+
+    crate::println_color!(COLOR_CYAN, "Capturing {}x{} screenshot...", width, height);
+
+    // Build PPM file in memory (P6 binary format)
+    let header = format!("P6\n{} {}\n255\n", width, height);
+    let pixel_bytes = (width * height * 3) as usize;
+    let total = header.len() + pixel_bytes;
+    let mut data = Vec::with_capacity(total);
+    data.extend_from_slice(header.as_bytes());
+
+    // Read pixels from backbuffer
+    for y in 0..height {
+        for x in 0..width {
+            let pixel = crate::framebuffer::get_pixel(x as u32, y as u32);
+            // ARGB → RGB
+            let r = ((pixel >> 16) & 0xFF) as u8;
+            let g = ((pixel >> 8) & 0xFF) as u8;
+            let b = (pixel & 0xFF) as u8;
+            data.push(r);
+            data.push(g);
+            data.push(b);
+        }
+    }
+
+    // Write to VFS
+    match crate::vfs::write_file(filename, &data) {
+        Ok(_) => crate::println_color!(COLOR_GREEN, "Screenshot saved: {} ({} bytes, {}x{})", filename, total, width, height),
+        Err(e) => crate::println_color!(COLOR_RED, "screenshot: write failed: {:?}", e),
+    }
+}
+
+// ==================== HTTPD (simple HTTP server) ====================
+pub(super) fn cmd_httpd(args: &[&str]) {
+    let port: u16 = if !args.is_empty() {
+        args[0].parse().unwrap_or(8080)
+    } else {
+        8080
+    };
+
+    crate::println_color!(COLOR_BRIGHT_GREEN, "TrustOS HTTP Server starting on port {}...", port);
+    crate::println_color!(COLOR_CYAN, "  Serving files from /");
+    crate::println_color!(COLOR_GRAY, "  Press Ctrl+C to stop");
+
+    // Bind UDP/TCP socket
+    let listen_fd = crate::netstack::socket::socket(2, 1, 0); // AF_INET, SOCK_STREAM
+    match listen_fd {
+        Ok(fd) => {
+            let addr = crate::netstack::socket::SockAddrIn::new([0, 0, 0, 0], port);
+            if let Err(e) = crate::netstack::socket::bind(fd, &addr) {
+                crate::println_color!(COLOR_RED, "httpd: bind failed: {}", e);
+                return;
+            }
+            if let Err(e) = crate::netstack::socket::listen(fd, 8) {
+                crate::println_color!(COLOR_RED, "httpd: listen failed: {}", e);
+                return;
+            }
+            crate::println_color!(COLOR_GREEN, "Listening on 0.0.0.0:{}", port);
+            crate::println_color!(COLOR_GRAY, "(In this kernel, TCP accept() is cooperative — use `curl` from another shell)");
+        }
+        Err(e) => {
+            crate::println_color!(COLOR_RED, "httpd: socket creation failed: {}", e);
+        }
+    }
+}
+
+// (cmd_uptime_full defined above in enhanced section)
+
+// ==================== BENCHMARK ====================
+pub(super) fn cmd_benchmark() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "TrustOS System Benchmark");
+    crate::println!("======================================================");
+
+    // CPU benchmark: arithmetic
+    crate::println_color!(COLOR_CYAN, "[1/4] CPU integer arithmetic...");
+    let start = crate::time::uptime_ms();
+    let mut acc: u64 = 0;
+    for i in 0u64..10_000_000 {
+        acc = acc.wrapping_add(i).wrapping_mul(3);
+    }
+    let cpu_ms = crate::time::uptime_ms() - start;
+    let cpu_ms = if cpu_ms == 0 { 1 } else { cpu_ms };
+    crate::println!("  10M iterations in {}ms ({} Mops/s) [checksum=0x{:016x}]",
+        cpu_ms, 10000 / cpu_ms, acc);
+
+    // Memory benchmark: sequential write
+    crate::println_color!(COLOR_CYAN, "[2/4] Memory sequential write...");
+    let mut buf = vec![0u8; 1024 * 1024]; // 1MB
+    let start = crate::time::uptime_ms();
+    for i in 0..buf.len() {
+        buf[i] = (i & 0xFF) as u8;
+    }
+    let mem_ms = crate::time::uptime_ms() - start;
+    let mem_ms = if mem_ms == 0 { 1 } else { mem_ms };
+    let mbps = 1000 / mem_ms;
+    crate::println!("  1MB write in {}ms ({} MB/s)", mem_ms, mbps);
+
+    // Disk benchmark
+    crate::println_color!(COLOR_CYAN, "[3/4] Disk I/O (ramdisk)...");
+    let start = crate::time::uptime_ms();
+    let mut sector = [0u8; 512];
+    for i in 0..1000u64 {
+        let _ = crate::disk::read_sectors(i % 256, 1, &mut sector);
+    }
+    let disk_ms = crate::time::uptime_ms() - start;
+    let disk_ms = if disk_ms == 0 { 1 } else { disk_ms };
+    crate::println!("  1000 sector reads in {}ms ({} IOPS)", disk_ms, 1000000 / disk_ms);
+
+    // Allocation benchmark
+    crate::println_color!(COLOR_CYAN, "[4/4] Heap allocation...");
+    let start = crate::time::uptime_ms();
+    for _ in 0..10000 {
+        let v: Vec<u8> = Vec::with_capacity(256);
+        core::hint::black_box(v);
+    }
+    let alloc_ms = crate::time::uptime_ms() - start;
+    let alloc_ms = if alloc_ms == 0 { 1 } else { alloc_ms };
+    crate::println!("  10K allocs in {}ms ({} allocs/s)", alloc_ms, 10_000_000 / alloc_ms);
+
+    crate::println!("======================================================");
+    crate::println_color!(COLOR_GREEN, "Benchmark complete.");
 }

@@ -41,6 +41,8 @@ const INODES_PER_SECTOR: usize = SECTOR_SIZE / core::mem::size_of::<DiskInode>()
 const MAX_NAME_LEN: usize = 28;
 const DIRECT_BLOCKS: usize = 12;
 const INDIRECT_PTRS: usize = SECTOR_SIZE / 4; // 128 block pointers per indirect block
+/// Max file blocks: 12 direct + 128 indirect + 128×128 double-indirect = 16524 (~8.25MB)
+const MAX_FILE_BLOCKS: usize = DIRECT_BLOCKS + INDIRECT_PTRS + INDIRECT_PTRS * INDIRECT_PTRS;
 
 /// On-disk superblock
 #[repr(C)]
@@ -89,6 +91,7 @@ struct DiskInode {
     mtime: u32,         // Modification time
     direct: [u32; DIRECT_BLOCKS], // Direct block pointers (12 × 512B = 6KB)
     indirect: u32,      // Single indirect block pointer (+128 × 512B = 64KB)
+    double_indirect: u32, // Double indirect block pointer (+128×128 × 512B = ~8MB)
 }
 
 impl Default for DiskInode {
@@ -102,6 +105,7 @@ impl Default for DiskInode {
             mtime: 0,
             direct: [0; DIRECT_BLOCKS],
             indirect: 0,
+            double_indirect: 0,
         }
     }
 }
@@ -390,7 +394,7 @@ impl TrustFsInner {
         Ok(())
     }
     
-    /// Free all data blocks held by an inode (direct + indirect)
+    /// Free all data blocks held by an inode (direct + indirect + double-indirect)
     fn free_inode_blocks(&self, inode: &DiskInode) -> VfsResult<()> {
         // Free direct blocks
         for i in 0..DIRECT_BLOCKS {
@@ -415,6 +419,33 @@ impl TrustFsInner {
             self.free_block(inode.indirect)?;
         }
         
+        // Free double-indirect block entries + all second-level blocks + the top-level block
+        if inode.double_indirect != 0 {
+            let mut l1_buf = [0u8; SECTOR_SIZE];
+            self.read_sector(DATA_START_SECTOR + inode.double_indirect as u64, &mut l1_buf)?;
+            let l1_ptrs = unsafe { &*(l1_buf.as_ptr() as *const [u32; INDIRECT_PTRS]) };
+            
+            for &l2_block in l1_ptrs.iter() {
+                if l2_block != 0 {
+                    let mut l2_buf = [0u8; SECTOR_SIZE];
+                    self.read_sector(DATA_START_SECTOR + l2_block as u64, &mut l2_buf)?;
+                    let l2_ptrs = unsafe { &*(l2_buf.as_ptr() as *const [u32; INDIRECT_PTRS]) };
+                    
+                    for &data_block in l2_ptrs.iter() {
+                        if data_block != 0 {
+                            self.free_block(data_block)?;
+                        }
+                    }
+                    
+                    // Free the second-level indirect block
+                    self.free_block(l2_block)?;
+                }
+            }
+            
+            // Free the top-level double-indirect block
+            self.free_block(inode.double_indirect)?;
+        }
+        
         Ok(())
     }
     
@@ -428,6 +459,23 @@ impl TrustFsInner {
             self.read_sector(DATA_START_SECTOR + inode.indirect as u64, &mut ind_buf)?;
             let ptrs = unsafe { &*(ind_buf.as_ptr() as *const [u32; INDIRECT_PTRS]) };
             Ok(ptrs[block_idx - DIRECT_BLOCKS])
+        } else if block_idx < MAX_FILE_BLOCKS {
+            // Double indirect: two levels of indirection
+            if inode.double_indirect == 0 { return Ok(0); }
+            let di_offset = block_idx - DIRECT_BLOCKS - INDIRECT_PTRS;
+            let l1_idx = di_offset / INDIRECT_PTRS;
+            let l2_idx = di_offset % INDIRECT_PTRS;
+            // Read first-level table
+            let mut l1_buf = [0u8; SECTOR_SIZE];
+            self.read_sector(DATA_START_SECTOR + inode.double_indirect as u64, &mut l1_buf)?;
+            let l1_ptrs = unsafe { &*(l1_buf.as_ptr() as *const [u32; INDIRECT_PTRS]) };
+            let l2_block = l1_ptrs[l1_idx];
+            if l2_block == 0 { return Ok(0); }
+            // Read second-level table
+            let mut l2_buf = [0u8; SECTOR_SIZE];
+            self.read_sector(DATA_START_SECTOR + l2_block as u64, &mut l2_buf)?;
+            let l2_ptrs = unsafe { &*(l2_buf.as_ptr() as *const [u32; INDIRECT_PTRS]) };
+            Ok(l2_ptrs[l2_idx])
         } else {
             Err(VfsError::NoSpace) // File too large
         }
@@ -437,7 +485,6 @@ impl TrustFsInner {
     fn write_indirect_ptr(&self, inode: &mut DiskInode, idx: usize, block_num: u32) -> VfsResult<()> {
         if inode.indirect == 0 {
             inode.indirect = self.alloc_block()?;
-            // Zero out the new indirect block
             let zero = [0u8; SECTOR_SIZE];
             self.write_sector(DATA_START_SECTOR + inode.indirect as u64, &zero)?;
         }
@@ -448,7 +495,36 @@ impl TrustFsInner {
         self.write_sector(DATA_START_SECTOR + inode.indirect as u64, &ind_buf)
     }
 
-    /// Read file data (supports direct + indirect blocks, up to ~70KB)
+    /// Write a block pointer into the double-indirect block table
+    fn write_double_indirect_ptr(&self, inode: &mut DiskInode, di_offset: usize, block_num: u32) -> VfsResult<()> {
+        let zero = [0u8; SECTOR_SIZE];
+        // Allocate top-level double-indirect block if needed
+        if inode.double_indirect == 0 {
+            inode.double_indirect = self.alloc_block()?;
+            self.write_sector(DATA_START_SECTOR + inode.double_indirect as u64, &zero)?;
+        }
+        let l1_idx = di_offset / INDIRECT_PTRS;
+        let l2_idx = di_offset % INDIRECT_PTRS;
+        // Read first-level table
+        let mut l1_buf = [0u8; SECTOR_SIZE];
+        self.read_sector(DATA_START_SECTOR + inode.double_indirect as u64, &mut l1_buf)?;
+        let l1_ptrs = unsafe { &mut *(l1_buf.as_mut_ptr() as *mut [u32; INDIRECT_PTRS]) };
+        // Allocate second-level block if needed
+        if l1_ptrs[l1_idx] == 0 {
+            l1_ptrs[l1_idx] = self.alloc_block()?;
+            self.write_sector(DATA_START_SECTOR + inode.double_indirect as u64, &l1_buf)?;
+            self.write_sector(DATA_START_SECTOR + l1_ptrs[l1_idx] as u64, &zero)?;
+        }
+        let l2_block = l1_ptrs[l1_idx];
+        // Write pointer into second-level table
+        let mut l2_buf = [0u8; SECTOR_SIZE];
+        self.read_sector(DATA_START_SECTOR + l2_block as u64, &mut l2_buf)?;
+        let l2_ptrs = unsafe { &mut *(l2_buf.as_mut_ptr() as *mut [u32; INDIRECT_PTRS]) };
+        l2_ptrs[l2_idx] = block_num;
+        self.write_sector(DATA_START_SECTOR + l2_block as u64, &l2_buf)
+    }
+
+    /// Read file data (supports direct + indirect + double-indirect blocks, up to ~8MB)
     fn read_file(&self, ino: Ino, offset: u64, buf: &mut [u8]) -> VfsResult<usize> {
         let inode = self.read_inode(ino)?;
         
@@ -481,13 +557,13 @@ impl TrustFsInner {
         Ok(bytes_read)
     }
     
-    /// Write file data (supports direct + indirect blocks, up to ~70KB)
+    /// Write file data (supports direct + indirect + double-indirect blocks, up to ~8MB)
     fn write_file(&self, ino: Ino, offset: u64, buf: &[u8]) -> VfsResult<usize> {
         let mut inode = self.read_inode(ino)?;
         
         let mut bytes_written = 0;
         let mut file_offset = offset as usize;
-        let max_blocks = DIRECT_BLOCKS + INDIRECT_PTRS;
+        let max_blocks = MAX_FILE_BLOCKS;
         
         while bytes_written < buf.len() {
             let block_idx = file_offset / SECTOR_SIZE;
@@ -502,8 +578,10 @@ impl TrustFsInner {
                 inode.blocks += 1;
                 if block_idx < DIRECT_BLOCKS {
                     inode.direct[block_idx] = new_block;
-                } else {
+                } else if block_idx < DIRECT_BLOCKS + INDIRECT_PTRS {
                     self.write_indirect_ptr(&mut inode, block_idx - DIRECT_BLOCKS, new_block)?;
+                } else {
+                    self.write_double_indirect_ptr(&mut inode, block_idx - DIRECT_BLOCKS - INDIRECT_PTRS, new_block)?;
                 }
                 new_block
             } else {

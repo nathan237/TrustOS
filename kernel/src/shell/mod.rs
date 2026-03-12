@@ -197,6 +197,9 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "login", "su", "passwd", "adduser", "useradd", "deluser", "userdel", "users", "logout",
     // Test and debug
     "hwtest", "keytest", "hexdump", "xxd", "panic",
+    // Hardware debug toolkit
+    "hwdiag", "cpudump", "stacktrace", "backtrace", "bootlog", "postcode",
+    "ioport", "rdmsr", "wrmsr", "cpuid", "memmap", "watchdog",
     // Desktop GUI (multi-layer compositor)
     "desktop", "gui", "mobile", "cosmic", "open", "trustedit",
     // Kernel signature
@@ -210,7 +213,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // Disk
     "disk", "dd", "ahci", "fdisk", "partitions",
     // Hardware
-    "lspci", "lshw", "hwinfo", "gpu", "gpuexec", "sdma", "neural", "a11y",
+    "lspci", "lshw", "hwinfo", "gpu", "gpuexec", "sdma", "neural", "gpufw", "a11y",
     // USB / checkm8
     "lsusb", "checkm8",
     // Audio
@@ -1090,6 +1093,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "gpuexec" | "gpurun" | "gpuagent" => commands::cmd_gpuexec(args),
         "sdma" | "dma" => commands::cmd_sdma(args),
         "neural" | "nn" | "gemm" => commands::cmd_neural(args),
+        "gpufw" | "firmware" => commands::cmd_gpufw(args),
         "a11y" | "accessibility" => vm::cmd_a11y(args),
         "beep" => vm::cmd_beep(args),
         "audio" => vm::cmd_audio(args),
@@ -1187,16 +1191,28 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "seq" => unix::cmd_seq(args),
         "sleep" => unix::cmd_sleep(args),
         "kill" => unix::cmd_kill(args),
+        "killall" => unix::cmd_killall(args),
+        "nice" => unix::cmd_nice(args),
 
         "top" => unix::cmd_top(),
         "htop" => unix::cmd_top(),
         "vmstat" => unix::cmd_vmstat(),
+        "iostat" => unix::cmd_iostat(),
+        "strace" => unix::cmd_strace(args),
+        "dmidecode" => unix::cmd_dmidecode(),
+        "hdparm" => unix::cmd_hdparm(args),
+        "screenshot" | "scrot" => unix::cmd_screenshot(args),
+        "httpd" | "serve" => unix::cmd_httpd(args),
+        "benchmark" | "bench" => unix::cmd_benchmark(),
+        "uptime" => unix::cmd_uptime_full(),
 
         "lsof" => unix::cmd_lsof(args),
 
         "strings" => unix::cmd_strings(args),
 
         "mount" => unix::cmd_mount(args),
+        "umount" => unix::cmd_umount(args),
+        "fsck" => unix::cmd_fsck(args),
 
         "sync" => unix::cmd_sync(),
         "lsblk" => unix::cmd_lsblk(),
@@ -1240,6 +1256,19 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "poke" | "memwrite" => unix::cmd_poke(args),
         "devpanel" => unix::cmd_devpanel(),
         "timecmd" => unix::cmd_timecmd(args),
+
+        // -- Hardware Debug Toolkit --
+        "hwdiag" | "diagnostic" | "diag" => unix::cmd_hwdiag(),
+        "cpudump" | "fullregs" => unix::cmd_cpudump(),
+        "stacktrace" | "backtrace" | "bt" => unix::cmd_stacktrace(args),
+        "bootlog" | "checkpoints" => unix::cmd_bootlog(),
+        "postcode" => unix::cmd_postcode(args),
+        "ioport" => unix::cmd_ioport(args),
+        "rdmsr" => unix::cmd_rdmsr(args),
+        "wrmsr" => unix::cmd_wrmsr(args),
+        "cpuid" => unix::cmd_cpuid(args),
+        "memmap" => unix::cmd_memmap(),
+        "watchdog" | "wdt" => unix::cmd_watchdog(args),
 
         // -- apps module: TrustLang, Film, Transpile, Video, Lab, Gterm, Wayland --
         "wayland" | "wl" => apps::cmd_wayland(args),

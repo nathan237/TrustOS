@@ -226,12 +226,12 @@ pub fn handle_full(num: u64, a1: u64, a2: u64, a3: u64, a4: u64, a5: u64, a6: u6
         SHUTDOWN => sys_shutdown(a1 as i32, a2 as i32),
         BIND => sys_bind(a1 as i32, a2, a3 as usize),
         LISTEN => sys_listen(a1 as i32, a2 as u32),
-        GETSOCKNAME => 0, // TODO
-        GETPEERNAME => 0, // TODO
+        GETSOCKNAME => sys_getsockname(a1 as i32, a2, a3),
+        GETPEERNAME => sys_getpeername(a1 as i32, a2, a3),
         SETSOCKOPT => sys_setsockopt(a1 as i32, a2 as i32, a3 as i32, a4, a5 as usize),
         GETSOCKOPT => sys_getsockopt(a1 as i32, a2 as i32, a3 as i32, a4, a5),
-        SENDMSG => errno::ENOSYS, // TODO
-        RECVMSG => errno::ENOSYS, // TODO
+        SENDMSG => sys_sendmsg(a1 as i32, a2, a3 as u32),
+        RECVMSG => sys_recvmsg(a1 as i32, a2, a3 as u32),
         
         // ====== Pipes ======
         PIPE2 => sys_pipe2(a1, a2 as u32),
@@ -721,6 +721,115 @@ fn sys_shutdown(fd: i32, _how: i32) -> i64 {
         Ok(()) => 0,
         Err(e) => e as i64,
     }
+}
+
+/// Get local address of a socket
+fn sys_getsockname(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
+    use crate::netstack::socket::{SockAddrIn, SOCKET_TABLE};
+
+    if addr_ptr == 0 || addr_len_ptr == 0 {
+        return errno::EFAULT;
+    }
+    if !validate_user_ptr(addr_len_ptr, 4, true) {
+        return errno::EFAULT;
+    }
+
+    let len = unsafe { *(addr_len_ptr as *const u32) } as usize;
+    if len < SockAddrIn::SIZE || !validate_user_ptr(addr_ptr, SockAddrIn::SIZE, true) {
+        return errno::EINVAL;
+    }
+
+    let table = SOCKET_TABLE.lock();
+    let sock = match table.get(&fd) {
+        Some(s) => s,
+        None => return errno::EBADF,
+    };
+
+    let addr = sock.local_addr.unwrap_or_default();
+    unsafe {
+        *(addr_ptr as *mut SockAddrIn) = addr;
+        *(addr_len_ptr as *mut u32) = SockAddrIn::SIZE as u32;
+    }
+    0
+}
+
+/// Get remote address of a connected socket
+fn sys_getpeername(fd: i32, addr_ptr: u64, addr_len_ptr: u64) -> i64 {
+    use crate::netstack::socket::{SockAddrIn, SOCKET_TABLE};
+
+    if addr_ptr == 0 || addr_len_ptr == 0 {
+        return errno::EFAULT;
+    }
+    if !validate_user_ptr(addr_len_ptr, 4, true) {
+        return errno::EFAULT;
+    }
+
+    let len = unsafe { *(addr_len_ptr as *const u32) } as usize;
+    if len < SockAddrIn::SIZE || !validate_user_ptr(addr_ptr, SockAddrIn::SIZE, true) {
+        return errno::EINVAL;
+    }
+
+    let table = SOCKET_TABLE.lock();
+    let sock = match table.get(&fd) {
+        Some(s) => s,
+        None => return errno::EBADF,
+    };
+
+    let addr = match sock.remote_addr {
+        Some(a) => a,
+        None => return -107, // ENOTCONN
+    };
+    unsafe {
+        *(addr_ptr as *mut SockAddrIn) = addr;
+        *(addr_len_ptr as *mut u32) = SockAddrIn::SIZE as u32;
+    }
+    0
+}
+
+/// sendmsg — extract iov[0] and optional addr from msghdr, delegate to sendto
+fn sys_sendmsg(fd: i32, msg_ptr: u64, flags: u32) -> i64 {
+    if msg_ptr == 0 || !validate_user_ptr(msg_ptr, 56, false) {
+        return errno::EFAULT;
+    }
+    // struct msghdr layout (x86_64): name(8), namelen(4), pad(4), iov(8), iovlen(8), control(8), controllen(8), flags(4)
+    let name_ptr = unsafe { *(msg_ptr as *const u64) };
+    let name_len = unsafe { *((msg_ptr + 8) as *const u32) } as usize;
+    let iov_ptr  = unsafe { *((msg_ptr + 16) as *const u64) };
+    let iov_len  = unsafe { *((msg_ptr + 24) as *const u64) } as usize;
+
+    if iov_len == 0 || iov_ptr == 0 {
+        return 0;
+    }
+    // Read first iovec {base: *u8, len: usize}
+    if !validate_user_ptr(iov_ptr, 16, false) {
+        return errno::EFAULT;
+    }
+    let base = unsafe { *(iov_ptr as *const u64) };
+    let len  = unsafe { *((iov_ptr + 8) as *const u64) } as usize;
+
+    sys_sendto(fd, base, len, flags, name_ptr, name_len)
+}
+
+/// recvmsg — extract iov[0] from msghdr, delegate to recvfrom
+fn sys_recvmsg(fd: i32, msg_ptr: u64, flags: u32) -> i64 {
+    if msg_ptr == 0 || !validate_user_ptr(msg_ptr, 56, true) {
+        return errno::EFAULT;
+    }
+    let name_ptr = unsafe { *(msg_ptr as *const u64) };
+    let name_len_ptr = unsafe { (msg_ptr + 8) as u64 };
+    let iov_ptr  = unsafe { *((msg_ptr + 16) as *const u64) };
+    let iov_len  = unsafe { *((msg_ptr + 24) as *const u64) } as usize;
+
+    if iov_len == 0 || iov_ptr == 0 {
+        return 0;
+    }
+    if !validate_user_ptr(iov_ptr, 16, false) {
+        return errno::EFAULT;
+    }
+    let base = unsafe { *(iov_ptr as *const u64) };
+    let len  = unsafe { *((iov_ptr + 8) as *const u64) } as usize;
+
+    sys_recvfrom(fd, base, len, flags, name_ptr, name_len_ptr)
 }
 
 /// Set socket option

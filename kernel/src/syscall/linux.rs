@@ -1051,19 +1051,59 @@ pub fn sys_ioctl(fd: i32, request: u64, arg: u64) -> i64 {
 
 /// sys_fcntl - File control
 pub fn sys_fcntl(fd: i32, cmd: u32, arg: u64) -> i64 {
+    use alloc::collections::BTreeMap;
+    use spin::Mutex;
+
     const F_DUPFD: u32 = 0;
     const F_GETFD: u32 = 1;
     const F_SETFD: u32 = 2;
     const F_GETFL: u32 = 3;
     const F_SETFL: u32 = 4;
-    
+    const F_DUPFD_CLOEXEC: u32 = 0x406;
+
+    // Per-(pid,fd) flag storage: (fd_flags, status_flags)
+    static FD_FLAGS: Mutex<BTreeMap<(u32, i32), (u32, u32)>> = Mutex::new(BTreeMap::new());
+
+    let pid = crate::process::current_pid();
+    let key = (pid, fd);
+
     match cmd {
-        F_GETFD => 0,  // No close-on-exec
-        F_SETFD => 0,
-        F_GETFL => 0,  // No flags
-        F_SETFL => 0,
+        F_DUPFD | F_DUPFD_CLOEXEC => {
+            match crate::vfs::dup_fd(fd) {
+                Ok(new_fd) => {
+                    if cmd == F_DUPFD_CLOEXEC {
+                        let mut flags = FD_FLAGS.lock();
+                        flags.insert((pid, new_fd), (1, 0)); // FD_CLOEXEC
+                    }
+                    new_fd as i64
+                }
+                Err(_) => -9, // EBADF
+            }
+        }
+        F_GETFD => {
+            let flags = FD_FLAGS.lock();
+            flags.get(&key).map(|f| f.0 as i64).unwrap_or(0)
+        }
+        F_SETFD => {
+            let mut flags = FD_FLAGS.lock();
+            let entry = flags.entry(key).or_insert((0, 0));
+            entry.0 = arg as u32;
+            0
+        }
+        F_GETFL => {
+            let flags = FD_FLAGS.lock();
+            flags.get(&key).map(|f| f.1 as i64).unwrap_or(0)
+        }
+        F_SETFL => {
+            // Only allow changing O_APPEND(0x400), O_NONBLOCK(0x800), O_ASYNC(0x2000)
+            let allowed = 0x400 | 0x800 | 0x2000;
+            let mut flags = FD_FLAGS.lock();
+            let entry = flags.entry(key).or_insert((0, 0));
+            entry.1 = (entry.1 & !allowed) | (arg as u32 & allowed);
+            0
+        }
         _ => {
-            crate::log_debug!("[FCNTL] fd={} cmd={} arg={}", fd, cmd, arg);
+            crate::log_debug!("[FCNTL] fd={} cmd={:#x} arg={}", fd, cmd, arg);
             0
         }
     }

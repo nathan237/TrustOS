@@ -710,6 +710,23 @@ pub fn parent_pid(pid: Pid) -> Option<Pid> {
     table.processes.get(&pid).map(|p| p.ppid)
 }
 
+/// Get a copy of the CPU context for a process (used by ptrace)
+pub fn get_context(pid: Pid) -> Option<CpuContext> {
+    let table = PROCESS_TABLE.read();
+    table.processes.get(&pid).map(|p| p.context.clone())
+}
+
+/// Set the CPU context for a process (used by ptrace)
+pub fn set_context(pid: Pid, ctx: &CpuContext) -> Result<(), &'static str> {
+    let mut table = PROCESS_TABLE.write();
+    if let Some(proc) = table.processes.get_mut(&pid) {
+        proc.context = ctx.clone();
+        Ok(())
+    } else {
+        Err("Process not found")
+    }
+}
+
 // ============================================================================
 // Process groups, sessions, controlling terminal, chroot
 // ============================================================================

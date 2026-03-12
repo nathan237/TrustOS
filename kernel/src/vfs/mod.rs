@@ -339,6 +339,22 @@ pub fn mount(path: &str, fs: Arc<dyn FileSystem>) -> VfsResult<()> {
     Ok(())
 }
 
+/// Unmount a filesystem at a path
+pub fn umount(path: &str) -> VfsResult<()> {
+    let mut vfs = VFS.write();
+    
+    let idx = vfs.mounts.iter().position(|mp| mp.path == path)
+        .ok_or(VfsError::NotFound)?;
+    
+    // Don't allow unmounting root
+    if vfs.mounts[idx].path == "/" {
+        return Err(VfsError::PermissionDenied);
+    }
+    
+    vfs.mounts.remove(idx);
+    Ok(())
+}
+
 /// Find the mount point for a path
 fn find_mount(path: &str) -> Option<(usize, String)> {
     let vfs = VFS.read();

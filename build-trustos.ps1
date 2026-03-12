@@ -65,9 +65,12 @@ New-Item -ItemType Directory -Path (Join-Path $isoDir "boot\limine") -Force | Ou
 New-Item -ItemType Directory -Path (Join-Path $isoDir "EFI\BOOT") -Force | Out-Null
 
 Copy-Item $kernelPath (Join-Path $isoDir "boot\trustos_kernel")
-Copy-Item "limine.cfg" (Join-Path $isoDir "boot\limine\limine.cfg")
-Copy-Item "limine.cfg" (Join-Path $isoDir "boot\limine\limine.conf")
-Copy-Item "limine.cfg" (Join-Path $isoDir "limine.conf")
+
+# Generate limine config WITHOUT jarvis module for base edition
+$limineBase = (Get-Content "limine.cfg") | Where-Object { $_ -notmatch "module_path|module_cmdline" }
+$limineBase | Set-Content (Join-Path $isoDir "boot\limine\limine.cfg")
+$limineBase | Set-Content (Join-Path $isoDir "boot\limine\limine.conf")
+$limineBase | Set-Content (Join-Path $isoDir "limine.conf")
 Copy-Item "limine\limine-bios.sys" (Join-Path $isoDir "boot\limine")
 Copy-Item "limine\limine-bios-cd.bin" (Join-Path $isoDir "boot\limine")
 Copy-Item "limine\limine-uefi-cd.bin" (Join-Path $isoDir "boot\limine")
@@ -80,6 +83,8 @@ Write-Host "[3/4] Creating bootable ISO..." -ForegroundColor Yellow
 $isoPath = Join-Path $OutputDir $IsoName
 
 $xorriso = Get-Command xorriso -ErrorAction SilentlyContinue
+$oldErr2 = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 if (-not $xorriso) {
     $full = [System.IO.Path]::GetFullPath($isoDir)
     $drive = $full.Substring(0, 1).ToLower()
@@ -91,10 +96,11 @@ if (-not $xorriso) {
     $rest2 = $full2.Substring(2) -replace "\\", "/"
     $wslIsoPath = "/mnt/$drive2$rest2"
 
-    wsl -e xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $wslIsoDir -o $wslIsoPath
+    wsl -e xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $wslIsoDir -o $wslIsoPath 2>&1 | Out-Null
 } else {
-    xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $isoDir -o $isoPath
+    xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $isoDir -o $isoPath 2>&1 | Out-Null
 }
+$ErrorActionPreference = $oldErr2
 if ($LASTEXITCODE -ne 0) { Write-Host "ISO creation failed!" -ForegroundColor Red; exit 1 }
 
 $oldErr = $ErrorActionPreference
