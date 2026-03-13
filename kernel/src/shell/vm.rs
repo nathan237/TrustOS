@@ -2888,8 +2888,13 @@ pub(super) fn cmd_audio(args: &[&str]) {
             let diag = crate::drivers::hda::diag();
             crate::println!("{}", diag);
         }
+        Some("dump") => {
+            crate::println_color!(COLOR_CYAN, "Codec Widget Dump");
+            let dump = crate::drivers::hda::codec_dump();
+            crate::println!("{}", dump);
+        }
         Some(other) => {
-            crate::println_color!(COLOR_YELLOW, "Usage: audio [init|status|stop|test|diag]");
+            crate::println_color!(COLOR_YELLOW, "Usage: audio [init|status|stop|test|diag|dump]");
         }
     }
 }
