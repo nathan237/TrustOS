@@ -2660,53 +2660,6 @@ impl Desktop {
     
     /// Initialize desktop with double buffering
     pub fn init(&mut self, width: u32, height: u32) {
-        // Helper: write diagnostic text directly to raw framebuffer (bypass backbuffer).
-        // Writes at bottom of screen, step 0-9, so user can see WHERE init hangs.
-        fn init_diag(step: u8, msg: &str, height: u32) {
-            use core::sync::atomic::Ordering;
-            let fb = framebuffer::FB_ADDR.load(Ordering::Relaxed);
-            let fw = framebuffer::FB_WIDTH.load(Ordering::Relaxed) as usize;
-            let pitch = framebuffer::FB_PITCH.load(Ordering::Relaxed) as usize;
-            let fh = height as usize;
-            if fb.is_null() || fw == 0 || pitch == 0 || fh == 0 { return; }
-            
-            let y_start = fh.saturating_sub(180) + (step as usize) * 16;
-            if y_start + 16 > fh { return; }
-            
-            // Clear line
-            for y in y_start..y_start + 16 {
-                for x in 0..fw.min(500) {
-                    unsafe {
-                        let ptr = fb.add(y * pitch + x * 4) as *mut u32;
-                        ptr.write_volatile(0xFF000000);
-                    }
-                }
-            }
-            // Draw text
-            for (ci, ch) in msg.bytes().enumerate() {
-                let glyph = framebuffer::font::get_glyph(ch as char);
-                for row in 0..16.min(glyph.len()) {
-                    let py = y_start + row;
-                    if py >= fh { break; }
-                    let bits = glyph[row];
-                    for col in 0..8 {
-                        if (bits >> (7 - col)) & 1 == 1 {
-                            let px = 8 + ci * 8 + col;
-                            if px < fw {
-                                unsafe {
-                                    let ptr = fb.add(py * pitch + px * 4) as *mut u32;
-                                    ptr.write_volatile(0xFF00FF00);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            crate::serial_println!("[INIT-DIAG {}] {}", step, msg);
-        }
-        
-        init_diag(0, "init: state reset...", height);
-        
         crate::serial_println!("[Desktop] init start: {}x{} (clearing {} windows, {} icons)", 
             width, height, self.windows.len(), self.icons.len());
         
@@ -2763,7 +2716,6 @@ impl Desktop {
         crate::serial_println!("[Desktop] state cleared, windows={} icons={}", 
             self.windows.len(), self.icons.len());
         
-        init_diag(1, "init: scaling + touch...", height);
         self.width = width;
         self.height = height;
         self.cursor_x = (width / 2) as i32;
@@ -2781,7 +2733,6 @@ impl Desktop {
         crate::serial_println!("[Desktop] Touch input initialized");
         
         // Initialize double buffering
-        init_diag(2, "init: double_buffer...", height);
         crate::serial_println!("[Desktop] init_double_buffer...");
         framebuffer::init_double_buffer();
         // Verify backbuffer was actually allocated — if it failed (OOM),
@@ -2795,18 +2746,15 @@ impl Desktop {
         }
         
         // Initialize background cache for fast redraws
-        init_diag(3, "init: bg_cache...", height);
         crate::serial_println!("[Desktop] init_background_cache...");
         framebuffer::init_background_cache();
         
         // Initialize OpenGL compositor
-        init_diag(4, "init: compositor...", height);
         crate::serial_println!("[Desktop] init_compositor...");
         compositor::init_compositor(width, height);
         compositor::set_compositor_theme(self.compositor_theme);
         
         // Create desktop icons like Windows
-        init_diag(5, "init: icons...", height);
         crate::serial_println!("[Desktop] init_desktop_icons...");
         self.init_desktop_icons();
         
@@ -2815,16 +2763,13 @@ impl Desktop {
         self.needs_full_redraw = true;
         
         // Initialize matrix rain
-        init_diag(6, "init: matrix_rain...", height);
         self.init_matrix_rain();
         
         // Detect optimal desktop tier based on host capabilities
-        init_diag(7, "init: detect_tier...", height);
         self.detect_tier();
         
         // Music player is available from the Start menu — not auto-opened
         
-        init_diag(8, "init: COMPLETE OK!", height);
         crate::serial_println!("[Desktop] init complete (tier={:?})", self.desktop_tier);
     }
     
@@ -14897,60 +14842,12 @@ pub fn run() {
         d.context_menu.visible = false;
     }
     
-    // ── Visual diagnostic: write step text directly to raw framebuffer ──
-    fn run_diag(step: u8, msg: &str) {
-        use core::sync::atomic::Ordering;
-        let fb = crate::framebuffer::FB_ADDR.load(Ordering::Relaxed);
-        let w = crate::framebuffer::FB_WIDTH.load(Ordering::Relaxed) as usize;
-        let pitch = crate::framebuffer::FB_PITCH.load(Ordering::Relaxed) as usize;
-        let h = crate::framebuffer::FB_HEIGHT.load(Ordering::Relaxed) as usize;
-        if fb.is_null() || w == 0 || pitch == 0 { return; }
-
-        // Place at top of screen — offset by 20 * step so each step is on its own line
-        let y_start = 20 + (step as usize) * 16;
-        if y_start + 16 > h { return; }
-
-        // Clear line
-        for y in y_start..y_start + 16 {
-            for x in 0..w.min(600) {
-                unsafe {
-                    let ptr = fb.add(y * pitch + x * 4) as *mut u32;
-                    ptr.write_volatile(0xFF000000);
-                }
-            }
-        }
-
-        // Draw text using built-in font
-        for (ci, ch) in msg.bytes().enumerate() {
-            let glyph = crate::framebuffer::font::get_glyph(ch as char);
-            for row in 0..16 {
-                let py = y_start + row;
-                if py >= h { break; }
-                let bits = glyph[row];
-                for col in 0..8 {
-                    if (bits >> (7 - col)) & 1 == 1 {
-                        let px = 8 + ci * 8 + col;
-                        if px < w {
-                            unsafe {
-                                let ptr = fb.add(py * pitch + px * 4) as *mut u32;
-                                ptr.write_volatile(0xFF00FF00);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        crate::serial_println!("[RUN-DIAG {}] {}", step, msg);
-    }
-
-    run_diag(0, "run: entered run()");
-    
     crate::serial_println!("[GUI] Starting desktop environment...");
+    crate::serial_println!("[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start");
+    crate::serial_println!("[GUI] Target: ~60 FPS (16.6ms) with spin-loop frame limiting");
     
     // Frame counter for safe startup (skip heavy work on first few frames)
     let mut loop_frame: u32 = 0;
-    
-    run_diag(1, "run: entering loop");
 
     loop {
         // Check exit flag
@@ -14958,18 +14855,11 @@ pub fn run() {
             crate::serial_println!("[GUI] Desktop exit requested, returning to shell");
             break;
         }
-        if loop_frame == 0 { run_diag(2, "run: frame 0 start"); }
-        if loop_frame == 1 { run_diag(5, "run: frame 1 start"); }
         let frame_start = engine::now_us();
         
         // ═══════════════════════════════════════════════════════════════
-        // Input Processing (skip first 3 frames for safe startup)
+        // Input Processing
         // ═══════════════════════════════════════════════════════════════
-        
-        if loop_frame < 3 {
-            // Skip input on first 3 frames to guarantee draw() runs
-            if loop_frame == 0 { run_diag(7, "run: frame 0 skip input -> draw"); }
-        } else {
         
         // Process mouse
         let mouse = crate::mouse::get_state();
@@ -14999,7 +14889,11 @@ pub fn run() {
         // NOTE: read_char() returns ASCII values, NOT scancodes.
         // The interrupt handler converts scancodes→ASCII and strips releases.
         // Use keyboard::is_key_pressed(scancode) to check modifier/key state.
+        // Cap at 32 keys per frame to prevent infinite loop from noisy UART/keyboard
+        let mut keys_this_frame = 0u32;
         while let Some(key) = crate::keyboard::read_char() {
+            keys_this_frame += 1;
+            if keys_this_frame > 32 { break; }
             crate::serial_println!("[INPUT-DBG] key={} (0x{:02X})", key, key);
             // Check modifier state from interrupt handler (tracks raw scancodes)
             let alt = crate::keyboard::is_key_pressed(0x38);
@@ -15408,16 +15302,12 @@ pub fn run() {
             }
         }
 
-        } // end of if loop_frame >= 3 (input processing)
-
         // ═══════════════════════════════════════════════════════════════
         // Rendering
         // ═══════════════════════════════════════════════════════════════
         
         // Render main desktop
-        if loop_frame == 0 { run_diag(3, "run: frame 0 draw()"); }
         draw();
-        if loop_frame == 0 { run_diag(4, "run: frame 0 draw() DONE"); }
         
         // Render Alt+Tab overlay if active
         if engine::is_alt_tab_active() {
@@ -15475,7 +15365,6 @@ pub fn run() {
             }
         }
         crate::gui::vsync::frame_end(frame_start);
-        if loop_frame == 0 { run_diag(6, "run: frame 0 COMPLETE OK!"); }
         loop_frame = loop_frame.saturating_add(1);
     }
     

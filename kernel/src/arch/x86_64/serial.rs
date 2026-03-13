@@ -77,6 +77,9 @@ pub fn write_bytes(bytes: &[u8]) {
 
 /// Try to read a byte from serial (non-blocking)
 pub fn read_byte() -> Option<u8> {
+    if !SERIAL_PRESENT.load(Ordering::Relaxed) {
+        return None;
+    }
     unsafe {
         if inb(COM1 + 5) & 0x01 != 0 {
             Some(inb(COM1))
