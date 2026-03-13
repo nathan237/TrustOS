@@ -464,15 +464,20 @@ impl HdaController {
                 return Err("HDA: reset exit timeout");
             }
 
-            // Wait for codecs to initialize (~521 µs per spec)
-            Self::delay_us(600);
+            // Wait for codecs to initialize (~521 µs per spec, but some
+            // codecs — especially on older chipsets like ICH8 (Lenovo T61) —
+            // need significantly longer.  Retry up to 50 ms total.
+            let mut statests = 0u16;
+            for attempt in 0..10 {
+                Self::delay_us(if attempt == 0 { 1000 } else { 5000 });
+                statests = self.read16(reg::STATESTS);
+                if statests != 0 { break; }
+            }
 
             // Enable unsolicited responses
             let gctl = self.read32(reg::GCTL);
             self.write32(reg::GCTL, gctl | gctl::UNSOL);
 
-            // Check which codecs are present
-            let statests = self.read16(reg::STATESTS);
             crate::serial_println!("[HDA]   STATESTS = {:#06X} (codec presence)", statests);
 
             if statests == 0 {
@@ -774,8 +779,15 @@ impl HdaController {
                 // Check if pin is an output type (connectivity != "No connection")
                 let connectivity = (w.pin_config >> 30) & 0x3;
                 let default_device = (w.pin_config >> 20) & 0xF;
-                connectivity != 1 && // Not "no connection"
-                (default_device <= 0x2 || default_device == 0x5) // Line Out, Speaker, HP, SPDIF
+                // Accept: Line Out(0), Speaker(1), HP Out(2), SPDIF Out(4),
+                //         Digital Other Out(5), Modem(6). Also accept Other(F)
+                //         for codecs with non-standard pin configs (AD1984, CX20549).
+                let is_output = matches!(default_device,
+                    0x0 | 0x1 | 0x2 | 0x4 | 0x5 | 0x6 | 0xF);
+                // Also accept pins where connectivity says "Jack" or "Fixed"
+                // even if default_device looks odd — some BIOS sets wrong defaults
+                let conn_ok = connectivity == 0 || connectivity == 2; // Jack or Fixed
+                (connectivity != 1 && is_output) || conn_ok
             })
             .map(|w| (w.nid, w.pin_config, w.connections.clone()))
             .collect();
@@ -845,11 +857,53 @@ impl HdaController {
             let _ = self.codec_cmd(codec, nid, verb::SET_POWER_STATE, 0x00); // D0
         }
 
-        // Configure the pin
-        let _ = self.codec_cmd(codec, path.pin_nid, verb::SET_PIN_CONTROL, 0xC0); // HP amp + out
-        // Try EAPD
+        // ── Codec-specific quirks ──
+        // Detect vendor ID for quirk selection
+        let vendor_id = self.get_param(codec, 0, verb::PARAM_VENDOR_ID).unwrap_or(0);
+        let vendor_hi = (vendor_id >> 16) & 0xFFFF;
+        let codec_device = vendor_id & 0xFFFF;
+        crate::serial_println!("[HDA]   Codec vendor={:#06X} device={:#06X}", vendor_hi, codec_device);
+
+        // AD1984 (vendor 0x11D4) / CX20549 Venice (vendor 0x14F1) quirks:
+        // These codecs need pin sense + specific EAPD + extra power states
+        let is_ad198x = vendor_hi == 0x11D4; // Analog Devices
+        let is_conexant = vendor_hi == 0x14F1; // Conexant
+        let needs_quirks = is_ad198x || is_conexant;
+
+        if needs_quirks {
+            crate::serial_println!("[HDA]   Applying {} codec quirks",
+                if is_ad198x { "Analog Devices AD198x" } else { "Conexant CX205xx" });
+
+            // Collect widget NIDs to avoid borrow conflict with self.codec_cmd()
+            let all_nids: Vec<u16> = self.widgets.iter().map(|w| w.nid).collect();
+            let output_pin_nids: Vec<u16> = self.widgets.iter()
+                .filter(|w| w.widget_type == WidgetType::PinComplex
+                    && matches!((w.pin_config >> 20) & 0xF, 0x0 | 0x1 | 0x2))
+                .map(|w| w.nid)
+                .collect();
+
+            // Power on all widgets in the AFG before configuring
+            for &nid in &all_nids {
+                let _ = self.codec_cmd(codec, nid, verb::SET_POWER_STATE, 0x00);
+            }
+            HdaController::delay_us(1000);
+
+            // For AD1984: override pin configs that BIOS may have set incorrectly
+            // Set all output pins to enable HP amp + output
+            for &nid in &output_pin_nids {
+                let _ = self.codec_cmd(codec, nid, verb::SET_PIN_CONTROL, 0xC0);
+                // Enable EAPD on all output pins
+                let eapd = self.codec_cmd(codec, nid, verb::GET_EAPD, 0).unwrap_or(0);
+                let _ = self.codec_cmd(codec, nid, verb::SET_EAPD, (eapd as u8) | 0x06);
+            }
+        }
+
+        // Configure the pin: OUT enable + HP amp enable
+        let _ = self.codec_cmd(codec, path.pin_nid, verb::SET_PIN_CONTROL, 0xC0);
+        // Try EAPD (External Amplifier Power Down control)
+        // Bit 1 = EAPD enable, Bit 2 = L/R swap (set both for safety)
         let eapd = self.codec_cmd(codec, path.pin_nid, verb::GET_EAPD, 0).unwrap_or(0);
-        let _ = self.codec_cmd(codec, path.pin_nid, verb::SET_EAPD, (eapd as u8) | 0x02);
+        let _ = self.codec_cmd(codec, path.pin_nid, verb::SET_EAPD, (eapd as u8) | 0x06);
 
         // Set stream tag on DAC
         let stream_tag = self.stream_tag;
@@ -858,24 +912,39 @@ impl HdaController {
             (stream_tag << 4) | channel);
 
         // Set stream format on DAC: 48 kHz, 16-bit, stereo
-        // FMT: base=48kHz(0), mult=x1(0), div=/1(0), bits=16(001), chan=2-1(0001)
         let fmt: u16 = 0x0011; // 48kHz, 16-bit, stereo
         let _ = self.set_verb_16(codec, path.dac_nid, verb::SET_STREAM_FORMAT, fmt);
 
-        // Unmute output amps along the path
-        for &nid in &path.path {
-            let widget = self.widgets.iter().find(|w| w.nid == nid);
-            if let Some(w) = widget {
-                if w.caps & (1 << 1) != 0 { // Has output amp
-                    // SET_AMP_GAIN_MUTE: [15]=1(output), [14:13]=11(L+R), [12]=0(not mute), [6:0]=gain
-                    let amp_cmd = 0xB000 | (1 << 15) | (3 << 13) | 0x7F; // Max gain
-                    let _ = self.send_verb(codec, nid, (0x300 << 8) | (amp_cmd & 0xFF), 0);
-                    // Actually SET_AMP_GAIN_MUTE is verb 0x3, payload is 16 bits
-                    // cmd[19:16] = 0x3, cmd[15:0] = amp_data
-                    let amp_data: u16 = (1 << 15) | (1 << 13) | (1 << 12) | 0x7F;
-                    let _ = self.set_verb_16(codec, nid, 0x300, amp_data);
-                    let amp_data2: u16 = (1 << 15) | (1 << 14) | (1 << 12) | 0x7F;
-                    let _ = self.set_verb_16(codec, nid, 0x300, amp_data2);
+        // Unmute output amps along the path — SET_AMP_GAIN_MUTE (verb 0x3)
+        // Payload: [15]=output, [14]=right, [13]=left, [12]=!mute, [6:0]=gain
+        // Collect widget info to avoid borrow conflict
+        let path_widget_info: Vec<(u16, u32, WidgetType, Vec<u16>)> = path.path.iter()
+            .filter_map(|&nid| self.widgets.iter().find(|w| w.nid == nid)
+                .map(|w| (nid, w.caps, w.widget_type, w.connections.clone())))
+            .collect();
+
+        for (nid, caps, wtype, connections) in &path_widget_info {
+            if caps & (1 << 1) != 0 { // Has output amp
+                // Set both L+R, unmuted, max gain in one command
+                let amp_out_lr: u16 = (1 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | 0x7F;
+                let _ = self.set_verb_16(codec, *nid, 0x300, amp_out_lr);
+            }
+            if caps & (1 << 2) != 0 { // Has input amp
+                // Also unmute input amps (needed for mixers in the path)
+                let amp_in_lr: u16 = (0 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | 0x7F;
+                let _ = self.set_verb_16(codec, *nid, 0x300, amp_in_lr);
+            }
+            // If this is a selector/mixer, select the right input
+            if *wtype == WidgetType::AudioSelector || *wtype == WidgetType::AudioMixer {
+                // Find which connection index leads to our path
+                let next_in_path = path.path.iter()
+                    .position(|&n| n == *nid)
+                    .and_then(|pos| path.path.get(pos + 1))
+                    .copied();
+                if let Some(next_nid) = next_in_path {
+                    if let Some(idx) = connections.iter().position(|&c| c == next_nid) {
+                        let _ = self.codec_cmd(codec, *nid, verb::SET_CONN_SELECT, idx as u8);
+                    }
                 }
             }
         }
@@ -1398,12 +1467,9 @@ pub fn set_volume(level: u8) -> Result<(), &'static str> {
     for &nid in &path.path {
         if let Some(w) = ctrl.widgets.iter().find(|w| w.nid == nid) {
             if w.caps & (1 << 1) != 0 {
-                // Left channel
-                let amp_data_l: u16 = (1 << 15) | (1 << 13) | (1 << 12) | gain;
-                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data_l);
-                // Right channel
-                let amp_data_r: u16 = (1 << 15) | (1 << 14) | (1 << 12) | gain;
-                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data_r);
+                // Both L+R channels, unmuted, with gain
+                let amp_data: u16 = (1 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | gain;
+                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data);
             }
         }
     }
@@ -1432,11 +1498,9 @@ pub fn mute() -> Result<(), &'static str> {
     for &nid in &path.path {
         if let Some(w) = ctrl.widgets.iter().find(|w| w.nid == nid) {
             if w.caps & (1 << 1) != 0 {
-                // Clear unmute flag (bit 12) → muted
-                let amp_mute_l: u16 = (1 << 15) | (1 << 13) | 0;
-                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_mute_l);
-                let amp_mute_r: u16 = (1 << 15) | (1 << 14) | 0;
-                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_mute_r);
+                // Mute both L+R: bit 12 clear = muted, bits 14+13 = L+R
+                let amp_mute: u16 = (1 << 15) | (1 << 14) | (1 << 13) | 0;
+                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_mute);
             }
         }
     }
