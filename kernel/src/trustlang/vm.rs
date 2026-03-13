@@ -185,6 +185,8 @@ const BUILTIN_ENERGY: u8 = 26;
 const BUILTIN_FRAME_NUM: u8 = 27;
 const BUILTIN_SIN_F: u8 = 28;
 const BUILTIN_COS_F: u8 = 29;
+const BUILTIN_MOUSE_X: u8 = 30;
+const BUILTIN_MOUSE_Y: u8 = 31;
 
 /// Resolve builtin name → ID
 pub fn builtin_id(name: &str) -> Option<u8> {
@@ -220,6 +222,8 @@ pub fn builtin_id(name: &str) -> Option<u8> {
         "frame_num" => Some(BUILTIN_FRAME_NUM),
         "sin_f" => Some(BUILTIN_SIN_F),
         "cos_f" => Some(BUILTIN_COS_F),
+        "mouse_x" => Some(BUILTIN_MOUSE_X),
+        "mouse_y" => Some(BUILTIN_MOUSE_Y),
         _ => None,
     }
 }
@@ -822,6 +826,18 @@ fn exec_builtin(id: u8, args: &[Value], output: &mut String) -> Result<Value, St
         BUILTIN_COS_F => {
             let x = args.first().unwrap_or(&Value::F64(0.0)).as_f64().unwrap_or(0.0);
             Ok(Value::F64(libm::cos(x)))
+        }
+        BUILTIN_MOUSE_X => {
+            let d = crate::desktop::DESKTOP.lock();
+            let mx = d.cursor_x;
+            drop(d);
+            Ok(Value::I64(mx as i64))
+        }
+        BUILTIN_MOUSE_Y => {
+            let d = crate::desktop::DESKTOP.lock();
+            let my = d.cursor_y;
+            drop(d);
+            Ok(Value::I64(my as i64))
         }
         _ => Err(format!("unknown builtin id: {}", id)),
     }

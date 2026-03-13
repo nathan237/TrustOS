@@ -25,9 +25,20 @@ pub fn enable_sse() {
         cr4 |= (1 << 9) | (1 << 10);
         
         core::arch::asm!("mov cr4, {}", in(reg) cr4);
+        
+        // Initialize x87 FPU to clean state (masks all x87 exceptions)
+        // Required because BIOS may leave pending FPU exceptions
+        core::arch::asm!("fninit");
+        
+        // Set MXCSR to default safe value: all SIMD exceptions masked
+        // 0x1F80 = IM|DM|ZM|OM|UM|PM mask bits set (bits 7-12)
+        // Without this, real hardware BIOS may leave exceptions unmasked,
+        // causing #XM on first SSE float operation (e.g. desktop matrix rain)
+        let mxcsr: u32 = 0x1F80;
+        core::arch::asm!("ldmxcsr [{}]", in(reg) &mxcsr, options(nostack));
     }
     
-    crate::serial_println!("[SIMD] SSE/SSE2 enabled");
+    crate::serial_println!("[SIMD] SSE/SSE2 enabled (FPU init + MXCSR masked)");
 }
 
 /// Enable AVX support (if available)

@@ -96,6 +96,7 @@ iso: build limine
 		-no-emul-boot -boot-load-size 4 -boot-info-table \
 		--efi-boot boot/limine/limine-uefi-cd.bin \
 		-efi-boot-part --efi-boot-image --protective-msdos-label \
+		--mbr-force-bootable \
 		-o $(ISO_FILE) $(ISO_ROOT)
 	@echo "$(GREEN)✓ ISO created: $(ISO_FILE)$(RESET)"
 

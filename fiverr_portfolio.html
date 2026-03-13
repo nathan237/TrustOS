@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Nathan L — Rust Systems Engineer Portfolio</title>
+<style>
+  @page { margin: 0.7in; size: letter; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; line-height: 1.5; margin: 0; padding: 40px; }
+  h1 { color: #c45500; font-size: 28px; margin-bottom: 2px; }
+  h2 { color: #333; font-size: 18px; border-bottom: 2px solid #c45500; padding-bottom: 4px; margin-top: 28px; }
+  h3 { color: #555; font-size: 14px; margin: 10px 0 4px 0; }
+  .subtitle { color: #666; font-size: 14px; margin-bottom: 20px; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 14px 0; }
+  .stat-box { background: #fff5eb; border-left: 3px solid #c45500; padding: 10px 14px; }
+  .stat-box .num { font-size: 22px; font-weight: bold; color: #c45500; }
+  .stat-box .label { font-size: 11px; color: #666; }
+  .tech-tag { display: inline-block; background: #f0f0f0; border-radius: 3px; padding: 2px 8px; margin: 2px; font-size: 11px; color: #333; }
+  .section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 10px 0; }
+  .card { border: 1px solid #ddd; border-radius: 6px; padding: 12px; }
+  .card h3 { margin-top: 0; color: #c45500; }
+  ul { margin: 4px 0; padding-left: 18px; }
+  li { font-size: 12px; margin-bottom: 3px; }
+  p { font-size: 12px; margin: 4px 0; }
+  .footer { margin-top: 30px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 11px; color: #888; text-align: center; }
+  .arch-list { font-size: 12px; }
+</style>
+</head>
+<body>
+
+<h1>Nathan L</h1>
+<div class="subtitle">Rust Systems Engineer &bull; OS Developer &bull; Embedded &amp; Bare-Metal Specialist &bull; Canada</div>
+
+<h2>TrustOS — Custom Operating System (Flagship Project)</h2>
+<p>A fully custom, bare-metal operating system written entirely in Rust with zero C dependencies. Designed, architected, and implemented solo — from bootloader to userland.</p>
+
+<div class="stat-grid">
+  <div class="stat-box"><div class="num">260K+</div><div class="label">Lines of Production Rust</div></div>
+  <div class="stat-box"><div class="num">3</div><div class="label">CPU Architectures (x86_64, ARM64, RISC-V)</div></div>
+  <div class="stat-box"><div class="num">0</div><div class="label">C Dependencies — 100% Pure Rust</div></div>
+  <div class="stat-box"><div class="num">95+</div><div class="label">Shell Commands Implemented</div></div>
+  <div class="stat-box"><div class="num">4.4M</div><div class="label">Parameter AI Transformer (Kernel-Resident)</div></div>
+  <div class="stat-box"><div class="num">30+</div><div class="label">Crates in Workspace</div></div>
+</div>
+
+<h2>Core Subsystems Built</h2>
+<div class="section-grid">
+  <div class="card">
+    <h3>Kernel &amp; Memory</h3>
+    <ul>
+      <li>Custom bootloader (Limine protocol)</li>
+      <li>Physical &amp; virtual memory manager</li>
+      <li>Process scheduler with priority queues</li>
+      <li>Interrupt handling (IDT, APIC, PIC)</li>
+      <li>System calls (Ring 3 → Ring 0)</li>
+      <li>IPC (pipes, shared memory, signals)</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Networking &amp; Security</h3>
+    <ul>
+      <li>Full TCP/IP stack from scratch</li>
+      <li>TLS 1.3 implementation</li>
+      <li>Ed25519 cryptographic signatures</li>
+      <li>Mesh networking with Raft consensus</li>
+      <li>PXE boot &amp; network replication</li>
+      <li>Sandbox / ptrace security model</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>AI / Machine Learning</h3>
+    <ul>
+      <li>4.4M-param transformer (built from scratch)</li>
+      <li>Byte-level tokenization</li>
+      <li>Backpropagation &amp; Adam optimizer</li>
+      <li>Federated learning across nodes</li>
+      <li>SIMD-optimized inference</li>
+      <li>21,000+ lines of ML code in-kernel</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Drivers &amp; Hardware</h3>
+    <ul>
+      <li>NVMe, virtio-blk, virtio-net</li>
+      <li>PCI bus enumeration</li>
+      <li>Framebuffer &amp; graphics compositor</li>
+      <li>Audio synthesis (TrustDAW)</li>
+      <li>UART / serial communication</li>
+      <li>Keyboard, mouse, touch input</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Additional Projects &amp; Capabilities</h2>
+<div class="section-grid">
+  <div class="card">
+    <h3>TrustLang — Custom Language</h3>
+    <ul>
+      <li>Lexer, parser, bytecode compiler</li>
+      <li>Stack-based virtual machine</li>
+      <li>Transpiler to Rust</li>
+      <li>Package manager (TrustPkg)</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3>Emulation &amp; Gaming</h3>
+    <ul>
+      <li>GameBoy emulator (CPU, PPU, timers)</li>
+      <li>NES emulator</li>
+      <li>3D game engine with rasterizer</li>
+      <li>GPU emulation layer</li>
+    </ul>
+  </div>
+</div>
+
+<h2>Technical Skills</h2>
+<div style="margin: 10px 0;">
+  <span class="tech-tag">Rust</span>
+  <span class="tech-tag">x86_64 Assembly</span>
+  <span class="tech-tag">ARM64</span>
+  <span class="tech-tag">RISC-V</span>
+  <span class="tech-tag">no_std / Bare-Metal</span>
+  <span class="tech-tag">Kernel Development</span>
+  <span class="tech-tag">Device Drivers</span>
+  <span class="tech-tag">Embedded Systems</span>
+  <span class="tech-tag">Networking (TCP/IP)</span>
+  <span class="tech-tag">TLS / Cryptography</span>
+  <span class="tech-tag">Machine Learning</span>
+  <span class="tech-tag">SIMD Optimization</span>
+  <span class="tech-tag">WebAssembly</span>
+  <span class="tech-tag">Async / Tokio</span>
+  <span class="tech-tag">Linux Internals</span>
+  <span class="tech-tag">UEFI / BIOS</span>
+  <span class="tech-tag">Git</span>
+  <span class="tech-tag">CI/CD</span>
+  <span class="tech-tag">Python</span>
+  <span class="tech-tag">C</span>
+</div>
+
+<div class="footer">
+  Nathan L &bull; @nated0ge &bull; github.com/nated0ge &bull; Canada &bull; Available for freelance work immediately
+</div>
+
+</body>
+</html>

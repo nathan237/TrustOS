@@ -1177,11 +1177,11 @@ impl Window {
             self.saved_y = self.y;
             self.saved_width = self.width;
             self.saved_height = self.height;
-            // Maximize
-            self.x = 0;
+            // Maximize to usable area (right of dock, above taskbar)
+            self.x = DOCK_WIDTH as i32;
             self.y = 0;
-            self.width = screen_width;
-            self.height = screen_height - TASKBAR_HEIGHT;
+            self.width = screen_width.saturating_sub(DOCK_WIDTH);
+            self.height = screen_height.saturating_sub(TASKBAR_HEIGHT);
             self.maximized = true;
         }
     }
@@ -3050,9 +3050,15 @@ struct AppConfig {
     /// upgrade back if FPS stays above 35 for ~5 seconds.
     /// Called once per frame from draw().
     fn auto_adjust_tier(&mut self) {
-        // ── Downgrade: sustained < 18 FPS for ~360 frames ──
-        if self.fps_current > 0 && self.fps_current < 18 {
-            self.fps_low_count += 1;
+        // Skip auto-adjust during the first few frames (FPS not yet measured)
+        if self.frame_count < 5 { return; }
+        
+        // ── Downgrade: sustained low FPS ──
+        // Include fps_current == 0 (frame > 1s) as critically low
+        if self.fps_current < 18 {
+            // Critical: if FPS is 0-2, count faster (each frame ≈ seconds of wall time)
+            let increment = if self.fps_current <= 2 { 60 } else { 1 };
+            self.fps_low_count += increment;
             self.fps_high_count = 0;
         } else if self.fps_current >= 35 {
             // ── Upgrade candidate: sustained >= 35 FPS ──
@@ -3071,10 +3077,18 @@ struct AppConfig {
         // ~6 seconds of sustained < 18 FPS → downgrade
         if self.fps_low_count >= 360 {
             let old = self.desktop_tier;
-            let new_tier = match old {
-                DesktopTier::Full => DesktopTier::Standard,
-                DesktopTier::Standard => DesktopTier::Minimal,
-                _ => old,
+            // Emergency: if FPS <= 2, skip directly to Minimal
+            let new_tier = if self.fps_current <= 2 {
+                match old {
+                    DesktopTier::Full | DesktopTier::Standard => DesktopTier::Minimal,
+                    _ => old,
+                }
+            } else {
+                match old {
+                    DesktopTier::Full => DesktopTier::Standard,
+                    DesktopTier::Standard => DesktopTier::Minimal,
+                    _ => old,
+                }
             };
             if new_tier != old {
                 self.desktop_tier = new_tier;
@@ -3203,7 +3217,19 @@ struct AppConfig {
     
     /// Create a new window with type
     pub fn create_window(&mut self, title: &str, x: i32, y: i32, width: u32, height: u32, wtype: WindowType) -> u32 {
-        let mut window = Window::new(title, x, y, width, height, wtype);
+        // Clamp window size to fit available screen area (minus dock and taskbar)
+        let usable_w = self.width.saturating_sub(DOCK_WIDTH + 4);
+        let usable_h = self.height.saturating_sub(TASKBAR_HEIGHT + TITLE_BAR_HEIGHT);
+        let w = width.min(usable_w).max(120);
+        let h = height.min(usable_h).max(80);
+        // Clamp position so the window stays on-screen
+        let min_x = DOCK_WIDTH as i32 + 2;
+        let max_x = (self.width as i32 - w as i32).max(min_x);
+        let max_y = (self.height as i32 - TASKBAR_HEIGHT as i32 - h as i32).max(0);
+        let cx = x.max(min_x).min(max_x);
+        let cy = y.max(0).min(max_y);
+
+        let mut window = Window::new(title, cx, cy, w, h, wtype);
         
         // Initialize content based on type
         match wtype {
@@ -3577,43 +3603,45 @@ struct AppConfig {
     /// Snap focused window to left/right/quadrant (Win+Arrow or drag-to-edge)
     pub fn snap_focused_window(&mut self, dir: SnapDir) {
         if let Some(w) = self.windows.iter_mut().rev().find(|w| w.focused) {
-            let work_height = self.height - TASKBAR_HEIGHT;
-            let half_w = self.width / 2;
+            let work_height = self.height.saturating_sub(TASKBAR_HEIGHT);
+            let work_x = DOCK_WIDTH as i32;
+            let work_w = self.width.saturating_sub(DOCK_WIDTH);
+            let half_w = work_w / 2;
             let half_h = work_height / 2;
             
             match dir {
                 SnapDir::Left => {
-                    w.x = 0;
+                    w.x = work_x;
                     w.y = 0;
                     w.width = half_w;
                     w.height = work_height;
                 }
                 SnapDir::Right => {
-                    w.x = half_w as i32;
+                    w.x = work_x + half_w as i32;
                     w.y = 0;
                     w.width = half_w;
                     w.height = work_height;
                 }
                 SnapDir::TopLeft => {
-                    w.x = 0;
+                    w.x = work_x;
                     w.y = 0;
                     w.width = half_w;
                     w.height = half_h;
                 }
                 SnapDir::TopRight => {
-                    w.x = half_w as i32;
+                    w.x = work_x + half_w as i32;
                     w.y = 0;
                     w.width = half_w;
                     w.height = half_h;
                 }
                 SnapDir::BottomLeft => {
-                    w.x = 0;
+                    w.x = work_x;
                     w.y = half_h as i32;
                     w.width = half_w;
                     w.height = half_h;
                 }
                 SnapDir::BottomRight => {
-                    w.x = half_w as i32;
+                    w.x = work_x + half_w as i32;
                     w.y = half_h as i32;
                     w.width = half_w;
                     w.height = half_h;
@@ -4297,17 +4325,19 @@ struct AppConfig {
             for w in &mut self.windows {
                 if w.dragging {
                     if let Some(dir) = snap_dir {
-                        // Apply snap: resize window to preview zone
-                        let work_h = self.height - TASKBAR_HEIGHT;
-                        let half_w = self.width / 2;
+                        // Apply snap: resize window to preview zone (accounting for dock)
+                        let work_h = self.height.saturating_sub(TASKBAR_HEIGHT);
+                        let work_x = DOCK_WIDTH as i32;
+                        let work_w = self.width.saturating_sub(DOCK_WIDTH);
+                        let half_w = work_w / 2;
                         let half_h = work_h / 2;
                         match dir {
-                            SnapDir::Left => { w.x = 0; w.y = 0; w.width = half_w; w.height = work_h; }
-                            SnapDir::Right => { w.x = half_w as i32; w.y = 0; w.width = half_w; w.height = work_h; }
-                            SnapDir::TopLeft => { w.x = 0; w.y = 0; w.width = half_w; w.height = half_h; }
-                            SnapDir::TopRight => { w.x = half_w as i32; w.y = 0; w.width = half_w; w.height = half_h; }
-                            SnapDir::BottomLeft => { w.x = 0; w.y = half_h as i32; w.width = half_w; w.height = half_h; }
-                            SnapDir::BottomRight => { w.x = half_w as i32; w.y = half_h as i32; w.width = half_w; w.height = half_h; }
+                            SnapDir::Left => { w.x = work_x; w.y = 0; w.width = half_w; w.height = work_h; }
+                            SnapDir::Right => { w.x = work_x + half_w as i32; w.y = 0; w.width = half_w; w.height = work_h; }
+                            SnapDir::TopLeft => { w.x = work_x; w.y = 0; w.width = half_w; w.height = half_h; }
+                            SnapDir::TopRight => { w.x = work_x + half_w as i32; w.y = 0; w.width = half_w; w.height = half_h; }
+                            SnapDir::BottomLeft => { w.x = work_x; w.y = half_h as i32; w.width = half_w; w.height = half_h; }
+                            SnapDir::BottomRight => { w.x = work_x + half_w as i32; w.y = half_h as i32; w.width = half_w; w.height = half_h; }
                         }
                         w.maximized = false;
                         snapped_id = Some(w.id);
@@ -4407,6 +4437,101 @@ struct AppConfig {
         self.start_menu_open = false;
         self.start_menu_search.clear();
         
+        // Check if right-click inside a File Manager window's content area
+        if let Some(fm_info) = self.windows.iter().find(|w| {
+            w.window_type == WindowType::FileManager
+            && x >= w.x && x < w.x + w.width as i32
+            && y >= w.y + TITLE_BAR_HEIGHT as i32 + 36 + 1 + 24 // below column headers
+            && y < w.y + w.height as i32
+        }).map(|w| (w.id, w.x, w.y, w.width, w.height, w.file_path.clone(), w.selected_index, w.content.len())) {
+            let (wid, wx, wy, ww, _wh, file_path_opt, sel_idx, content_len) = fm_info;
+            let sidebar_w = self.fm_states.get(&wid).map(|f| if f.sidebar_collapsed { 0i32 } else { f.sidebar_width as i32 }).unwrap_or(180);
+            
+            // Only show context menu if click is in the file list area (right of sidebar)
+            if x >= wx + sidebar_w {
+                // Determine which file is under the cursor
+                let content_y = wy + TITLE_BAR_HEIGHT as i32;
+                let body_y = content_y + 36 + 1;
+                let list_start_y = body_y + 24 + 1;
+                let row_h = 26i32;
+                let file_start_idx = 5usize.min(content_len);
+                let file_count = if content_len > file_start_idx + 2 { content_len - file_start_idx - 2 } else { 0 };
+                let rel_y = y - list_start_y;
+                let scroll = self.windows.iter().find(|w| w.id == wid).map(|w| w.scroll_offset).unwrap_or(0);
+                
+                let click_idx = if rel_y >= 0 { Some(scroll + (rel_y / row_h) as usize) } else { None };
+                let on_file = click_idx.map(|i| i < file_count).unwrap_or(false);
+                
+                // Select the clicked file
+                if let Some(idx) = click_idx {
+                    if idx < file_count {
+                        if let Some(w) = self.windows.iter_mut().find(|w| w.id == wid) {
+                            w.selected_index = idx;
+                        }
+                    }
+                }
+                
+                // Get target file name
+                let target_file = if on_file {
+                    if let Some(w) = self.windows.iter().find(|w| w.id == wid) {
+                        let actual_idx = file_start_idx + click_idx.unwrap_or(0);
+                        if actual_idx < w.content.len().saturating_sub(2) {
+                            let line = &w.content[actual_idx];
+                            let name = Self::extract_name_from_entry(line);
+                            if name != ".." { Some(String::from(name)) } else { None }
+                        } else { None }
+                    } else { None }
+                } else { None };
+                
+                if on_file && target_file.is_some() {
+                    // Right-click on a file/folder
+                    self.context_menu = ContextMenu {
+                        visible: true,
+                        x, y,
+                        items: alloc::vec![
+                            ContextMenuItem { label: String::from("  Open          Enter"), action: ContextAction::Open },
+                            ContextMenuItem { label: String::from("  Open With..."), action: ContextAction::OpenWith },
+                            ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
+                            ContextMenuItem { label: String::from("  Cut          Ctrl+X"), action: ContextAction::Cut },
+                            ContextMenuItem { label: String::from("  Copy         Ctrl+C"), action: ContextAction::Copy },
+                            ContextMenuItem { label: String::from("  Copy Path"), action: ContextAction::CopyPath },
+                            ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
+                            ContextMenuItem { label: String::from("  Rename            F2"), action: ContextAction::Rename },
+                            ContextMenuItem { label: String::from("  Delete           Del"), action: ContextAction::Delete },
+                            ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
+                            ContextMenuItem { label: String::from("  Properties"), action: ContextAction::Properties },
+                        ],
+                        selected_index: 0,
+                        target_icon: None,
+                        target_file,
+                    };
+                } else {
+                    // Right-click on empty area inside FM
+                    self.context_menu = ContextMenu {
+                        visible: true,
+                        x, y,
+                        items: alloc::vec![
+                            ContextMenuItem { label: String::from("  New File         N"), action: ContextAction::NewFile },
+                            ContextMenuItem { label: String::from("  New Folder       D"), action: ContextAction::NewFolder },
+                            ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
+                            ContextMenuItem { label: String::from("  Paste        Ctrl+V"), action: ContextAction::Paste },
+                            ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
+                            ContextMenuItem { label: String::from("  Sort by Name"), action: ContextAction::SortByName },
+                            ContextMenuItem { label: String::from("  Sort by Size"), action: ContextAction::SortBySize },
+                            ContextMenuItem { label: String::from("─────────────────────"), action: ContextAction::Cancel },
+                            ContextMenuItem { label: String::from("  Refresh          F5"), action: ContextAction::Refresh },
+                            ContextMenuItem { label: String::from("  Open in Terminal"), action: ContextAction::TerminalHere },
+                            ContextMenuItem { label: String::from("  Properties"), action: ContextAction::Properties },
+                        ],
+                        selected_index: 0,
+                        target_icon: None,
+                        target_file: file_path_opt,
+                    };
+                }
+                return;
+            }
+        }
+        
         // Check if right-click on desktop icon
         if let Some(idx) = self.check_icon_index(x, y) {
             self.show_icon_context_menu(x, y, idx);
@@ -4494,35 +4619,78 @@ struct AppConfig {
     fn execute_context_action(&mut self, action: ContextAction) {
         let offset = (self.windows.len() as i32 * 25) % 200;
         
+        // Check if this context action targets a File Manager file (not a desktop icon)
+        let fm_target = self.context_menu.target_file.clone();
+        let fm_icon_target = self.context_menu.target_icon;
+        
+        // If target_file is set and target_icon is None, this came from File Manager
+        let is_fm_ctx = fm_target.is_some() && fm_icon_target.is_none();
+        
         match action {
             ContextAction::Open => {
-                if let Some(idx) = self.context_menu.target_icon {
+                if is_fm_ctx {
+                    // Open from file manager — open the selected file in the focused FM
+                    if let Some(window) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+                        let file_start_idx = 5usize.min(window.content.len());
+                        let actual_idx = file_start_idx + window.selected_index;
+                        if actual_idx < window.content.len().saturating_sub(2) {
+                            let line = &window.content[actual_idx];
+                            let is_dir = line.contains("[D]");
+                            let name = String::from(Self::extract_name_from_entry(line));
+                            if is_dir {
+                                self.navigate_file_manager(&name);
+                            } else {
+                                self.open_file(&name);
+                            }
+                        }
+                    }
+                } else if let Some(idx) = fm_icon_target {
                     let icon_action = self.icons[idx].action;
                     self.handle_icon_action(icon_action);
                 }
             },
             ContextAction::OpenWith => {
-                // Show file associations window
                 self.create_window("Open With", 300 + offset, 200 + offset, 400, 300, WindowType::FileAssociations);
             },
             ContextAction::Refresh => {
-                // Redraw desktop - just logs for now
-                crate::serial_println!("[GUI] Desktop refreshed");
+                if is_fm_ctx {
+                    if let Some(path) = fm_target {
+                        self.refresh_file_manager(&path);
+                    }
+                }
+                crate::serial_println!("[GUI] Refreshed");
             },
             ContextAction::NewFile => {
-                // Create a new file in ramfs
-                let filename = format!("/desktop/newfile_{}.txt", self.frame_count);
-                crate::ramfs::with_fs(|fs| {
-                    let _ = fs.write_file(&filename, b"New file created from desktop");
-                });
-                crate::serial_println!("[GUI] Created new file: {}", filename);
+                if is_fm_ctx {
+                    let current_path = self.windows.iter()
+                        .find(|w| w.focused && w.window_type == WindowType::FileManager)
+                        .and_then(|w| w.file_path.clone())
+                        .unwrap_or_else(|| String::from("/"));
+                    let name = format!("new_file_{}.txt", self.frame_count % 1000);
+                    let full_path = if current_path == "/" { format!("/{}", name) } else { format!("{}/{}", current_path, name) };
+                    let _ = crate::ramfs::with_fs(|fs| fs.touch(&full_path));
+                    crate::serial_println!("[FM] Created file: {}", full_path);
+                    self.refresh_file_manager(&current_path);
+                } else {
+                    let filename = format!("/desktop/newfile_{}.txt", self.frame_count);
+                    crate::ramfs::with_fs(|fs| { let _ = fs.write_file(&filename, b"New file created from desktop"); });
+                }
             },
             ContextAction::NewFolder => {
-                let dirname = format!("/desktop/folder_{}", self.frame_count);
-                crate::ramfs::with_fs(|fs| {
-                    let _ = fs.mkdir(&dirname);
-                });
-                crate::serial_println!("[GUI] Created new folder: {}", dirname);
+                if is_fm_ctx {
+                    let current_path = self.windows.iter()
+                        .find(|w| w.focused && w.window_type == WindowType::FileManager)
+                        .and_then(|w| w.file_path.clone())
+                        .unwrap_or_else(|| String::from("/"));
+                    let name = format!("folder_{}", self.frame_count % 1000);
+                    let full_path = if current_path == "/" { format!("/{}", name) } else { format!("{}/{}", current_path, name) };
+                    let _ = crate::ramfs::with_fs(|fs| fs.mkdir(&full_path));
+                    crate::serial_println!("[FM] Created folder: {}", full_path);
+                    self.refresh_file_manager(&current_path);
+                } else {
+                    let dirname = format!("/desktop/folder_{}", self.frame_count);
+                    crate::ramfs::with_fs(|fs| { let _ = fs.mkdir(&dirname); });
+                }
             },
             ContextAction::Properties => {
                 let (w, h) = (self.width, self.height);
@@ -4538,34 +4706,33 @@ struct AppConfig {
                     window.content.push(format!("Desktop icons: {}", icon_count));
                     window.content.push(String::new());
                     window.content.push(String::from("Theme: GitHub Dark"));
-                    window.content.push(String::from("OS: TrustOS v0.2.0"));
+                    window.content.push(String::from("OS: TrustOS v0.9.4"));
                 }
             },
             ContextAction::Cut => {
-                if let Some(idx) = self.context_menu.target_icon {
+                if is_fm_ctx {
+                    self.file_clipboard_copy(true);
+                } else if let Some(idx) = fm_icon_target {
                     self.clipboard_icon = Some((idx, true));
-                    // Also store icon name in text clipboard
                     let name = self.icons[idx].name.clone();
                     crate::keyboard::clipboard_set(&name);
-                    crate::serial_println!("[GUI] Cut icon: {}", name);
                 }
             },
             ContextAction::Copy => {
-                if let Some(idx) = self.context_menu.target_icon {
+                if is_fm_ctx {
+                    self.file_clipboard_copy(false);
+                } else if let Some(idx) = fm_icon_target {
                     self.clipboard_icon = Some((idx, false));
                     let name = self.icons[idx].name.clone();
                     crate::keyboard::clipboard_set(&name);
-                    crate::serial_println!("[GUI] Copied icon: {}", name);
                 }
             },
             ContextAction::Paste => {
-                if let Some((src_idx, is_cut)) = self.clipboard_icon.take() {
+                if is_fm_ctx {
+                    self.file_clipboard_paste();
+                } else if let Some((src_idx, is_cut)) = self.clipboard_icon.take() {
                     if src_idx < self.icons.len() {
-                        if is_cut {
-                            // Move: icon already exists, just log
-                            crate::serial_println!("[GUI] Pasted (moved) icon: {}", self.icons[src_idx].name);
-                        } else {
-                            // Copy: duplicate the icon
+                        if !is_cut {
                             let src = self.icons[src_idx].clone();
                             let new_name = format!("{} (copy)", src.name);
                             let new_icon = DesktopIcon {
@@ -4576,49 +4743,110 @@ struct AppConfig {
                                 action: src.action,
                             };
                             self.icons.push(new_icon);
-                            crate::serial_println!("[GUI] Pasted (copied) icon: {}", new_name);
                         }
                     }
                 }
             },
+            ContextAction::CopyPath => {
+                if is_fm_ctx {
+                    if let Some(window) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+                        let current_path = window.file_path.clone().unwrap_or_else(|| String::from("/"));
+                        let file_start_idx = 5usize.min(window.content.len());
+                        let actual_idx = file_start_idx + window.selected_index;
+                        if actual_idx < window.content.len().saturating_sub(2) {
+                            let name = Self::extract_name_from_entry(&window.content[actual_idx]);
+                            let full = if current_path == "/" { format!("/{}", name) } else { format!("{}/{}", current_path, name) };
+                            crate::keyboard::clipboard_set(&full);
+                            crate::serial_println!("[FM] Copied path: {}", full);
+                        }
+                    }
+                } else if let Some(idx) = fm_icon_target {
+                    if idx < self.icons.len() {
+                        let path = format!("/desktop/{}", self.icons[idx].name);
+                        crate::keyboard::clipboard_set(&path);
+                    }
+                }
+            },
+            ContextAction::Delete => {
+                if is_fm_ctx {
+                    if let Some(window) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+                        let current_path = window.file_path.clone().unwrap_or_else(|| String::from("/"));
+                        let file_start_idx = 5usize.min(window.content.len());
+                        let actual_idx = file_start_idx + window.selected_index;
+                        if actual_idx < window.content.len().saturating_sub(2) {
+                            let name = String::from(Self::extract_name_from_entry(&window.content[actual_idx]));
+                            if name != ".." {
+                                let full_path = if current_path == "/" { format!("/{}", name) } else { format!("{}/{}", current_path, name) };
+                                let _ = crate::ramfs::with_fs(|fs| fs.rm(&full_path));
+                                crate::serial_println!("[FM] Deleted: {}", full_path);
+                            }
+                        }
+                        let cp = current_path.clone();
+                        drop(window);
+                        self.refresh_file_manager(&cp);
+                    }
+                } else if let Some(idx) = fm_icon_target {
+                    if idx < self.icons.len() {
+                        self.icons.remove(idx);
+                        self.clipboard_icon = None;
+                    }
+                }
+            },
+            ContextAction::Rename => {
+                if is_fm_ctx {
+                    // Enter rename mode
+                    if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+                        let file_start_idx = 5usize.min(window.content.len());
+                        let actual_idx = file_start_idx + window.selected_index;
+                        if actual_idx < window.content.len().saturating_sub(2) {
+                            let name = String::from(Self::extract_name_from_entry(&window.content[actual_idx]));
+                            if name != ".." {
+                                self.input_buffer = name.clone();
+                                window.title = format!("RENAME:{}", name);
+                            }
+                        }
+                    }
+                } else if let Some(idx) = fm_icon_target {
+                    if idx < self.icons.len() {
+                        crate::serial_println!("[GUI] Rename icon: {}", self.icons[idx].name);
+                    }
+                }
+            },
+            ContextAction::SortByName => {
+                if is_fm_ctx {
+                    if let Some(wid) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager).map(|w| w.id) {
+                        if let Some(fm) = self.fm_states.get_mut(&wid) {
+                            if fm.sort_column == 0 { fm.sort_ascending = !fm.sort_ascending; } else { fm.sort_column = 0; fm.sort_ascending = true; }
+                        }
+                        if let Some(path) = self.windows.iter().find(|w| w.id == wid).and_then(|w| w.file_path.clone()) {
+                            self.refresh_file_manager(&path);
+                        }
+                    }
+                }
+            },
+            ContextAction::SortBySize => {
+                if is_fm_ctx {
+                    if let Some(wid) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager).map(|w| w.id) {
+                        if let Some(fm) = self.fm_states.get_mut(&wid) {
+                            if fm.sort_column == 2 { fm.sort_ascending = !fm.sort_ascending; } else { fm.sort_column = 2; fm.sort_ascending = true; }
+                        }
+                        if let Some(path) = self.windows.iter().find(|w| w.id == wid).and_then(|w| w.file_path.clone()) {
+                            self.refresh_file_manager(&path);
+                        }
+                    }
+                }
+            },
+            ContextAction::SortByDate => {
+                crate::serial_println!("[GUI] Sort by date (not yet supported)");
+            },
             ContextAction::ViewLargeIcons | ContextAction::ViewSmallIcons | ContextAction::ViewList => {
                 crate::serial_println!("[GUI] View mode changed");
-            },
-            ContextAction::SortByName | ContextAction::SortByDate | ContextAction::SortBySize => {
-                crate::serial_println!("[GUI] Sort order changed");
             },
             ContextAction::Personalize => {
                 self.create_window("Personalization", 250 + offset, 150 + offset, 400, 300, WindowType::Settings);
             },
             ContextAction::TerminalHere => {
                 self.create_window("Terminal", 200 + offset, 120 + offset, 500, 350, WindowType::Terminal);
-            },
-            ContextAction::Delete => {
-                if let Some(idx) = self.context_menu.target_icon {
-                    if idx < self.icons.len() {
-                        let name = self.icons[idx].name.clone();
-                        self.icons.remove(idx);
-                        // Clear clipboard if it referenced this or a later icon
-                        self.clipboard_icon = None;
-                        crate::serial_println!("[GUI] Deleted icon: {}", name);
-                    }
-                }
-            },
-            ContextAction::Rename => {
-                if let Some(idx) = self.context_menu.target_icon {
-                    if idx < self.icons.len() {
-                        crate::serial_println!("[GUI] Rename icon: {} (inline rename not yet supported)", self.icons[idx].name);
-                    }
-                }
-            },
-            ContextAction::CopyPath => {
-                if let Some(idx) = self.context_menu.target_icon {
-                    if idx < self.icons.len() {
-                        let path = format!("/desktop/{}", self.icons[idx].name);
-                        crate::keyboard::clipboard_set(&path);
-                        crate::serial_println!("[GUI] Copied path: {}", path);
-                    }
-                }
             },
             ContextAction::Cancel => {},
         }
@@ -5402,6 +5630,52 @@ struct AppConfig {
     fn handle_filemanager_key(&mut self, key: u8) {
         use crate::keyboard::{KEY_UP, KEY_DOWN, KEY_DELETE};
         
+        // ── Check if search box is focused → route keys there ──
+        {
+            let focused_wid = self.windows.iter()
+                .find(|w| w.focused && w.window_type == WindowType::FileManager)
+                .map(|w| w.id);
+            if let Some(wid) = focused_wid {
+                let search_focused = self.fm_states.get(&wid).map(|f| f.search_focused).unwrap_or(false);
+                if search_focused {
+                    if key == 0x1B { // Escape — unfocus search
+                        if let Some(fm) = self.fm_states.get_mut(&wid) {
+                            fm.search_focused = false;
+                            fm.search_query.clear();
+                        }
+                        let path = self.windows.iter().find(|w| w.id == wid)
+                            .and_then(|w| w.file_path.clone()).unwrap_or_else(|| String::from("/"));
+                        self.refresh_file_manager(&path);
+                        return;
+                    } else if key == 0x08 { // Backspace
+                        if let Some(fm) = self.fm_states.get_mut(&wid) {
+                            fm.search_query.pop();
+                        }
+                        let path = self.windows.iter().find(|w| w.id == wid)
+                            .and_then(|w| w.file_path.clone()).unwrap_or_else(|| String::from("/"));
+                        self.refresh_file_manager(&path);
+                        return;
+                    } else if key == 0x0D || key == 0x0A { // Enter — unfocus
+                        if let Some(fm) = self.fm_states.get_mut(&wid) {
+                            fm.search_focused = false;
+                        }
+                        return;
+                    } else if key >= 0x20 && key < 0x7F {
+                        if let Some(fm) = self.fm_states.get_mut(&wid) {
+                            if fm.search_query.len() < 32 {
+                                fm.search_query.push(key as char);
+                            }
+                        }
+                        let path = self.windows.iter().find(|w| w.id == wid)
+                            .and_then(|w| w.file_path.clone()).unwrap_or_else(|| String::from("/"));
+                        self.refresh_file_manager(&path);
+                        return;
+                    }
+                    return;
+                }
+            }
+        }
+        
         let mut action: Option<(String, bool)> = None; // (filename, is_dir)
         let mut delete_target: Option<String> = None;
         let mut new_file = false;
@@ -5569,11 +5843,19 @@ struct AppConfig {
     
     /// Refresh file manager at current directory
     fn refresh_file_manager(&mut self, path: &str) {
-        // Set file_path temporarily to know current path, then navigate to "."
-        // We just re-call navigate with the same path by navigating to a dummy then back
+        // Read sort/search settings before borrowing windows mutably
+        let (sort_col, sort_asc, search_q) = {
+            let wid = self.windows.iter()
+                .find(|w| w.focused && w.window_type == WindowType::FileManager)
+                .map(|w| w.id);
+            if let Some(wid) = wid {
+                if let Some(fm) = self.fm_states.get(&wid) {
+                    (fm.sort_column, fm.sort_ascending, fm.search_query.clone())
+                } else { (0, true, String::new()) }
+            } else { return; }
+        };
+        
         if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
-            let cp = window.file_path.clone().unwrap_or_else(|| String::from("/"));
-            // Rebuild content in-place
             window.content.clear();
             window.content.push(String::from("=== File Manager ==="));
             window.content.push(format!("Path: {}", path));
@@ -5587,7 +5869,38 @@ struct AppConfig {
             
             let path_arg = if path == "/" { Some("/") } else { Some(path) };
             if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(path_arg)) {
-                for (name, ftype, size) in entries.iter().take(50) {
+                // Filter by search query
+                let search_lower: String = search_q.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                let mut filtered: Vec<&(String, crate::ramfs::FileType, usize)> = if search_lower.is_empty() {
+                    entries.iter().collect()
+                } else {
+                    entries.iter().filter(|(name, _, _)| {
+                        let name_lower: String = name.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
+                        name_lower.contains(search_lower.as_str())
+                    }).collect()
+                };
+                
+                // Sort entries
+                filtered.sort_by(|a, b| {
+                    // Directories always first
+                    let a_is_dir = a.1 == crate::ramfs::FileType::Directory;
+                    let b_is_dir = b.1 == crate::ramfs::FileType::Directory;
+                    if a_is_dir != b_is_dir {
+                        return if a_is_dir { core::cmp::Ordering::Less } else { core::cmp::Ordering::Greater };
+                    }
+                    let ord = match sort_col {
+                        1 => { // Sort by type (extension)
+                            let ext_a = a.0.rsplit('.').next().unwrap_or("");
+                            let ext_b = b.0.rsplit('.').next().unwrap_or("");
+                            ext_a.cmp(ext_b)
+                        }
+                        2 => a.2.cmp(&b.2), // Sort by size
+                        _ => a.0.cmp(&b.0), // Sort by name (default)
+                    };
+                    if sort_asc { ord } else { ord.reverse() }
+                });
+                
+                for (name, ftype, size) in filtered.iter().take(200) {
                     let icon = if *ftype == crate::ramfs::FileType::Directory { 
                         "[D]" 
                     } else { 
@@ -5616,75 +5929,48 @@ struct AppConfig {
     
     /// Navigate file manager to a directory
     fn navigate_file_manager(&mut self, dirname: &str) {
-        if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::FileManager) {
-            // Build new path
-            let current_path = window.file_path.clone().unwrap_or_else(|| String::from("/"));
-            let new_path = if dirname == ".." {
-                // Go up one level
-                if current_path == "/" {
-                    String::from("/")
-                } else {
-                    let trimmed = current_path.trim_end_matches('/');
-                    match trimmed.rfind('/') {
-                        Some(0) => String::from("/"),
-                        Some(pos) => String::from(&trimmed[..pos]),
-                        None => String::from("/"),
-                    }
-                }
-            } else if current_path == "/" {
-                format!("/{}", dirname)
-            } else {
-                format!("{}/{}", current_path.trim_end_matches('/'), dirname)
-            };
-            
-            crate::serial_println!("[FM] Navigate: {} -> {}", current_path, new_path);
-            
-            // Rebuild window content
-            window.content.clear();
-            window.content.push(String::from("=== File Manager ==="));
-            window.content.push(format!("Path: {}", new_path));
-            window.content.push(String::from(""));
-            window.content.push(String::from("  Name              Type       Size    Program"));
-            window.content.push(String::from("  ────────────────────────────────────────────"));
-            
-            // Add ".." entry if not at root
-            if new_path != "/" {
-                window.content.push(String::from("  [D] ..             DIR        ---     ---"));
-            }
-            
-            // List actual files from ramfs
-            let path_arg = if new_path == "/" { Some("/") } else { Some(new_path.as_str()) };
-            if let Ok(entries) = crate::ramfs::with_fs(|fs| fs.ls(path_arg)) {
-                for (name, ftype, size) in entries.iter().take(200) {
-                    let icon = if *ftype == crate::ramfs::FileType::Directory { 
-                        "[D]" 
-                    } else { 
-                        crate::file_assoc::get_file_icon(name)
-                    };
-                    let prog = if *ftype == crate::ramfs::FileType::Directory {
-                        String::from("---")
+        // Build new path first
+        let (new_path, wid) = {
+            if let Some(window) = self.windows.iter().find(|w| w.focused && w.window_type == WindowType::FileManager) {
+                let current_path = window.file_path.clone().unwrap_or_else(|| String::from("/"));
+                let new_path = if dirname == ".." {
+                    if current_path == "/" {
+                        String::from("/")
                     } else {
-                        String::from(crate::file_assoc::get_program_for_file(name).name())
-                    };
-                    let ftype_str = if *ftype == crate::ramfs::FileType::Directory { "DIR" } else { "FILE" };
-                    window.content.push(format!("  {} {:<14} {:<10} {:<7} {}", icon, name, ftype_str, size, prog));
-                }
-            }
-            if window.content.len() <= 5 + if new_path != "/" { 1 } else { 0 } {
-                window.content.push(String::from("  (empty directory)"));
-            }
-            window.content.push(String::from(""));
-            window.content.push(String::from("  [Del] Delete | [N] New File | [D] New Folder | [R] Rename"));
-            
+                        let trimmed = current_path.trim_end_matches('/');
+                        match trimmed.rfind('/') {
+                            Some(0) => String::from("/"),
+                            Some(pos) => String::from(&trimmed[..pos]),
+                            None => String::from("/"),
+                        }
+                    }
+                } else if current_path == "/" {
+                    format!("/{}", dirname)
+                } else {
+                    format!("{}/{}", current_path.trim_end_matches('/'), dirname)
+                };
+                crate::serial_println!("[FM] Navigate: {} -> {}", current_path, new_path);
+                (new_path, window.id)
+            } else { return; }
+        };
+        
+        // Clear search on navigation
+        if let Some(fm) = self.fm_states.get_mut(&wid) {
+            fm.search_query.clear();
+            fm.search_focused = false;
+        }
+        
+        // Set path on window
+        if let Some(window) = self.windows.iter_mut().find(|w| w.id == wid) {
             window.file_path = Some(new_path.clone());
-            window.selected_index = 0;
-            window.scroll_offset = 0;
-            
-            // Track navigation history
-            let wid = window.id;
-            if let Some(fm) = self.fm_states.get_mut(&wid) {
-                fm.push_history(&new_path);
-            }
+        }
+        
+        // Use refresh to populate with sort/filter
+        self.refresh_file_manager(&new_path);
+        
+        // Track navigation history
+        if let Some(fm) = self.fm_states.get_mut(&wid) {
+            fm.push_history(&new_path);
         }
     }
     
@@ -11876,6 +12162,52 @@ struct AppConfig {
             return;
         }
         
+        // ── Search box click (focus toggle) ──
+        let search_w = if ww > 400 { 180i32 } else if ww > 300 { 120i32 } else { 0i32 };
+        if search_w > 0 {
+            let sx = wx + ww as i32 - search_w - 8;
+            if x >= sx && x < sx + search_w && y >= btn_y && y < btn_y + btn_sz {
+                if let Some(fm) = self.fm_states.get_mut(&window_id) {
+                    fm.search_focused = true;
+                }
+                return;
+            } else {
+                // Click outside search box → unfocus
+                if let Some(fm) = self.fm_states.get_mut(&window_id) {
+                    fm.search_focused = false;
+                }
+            }
+        }
+        
+        // ── Column header clicks (sorting) ──
+        let body_y = content_y + toolbar_h + 1;
+        let col_h = 24i32;
+        let content_x = wx + sidebar_w;
+        let content_w = ww as i32 - sidebar_w;
+        if y >= body_y && y < body_y + col_h && x >= content_x {
+            let col_type_x = content_x + (content_w * 52 / 100);
+            let col_size_x = content_x + (content_w * 68 / 100);
+            let col_date_x = content_x + (content_w * 82 / 100);
+            
+            let clicked_col: u8 = if content_w > 420 && x >= col_date_x { 3 }
+                else if content_w > 300 && x >= col_size_x { 2 }
+                else if content_w > 200 && x >= col_type_x { 1 }
+                else { 0 };
+            
+            if let Some(fm) = self.fm_states.get_mut(&window_id) {
+                if fm.sort_column == clicked_col {
+                    fm.sort_ascending = !fm.sort_ascending;
+                } else {
+                    fm.sort_column = clicked_col;
+                    fm.sort_ascending = true;
+                }
+            }
+            // Re-sort by refreshing
+            let path = file_path_opt.clone().unwrap_or_else(|| String::from("/"));
+            self.refresh_file_manager(&path);
+            return;
+        }
+        
         // ── Status bar view mode buttons (bottom-right) ──
         let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h as u32 + 1 + 26);
         let status_y = content_y + toolbar_h + 1 + body_h as i32;
@@ -12536,15 +12868,23 @@ struct AppConfig {
         // ── Search box (Windows 11 style, right side)
         if search_w > 0 {
             let sx = wx + ww as i32 - search_w - 8;
-            draw_rounded_rect(sx, btn_y, search_w as u32, btn_sz, 6, bg_search);
-            draw_rounded_rect_border(sx, btn_y, search_w as u32, btn_sz, 6, sep_color);
+            let search_focused = fm.map(|f| f.search_focused).unwrap_or(false);
+            let sb_bg = if search_focused { 0xFF081008 } else { bg_search };
+            let sb_border = if search_focused { accent } else { sep_color };
+            draw_rounded_rect(sx, btn_y, search_w as u32, btn_sz, 6, sb_bg);
+            draw_rounded_rect_border(sx, btn_y, search_w as u32, btn_sz, 6, sb_border);
             // Search icon (magnifying glass)
-            self.draw_text_smooth(sx + 8, btn_y + 5, "\x0F", GREEN_GHOST); // search icon
+            self.draw_text_smooth(sx + 8, btn_y + 5, "\x0F", if search_focused { accent } else { GREEN_GHOST });
             let query = fm.map(|f| f.search_query.as_str()).unwrap_or("");
             if query.is_empty() {
                 self.draw_text_smooth(sx + 22, btn_y + 5, "Search", text_dim);
             } else {
                 self.draw_text_smooth(sx + 22, btn_y + 5, query, text_file);
+            }
+            // Blinking cursor when focused
+            if search_focused && (self.frame_count / 30) % 2 == 0 {
+                let cursor_x = sx + 22 + (query.len() as i32) * 8;
+                framebuffer::fill_rect(cursor_x as u32, (btn_y + 4) as u32, 1, 14, accent);
             }
         }
         
@@ -14997,7 +15337,7 @@ pub fn run() {
 }
 
 /// Snap direction for window snapping
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SnapDir {
     Left,
     Right,

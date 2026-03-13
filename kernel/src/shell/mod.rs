@@ -303,8 +303,20 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
     let mut showing_suggestions = false;
     
     // Save the row where input starts (for suggestion display)
-    let input_row = crate::framebuffer::get_cursor().1;
+    // If we're at the bottom of the screen, scroll up to make room for suggestions
+    let (_scr_w, scr_h) = crate::framebuffer::get_dimensions();
+    let max_rows = (scr_h as usize) / 16; // CHAR_HEIGHT = 16
+    let mut input_row = crate::framebuffer::get_cursor().1;
     let input_col_start = crate::framebuffer::get_cursor().0;
+    const SUGGESTION_ROOM: usize = 4; // Reserve space for up to 4 visible suggestions
+    if max_rows > SUGGESTION_ROOM && input_row + SUGGESTION_ROOM >= max_rows {
+        let lines_needed = input_row + SUGGESTION_ROOM - max_rows + 1;
+        for _ in 0..lines_needed {
+            crate::framebuffer::scroll_up();
+        }
+        input_row = input_row.saturating_sub(lines_needed);
+        crate::framebuffer::set_cursor(input_col_start, input_row);
+    }
     
     // Cursor blinking state
     let mut cursor_visible = true;
@@ -701,10 +713,16 @@ fn show_suggestions_at_row(input_row: usize, suggestions: &[&str], selected_idx:
         return;
     }
     
+    // Screen bounds: don't render suggestions beyond the visible area
+    let (_width, height) = crate::framebuffer::get_dimensions();
+    let max_row = (height as usize) / 16; // CHAR_HEIGHT = 16
+    
     // Use direct Writer access to guarantee no serial output
     use core::fmt::Write;
     for (i, cmd) in suggestions.iter().enumerate() {
-        crate::framebuffer::set_cursor(0, input_row + 1 + i);
+        let row = input_row + 1 + i;
+        if row >= max_row { break; } // Stop rendering off-screen
+        crate::framebuffer::set_cursor(0, row);
         if i as i32 == selected_idx {
             let _ = write!(crate::framebuffer::Writer, " > {}", cmd);
         } else {
@@ -715,9 +733,13 @@ fn show_suggestions_at_row(input_row: usize, suggestions: &[&str], selected_idx:
 
 /// Clear the suggestions display at given row
 fn clear_suggestions_at_row(input_row: usize, count: usize) {
+    let (_width, height) = crate::framebuffer::get_dimensions();
+    let max_row = (height as usize) / 16; // CHAR_HEIGHT = 16
     use core::fmt::Write;
     for i in 0..count {
-        crate::framebuffer::set_cursor(0, input_row + 1 + i);
+        let row = input_row + 1 + i;
+        if row >= max_row { break; } // Don't clear off-screen
+        crate::framebuffer::set_cursor(0, row);
         for _ in 0..40 {
             let _ = write!(crate::framebuffer::Writer, " ");
         }
@@ -966,6 +988,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "users" => commands::cmd_users(),
         "hwtest" => commands::cmd_test(),
         "memtest" => commands::cmd_memtest(),
+        "restest" => commands::cmd_restest(),
         "inttest" => commands::cmd_inttest(),
         "debugnew" => commands::cmd_debugnew(),
         "nvme" => commands::cmd_nvme(),

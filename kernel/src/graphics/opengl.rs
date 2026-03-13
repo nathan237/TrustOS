@@ -212,7 +212,16 @@ pub fn gl_init(width: u32, height: u32) {
     let mut state = GL_STATE.lock();
     state.viewport_width = width;
     state.viewport_height = height;
-    state.depth_buffer = alloc::vec![1.0f32; (width * height) as usize];
+    // Use try_reserve to avoid OOM panic on memory-constrained hardware
+    let size = (width as usize) * (height as usize);
+    let mut depth = alloc::vec::Vec::new();
+    if depth.try_reserve_exact(size).is_ok() {
+        depth.resize(size, 1.0f32);
+        state.depth_buffer = depth;
+    } else {
+        crate::serial_println!("[GL] WARNING: Failed to allocate depth buffer {} KB — OOM",
+            size * 4 / 1024);
+    }
     state.modelview_stack.push(Mat4::IDENTITY);
     state.projection_stack.push(Mat4::IDENTITY);
     state.initialized = true;
@@ -229,8 +238,13 @@ pub fn gl_viewport(x: i32, y: i32, width: u32, height: u32) {
     state.viewport_y = y;
     state.viewport_width = width;
     state.viewport_height = height;
-    // Resize depth buffer
-    state.depth_buffer = alloc::vec![1.0f32; (width * height) as usize];
+    // Resize depth buffer (fallible)
+    let size = (width as usize) * (height as usize);
+    let mut depth = alloc::vec::Vec::new();
+    if depth.try_reserve_exact(size).is_ok() {
+        depth.resize(size, 1.0f32);
+        state.depth_buffer = depth;
+    }
 }
 
 /// Set the current matrix mode

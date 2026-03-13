@@ -79,10 +79,14 @@ impl RamFs {
         self.mkdir("/tmp").ok();
         self.mkdir("/bin").ok();
         self.mkdir("/etc").ok();
+        self.mkdir("/documents").ok();
+        self.mkdir("/downloads").ok();
+        self.mkdir("/music").ok();
+        self.mkdir("/pictures").ok();
         
         // Create a welcome file
         self.touch("/home/welcome.txt").ok();
-        self.write_file("/home/welcome.txt", b"Welcome to T-RustOs!\n\nThis is a RAM filesystem.\nAll files are stored in memory.\n").ok();
+        self.write_file("/home/welcome.txt", b"Welcome to TrustOS!\n\nThis is a RAM filesystem.\nAll files are stored in memory.\n").ok();
         
         // Create /etc/hostname
         self.touch("/etc/hostname").ok();
@@ -90,7 +94,22 @@ impl RamFs {
         
         // Create /etc/version
         self.touch("/etc/version").ok();
-        self.write_file("/etc/version", b"T-RustOs v0.2.0\n").ok();
+        self.write_file("/etc/version", b"TrustOS v0.9.4\n").ok();
+        
+        // Placeholder files in user directories
+        self.touch("/documents/readme.md").ok();
+        self.write_file("/documents/readme.md", b"# My Documents\n\nWelcome to TrustOS! Place your files here.\n").ok();
+        self.touch("/documents/notes.txt").ok();
+        self.write_file("/documents/notes.txt", b"My notes\n--------\n").ok();
+        
+        self.touch("/downloads/example.txt").ok();
+        self.write_file("/downloads/example.txt", b"Downloaded files will appear here.\n").ok();
+        
+        self.touch("/music/playlist.toml").ok();
+        self.write_file("/music/playlist.toml", b"[playlist]\nname = \"My Music\"\ntracks = []\n").ok();
+        
+        self.touch("/pictures/info.txt").ok();
+        self.write_file("/pictures/info.txt", b"Screenshots and images will be saved here.\n").ok();
     }
     
     /// Get current directory

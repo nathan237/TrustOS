@@ -70,9 +70,9 @@ impl RainEffect {
 // Visualizer mode enum
 // ═══════════════════════════════════════
 
-pub const NUM_MODES: u8 = 13;
+pub const NUM_MODES: u8 = 14;
 
-pub const MODE_NAMES: [&str; 13] = [
+pub const MODE_NAMES: [&str; 14] = [
     "Sphere",
     "Morphing",
     "Lorenz",
@@ -86,6 +86,7 @@ pub const MODE_NAMES: [&str; 13] = [
     "Vortex",
     "PlasmaSphere",
     "Galaxy",
+    "Subscribe",
 ];
 
 // ═══════════════════════════════════════
@@ -462,6 +463,15 @@ pub struct VisualizerState {
     galaxy_base: Vec<V3>,
     galaxy_edges: Vec<Edge>,
 
+    // ── Mode 13: Subscribe DVD Bounce ──
+    dvd_x: f32,           // bounce position X (pixels)
+    dvd_y: f32,           // bounce position Y (pixels)
+    dvd_vx: f32,          // velocity X (pixels/frame)
+    dvd_vy: f32,          // velocity Y (pixels/frame)
+    dvd_flash: f32,       // red flash intensity (0.0-1.0)
+    subscribe_base: Vec<V3>,
+    subscribe_edges: Vec<Edge>,
+
     // ── Shared: color palette ──
     pub palette: u8,
 
@@ -510,6 +520,9 @@ impl VisualizerState {
             plasma_base: Vec::new(), plasma_edges: Vec::new(),
             plasma_tendrils: Vec::new(), plasma_tendril_edges: Vec::new(),
             galaxy_base: Vec::new(), galaxy_edges: Vec::new(),
+            dvd_x: 200.0, dvd_y: 150.0, dvd_vx: 1.8, dvd_vy: 1.2,
+            dvd_flash: 0.0,
+            subscribe_base: Vec::new(), subscribe_edges: Vec::new(),
             palette: 0,
             initialized: false,
         }
@@ -957,6 +970,155 @@ fn gen_galaxy(arms: usize, points_per_arm: usize) -> (Vec<V3>, Vec<Edge>) {
 }
 
 // ═══════════════════════════════════════
+// Mode 13: Subscribe — Diamond Play Button + SUBSCRIBE text
+// ═══════════════════════════════════════
+
+/// Generate a YouTube Diamond Play Button with "SUBSCRIBE" text as 3D wireframe.
+/// The shape is flat-ish (slight Z depth) for a recognizable icon look.
+fn gen_subscribe_button() -> (Vec<V3>, Vec<Edge>) {
+    let mut verts = Vec::with_capacity(256);
+    let mut edges = Vec::new();
+
+    // ── Diamond Play Button outline (rhombus shape) ──
+    // Outer diamond: 4 corners
+    let dw = 0.9f32;   // half-width
+    let dh = 0.55f32;  // half-height
+    let dz = 0.08f32;  // slight depth for 3D look
+
+    // Front face corners (clockwise from top)
+    let v0 = verts.len();
+    verts.push(V3::new(0.0, dh, dz));           // top
+    verts.push(V3::new(dw, 0.0, dz));           // right
+    verts.push(V3::new(0.0, -dh, dz));          // bottom
+    verts.push(V3::new(-dw, 0.0, dz));          // left
+
+    // Back face corners
+    verts.push(V3::new(0.0, dh, -dz));          // top back
+    verts.push(V3::new(dw, 0.0, -dz));          // right back
+    verts.push(V3::new(0.0, -dh, -dz));         // bottom back
+    verts.push(V3::new(-dw, 0.0, -dz));         // left back
+
+    // Front face edges
+    edges.push(Edge(v0 as u16, (v0 + 1) as u16));
+    edges.push(Edge((v0 + 1) as u16, (v0 + 2) as u16));
+    edges.push(Edge((v0 + 2) as u16, (v0 + 3) as u16));
+    edges.push(Edge((v0 + 3) as u16, v0 as u16));
+    // Back face edges
+    edges.push(Edge((v0 + 4) as u16, (v0 + 5) as u16));
+    edges.push(Edge((v0 + 5) as u16, (v0 + 6) as u16));
+    edges.push(Edge((v0 + 6) as u16, (v0 + 7) as u16));
+    edges.push(Edge((v0 + 7) as u16, (v0 + 4) as u16));
+    // Connecting edges (front to back)
+    for i in 0..4 {
+        edges.push(Edge((v0 + i) as u16, (v0 + 4 + i) as u16));
+    }
+
+    // ── Play triangle (inside diamond) ──
+    let pw = 0.22f32;   // play triangle dimensions
+    let ph = 0.28f32;
+    let poff = 0.05f32; // slight right offset (YouTube style)
+    let pz = dz + 0.02;
+
+    let pt = verts.len();
+    // Front play triangle
+    verts.push(V3::new(-pw + poff, ph, pz));       // top-left
+    verts.push(V3::new(pw * 1.2 + poff, 0.0, pz)); // right point
+    verts.push(V3::new(-pw + poff, -ph, pz));      // bottom-left
+    // Back play triangle
+    verts.push(V3::new(-pw + poff, ph, -pz));
+    verts.push(V3::new(pw * 1.2 + poff, 0.0, -pz));
+    verts.push(V3::new(-pw + poff, -ph, -pz));
+
+    // Front triangle edges
+    edges.push(Edge(pt as u16, (pt + 1) as u16));
+    edges.push(Edge((pt + 1) as u16, (pt + 2) as u16));
+    edges.push(Edge((pt + 2) as u16, pt as u16));
+    // Back triangle edges
+    edges.push(Edge((pt + 3) as u16, (pt + 4) as u16));
+    edges.push(Edge((pt + 4) as u16, (pt + 5) as u16));
+    edges.push(Edge((pt + 5) as u16, (pt + 3) as u16));
+    // Connecting
+    for i in 0..3 {
+        edges.push(Edge((pt + i) as u16, (pt + 3 + i) as u16));
+    }
+
+    // ── "SUBSCRIBE" text below the diamond ──
+    // Each letter is a small 3D wireframe glyph at y offset below diamond
+    let text_y = -dh - 0.25;  // below diamond
+    let letter_w = 0.14f32;    // width per letter
+    let letter_h = 0.15f32;    // letter height
+    let text_z = 0.04f32;      // slight depth
+    let total_w = 9.0 * letter_w; // "SUBSCRIBE" = 9 chars
+    let start_x = -total_w / 2.0;
+
+    // Helper: add a letter's front face vertices and edges
+    // Letters are drawn as simple wireframe strokes
+    let letters: [&[(f32, f32, f32, f32)]; 9] = [
+        // S: 3 horizontal + 2 vertical pieces
+        &[(0.0, 1.0, 0.8, 1.0), (0.0, 1.0, 0.0, 0.5), (0.0, 0.5, 0.8, 0.5),
+          (0.8, 0.5, 0.8, 0.0), (0.0, 0.0, 0.8, 0.0)],
+        // U: left side down, bottom, right side up
+        &[(0.0, 1.0, 0.0, 0.0), (0.0, 0.0, 0.8, 0.0), (0.8, 0.0, 0.8, 1.0)],
+        // B: left side + 3 horizontal + right bumps
+        &[(0.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.6, 1.0), (0.6, 1.0, 0.7, 0.75),
+          (0.7, 0.75, 0.6, 0.5), (0.0, 0.5, 0.6, 0.5), (0.6, 0.5, 0.7, 0.25),
+          (0.7, 0.25, 0.6, 0.0), (0.0, 0.0, 0.6, 0.0)],
+        // S (duplicate)
+        &[(0.0, 1.0, 0.8, 1.0), (0.0, 1.0, 0.0, 0.5), (0.0, 0.5, 0.8, 0.5),
+          (0.8, 0.5, 0.8, 0.0), (0.0, 0.0, 0.8, 0.0)],
+        // C: top + left + bottom
+        &[(0.8, 1.0, 0.0, 1.0), (0.0, 1.0, 0.0, 0.0), (0.0, 0.0, 0.8, 0.0)],
+        // R: left + top + right-top + mid + diagonal
+        &[(0.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.6, 1.0), (0.6, 1.0, 0.7, 0.75),
+          (0.7, 0.75, 0.6, 0.5), (0.0, 0.5, 0.6, 0.5), (0.4, 0.5, 0.8, 0.0)],
+        // I: top + middle + bottom
+        &[(0.2, 1.0, 0.6, 1.0), (0.4, 1.0, 0.4, 0.0), (0.2, 0.0, 0.6, 0.0)],
+        // B (duplicate)
+        &[(0.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.6, 1.0), (0.6, 1.0, 0.7, 0.75),
+          (0.7, 0.75, 0.6, 0.5), (0.0, 0.5, 0.6, 0.5), (0.6, 0.5, 0.7, 0.25),
+          (0.7, 0.25, 0.6, 0.0), (0.0, 0.0, 0.6, 0.0)],
+        // E: left + top + mid + bottom
+        &[(0.0, 0.0, 0.0, 1.0), (0.0, 1.0, 0.8, 1.0), (0.0, 0.5, 0.6, 0.5),
+          (0.0, 0.0, 0.8, 0.0)],
+    ];
+
+    for (li, strokes) in letters.iter().enumerate() {
+        let ox = start_x + li as f32 * letter_w;
+        for &(x1, y1, x2, y2) in *strokes {
+            let sx1 = ox + x1 * (letter_w * 0.85);
+            let sy1 = text_y + y1 * letter_h;
+            let sx2 = ox + x2 * (letter_w * 0.85);
+            let sy2 = text_y + y2 * letter_h;
+
+            let vi = verts.len();
+            // Front points
+            verts.push(V3::new(sx1, sy1, text_z));
+            verts.push(V3::new(sx2, sy2, text_z));
+            // Back points
+            verts.push(V3::new(sx1, sy1, -text_z));
+            verts.push(V3::new(sx2, sy2, -text_z));
+            // Front edge
+            edges.push(Edge(vi as u16, (vi + 1) as u16));
+            // Back edge
+            edges.push(Edge((vi + 2) as u16, (vi + 3) as u16));
+            // Depth connectors
+            edges.push(Edge(vi as u16, (vi + 2) as u16));
+            edges.push(Edge((vi + 1) as u16, (vi + 3) as u16));
+        }
+    }
+
+    (verts, edges)
+}
+
+fn build_mode_13(s: &mut VisualizerState) {
+    // Subscribe DVD Bounce: use pre-built geometry, no audio deformation
+    s.verts.clear();
+    s.verts.extend_from_slice(&s.subscribe_base);
+    s.edges.clear();
+    s.edges.extend_from_slice(&s.subscribe_edges);
+}
+
+// ═══════════════════════════════════════
 // Initialization
 // ═══════════════════════════════════════
 
@@ -1037,6 +1199,11 @@ fn ensure_init(s: &mut VisualizerState) {
     let (gal_v, gal_e) = gen_galaxy(4, 20);
     s.galaxy_base = gal_v;
     s.galaxy_edges = gal_e;
+
+    // Mode 13: Subscribe DVD Bounce
+    let (sub_v, sub_e) = gen_subscribe_button();
+    s.subscribe_base = sub_v;
+    s.subscribe_edges = sub_e;
 
     s.initialized = true;
 }
@@ -1551,21 +1718,78 @@ pub fn update(
     if state.ripple_radius < 600.0 { state.ripple_radius += 6.0; }
 
     // ── Rotation ──
-    let bass_hit = if playing {
-        ((state.smooth_sub_bass + state.smooth_bass) * 15.0 + beat * 8.0) as i32
-    } else { 0 };
-    state.rot_x += state.rot_speed_x + bass_hit / 4;
-    state.rot_y += state.rot_speed_y + bass_hit;
-    state.rot_z += state.rot_speed_z;
-    state.rot_x %= 6283; state.rot_y %= 6283; state.rot_z %= 6283;
+    if state.mode == 13 {
+        // Subscribe mode: slow constant rotation, NOT audio-reactive
+        state.rot_x += 3;
+        state.rot_y += 5;
+        state.rot_z += 1;
+        state.rot_x %= 6283; state.rot_y %= 6283; state.rot_z %= 6283;
+    } else {
+        let bass_hit = if playing {
+            ((state.smooth_sub_bass + state.smooth_bass) * 15.0 + beat * 8.0) as i32
+        } else { 0 };
+        state.rot_x += state.rot_speed_x + bass_hit / 4;
+        state.rot_y += state.rot_speed_y + bass_hit;
+        state.rot_z += state.rot_speed_z;
+        state.rot_x %= 6283; state.rot_y %= 6283; state.rot_z %= 6283;
+    }
 
     // ── Scale ──
-    state.scale_target = if playing {
-        150 + ((state.smooth_sub_bass + state.smooth_bass) * 25.0) as i32
-            + (state.beat_pulse * 25.0) as i32
-    } else { 150 };
-    state.scale += (state.scale_target - state.scale) / 3;
-    state.scale = state.scale.max(80).min(220);
+    if state.mode == 13 {
+        // Subscribe mode: fixed scale, no audio
+        state.scale = 160;
+        state.scale_target = 160;
+    } else {
+        state.scale_target = if playing {
+            150 + ((state.smooth_sub_bass + state.smooth_bass) * 25.0) as i32
+                + (state.beat_pulse * 25.0) as i32
+        } else { 150 };
+        state.scale += (state.scale_target - state.scale) / 3;
+        state.scale = state.scale.max(80).min(220);
+    }
+
+    // ── Mode 13: DVD bounce movement ──
+    if state.mode == 13 {
+        // Compute shape bounding box radius in screen coords (approximate)
+        let shape_radius_x = (state.scale as f32 * 0.9).max(80.0);
+        let shape_radius_y = (state.scale as f32 * 0.7).max(60.0);
+
+        // Move position
+        state.dvd_x += state.dvd_vx;
+        state.dvd_y += state.dvd_vy;
+
+        // Bounce off edges
+        let margin_x = shape_radius_x;
+        let margin_y = shape_radius_y;
+        let sw = screen_w as f32;
+        let sh = screen_h as f32;
+
+        if state.dvd_x - margin_x < 0.0 {
+            state.dvd_x = margin_x;
+            state.dvd_vx = state.dvd_vx.abs();
+        } else if state.dvd_x + margin_x > sw {
+            state.dvd_x = sw - margin_x;
+            state.dvd_vx = -(state.dvd_vx.abs());
+        }
+        if state.dvd_y - margin_y < 0.0 {
+            state.dvd_y = margin_y;
+            state.dvd_vy = state.dvd_vy.abs();
+        } else if state.dvd_y + margin_y > sh {
+            state.dvd_y = sh - margin_y;
+            state.dvd_vy = -(state.dvd_vy.abs());
+        }
+
+        // Override center to bounce position
+        state.center_x = state.dvd_x as i32;
+        state.center_y = state.dvd_y as i32;
+
+        // Red flash on beat — trigger and decay
+        if bass_beat {
+            state.dvd_flash = 1.0;
+        }
+        state.dvd_flash *= 0.92;
+        if state.dvd_flash < 0.01 { state.dvd_flash = 0.0; }
+    }
 
     // ── Mode 1: advance morph phase ──
     if state.mode == 1 {
@@ -1593,6 +1817,7 @@ pub fn update(
         10 => build_mode_10(state),
         11 => build_mode_11(state),
         12 => build_mode_12(state),
+        13 => build_mode_13(state),
         _ => build_mode_0(state),
     }
 
@@ -1829,8 +2054,11 @@ pub fn check_rain_collision(
     }
 
     // ═══════════════════════════════════════
-    // Modes 0–5: 3D wireframe collision
+    // Modes 0–5, 7–13: 3D wireframe collision
     // ═══════════════════════════════════════
+
+    // ── Red flash for Subscribe mode (mode 13) ──
+    let red_flash = if state.mode == 13 { state.dvd_flash } else { 0.0 };
 
     // ── Beat ripple ring ──
     let mut ripple: u8 = 0;
@@ -1910,7 +2138,10 @@ pub fn check_rain_collision(
                 scanline: 0,
                 inner_glow,
                 shadow: 0,
-                target_r: 0, target_g: 0, target_b: 0, target_blend: 0,
+                target_r: if red_flash > 0.01 { 255 } else { 0 },
+                target_g: 0,
+                target_b: 0,
+                target_blend: (red_flash * 220.0).min(220.0) as u8,
             };
         }
     }
@@ -1946,7 +2177,10 @@ pub fn check_rain_collision(
             ripple, dim: 0,
             fresnel, specular: 0, ao: 0, bloom: 0,
             scanline: 0, inner_glow, shadow: 0,
-            target_r: 0, target_g: 0, target_b: 0, target_blend: 0,
+            target_r: if red_flash > 0.01 { 255 } else { 0 },
+            target_g: 0,
+            target_b: 0,
+            target_blend: (red_flash * 180.0).min(180.0) as u8,
         };
     }
 

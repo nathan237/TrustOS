@@ -627,7 +627,15 @@ pub fn init_double_buffer() {
         return;
     }
     
-    let buffer = alloc::vec![0u32; size].into_boxed_slice();
+    // Use try_reserve to avoid OOM panic on memory-constrained hardware
+    let mut buffer = alloc::vec::Vec::new();
+    if buffer.try_reserve_exact(size).is_err() {
+        crate::serial_println!("[FB] WARNING: Failed to allocate backbuffer {} KB — OOM, desktop will use direct mode",
+            size_bytes / 1024);
+        return;
+    }
+    buffer.resize(size, 0u32);
+    let buffer = buffer.into_boxed_slice();
     
     *BACKBUFFER.lock() = Some(buffer);
     crate::serial_println!("[FB] Double buffer allocated: {}x{} ({} KB)", width, height, size_bytes / 1024);
@@ -1648,7 +1656,15 @@ pub fn init_background_cache() {
     }
     
     let size = width * height;
-    let buffer = alloc::vec![0u32; size].into_boxed_slice();
+    // Use try_reserve to avoid OOM panic on memory-constrained hardware
+    let mut buffer = alloc::vec::Vec::new();
+    if buffer.try_reserve_exact(size).is_err() {
+        crate::serial_println!("[FB] WARNING: Failed to allocate background cache {} KB — OOM",
+            size * 4 / 1024);
+        return;
+    }
+    buffer.resize(size, 0u32);
+    let buffer = buffer.into_boxed_slice();
     
     *BACKGROUND_CACHE.lock() = Some(buffer);
     BACKGROUND_VALID.store(false, Ordering::SeqCst);

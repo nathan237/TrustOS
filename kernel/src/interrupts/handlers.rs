@@ -182,6 +182,61 @@ pub extern "x86-interrupt" fn divide_error_handler(stack_frame: InterruptStackFr
     panic!("EXCEPTION: DIVIDE BY ZERO\n{:#?}", stack_frame);
 }
 
+/// Device Not Available (#NM, interrupt 7) — FPU/SSE not enabled
+pub extern "x86-interrupt" fn device_not_available_handler(stack_frame: InterruptStackFrame) {
+    if stack_frame.code_segment & 3 == 3 {
+        crate::serial_println!(
+            "[NM] User-mode #NM at RIP={:#x}, killing process",
+            stack_frame.instruction_pointer.as_u64()
+        );
+        unsafe { crate::userland::return_from_ring3(-4); } // SIGILL
+    }
+    panic!("EXCEPTION: DEVICE NOT AVAILABLE (#NM) — FPU/SSE not enabled\n{:#?}", stack_frame);
+}
+
+/// Stack-Segment Fault (#SS, interrupt 12) — stack overflow or bad SS
+pub extern "x86-interrupt" fn stack_segment_fault_handler(
+    stack_frame: InterruptStackFrame,
+    error_code: u64,
+) {
+    if stack_frame.code_segment & 3 == 3 {
+        crate::serial_println!(
+            "[SS] User-mode stack fault at RIP={:#x} error_code={}, killing process",
+            stack_frame.instruction_pointer.as_u64(),
+            error_code
+        );
+        unsafe { crate::userland::return_from_ring3(-11); } // SIGSEGV (stack overflow)
+    }
+    panic!(
+        "EXCEPTION: STACK-SEGMENT FAULT (#SS)\nError Code: {}\n{:#?}",
+        error_code, stack_frame
+    );
+}
+
+/// x87 FPU Floating-Point Error (#MF, interrupt 16)
+pub extern "x86-interrupt" fn x87_fpu_error_handler(stack_frame: InterruptStackFrame) {
+    if stack_frame.code_segment & 3 == 3 {
+        crate::serial_println!(
+            "[MF] User-mode x87 FPU error at RIP={:#x}, killing process",
+            stack_frame.instruction_pointer.as_u64()
+        );
+        unsafe { crate::userland::return_from_ring3(-8); } // SIGFPE
+    }
+    panic!("EXCEPTION: x87 FPU ERROR (#MF)\n{:#?}", stack_frame);
+}
+
+/// SIMD Floating-Point Exception (#XM/#XF, interrupt 19)
+pub extern "x86-interrupt" fn simd_floating_point_handler(stack_frame: InterruptStackFrame) {
+    if stack_frame.code_segment & 3 == 3 {
+        crate::serial_println!(
+            "[XM] User-mode SIMD exception at RIP={:#x}, killing process",
+            stack_frame.instruction_pointer.as_u64()
+        );
+        unsafe { crate::userland::return_from_ring3(-8); } // SIGFPE
+    }
+    panic!("EXCEPTION: SIMD FLOATING-POINT (#XM)\n{:#?}", stack_frame);
+}
+
 /// Timer interrupt handler (legacy PIC — vector 32)
 pub extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     if !BOOTSTRAP_READY.load(Ordering::Relaxed) {

@@ -38,6 +38,10 @@ lazy_static! {
         idt.general_protection_fault.set_handler_fn(handlers::general_protection_fault_handler);
         idt.invalid_opcode.set_handler_fn(handlers::invalid_opcode_handler);
         idt.divide_error.set_handler_fn(handlers::divide_error_handler);
+        idt.device_not_available.set_handler_fn(handlers::device_not_available_handler);
+        idt.stack_segment_fault.set_handler_fn(handlers::stack_segment_fault_handler);
+        idt.x87_floating_point.set_handler_fn(handlers::x87_fpu_error_handler);
+        idt.simd_floating_point.set_handler_fn(handlers::simd_floating_point_handler);
         
         // Hardware interrupts (legacy PIC vectors — used if APIC unavailable)
         idt[pic::InterruptIndex::Timer.as_usize()]

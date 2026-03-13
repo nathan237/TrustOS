@@ -1385,6 +1385,156 @@ pub(super) fn cmd_test() {
     crate::println_color!(COLOR_BRIGHT_GREEN, "Done!");
 }
 
+/// Test desktop layout at every common resolution — verifies no panics/overflows
+pub(super) fn cmd_restest() {
+    use crate::desktop::{self, WindowType, SnapDir};
+    
+    crate::println_color!(COLOR_BRIGHT_GREEN, "=== Desktop Resolution Test Suite ===");
+    crate::println!();
+    
+    // Every resolution a real machine might produce (VBIOS Legacy + UEFI)
+    let resolutions: &[(u32, u32, &str)] = &[
+        // Extreme edge cases
+        (320, 200, "CGA"),
+        (640, 480, "VGA"),
+        (720, 400, "VGA text-mode fb"),
+        // Common Legacy BIOS (VESA)
+        (800, 600, "SVGA"),
+        (1024, 600, "Netbook"),
+        (1024, 768, "XGA"),
+        // Laptops (like T61)
+        (1280, 800, "WXGA (T61)"),
+        (1280, 1024, "SXGA"),
+        (1366, 768, "HD laptop"),
+        (1440, 900, "WXGA+ (T61 widescreen)"),
+        // Modern displays
+        (1600, 900, "HD+"),
+        (1680, 1050, "WSXGA+"),
+        (1920, 1080, "FHD"),
+        (1920, 1200, "WUXGA"),
+        (2560, 1440, "QHD"),
+        (2560, 1600, "WQXGA"),
+        (3840, 2160, "4K UHD"),
+        // Portrait / mobile
+        (768, 1024, "iPad portrait"),
+        (1080, 1920, "Phone portrait"),
+        // Weird aspect ratios
+        (1280, 720, "720p"),
+        (1600, 1200, "UXGA 4:3"),
+        (2048, 1152, "2K"),
+        // Minimum edge cases
+        (200, 150, "Tiny"),
+        (100, 80, "Absurdly small"),
+    ];
+    
+    let mut passed = 0usize;
+    let mut failed = 0usize;
+    
+    for &(w, h, label) in resolutions {
+        crate::print!("  {:>4}x{:<4} ({:<20}) ", w, h, label);
+        
+        // Use a separate desktop instance to avoid touching the global one
+        let mut desktop = desktop::Desktop::new();
+        // Manually set dimensions (skip init() to avoid framebuffer/compositor calls)
+        desktop.width = w;
+        desktop.height = h;
+        
+        let mut ok = true;
+        let mut detail = alloc::string::String::new();
+        
+        // Test 1: Create windows of various sizes (some larger than screen)
+        let test_windows: &[(&str, i32, i32, u32, u32, WindowType)] = &[
+            ("Terminal", 100, 60, 780, 540, WindowType::Terminal),
+            ("Files",    140, 80, 520, 420, WindowType::FileManager),
+            ("Calc",     350, 100, 300, 380, WindowType::Calculator),
+            ("Browser",  100, 40, 720, 520, WindowType::Browser),
+            ("Big",      0,   0, 1920, 1080, WindowType::About),
+            ("Tiny",     0,   0, 50,  30,  WindowType::Empty),
+            ("OffScreen", 9999, 9999, 400, 300, WindowType::Empty),
+            ("Negative",  -100, -50, 400, 300, WindowType::Empty),
+        ];
+        
+        for &(title, x, y, ww, wh, wtype) in test_windows {
+            let id = desktop.create_window(title, x, y, ww, wh, wtype);
+            if let Some(win) = desktop.windows.iter().find(|w| w.id == id) {
+                // Verify window is within screen bounds
+                let right = win.x as u32 + win.width;
+                let bottom = win.y as u32 + win.height;
+                if right > w + 1 || bottom > h + 1 {
+                    ok = false;
+                    use core::fmt::Write;
+                    let _ = core::fmt::write(&mut detail, format_args!(
+                        " OOB:{}({}+{}={}>{})", title, win.x, win.width, right, w
+                    ));
+                }
+                if win.width == 0 || win.height == 0 {
+                    ok = false;
+                    use core::fmt::Write;
+                    let _ = core::fmt::write(&mut detail, format_args!(" ZERO:{}", title));
+                }
+            }
+        }
+        
+        // Test 2: Maximize and verify bounds
+        if let Some(win) = desktop.windows.first_mut() {
+            win.focused = true;
+            win.toggle_maximize(w, h);
+            let right = win.x as u32 + win.width;
+            let bottom = win.y as u32 + win.height;
+            if right > w + 1 || bottom > h + 1 {
+                ok = false;
+                use core::fmt::Write;
+                let _ = core::fmt::write(&mut detail, format_args!(
+                    " MAX_OOB({}+{}={}>{})", win.x, win.width, right, w
+                ));
+            }
+            // Restore
+            win.toggle_maximize(w, h);
+        }
+        
+        // Test 3: Snap all directions
+        let snap_dirs = [
+            SnapDir::Left, SnapDir::Right,
+            SnapDir::TopLeft, SnapDir::TopRight,
+            SnapDir::BottomLeft, SnapDir::BottomRight,
+        ];
+        for dir in &snap_dirs {
+            desktop.snap_focused_window(*dir);
+            if let Some(win) = desktop.windows.iter().find(|w| w.focused) {
+                let right = win.x as u32 + win.width;
+                let bottom = win.y as u32 + win.height;
+                if right > w + 1 || bottom > h + 1 {
+                    ok = false;
+                    use core::fmt::Write;
+                    let _ = core::fmt::write(&mut detail, format_args!(" SNAP_OOB:{:?}", dir));
+                }
+            }
+        }
+        
+        // Test 4: screen_width/screen_height consistent
+        if desktop.screen_width() != w || desktop.screen_height() != h {
+            ok = false;
+            use core::fmt::Write;
+            let _ = core::fmt::write(&mut detail, format_args!(" DIM_MISMATCH"));
+        }
+        
+        if ok {
+            crate::println_color!(COLOR_GREEN, "[OK]  ({} windows)", desktop.windows.len());
+            passed += 1;
+        } else {
+            crate::println_color!(COLOR_RED, "[FAIL]{}", detail);
+            failed += 1;
+        }
+    }
+    
+    crate::println!();
+    if failed == 0 {
+        crate::println_color!(COLOR_BRIGHT_GREEN, "All {} resolutions passed!", passed);
+    } else {
+        crate::println_color!(COLOR_RED, "{}/{} failed", failed, passed + failed);
+    }
+}
+
 /// Comprehensive v0.3 memory-management test suite
 pub(super) fn cmd_memtest() {
     crate::println_color!(COLOR_BRIGHT_GREEN, "=== TrustOS v0.3 Memory Test Suite ===");

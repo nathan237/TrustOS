@@ -35,12 +35,13 @@ ENTRY_SIZE = 48  # bytes per track entry in header
 
 def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    out_path = os.path.join(script_dir, "trustos_data.img")
+    project_root = os.path.dirname(script_dir)  # up from tools/ to OSrust/
+    out_path = os.path.join(project_root, "builds", "trustos_data.img")
 
     # Track list: (wav_path, display_name)
     tracks = [
-        (os.path.join(script_dir, "kernel", "src", "trustdaw", "untitled2.wav"), "Untitled (2) - Lo-Fi"),
-        (os.path.join(script_dir, "kernel", "src", "trustdaw", "circuit_hearts.wav"), "Circuit Hearts - ogezaki"),
+        (os.path.join(project_root, "kernel", "src", "trustdaw", "untitled2.wav"), "Untitled (2) - Lo-Fi"),
+        (os.path.join(project_root, "kernel", "src", "trustdaw", "circuit_hearts.wav"), "Circuit Hearts - ogezaki"),
     ]
 
     # Validate

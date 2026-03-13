@@ -97,9 +97,9 @@ if (-not $xorriso) {
     $rest2 = $full2.Substring(2) -replace "\\", "/"
     $wslIsoPath = "/mnt/$drive2$rest2"
 
-    wsl -e xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $wslIsoDir -o $wslIsoPath 2>&1 | Out-Null
+    wsl -e xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label --mbr-force-bootable $wslIsoDir -o $wslIsoPath 2>&1 | Out-Null
 } else {
-    xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $isoDir -o $isoPath 2>&1 | Out-Null
+    xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label --mbr-force-bootable $isoDir -o $isoPath 2>&1 | Out-Null
 }
 $ErrorActionPreference = $oldErr2
 if ($LASTEXITCODE -ne 0) { Write-Host "ISO creation failed!" -ForegroundColor Red; exit 1 }
@@ -115,6 +115,14 @@ if ($LASTEXITCODE -ne 0) {
     Write-Host "  BIOS boot sectors installed OK" -ForegroundColor DarkGreen
 }
 $ErrorActionPreference = $oldErr
+
+# Patch MBR: set partition 1 bootable flag (0x80) for Legacy BIOS compatibility
+$isoBytes = [System.IO.File]::ReadAllBytes($isoPath)
+if ($isoBytes[446] -ne 0x80) {
+    $isoBytes[446] = 0x80
+    [System.IO.File]::WriteAllBytes($isoPath, $isoBytes)
+    Write-Host "  MBR bootable flag patched for Legacy BIOS" -ForegroundColor DarkGreen
+}
 
 Copy-Item $isoPath "trustos.iso" -Force
 
