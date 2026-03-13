@@ -67,10 +67,11 @@ New-Item -ItemType Directory -Path (Join-Path $isoDir "EFI\BOOT") -Force | Out-N
 Copy-Item $kernelPath (Join-Path $isoDir "boot\trustos_kernel")
 
 # Generate limine config WITHOUT jarvis module for base edition
-$limineBase = (Get-Content "limine.cfg") | Where-Object { $_ -notmatch "module_path|module_cmdline" }
-$limineBase | Set-Content (Join-Path $isoDir "boot\limine\limine.cfg")
+$limineBase = (Get-Content "limine.conf") | Where-Object { $_ -notmatch "module_path|module_cmdline" }
 $limineBase | Set-Content (Join-Path $isoDir "boot\limine\limine.conf")
 $limineBase | Set-Content (Join-Path $isoDir "limine.conf")
+# Also place as limine.cfg for older Limine compat
+$limineBase | Set-Content (Join-Path $isoDir "boot\limine\limine.cfg")
 Copy-Item "limine\limine-bios.sys" (Join-Path $isoDir "boot\limine")
 Copy-Item "limine\limine-bios-cd.bin" (Join-Path $isoDir "boot\limine")
 Copy-Item "limine\limine-uefi-cd.bin" (Join-Path $isoDir "boot\limine")
@@ -96,16 +97,23 @@ if (-not $xorriso) {
     $rest2 = $full2.Substring(2) -replace "\\", "/"
     $wslIsoPath = "/mnt/$drive2$rest2"
 
-    wsl -e xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $wslIsoDir -o $wslIsoPath 2>&1 | Out-Null
+    wsl -e xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $wslIsoDir -o $wslIsoPath 2>&1 | Out-Null
 } else {
-    xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $isoDir -o $isoPath 2>&1 | Out-Null
+    xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $isoDir -o $isoPath 2>&1 | Out-Null
 }
 $ErrorActionPreference = $oldErr2
 if ($LASTEXITCODE -ne 0) { Write-Host "ISO creation failed!" -ForegroundColor Red; exit 1 }
 
+Write-Host "  Installing BIOS bootloader (Legacy BIOS support)..." -ForegroundColor DarkGray
 $oldErr = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-& "limine\limine.exe" bios-install $isoPath 2>$null | Out-Null
+$biosResult = & "limine\limine.exe" bios-install $isoPath 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  WARNING: limine bios-install failed: $biosResult" -ForegroundColor Yellow
+    Write-Host "  Legacy BIOS boot may not work" -ForegroundColor Yellow
+} else {
+    Write-Host "  BIOS boot sectors installed OK" -ForegroundColor DarkGreen
+}
 $ErrorActionPreference = $oldErr
 
 Copy-Item $isoPath "trustos.iso" -Force
@@ -118,6 +126,7 @@ Write-Host "  Edition:  $Edition (Base)" -ForegroundColor Cyan
 Write-Host "  Kernel:   $kernelSize MB" -ForegroundColor Cyan
 Write-Host "  ISO:      $isoSize MB" -ForegroundColor Cyan
 Write-Host "  Output:   $OutputDir" -ForegroundColor Cyan
+Write-Host "  Boot:     UEFI + Legacy BIOS (hybrid)" -ForegroundColor Cyan
 Write-Host "  JARVIS:   Code included, no pretrained weights" -ForegroundColor Cyan
 Write-Host ""
 

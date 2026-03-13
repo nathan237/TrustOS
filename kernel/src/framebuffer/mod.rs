@@ -695,9 +695,9 @@ pub fn swap_buffers() {
         }
     }
     
-    // ── MMIO fallback path with row-diff optimization ──
+    // ── MMIO fallback path ──
     if addr.is_null() { return; }
-    swap_buffers_mmio_diff(addr, width, height, pitch);
+    swap_buffers_mmio(addr, width, height, pitch);
 }
 
 /// MMIO framebuffer copy with row-diff — only copies rows that changed.

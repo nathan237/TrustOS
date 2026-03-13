@@ -12,28 +12,31 @@
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
 [![Lines](https://img.shields.io/badge/code-257%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.8.0-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.9.2-orange?style=for-the-badge)]()
 [![Tests](https://img.shields.io/badge/tests-96%2F96%20(100%25)-brightgreen?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
 [![Watch the demo](https://img.shields.io/badge/%E2%96%B6%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
 
-[What's New](#-whats-new-in-v080) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
+[What's New](#-whats-new-in-v092) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
 
 ---
 
 </div>
 
-## 🆕 What's New in v0.8.0
+## 🆕 What's New in v0.9.2
 
-> **March 12, 2026** — Native x86_64 Compiler, Desktop Refresh, 96/96 Tests
+> **March 12, 2026** — Legacy BIOS Boot, Boot Fixes, Audio Viz, Music Player
 
-- 🔥 **TrustLang now compiles to native x86_64 machine code** — write a program, compile it to raw Intel instructions, execute it bare-metal. No LLVM, no GCC, no external tools. Dual backend: bytecode VM + native.
-- 🧪 **55+ automated compiler tests** — arithmetic, variables, control flow, recursion, bitwise, edge cases, cross-validation between VM and native output.
-- 🎯 **New commands**: `trustlang compile`, `trustlang test`, `trustlang bench` — benchmark native vs interpreted.
-- 🖥 **COSMIC2 desktop borders refined** — 4px chrome for a bolder, modern window look.
-- ✅ **96/96 self-tests passing** (100%) — native compiler smoke test integrated.
+- 🖥 **Legacy BIOS boot support** — TrustOS now boots on PCs without UEFI. Hybrid ISO works on both UEFI and Legacy BIOS machines. Limine `bios-install` + Rock Ridge/Joliet ISO for maximum hardware compatibility.
+- 🔧 **Boot ALLOC ERROR crash fixed** — Checkpoints and memory map used heap before allocator init. Replaced with fixed-size arrays.
+- 🔧 **Build pipeline fixed** — xorriso stderr no longer kills the PowerShell build script.
+- 🎨 **Transparent logo** — Boot splash logo now renders transparently over the matrix rain.
+- 🎵 **Music player overhaul** — New TrustPlayer with waveform visualizer, playlist management, playback controls.
+- 🔊 **Audio visualizer** in desktop taskbar.
+- 🌐 **Chrome-style browser** — Tab bar, nav bar with omnibox, rounded buttons, lock icon.
+- ✅ **96/96 self-tests passing** (100%).
 - 📊 **257,000+ lines** across 473 source files, 3 architectures.
 
 ---
@@ -52,7 +55,9 @@
 qemu-system-x86_64 -cdrom trustos.iso -m 512M -cpu max -smp 4 -display gtk -vga std -serial stdio
 ```
 
-> 💡 Or flash to a USB drive and boot on real hardware — TrustOS runs bare-metal on x86_64 PCs, ARM64 phones/tablets, and RISC-V boards.
+> 💡 Or flash to a USB drive and boot on real hardware — TrustOS runs bare-metal on x86_64 PCs (UEFI or Legacy BIOS), ARM64 phones/tablets, and RISC-V boards.
+>
+> **For Legacy BIOS machines:** Use [Rufus](https://rufus.ie/) in **DD Image mode** (not ISO mode) to flash the ISO to USB. Or on Linux: `dd if=trustos.iso of=/dev/sdX bs=4M status=progress`.
 
 All releases: [**github.com/nathan237/TrustOS/releases**](https://github.com/nathan237/TrustOS/releases)
 
@@ -260,7 +265,7 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 
 | Target | Arch | Method | Status |
 |--------|------|--------|--------|
-| PC (USB/ISO) | x86_64 | Limine UEFI + BIOS | Production |
+| PC (USB/ISO) | x86_64 | Limine UEFI + Legacy BIOS (hybrid) | Production |
 | Android | ARM64 | `fastboot flash boot` | Ready |
 | Raspberry Pi | ARM64 | SD card (kernel8.img) | Ready |
 | RISC-V boards | RISC-V | OpenSBI + U-Boot | Ready |
@@ -296,7 +301,8 @@ qemu-system-x86_64 -cdrom trustos.iso -m 512M -cpu max -smp 4 -display gtk -vga 
 qemu-system-x86_64 -cdrom trustos-jarvispack.iso -m 512M -cpu max -smp 4 -display gtk -vga std -serial stdio
 ```
 
-> Or flash to USB with `dd` / Rufus and boot on real hardware.
+> Or flash to USB with **Rufus (DD Image mode)** / `dd` and boot on real hardware.
+> Works on both **UEFI** and **Legacy BIOS** machines.
 
 ### Option B: Build from source
 
@@ -369,6 +375,27 @@ TrustOS/
 ---
 
 ## 📋 Changelog
+
+### v0.9.2 — Legacy BIOS Boot & Audio Viz (March 12, 2026)
+
+- **Legacy BIOS boot support** — Hybrid ISO now boots on PCs without UEFI. `limine bios-install`, Rock Ridge `-R -r -J` ISO flags, `limine.conf` + `limine.cfg` dual config.
+- **Taskbar overlap fix** — Desktop windows no longer render behind the taskbar.
+- **Audio visualizer** — Real-time waveform display in desktop.
+- **TrustLang VM improvements** — Better error handling, optimized execution.
+
+### v0.9.1 — Music Player Overhaul (March 12, 2026)
+
+- **TrustPlayer** — New music player with waveform visualizer, playlist, playback controls.
+- **Auto-tier fix** — Hardware tier detection corrected.
+
+### v0.9.0 — Boot Fix, Transparent Logo, Chrome Browser (March 12, 2026)
+
+- **Fix boot ALLOC ERROR crash** — CHECKPOINTS and BOOT_MEMORY_MAP replaced with fixed-size arrays (no heap before allocator init).
+- **Fix build pipeline** — xorriso stderr no longer kills PowerShell script.
+- **Transparent logo** — Logo renders over matrix rain (luminance threshold skip).
+- **Chrome-style browser** — Tab bar, omnibox, rounded buttons, lock icon, 3-dot menu.
+- **File manager** — Details/Tiles views, sidebar, search, column sorting.
+- 30 files changed, ~5500 insertions, ~570 deletions.
 
 ### v0.8.0 — Native Compiler & Desktop Polish (March 12, 2026)
 

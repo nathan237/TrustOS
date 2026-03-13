@@ -86,9 +86,10 @@ New-Item -ItemType Directory -Path (Join-Path $isoDir "boot\limine") -Force | Ou
 New-Item -ItemType Directory -Path (Join-Path $isoDir "EFI\BOOT") -Force | Out-Null
 
 Copy-Item $kernelPath (Join-Path $isoDir "boot\trustos_kernel")
-Copy-Item "limine.cfg" (Join-Path $isoDir "boot\limine\limine.cfg")
-Copy-Item "limine.cfg" (Join-Path $isoDir "boot\limine\limine.conf")
-Copy-Item "limine.cfg" (Join-Path $isoDir "limine.conf")
+Copy-Item "limine.conf" (Join-Path $isoDir "boot\limine\limine.conf")
+Copy-Item "limine.conf" (Join-Path $isoDir "limine.conf")
+# Also place as limine.cfg for older Limine compat
+Copy-Item "limine.conf" (Join-Path $isoDir "boot\limine\limine.cfg")
 Copy-Item "limine\limine-bios.sys" (Join-Path $isoDir "boot\limine")
 Copy-Item "limine\limine-bios-cd.bin" (Join-Path $isoDir "boot\limine")
 Copy-Item "limine\limine-uefi-cd.bin" (Join-Path $isoDir "boot\limine")
@@ -105,6 +106,8 @@ Write-Host "[4/5] Creating bootable ISO..." -ForegroundColor Yellow
 $isoPath = Join-Path $OutputDir $IsoName
 
 $xorriso = Get-Command xorriso -ErrorAction SilentlyContinue
+$oldErr2 = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
 if (-not $xorriso) {
     $full = [System.IO.Path]::GetFullPath($isoDir)
     $drive = $full.Substring(0, 1).ToLower()
@@ -116,15 +119,23 @@ if (-not $xorriso) {
     $rest2 = $full2.Substring(2) -replace "\\", "/"
     $wslIsoPath = "/mnt/$drive2$rest2"
 
-    wsl -e xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $wslIsoDir -o $wslIsoPath
+    wsl -e xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $wslIsoDir -o $wslIsoPath 2>&1 | Out-Null
 } else {
-    xorriso -as mkisofs -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $isoDir -o $isoPath
+    xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin -no-emul-boot -boot-load-size 4 -boot-info-table --efi-boot boot/limine/limine-uefi-cd.bin -efi-boot-part --efi-boot-image --protective-msdos-label $isoDir -o $isoPath 2>&1 | Out-Null
 }
+$ErrorActionPreference = $oldErr2
 if ($LASTEXITCODE -ne 0) { Write-Host "ISO creation failed!" -ForegroundColor Red; exit 1 }
 
+Write-Host "  Installing BIOS bootloader (Legacy BIOS support)..." -ForegroundColor DarkGray
 $oldErr = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
-& "limine\limine.exe" bios-install $isoPath 2>$null | Out-Null
+$biosResult = & "limine\limine.exe" bios-install $isoPath 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  WARNING: limine bios-install failed: $biosResult" -ForegroundColor Yellow
+    Write-Host "  Legacy BIOS boot may not work" -ForegroundColor Yellow
+} else {
+    Write-Host "  BIOS boot sectors installed OK" -ForegroundColor DarkGreen
+}
 $ErrorActionPreference = $oldErr
 
 $isoSize = [math]::Round((Get-Item $isoPath).Length / 1MB, 2)
@@ -135,6 +146,7 @@ Write-Host "  Edition:  $Edition (AI)" -ForegroundColor Magenta
 Write-Host "  Kernel:   $kernelSize MB" -ForegroundColor Magenta
 Write-Host "  ISO:      $isoSize MB" -ForegroundColor Magenta
 Write-Host "  Output:   $OutputDir" -ForegroundColor Magenta
+Write-Host "  Boot:     UEFI + Legacy BIOS (hybrid)" -ForegroundColor Magenta
 if ($brainFile) {
     Write-Host "  JARVIS:   Pretrained brain ($brainSize MB)" -ForegroundColor Magenta
 } else {
