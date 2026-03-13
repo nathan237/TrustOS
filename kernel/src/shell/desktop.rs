@@ -376,11 +376,60 @@ fn check_desktop_resources() -> bool {
 pub(super) fn launch_desktop_env(initial_window: Option<(&str, crate::desktop::WindowType, i32, i32, u32, u32)>) {
     use crate::desktop;
 
+    // ── Helper: write raw text directly to framebuffer (bypass backbuffer) ──
+    // This is a diagnostic tool to find WHERE the desktop freezes on T61.
+    fn diag(step: u8, msg: &str) {
+        use core::sync::atomic::Ordering;
+        let fb = crate::framebuffer::FB_ADDR.load(Ordering::Relaxed);
+        let w = crate::framebuffer::FB_WIDTH.load(Ordering::Relaxed) as usize;
+        let pitch = crate::framebuffer::FB_PITCH.load(Ordering::Relaxed) as usize;
+        let h = crate::framebuffer::FB_HEIGHT.load(Ordering::Relaxed) as usize;
+        if fb.is_null() || w == 0 || pitch == 0 { return; }
+        
+        let y_start = (h.saturating_sub(200)) + (step as usize) * 16; // bottom area
+        if y_start + 16 > h { return; }
+        
+        // Clear line with dark background
+        for y in y_start..y_start + 16 {
+            for x in 0..w.min(600) {
+                unsafe {
+                    let ptr = fb.add(y * pitch + x * 4) as *mut u32;
+                    ptr.write_volatile(0xFF000000); // black
+                }
+            }
+        }
+        
+        // Draw text using built-in font (8x16 characters)
+        for (ci, ch) in msg.bytes().enumerate() {
+            let glyph = crate::framebuffer::font::get_glyph(ch as char);
+            for row in 0..16 {
+                let py = y_start + row;
+                if py >= h { break; }
+                let bits = glyph[row];
+                for col in 0..8 {
+                    if (bits >> (7 - col)) & 1 == 1 {
+                        let px = 8 + ci * 8 + col;
+                        if px < w {
+                            unsafe {
+                                let ptr = fb.add(py * pitch + px * 4) as *mut u32;
+                                ptr.write_volatile(0xFF00FF00); // bright green
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        crate::serial_println!("[DIAG {}] {}", step, msg);
+    }
+
+    diag(0, "desktop: check_resources...");
+    
     // Resource detection before launch
     if !check_desktop_resources() {
         return;
     }
 
+    diag(1, "desktop: get_dimensions...");
     let (width, height) = crate::framebuffer::get_dimensions();
     if width == 0 || height == 0 {
         crate::println_color!(COLOR_RED, "Error: Invalid framebuffer!");
@@ -388,8 +437,11 @@ pub(super) fn launch_desktop_env(initial_window: Option<(&str, crate::desktop::W
     }
     crate::mouse::set_screen_size(width, height);
     
+    diag(2, "desktop: DESKTOP.lock()...");
     let mut d = desktop::DESKTOP.lock();
+    diag(3, "desktop: d.init()...");
     d.init(width, height);
+    diag(4, "desktop: init done, check tier...");
     
     // If host resources are too low, stay in CLI
     if d.desktop_tier == desktop::DesktopTier::CliOnly {
@@ -419,7 +471,10 @@ pub(super) fn launch_desktop_env(initial_window: Option<(&str, crate::desktop::W
         d.create_window(title, x, y, w, h, wtype);
     }
     
+    diag(5, "desktop: drop(d)...");
     drop(d);
+    
+    diag(6, "desktop: entering run()...");
     
     // Welcome notification
     crate::gui::engine::show_toast("TrustOS Desktop", "Welcome! Alt+Tab to switch windows", crate::gui::engine::NotifyPriority::Success);
