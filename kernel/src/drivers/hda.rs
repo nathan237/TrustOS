@@ -952,18 +952,19 @@ impl HdaController {
             .collect();
 
         for &(nid, caps) in &all_widget_info {
-            if caps & (1 << 1) != 0 { // Has output amp
-                let amp_out_lr: u16 = (1 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | 0x7F;
-                let _ = self.set_verb_16(codec, nid, 0x300, amp_out_lr);
-            }
-            if caps & (1 << 2) != 0 { // Has input amp
-                // Unmute all input amp indices (up to 16)
-                let conn_len = (caps >> 8) & 0x7F; // from audio widget caps, not always accurate
-                let max_idx = if conn_len > 0 { conn_len.min(16) } else { 1 };
-                for idx in 0..max_idx {
-                    // [15]=0 (input), [14]=R, [13]=L, [12]=!mute, [11:8]=index, [6:0]=gain
-                    let amp_in_lr: u16 = (0 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | ((idx as u16 & 0xF) << 8) | 0x7F;
-                    let _ = self.set_verb_16(codec, nid, 0x300, amp_in_lr);
+            // Unconditionally set BOTH output and input amps on every widget.
+            // Widgets without a given amp type simply ignore the command.
+            // Payload: [15]=set output, [14]=set input, [13]=L, [12]=R, [7]=mute(0), [6:0]=gain
+            let amp_both: u16 = (1 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | 0x7F;
+            let _ = self.set_verb_16(codec, nid, 0x300, amp_both);
+
+            // For widgets with input amps and multiple connections, also unmute each index
+            // Audio Widget Caps bit 1 = In Amp Present
+            if caps & (1 << 1) != 0 {
+                let conn_len = (caps >> 8) & 0x7F;
+                for idx in 1..conn_len.min(16) {
+                    let amp_in_idx: u16 = (1 << 14) | (1 << 13) | (1 << 12) | ((idx as u16 & 0xF) << 8) | 0x7F;
+                    let _ = self.set_verb_16(codec, nid, 0x300, amp_in_idx);
                 }
             }
         }
@@ -1743,15 +1744,11 @@ pub fn set_volume(level: u8) -> Result<(), &'static str> {
     // Convert 0-100 to 0-127 amp gain
     let gain = ((level as u32) * 127 / 100) as u16;
     
-    // Set amp gain on all widgets in the output path that have output amps
+    // Set amp gain on all widgets in the output path (both output and input amps)
     for &nid in &path.path {
-        if let Some(w) = ctrl.widgets.iter().find(|w| w.nid == nid) {
-            if w.caps & (1 << 1) != 0 {
-                // Both L+R channels, unmuted, with gain
-                let amp_data: u16 = (1 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | gain;
-                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data);
-            }
-        }
+        // Set both output amp (bit 15) and input amp (bit 14), both channels, with gain
+        let amp_data: u16 = (1 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | gain;
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data);
     }
     
     crate::serial_println!("[HDA] Volume set to {}% (gain={})", level, gain);
@@ -1776,13 +1773,9 @@ pub fn mute() -> Result<(), &'static str> {
     let path = ctrl.output_paths[0].clone();
     
     for &nid in &path.path {
-        if let Some(w) = ctrl.widgets.iter().find(|w| w.nid == nid) {
-            if w.caps & (1 << 1) != 0 {
-                // Mute both L+R: bit 12 clear = muted, bits 14+13 = L+R
-                let amp_mute: u16 = (1 << 15) | (1 << 14) | (1 << 13) | 0;
-                let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_mute);
-            }
-        }
+        // Mute both output+input amps, both channels: bit 7 = mute
+        let amp_mute: u16 = (1 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | (1 << 7);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_mute);
     }
     
     Ok(())
