@@ -18,6 +18,7 @@ pub mod fat32;
 pub mod block_cache;
 pub mod wal;
 pub mod ext4;
+pub mod ntfs;
 
 /// File descriptor type
 pub type Fd = i32;
@@ -320,6 +321,18 @@ pub fn init() {
             crate::log!("[VFS] Mounted FAT32 at /mnt/fat32");
         } else {
             crate::log_debug!("[VFS] No FAT32 partition found");
+        }
+    }
+    
+    // Try to mount NTFS partitions from AHCI (x86_64 only)
+    #[cfg(target_arch = "x86_64")]
+    {
+        crate::log_debug!("[VFS] Looking for NTFS partitions...");
+        if let Some(ntfs_fs) = ntfs::try_mount_ntfs() {
+            mount("/mnt/ntfs", ntfs_fs).ok();
+            crate::log!("[VFS] Mounted NTFS at /mnt/ntfs");
+        } else {
+            crate::log_debug!("[VFS] No NTFS partition found");
         }
     }
     

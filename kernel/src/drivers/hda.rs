@@ -882,28 +882,36 @@ impl HdaController {
                 .map(|w| w.nid)
                 .collect();
 
-            // Power on all widgets in the AFG before configuring
+            // Power on AFG (node 1) first, then all widgets
+            let _ = self.codec_cmd(codec, 1, verb::SET_POWER_STATE, 0x00);
+            HdaController::delay_us(10_000); // 10ms for AFG to wake
             for &nid in &all_nids {
                 let _ = self.codec_cmd(codec, nid, verb::SET_POWER_STATE, 0x00);
             }
-            HdaController::delay_us(1000);
+            // AD1984/CX20549 need 50-100ms to fully transition D3→D0
+            HdaController::delay_us(100_000); // 100ms — critical for T61
 
             // For AD1984: override pin configs that BIOS may have set incorrectly
             // Set all output pins to enable HP amp + output
             for &nid in &output_pin_nids {
                 let _ = self.codec_cmd(codec, nid, verb::SET_PIN_CONTROL, 0xC0);
-                // Enable EAPD on all output pins
-                let eapd = self.codec_cmd(codec, nid, verb::GET_EAPD, 0).unwrap_or(0);
-                let _ = self.codec_cmd(codec, nid, verb::SET_EAPD, (eapd as u8) | 0x06);
+                // Enable EAPD (bit 1) — do NOT set bit 2 (L/R swap) on AD1984
+                // as it can cause silence on some configurations
+                let _ = self.codec_cmd(codec, nid, verb::SET_EAPD, 0x02);
+                crate::serial_println!("[HDA]   Pin NID {} -> EAPD=0x02, PIN_CTL=0xC0", nid);
             }
+
+            // Also try to unmute the AFG output amp (node 1)
+            let _ = self.set_verb_16(codec, 1, 0x300,
+                (1u16 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | 0x7F);
         }
 
         // Configure the pin: OUT enable + HP amp enable
         let _ = self.codec_cmd(codec, path.pin_nid, verb::SET_PIN_CONTROL, 0xC0);
-        // Try EAPD (External Amplifier Power Down control)
-        // Bit 1 = EAPD enable, Bit 2 = L/R swap (set both for safety)
-        let eapd = self.codec_cmd(codec, path.pin_nid, verb::GET_EAPD, 0).unwrap_or(0);
-        let _ = self.codec_cmd(codec, path.pin_nid, verb::SET_EAPD, (eapd as u8) | 0x06);
+        // Enable EAPD (External Amplifier) — bit 1 only
+        // Bit 2 is L/R swap which causes silence on AD1984/CX20549
+        let _ = self.codec_cmd(codec, path.pin_nid, verb::SET_EAPD, 0x02);
+        crate::serial_println!("[HDA]   Output pin {} -> EAPD=0x02, PIN_CTL=0xC0", path.pin_nid);
 
         // Set stream tag on DAC
         let stream_tag = self.stream_tag;
@@ -914,6 +922,11 @@ impl HdaController {
         // Set stream format on DAC: 48 kHz, 16-bit, stereo
         let fmt: u16 = 0x0011; // 48kHz, 16-bit, stereo
         let _ = self.set_verb_16(codec, path.dac_nid, verb::SET_STREAM_FORMAT, fmt);
+
+        // Give converter time to apply format change (critical on ICH8/AD1984)
+        HdaController::delay_us(5000);
+        crate::serial_println!("[HDA]   DAC NID {} -> stream_tag={}, fmt=0x{:04X}",
+            path.dac_nid, stream_tag, fmt);
 
         // Unmute output amps along the path — SET_AMP_GAIN_MUTE (verb 0x3)
         // Payload: [15]=output, [14]=right, [13]=left, [12]=!mute, [6:0]=gain

@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrustOS — Bare-Metal OS with AI Transformer in the Kernel | 257K Lines of Pure Rust</title>
+  <meta name="description" content="TrustOS is a bare-metal operating system written entirely in Rust with a 4.4M-parameter AI transformer running in the kernel. 257,000+ lines, zero C, zero binary blobs. Desktop, browser, emulators, native compiler, mesh networking. x86_64, ARM64, RISC-V. Built solo by Nated0ge.">
+  <meta name="keywords" content="TrustOS, bare-metal OS, Rust operating system, kernel AI, transformer, JARVIS AI, osdev, operating system from scratch, no_std Rust, x86_64, ARM64, RISC-V, bare-metal Rust, kernel-resident AI, federated learning, PXE boot, mesh networking, TrustLang, native compiler, Game Boy emulator, NES emulator, Nated0ge, nathan237">
+  <meta name="author" content="Nated0ge (Nathan)">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://nathan237.github.io/TrustOS/">
+
+  <!-- Open Graph / Social -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="TrustOS — Bare-Metal OS with AI in the Kernel">
+  <meta property="og:description" content="257,000 lines of pure Rust. A 4.4M-param AI transformer running in Ring 0. Desktop, browser, emulators, native x86_64 compiler. Zero C. Built solo.">
+  <meta property="og:url" content="https://nathan237.github.io/TrustOS/">
+  <meta property="og:image" content="https://nathan237.github.io/TrustOS/screenshot_desktop.png">
+  <meta property="og:site_name" content="TrustOS">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="TrustOS — Bare-Metal OS with AI in the Kernel">
+  <meta name="twitter:description" content="257K lines of pure Rust. 4.4M-param transformer in Ring 0. Desktop, browser, emulators, native compiler. Zero C. Built solo by one developer.">
+  <meta name="twitter:image" content="https://nathan237.github.io/TrustOS/screenshot_desktop.png">
+
+  <!-- JSON-LD Structured Data for Google -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "TrustOS",
+    "applicationCategory": "OperatingSystem",
+    "operatingSystem": "Bare-metal (x86_64, ARM64, RISC-V)",
+    "description": "A bare-metal operating system written entirely in Rust with a 4.4-million-parameter AI transformer running in the kernel. 257,000+ lines, zero C, zero binary blobs.",
+    "url": "https://nathan237.github.io/TrustOS/",
+    "downloadUrl": "https://github.com/nathan237/TrustOS/releases/latest",
+    "softwareVersion": "0.10.0",
+    "author": {
+      "@type": "Person",
+      "name": "Nated0ge",
+      "url": "https://github.com/nathan237"
+    },
+    "license": "https://www.apache.org/licenses/LICENSE-2.0",
+    "programmingLanguage": "Rust",
+    "codeRepository": "https://github.com/nathan237/TrustOS",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    }
+  }
+  </script>
+
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-dim: #8b949e;
+      --accent: #f97316;
+      --accent2: #3b82f6;
+      --rust: #f74c00;
+      --green: #3fb950;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    a { color: var(--accent2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 80px 20px 60px;
+      background: linear-gradient(180deg, #0d1117 0%, #111827 50%, #0d1117 100%);
+    }
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+    .hero h1 .rust { color: var(--rust); }
+    .hero .tagline {
+      font-size: clamp(1.1rem, 2.5vw, 1.4rem);
+      color: var(--text-dim);
+      max-width: 700px;
+      margin: 0 auto 32px;
+    }
+    .hero .highlight {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* Badges */
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 40px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .badge.rust { border-color: var(--rust); color: var(--rust); }
+    .badge.lines { border-color: var(--accent2); color: var(--accent2); }
+    .badge.ai { border-color: #a855f7; color: #a855f7; }
+    .badge.arch { border-color: var(--green); color: var(--green); }
+
+    /* CTA buttons */
+    .cta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,0,0,0.4); text-decoration: none; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn-yt { background: #c0392b; color: #fff; }
+
+    /* Screenshot */
+    .screenshot {
+      max-width: 900px;
+      margin: 40px auto 0;
+      padding: 0 20px;
+    }
+    .screenshot img {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+    }
+
+    /* Sections */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+    section { padding: 80px 0; }
+    section h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    /* Feature grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px;
+    }
+    .card h3 {
+      font-size: 1.15rem;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card p { color: var(--text-dim); font-size: 0.95rem; }
+    .card .icon { font-size: 1.4rem; }
+
+    /* Stats */
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 20px;
+      text-align: center;
+    }
+    .stat-num {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--accent);
+    }
+    .stat-label {
+      font-size: 0.9rem;
+      color: var(--text-dim);
+      margin-top: 4px;
+    }
+
+    /* Comparison */
+    .comparison {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+    }
+    .comparison th, .comparison td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.95rem;
+    }
+    .comparison th {
+      color: var(--text-dim);
+      font-weight: 600;
+      background: var(--surface);
+    }
+    .comparison td:first-child { font-weight: 600; }
+    .check { color: var(--green); }
+    .cross { color: #f85149; }
+
+    /* Quick start */
+    .code-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.9rem;
+      overflow-x: auto;
+      color: var(--text-dim);
+      max-width: 750px;
+      margin: 0 auto;
+      line-height: 1.8;
+    }
+    .code-block .cmd { color: var(--green); }
+    .code-block .comment { color: #6e7681; }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.9rem;
+    }
+    footer a { color: var(--accent); }
+
+    /* Responsive */
+    @media (max-width: 600px) {
+      .hero { padding: 50px 16px 40px; }
+      section { padding: 50px 0; }
+      .btn { padding: 12px 20px; font-size: 0.9rem; }
+      .comparison th, .comparison td { padding: 8px 10px; font-size: 0.85rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== HERO ===== -->
+  <header class="hero">
+    <h1><span class="rust">Trust</span>OS</h1>
+    <p class="tagline">
+      A bare-metal operating system with a <span class="highlight">4.4-million-parameter AI transformer</span> running in the kernel.<br>
+      257,000 lines of pure Rust. Zero C. Built solo by one developer.
+    </p>
+
+    <div class="badges">
+      <span class="badge rust">100% Rust</span>
+      <span class="badge lines">257,000+ lines</span>
+      <span class="badge ai">4.4M AI params in kernel</span>
+      <span class="badge arch">x86_64 · ARM64 · RISC-V</span>
+    </div>
+
+    <div class="cta">
+      <a href="https://github.com/nathan237/TrustOS/releases/latest/download/trustos.iso" class="btn btn-primary">⬇ Download ISO (12 MB)</a>
+      <a href="https://github.com/nathan237/TrustOS" class="btn btn-secondary">⭐ GitHub</a>
+      <a href="https://youtu.be/RBJJi8jW1_g" class="btn btn-yt">▶ Watch Demo</a>
+    </div>
+
+    <div class="screenshot">
+      <img src="screenshot_desktop.png" alt="TrustOS COSMIC2 Desktop — bare-metal Rust OS with GUI, taskbar, and applications" loading="lazy" width="1280" height="720">
+    </div>
+  </header>
+
+  <!-- ===== WHAT MAKES IT UNIQUE ===== -->
+  <section>
+    <div class="container">
+      <h2>What No Other OS Does</h2>
+      <div class="grid">
+        <div class="card">
+          <h3><span class="icon">🧠</span> AI Transformer in Ring 0</h3>
+          <p>JARVIS — a 4.4-million-parameter transformer with 8 attention heads, 6 layers, and 512-dim embeddings — runs bare-metal in kernel space. On-device training via backpropagation with Adam optimizer. No cloud. No API. No ML framework.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon">⚡</span> Native x86_64 Compiler</h3>
+          <p>TrustLang compiles programs to raw Intel machine code and executes them inside the kernel. Lexer → Parser → AST → native x86_64. No LLVM, no GCC. 3,555 lines, dual execution (bytecode VM + native).</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon">🌐</span> Self-Replicating AI Network</h3>
+          <p>PXE boot a blank machine → TrustOS installs itself → JARVIS wakes up → joins Raft-consensus mesh → starts federated learning with other nodes. Fully autonomous AI propagation over LAN.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon">🖥️</span> 144 FPS Desktop</h3>
+          <p>COSMIC2 desktop environment with SIMD-accelerated compositing, 14+ apps, window manager, taskbar, dock. Browser with HTML/CSS/JS, Game Boy &amp; NES emulators, 3D chess, code editor, audio synth.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon">🔐</span> Everything From Scratch</h3>
+          <p>TLS 1.3, TCP/IP, DNS, DHCP, HTTP/HTTPS, FAT32, EXT4, NVMe, AHCI, VirtIO, Ed25519 signatures, hypervisor (VT-x/AMD-V) — all written in pure Rust. Not a single line of C.</p>
+        </div>
+        <div class="card">
+          <h3><span class="icon">📱</span> 3 Architectures</h3>
+          <p>Boots on x86_64 PCs (UEFI + Legacy BIOS), ARM64 phones &amp; tablets (Android fastboot, Raspberry Pi), and RISC-V boards — from one codebase.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== BY THE NUMBERS ===== -->
+  <section style="background: var(--surface);">
+    <div class="container">
+      <h2>By the Numbers</h2>
+      <div class="stats">
+        <div><div class="stat-num">257K+</div><div class="stat-label">Lines of Pure Rust</div></div>
+        <div><div class="stat-num">4.4M</div><div class="stat-label">AI Parameters in Kernel</div></div>
+        <div><div class="stat-num">473</div><div class="stat-label">Source Files</div></div>
+        <div><div class="stat-num">3</div><div class="stat-label">CPU Architectures</div></div>
+        <div><div class="stat-num">200+</div><div class="stat-label">Shell Commands</div></div>
+        <div><div class="stat-num">96/96</div><div class="stat-label">Self-Tests Passing</div></div>
+        <div><div class="stat-num">0</div><div class="stat-label">Lines of C</div></div>
+        <div><div class="stat-num">1</div><div class="stat-label">Developer</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== COMPARISON ===== -->
+  <section>
+    <div class="container">
+      <h2>How TrustOS Compares</h2>
+      <div style="overflow-x:auto;">
+        <table class="comparison">
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th>TrustOS</th>
+              <th>Linux</th>
+              <th>SerenityOS</th>
+              <th>Redox OS</th>
+              <th>TempleOS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Language</td><td>100% Rust</td><td>C + Assembly</td><td>C++</td><td>Rust</td><td>HolyC</td></tr>
+            <tr><td>AI in kernel</td><td class="check">✓ 4.4M transformer</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+            <tr><td>Native compiler</td><td class="check">✓ x86_64 codegen</td><td class="cross">✗ (userspace)</td><td class="cross">✗</td><td class="cross">✗</td><td class="check">✓ HolyC JIT</td></tr>
+            <tr><td>GUI desktop</td><td class="check">✓ 144 FPS</td><td class="check">✓ (X11/Wayland)</td><td class="check">✓</td><td class="check">✓ Orbital</td><td class="check">✓</td></tr>
+            <tr><td>Mesh AI networking</td><td class="check">✓ Raft + federated</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+            <tr><td>Self-replicating (PXE)</td><td class="check">✓</td><td class="cross">✗ (manual)</td><td class="cross">✗</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+            <tr><td>Multi-arch</td><td class="check">✓ x86_64 + ARM64 + RISC-V</td><td class="check">✓</td><td class="cross">✗ x86_64 only</td><td class="check">✓</td><td class="cross">✗ x86_64 only</td></tr>
+            <tr><td>TLS 1.3 from scratch</td><td class="check">✓</td><td class="cross">✗ (OpenSSL)</td><td class="cross">✗ (LibTLS)</td><td class="cross">✗</td><td class="cross">✗</td></tr>
+            <tr><td>Solo developer</td><td class="check">✓</td><td class="cross">✗ (thousands)</td><td class="check">✓ (started solo)</td><td class="cross">✗ (team)</td><td class="check">✓</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== QUICK START ===== -->
+  <section style="background: var(--surface);">
+    <div class="container">
+      <h2>Boot in 30 Seconds</h2>
+      <div class="code-block">
+        <span class="comment"># Download the ISO</span><br>
+        <span class="cmd">wget</span> https://github.com/nathan237/TrustOS/releases/latest/download/trustos.iso<br><br>
+        <span class="comment"># Boot in QEMU</span><br>
+        <span class="cmd">qemu-system-x86_64</span> -cdrom trustos.iso -m 512M -cpu max -smp 4 -display gtk -vga std -serial stdio<br><br>
+        <span class="comment"># Or flash to USB with Rufus (DD Image mode) and boot on real hardware</span><br>
+        <span class="comment"># Works on UEFI and Legacy BIOS — any x86_64 PC from 2005+</span>
+      </div>
+      <div style="text-align:center; margin-top: 32px;">
+        <a href="https://github.com/nathan237/TrustOS/releases/latest/download/trustos-jarvispack.iso" class="btn btn-primary">⬇ Download with AI Brain (29 MB)</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== JARVIS ===== -->
+  <section>
+    <div class="container">
+      <h2>JARVIS — On-Device AI</h2>
+      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
+        <div class="card">
+          <h3>Architecture</h3>
+          <p>Custom transformer: 8 attention heads, 6 layers, 512-dim embeddings, byte-level tokenizer (256 vocab). 4.4 million trainable weights in kernel memory.</p>
+        </div>
+        <div class="card">
+          <h3>Training</h3>
+          <p>On-device backpropagation with Adam optimizer. Runs bare-metal — no ML framework, no libc, no OS dependency. SIMD-accelerated (SSE2/AVX).</p>
+        </div>
+        <div class="card">
+          <h3>Federated Learning</h3>
+          <p>Nodes sync model weights across a Raft-consensus mesh network. Distributed training without any cloud infrastructure.</p>
+        </div>
+        <div class="card">
+          <h3>Guardian System</h3>
+          <p>Hard-coded authorization protocol: JARVIS cannot modify OS code or weights without explicit permission from its guardians. Enforced at kernel level.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== MINIMUM SPECS ===== -->
+  <section style="background: var(--surface);">
+    <div class="container">
+      <h2>System Requirements</h2>
+      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));">
+        <div class="card">
+          <h3>Minimum</h3>
+          <p><strong>CPU:</strong> Any x86_64 (Pentium 4+, 2003)<br>
+          <strong>RAM:</strong> 256 MB<br>
+          <strong>Storage:</strong> 12 MB (ISO)<br>
+          <strong>Display:</strong> 640×480 framebuffer<br>
+          <strong>Boot:</strong> UEFI or Legacy BIOS</p>
+        </div>
+        <div class="card">
+          <h3>Recommended</h3>
+          <p><strong>CPU:</strong> Intel i5+ / AMD Ryzen<br>
+          <strong>RAM:</strong> 512 MB – 2 GB<br>
+          <strong>Storage:</strong> USB 3.0 drive<br>
+          <strong>Display:</strong> 1024×768+<br>
+          <strong>Boot:</strong> UEFI 2.0+</p>
+        </div>
+        <div class="card">
+          <h3>Also Runs On</h3>
+          <p><strong>ARM64:</strong> Android phones, Raspberry Pi<br>
+          <strong>RISC-V:</strong> SiFive, StarFive boards<br>
+          <strong>Virtual:</strong> QEMU, VirtualBox, KVM<br>
+          <strong>Tested:</strong> ThinkPad T61 (2007)</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer>
+    <p>
+      <strong>TrustOS</strong> — Created by <a href="https://github.com/nathan237">Nated0ge</a> — March 2026<br>
+      257,000+ lines · 4.4M AI params · x86_64 + ARM64 + RISC-V · Zero C · Apache 2.0<br><br>
+      <a href="https://github.com/nathan237/TrustOS">GitHub</a> · 
+      <a href="https://github.com/nathan237/TrustOS/releases">Releases</a> · 
+      <a href="https://youtu.be/RBJJi8jW1_g">YouTube Demo</a> · 
+      <a href="https://github.com/nathan237/TrustOS/issues">Issues</a>
+    </p>
+  </footer>
+
+</body>
+</html>

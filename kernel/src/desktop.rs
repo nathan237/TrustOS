@@ -3034,10 +3034,11 @@ struct AppConfig {
         let res_penalty = ((pixels as i64) - 1_000_000) / 1_000_000;
         let score = ram_score + cpu_score + core_score - res_penalty;
         
-        // Hard cap: old dual-core CPUs (< 3 GHz) cannot sustain Full tier.
+        // Hard cap: very old single-core CPUs (< 1.5 GHz) cannot sustain Full tier.
         // The 4-layer matrix rain + visualizer + drone swarm need at least
-        // ~3 GHz × 4 cores or equivalent throughput to hit stable 30 FPS.
-        let cpu_limited = tsc_mhz > 0 && tsc_mhz < 3000 && cpus <= 2;
+        // ~2 GHz × 2 cores or equivalent throughput to hit stable 30 FPS.
+        // Core 2 Duo (~2.2 GHz) is perfectly capable of Standard tier with 2-layer rain.
+        let cpu_limited = tsc_mhz > 0 && tsc_mhz < 1500 && cpus <= 1;
         
         let tier = if phys_mb < 128 || heap_free_mb < 8 {
             DesktopTier::CliOnly
@@ -3064,8 +3065,9 @@ struct AppConfig {
     /// upgrade back if FPS stays above 35 for ~5 seconds.
     /// Called once per frame from draw().
     fn auto_adjust_tier(&mut self) {
-        // Skip auto-adjust during the first few frames (FPS not yet measured)
-        if self.frame_count < 5 { return; }
+        // Skip auto-adjust during the first 120 frames (FPS not yet stable,
+        // especially on slower hardware like T61 where boot takes longer)
+        if self.frame_count < 120 { return; }
         
         // ── Downgrade: sustained low FPS ──
         // Include fps_current == 0 (frame > 1s) as critically low
@@ -7505,14 +7507,12 @@ struct AppConfig {
         }
         
         // OPTIMIZATION 1: Background rendering — tier-adaptive
-        // Full: animated matrix rain every frame
-        // Standard: simplified background (every other frame for rain)
-        // Minimal: solid dark background only — no rain, no effects
+        // Full: animated matrix rain every frame (4 layers + visualizer + drones)
+        // Standard: 2-layer rain, no visualizer/drones
+        // Minimal: 1-layer simplified rain (lightweight, any CPU can handle it)
         framebuffer::clear_backbuffer(0xFF010200);
         framebuffer::begin_frame(); // Cache BB pointer — all put_pixel_fast calls are zero-lock
-        if self.desktop_tier >= DesktopTier::Standard {
-            self.draw_background();
-        }
+        self.draw_background();
         self.draw_desktop_icons();
         
         // Draw windows (these change, so always redraw)
@@ -8385,7 +8385,13 @@ struct AppConfig {
         // ═══════════════════════════════════════════════════════════════
         const MATRIX_COLS: usize = 256;
         const MAX_TRAIL: usize = 40;
-        let num_layers: usize = if self.desktop_tier >= DesktopTier::Full { 4 } else { 2 };
+        let num_layers: usize = if self.desktop_tier >= DesktopTier::Full {
+            4
+        } else if self.desktop_tier >= DesktopTier::Standard {
+            2
+        } else {
+            1  // Minimal: single layer — lightweight rain even on old CPUs
+        };
         
         // ── Per-layer depth parameters (4 layers: far→near) ──
         // Layer 0 = FAR BG      (slow, dark, long trails)

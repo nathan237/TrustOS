@@ -1,39 +1,45 @@
 <div align="center">
 
+<!-- To add a logo: place a logo.png in media/ and uncomment the line below -->
+<!-- <img src="media/logo.png" alt="TrustOS" width="200"/> -->
+
 # TrustOS
 
 ### The OS you can actually read.
 
-**A bare-metal operating system written entirely in Rust — 257,000 lines, zero C, zero binary blobs, zero secrets.**
+**A bare-metal operating system written entirely in Rust — 261,000+ lines, zero C, zero binary blobs, zero secrets.**
 
 *Built by one developer. Auditable by anyone.*
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-257%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-261%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.9.5-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.10.0-orange?style=for-the-badge)]()
 [![Tests](https://img.shields.io/badge/tests-96%2F96%20(100%25)-brightgreen?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
 [![Watch the demo](https://img.shields.io/badge/%E2%96%B6%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
 
-[What's New](#-whats-new-in-v095) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
+<img src="media/screenshots/screenshot_desktop.png" alt="TrustOS Desktop" width="720"/>
+
+[What's New](#-whats-new-in-v0100) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
 
 ---
 
 </div>
 
-## 🆕 What's New in v0.9.5
+## 🆕 What's New in v0.10.0
 
-> **March 13, 2026** — Hardware Compatibility Hardening
+> **March 13, 2026** — Real Hardware Stability (Lenovo T61 Tested)
 
-- 🔧 **Serial port safe on all hardware** — UART 16550 loopback detection at init: systems without a serial controller skip serial output entirely instead of hanging. Write timeout (100K iterations) prevents stuck UART from blocking the kernel.
-- 🔧 **APIC timer never stalls** — If PIT-based LAPIC calibration returns 0 ticks (PIT absent/broken), a conservative fallback (1000 ticks/ms) is used. `start_timer()` also self-heals: if called with uncalibrated tpm, it applies the fallback and starts anyway. Preemptive scheduling is now guaranteed.
-- 🖥️ **4K OOM protection** — Backbuffer allocation capped at 16 MB (~2560×1600). On 4K+ displays the OS falls back to direct framebuffer rendering instead of OOM-panicking the kernel heap.
-- 🖥️ **BPP validation** — Framebuffer bpp is now stored and checked; non-32bpp framebuffers log a warning (Limine always provides 32bpp, but firmware edge cases are handled).
-- 📊 **257,000+ lines** across 473 source files, 3 architectures.
+- 🔧 **Desktop freeze fixed** — Root cause: `serial::read_byte()` didn't check `SERIAL_PRESENT` on hardware with no cable. UART noise caused the keyboard loop to spin forever. Now gated + loop capped at 32 keys/frame.
+- 🔊 **HDA audio on real hardware** — ICH8 codec wake timeout raised to 50ms, Analog Devices AD198x / Conexant CX205xx quirks, EAPD enable, proper amp unmute for L+R channels.
+- 🛡️ **SIMD/FPU safe on real BIOS** — `fninit` + `ldmxcsr 0x1F80` in `enable_sse()` masks all SIMD/FPU exceptions (real BIOS leaves dirty state). New IDT handlers for #NM, #SS, #MF, #XM.
+- 🖥️ **Fallible buffer allocations** — Framebuffer double buffer, background cache, and OpenGL depth buffer now use `try_reserve_exact` instead of panicking on OOM.
+- 🔧 **Serial/APIC/4K hardening (v0.9.5)** — UART loopback detection, APIC timer fallback, backbuffer capped at 16 MB, BPP validation.
+- 📊 **261,000+ lines** across 476 source files, 3 architectures.
 
 ---
 
@@ -51,15 +57,55 @@
 qemu-system-x86_64 -cdrom trustos.iso -m 512M -cpu max -smp 4 -display gtk -vga std -serial stdio
 ```
 
-> 💡 Or flash to a USB drive and boot on real hardware — TrustOS runs bare-metal on x86_64 PCs (UEFI or Legacy BIOS), ARM64 phones/tablets, and RISC-V boards.
->
-> **Flash to USB with [Rufus](https://rufus.ie/):**
-> 1. Open Rufus → select your USB drive → click **SELECT** → pick the `.iso`
-> 2. Rufus will ask: **ISO mode** or **DD Image mode** → pick **DD Image mode**
-> 3. Click **START** — the target system field stays greyed out, that's normal in DD mode
-> 4. Boot your PC from USB (F12 / DEL at startup) — works on both UEFI and Legacy BIOS
->
-> On Linux: `dd if=trustos.iso of=/dev/sdX bs=4M status=progress`
+### 💾 Flash to USB with [Rufus](https://rufus.ie/)
+
+TrustOS runs bare-metal on x86_64 PCs (UEFI or Legacy BIOS), ARM64 phones/tablets, and RISC-V boards. Flash the ISO to a USB drive and boot on real hardware:
+
+<details>
+<summary><b>🔹 UEFI Boot (modern PCs, 2012+)</b></summary>
+
+1. Download & open [**Rufus**](https://rufus.ie/) (no install needed)
+2. **Device** → select your USB drive
+3. **Boot selection** → click **SELECT** → pick `trustos.iso` or `trustos-jarvispack.iso`
+4. Rufus will ask: **ISO mode** or **DD Image mode** → pick **DD Image mode**
+5. **Click START** — the partition scheme / target system fields stay greyed out in DD mode, that's normal
+6. Wait for the write to finish (~30 seconds)
+7. Reboot your PC → press **F12** / **F2** / **DEL** at startup to open the boot menu
+8. Select your USB drive (it may appear as `UEFI: <USB name>`)
+9. TrustOS boots! 🚀
+
+> ⚠️ If your PC has **Secure Boot** enabled, you may need to disable it in BIOS settings first (Security → Secure Boot → Disabled). TrustOS does not use signed bootloaders.
+
+</details>
+
+<details>
+<summary><b>🔹 Legacy BIOS Boot (older PCs, pre-2012 or CSM mode)</b></summary>
+
+1. Download & open [**Rufus**](https://rufus.ie/) (no install needed)
+2. **Device** → select your USB drive
+3. **Boot selection** → click **SELECT** → pick `trustos.iso` or `trustos-jarvispack.iso`
+4. Rufus will ask: **ISO mode** or **DD Image mode** → pick **DD Image mode**
+5. **Click START** — the partition scheme / target system fields stay greyed out in DD mode, that's normal
+6. Wait for the write to finish (~30 seconds)
+7. Reboot your PC → press **F12** / **F2** / **DEL** at startup to open the boot menu
+8. Select your USB drive (non-UEFI entry, usually just the drive name without `UEFI:` prefix)
+9. TrustOS boots via Legacy/CSM! 🚀
+
+> 💡 On some PCs, you need to enable **CSM** (Compatibility Support Module) or **Legacy Boot** in BIOS settings for the Legacy option to appear.
+
+</details>
+
+<details>
+<summary><b>🔹 Linux / macOS (dd)</b></summary>
+
+```bash
+# Replace /dev/sdX with your USB device (use lsblk to find it)
+sudo dd if=trustos.iso of=/dev/sdX bs=4M status=progress conv=fsync
+```
+
+</details>
+
+> **Why DD Image mode?** TrustOS uses a hybrid ISO (Limine bootloader) that embeds both UEFI and Legacy BIOS boot sectors directly in the image. DD mode writes the raw image byte-for-byte, preserving both boot paths. ISO mode would reformat the drive and break the hybrid layout.
 
 All releases: [**github.com/nathan237/TrustOS/releases**](https://github.com/nathan237/TrustOS/releases)
 
@@ -75,7 +121,7 @@ JARVIS is a **4.4-million-parameter transformer** running in Ring 0 — bare-met
 ### ⚡ A compiler that generates native machine code — inside the OS
 TrustLang compiles your programs to **raw x86_64 Intel instructions** and executes them, all from within the kernel. No LLVM. No GCC. No external toolchain. Write code → native binary → execute. The entire compiler is 3,555 lines of Rust.
 
-### 🔍 257,000 lines — and you can read every single one
+### 🔍 261,000 lines — and you can read every single one
 No binary blobs. No proprietary drivers. No hidden telemetry. **Every driver, every protocol, every pixel, every encryption algorithm, every line of AI** is open Rust. One developer built it. Anyone can audit it.
 
 ### 🌐 Self-replicating distributed AI
@@ -109,7 +155,7 @@ trustlang bench               → Benchmark native vs VM (shows speedup)
 trustlang test                → 55+ automated test suite
 ```
 
-3,555 lines. Lexer → Parser → AST → Bytecode OR native x86_64. Dual execution backends.
+3,612 lines. Lexer → Parser → AST → Bytecode OR native x86_64. Dual execution backends.
 
 ### 2. Kernel-Resident AI Transformer (JARVIS)
 
@@ -228,7 +274,7 @@ kernel/src/jarvis_hw/         # 3,111 lines — hardware intelligence
 - Full pipeline: Lexer → Parser → AST → Compiler → Bytecode VM **+ native x86_64 backend**
 - 20 builtin functions: `print`, `pixel`, `fill_rect`, `draw_circle`, `screen_w`, `sleep`…
 - REPL, file execution, syntax checker, native benchmark
-- 3,555 lines, dual execution mode (interpreted + native)
+- 3,612 lines, dual execution mode (interpreted + native)
 
 ### Network Stack (all from scratch)
 - VirtIO-net driver, TCP/IP (ARP, DHCP, DNS, TCP, UDP, ICMP), IPv6 + ICMPv6
@@ -279,12 +325,12 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 
 | | |
 |---|---|
-| **257,000+ lines** of pure Rust | **96/96** self-tests passing (100%) |
-| **473** source files | **144 FPS** SIMD desktop |
+| **261,000+ lines** of pure Rust | **96/96** self-tests passing (100%) |
+| **476** source files | **144 FPS** SIMD desktop |
 | **3** architectures (x86_64, ARM64, RISC-V) | **< 1 sec** boot time |
 | **4.4M** AI parameters in kernel space | **0** lines of C |
 | **14,443** lines of AI code (24 modules) | **0** binary blobs |
-| **3,555** lines of TrustLang (dual backend) | **0** external ML frameworks |
+| **3,612** lines of TrustLang (dual backend) | **0** external ML frameworks |
 
 ---
 
@@ -342,11 +388,11 @@ cd TrustOS
 
 ```
 TrustOS/
-  kernel/                     # Core bare-metal kernel (253K+ lines)
+  kernel/                     # Core bare-metal kernel (258K+ lines)
     src/
       jarvis/                 # JARVIS AI (14,443 lines, 24 modules)
       jarvis_hw/              # Hardware intelligence (3,111 lines)
-      trustlang/              # TrustLang compiler + native x86_64 (3,555 lines)
+      trustlang/              # TrustLang compiler + native x86_64 (3,612 lines)
       shell/                  # 200+ commands
       desktop.rs              # COSMIC2 desktop manager
       network/                # TCP/IP, TLS 1.3, DHCP, DNS
@@ -377,6 +423,21 @@ TrustOS/
 ---
 
 ## 📋 Changelog
+
+### v0.10.0 — Real Hardware Stability (March 13, 2026)
+
+- **T61 desktop freeze fixed** — `serial::read_byte()` now checks `SERIAL_PRESENT`; UART noise no longer spins the keyboard loop. Desktop input loop capped at 32 keys/frame.
+- **HDA audio on ICH8** — Codec wake timeout 50ms with retry, AD198x/CX205xx quirks, EAPD, proper L+R amp unmute.
+- **SIMD/FPU safety** — `fninit` + `ldmxcsr` in `enable_sse()` masks all SIMD/FPU exceptions from dirty BIOS state. New IDT handlers for #NM(7), #SS(12), #MF(16), #XM(19).
+- **Fallible buffer allocs** — Double buffer, background cache, GL depth buffer use `try_reserve_exact` (no OOM panic).
+- **Diagnostic framework** — Step-by-step visual diagnostics written directly to raw framebuffer for hardware debugging.
+
+### v0.9.6 — T61 Desktop Crash Fix (March 13, 2026)
+
+- **MXCSR/FPU init** — Real hardware BIOS leaves dirty SIMD/FPU state; now clean-initialized.
+- **Missing IDT handlers** — Added #NM, #SS, #MF, #XM exception handlers.
+- **Fallible framebuffer allocs** — `init_double_buffer` / `init_background_cache` use `try_reserve_exact`.
+- **Autocomplete bounds check** — Shell autocomplete no longer panics on edge cases.
 
 ### v0.9.5 — Hardware Compatibility Hardening (March 13, 2026)
 
@@ -427,7 +488,6 @@ TrustOS/
 - **Desktop border refinement** — window borders thickened to 4px for a bolder, more modern look.
 - **Shell commands**: `trustlang compile`, `trustlang test`, `trustlang bench`.
 - **Selftest integration** — native compiler smoke test added to the 96-test diagnostic suite.
-- 257,000+ lines, 473 source files, 3 architectures.
 
 ### v0.7.0 — checkm8 & JARVIS (March 2026)
 
@@ -523,7 +583,7 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 
 Created by [Nated0ge](https://github.com/nathan237) — March 2026
 
-257,000+ lines | Native x86_64 compiler | JARVIS AI (4.4M params) | x86_64 + ARM64 + RISC-V | Zero C
+261,000+ lines | Native x86_64 compiler | JARVIS AI (4.4M params) | x86_64 + ARM64 + RISC-V | Zero C
 
 [Report Bug](https://github.com/nathan237/TrustOS/issues) | [Request Feature](https://github.com/nathan237/TrustOS/issues) | [Watch Demo](https://youtu.be/RBJJi8jW1_g)
 
