@@ -236,7 +236,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // TrustProbe
     "hwscan", "trustprobe", "probe",
     // Fun
-    "neofetch", "matrix", "cowsay", "rain", "aura",
+    "neofetch", "matrix", "cowsay", "rain",
     // Showcase
     "showcase",
     "showcase3d",
@@ -1002,25 +1002,6 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
             }
         },
         "cowsay" => commands::cmd_cowsay(args),
-        "aura" => {
-            // aura [on|off] — toggle window aura effect
-            let mut d = crate::desktop::DESKTOP.lock();
-            if args.is_empty() {
-                d.window_aura_enabled = !d.window_aura_enabled;
-            } else {
-                match args[0] {
-                    "on" | "1" => d.window_aura_enabled = true,
-                    "off" | "0" => d.window_aura_enabled = false,
-                    _ => {
-                        crate::println!("Usage: aura [on|off]");
-                        return;
-                    }
-                }
-            }
-            let state = if d.window_aura_enabled { "ON" } else { "OFF" };
-            drop(d);
-            crate::println!("Window aura effect: {}", state);
-        },
 
         // -- desktop module: COSMIC, Showcase, Benchmark, Signature, Security --
         "benchmark" | "bench" => desktop::cmd_benchmark(args),

@@ -40,11 +40,8 @@ pub static FB_PITCH: AtomicU64 = AtomicU64::new(0);
 
 // Double buffering
 static BACKBUFFER: Mutex<Option<Box<[u32]>>> = Mutex::new(None);
-static USE_BACKBUFFER: AtomicBool = AtomicBool::new(false);
-
-// Previous frame buffer for row-diff MMIO optimization
-// Only copies changed rows to VRAM, avoiding expensive MMIO writes for static regions
 static PREV_FRAME: Mutex<Option<Box<[u32]>>> = Mutex::new(None);
+static USE_BACKBUFFER: AtomicBool = AtomicBool::new(false);
 
 // ==================== FRAME-CACHED BACKBUFFER ACCESS ====================
 // Lock the backbuffer ONCE per frame, then all pixel ops use the cached pointer.
@@ -613,12 +610,9 @@ pub fn init_double_buffer() {
     
     let size = width * height;
     let buffer = alloc::vec![0u32; size].into_boxed_slice();
-    // Shadow buffer for row-diff: starts all-zero so first frame copies everything
-    let shadow = alloc::vec![0xFFFFFFFFu32; size].into_boxed_slice();
     
     *BACKBUFFER.lock() = Some(buffer);
-    *PREV_FRAME.lock() = Some(shadow);
-    crate::serial_println!("[FB] Double buffer + shadow allocated: {}x{} ({} KB × 2)", width, height, size * 4 / 1024);
+    crate::serial_println!("[FB] Double buffer allocated: {}x{} ({} KB)", width, height, size * 4 / 1024);
 }
 
 /// Enable/disable double buffering mode

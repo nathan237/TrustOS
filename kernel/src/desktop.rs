@@ -2038,8 +2038,6 @@ pub struct Desktop {
     snap_preview: Option<SnapDir>,
     /// Shortcut help overlay visible (F1 toggle)
     show_shortcuts: bool,
-    /// Window aura effect: rain chars near windows change color randomly
-    pub window_aura_enabled: bool,
 }
 
 /// Calculator state for interactive calculator windows
@@ -2657,7 +2655,6 @@ impl Desktop {
             initial_tier: DesktopTier::Full,
             snap_preview: None,
             show_shortcuts: false,
-            window_aura_enabled: false,
         }
     }
     
@@ -7184,13 +7181,7 @@ struct AppConfig {
         // Full: animated matrix rain every frame
         // Standard: simplified background (every other frame for rain)
         // Minimal: solid dark background only — no rain, no effects
-        // OPTIMIZATION 6: skip full clear when draw_background covers everything above taskbar
-        if self.desktop_tier >= DesktopTier::Standard {
-            // draw_background() fills all pixels above taskbar; only clear the taskbar strip
-            framebuffer::fill_rect(0, self.height.saturating_sub(TASKBAR_HEIGHT), self.width, TASKBAR_HEIGHT, 0xFF010200);
-        } else {
-            framebuffer::clear_backbuffer(0xFF010200);
-        }
+        framebuffer::clear_backbuffer(0xFF010200);
         framebuffer::begin_frame(); // Cache BB pointer — all put_pixel_fast calls are zero-lock
         if self.desktop_tier >= DesktopTier::Standard {
             self.draw_background();
@@ -8205,33 +8196,6 @@ struct AppConfig {
         // Get raw framebuffer pointer once — eliminates 3 atomic loads per pixel
         let (fb_ptr, fb_stride, _fb_height) = framebuffer::frame_context();
         let has_any_overrides = !self.matrix_overrides.is_empty();
-        // ── Window Aura: pre-compute aura zones for visible non-maximized windows ──
-        // Each aura zone = 15% expanded rect around the window. Rain chars falling
-        // inside the aura (but outside the window) get random vivid colors.
-        const MAX_AURA_RECTS: usize = 16;
-        // (inner_x, inner_y, inner_x2, inner_y2, outer_x, outer_y, outer_x2, outer_y2)
-        let mut aura_rects: [(i32, i32, i32, i32, i32, i32, i32, i32); MAX_AURA_RECTS] =
-            [(0, 0, 0, 0, 0, 0, 0, 0); MAX_AURA_RECTS];
-        let mut aura_count: usize = 0;
-        if self.window_aura_enabled {
-            for w in &self.windows {
-                if !w.visible || w.minimized || w.maximized { continue; }
-                if aura_count >= MAX_AURA_RECTS { break; }
-                let wx = w.x;
-                let wy = w.y;
-                let wx2 = w.x + w.width as i32;
-                let wy2 = w.y + w.height as i32;
-                // 15% expansion on each side
-                let expand_x = (w.width as i32 * 15) / 100;
-                let expand_y = (w.height as i32 * 15) / 100;
-                let ox = wx - expand_x;
-                let oy = wy - expand_y;
-                let ox2 = wx2 + expand_x;
-                let oy2 = wy2 + expand_y;
-                aura_rects[aura_count] = (wx, wy, wx2, wy2, ox, oy, ox2, oy2);
-                aura_count += 1;
-            }
-        }
         for layer in 0..num_layers {
         // ── Parallax sway: horizontal drift based on frame time ──
         // Each layer oscillates at a different frequency for organic motion
@@ -8527,44 +8491,6 @@ struct AppConfig {
                     r = ((r as i16 + drone_fx.color_r).max(0).min(255)) as u8;
                     g = ((g as i16 + drone_fx.color_g).max(0).min(255)) as u8;
                     b = ((b as i16 + drone_fx.color_b).max(0).min(255)) as u8;
-                }
-                
-                // ── Window Aura: random vivid color for rain in the aura zone ──
-                if aura_count > 0 {
-                    let px = x_flow as i32;
-                    let py = char_y;
-                    for ai in 0..aura_count {
-                        let (wx, wy, wx2, wy2, ox, oy, ox2, oy2) = aura_rects[ai];
-                        // Inside outer box but outside inner window = aura zone
-                        if px >= ox && px < ox2 && py >= oy && py < oy2
-                            && !(px >= wx && px < wx2 && py >= wy && py < wy2)
-                        {
-                            // Random vivid color: hash position + frame for animation
-                            let h = (px as u32).wrapping_mul(2654435761)
-                                ^ (py as u32).wrapping_mul(340573321)
-                                ^ (self.frame_count as u32).wrapping_mul(1103515245);
-                            let h = h ^ (h >> 13);
-                            // Cycle through vivid hues: 6 sectors × 42 steps ≈ 252 values
-                            let hue = h % 252;
-                            let sector = hue / 42;
-                            let frac = ((hue % 42) * 255 / 42) as u8;
-                            let (ar, ag, ab) = match sector {
-                                0 => (255u8, frac, 0u8),        // red → yellow
-                                1 => (255 - frac, 255, 0),      // yellow → green
-                                2 => (0, 255, frac),             // green → cyan
-                                3 => (0, 255 - frac, 255),      // cyan → blue
-                                4 => (frac, 0, 255),             // blue → magenta
-                                _ => (255, 0, 255 - frac),       // magenta → red
-                            };
-                            // Blend: keep some original brightness, overlay vivid color
-                            let orig_lum = (r as u16 + g as u16 + b as u16) / 3;
-                            let boost = (orig_lum as f32 / 180.0).min(1.0).max(0.3);
-                            r = (ar as f32 * boost) as u8;
-                            g = (ag as f32 * boost) as u8;
-                            b = (ab as f32 * boost) as u8;
-                            break;
-                        }
-                    }
                 }
                 
                 let color = 0xFF000000 | ((r as u32) << 16) | ((g as u32) << 8) | (b as u32);
@@ -9707,8 +9633,8 @@ struct AppConfig {
         }
         
         // ── System tray (right side) — layout right-to-left with proper spacing ──
-        // Layout anchors (right to left): ShowDesktop(8) | Gear(20) | Clock(56) | CPU/MEM(36) | FPS(48) | A11y(50) | WiFi/Vol/Bat(80)
-        let tray_gap = 8u32; // gap between each tray element
+        // Layout anchors (right to left): ShowDesktop(8) | Gear(20) | Clock(64) | CPU/MEM(36) | FPS(~44) | A11y(~50) | WiFi/Vol/Bat(100)
+        let tray_gap = 12u32; // gap between each tray element
         
         // Cursor starts after ShowDesktop button (8px + gap)
         let mut tray_cursor = self.width - 8 - 8 - tray_gap; // skip ShowDesktop zone
@@ -9720,7 +9646,7 @@ struct AppConfig {
         tray_cursor = gear_x - tray_gap;
         
         // ── Clock + Date ──
-        let clock_w = 56u32;
+        let clock_w = 64u32;
         let clock_x = tray_cursor - clock_w;
         let time = self.get_time_string();
         self.draw_text_smooth(clock_x as i32, (y + 10) as i32, &time, hc(GREEN_PRIMARY, 0xFFFFFFFF));
@@ -9775,7 +9701,7 @@ struct AppConfig {
         }
         
         // ── System tray indicators (WiFi, Volume, Battery) ──
-        let tray_icons_w = 80u32;
+        let tray_icons_w = 100u32;
         let tray_icons_x = tray_cursor - tray_icons_w;
         self.draw_sys_tray_indicators(tray_icons_x, y + 10);
         let gear_hover = self.cursor_x >= (gear_x as i32 - 4) && self.cursor_x < (gear_x as i32 + 20)
