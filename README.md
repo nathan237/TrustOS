@@ -12,30 +12,27 @@
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
 [![Lines](https://img.shields.io/badge/code-257%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.9.4-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.9.5-orange?style=for-the-badge)]()
 [![Tests](https://img.shields.io/badge/tests-96%2F96%20(100%25)-brightgreen?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
 [![Watch the demo](https://img.shields.io/badge/%E2%96%B6%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
 
-[What's New](#-whats-new-in-v094) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
+[What's New](#-whats-new-in-v095) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
 
 ---
 
 </div>
 
-## 🆕 What's New in v0.9.4
+## 🆕 What's New in v0.9.5
 
-> **March 13, 2026** — Keyboard Stability Fix for Real Hardware
+> **March 13, 2026** — Hardware Compatibility Hardening
 
-- 🔧 **Critical deadlock fix** — Keyboard IRQ handler could deadlock the kernel when pressing keys while the shell held the input buffer lock. All user-side buffer accesses now wrapped in `without_interrupts`. IRQ-side pushes use `try_lock` (drops keystroke rather than deadlock).
-- 🔧 **Bootstrap guard on keyboard IRQ** — Both PIC and APIC keyboard handlers now check `BOOTSTRAP_READY` before processing scancodes. Prevents panic when keys are pressed during early boot.
-- ⌨️ **i8042 timeout 10x increase** — PS/2 controller timeouts raised from 100K to 1M iterations for slow hardware (tested on Lenovo T61, circa 2008).
-- ⌨️ **Pause/Break key handled** — E1 prefix sequence (6 bytes) now properly consumed instead of being misinterpreted as Ctrl+garbage.
-- ⌨️ **Right Ctrl / Right Alt fixed** — Extended modifier key releases (E0 1D, E0 38) were silently dropped, causing modifiers to get "stuck". Now properly tracked.
-- ⌨️ **Extra PS/2 response filtered** — Added 0xAB (interface test pass) to spurious scancode filter.
-- ✅ **Tested on real hardware** — Lenovo ThinkPad T61 Legacy BIOS boot.
+- 🔧 **Serial port safe on all hardware** — UART 16550 loopback detection at init: systems without a serial controller skip serial output entirely instead of hanging. Write timeout (100K iterations) prevents stuck UART from blocking the kernel.
+- 🔧 **APIC timer never stalls** — If PIT-based LAPIC calibration returns 0 ticks (PIT absent/broken), a conservative fallback (1000 ticks/ms) is used. `start_timer()` also self-heals: if called with uncalibrated tpm, it applies the fallback and starts anyway. Preemptive scheduling is now guaranteed.
+- 🖥️ **4K OOM protection** — Backbuffer allocation capped at 16 MB (~2560×1600). On 4K+ displays the OS falls back to direct framebuffer rendering instead of OOM-panicking the kernel heap.
+- 🖥️ **BPP validation** — Framebuffer bpp is now stored and checked; non-32bpp framebuffers log a warning (Limine always provides 32bpp, but firmware edge cases are handled).
 - 📊 **257,000+ lines** across 473 source files, 3 architectures.
 
 ---
@@ -380,6 +377,13 @@ TrustOS/
 ---
 
 ## 📋 Changelog
+
+### v0.9.5 — Hardware Compatibility Hardening (March 13, 2026)
+
+- **Serial port detection** — Loopback test + write timeout; no-UART systems boot without hangs.
+- **APIC timer fallback** — PIT calibration failure → 1000 ticks/ms fallback; timer always starts.
+- **4K OOM protection** — Backbuffer capped at 16 MB; 4K+ goes direct framebuffer.
+- **BPP validation** — Non-32bpp framebuffers warned and handled gracefully.
 
 ### v0.9.4 — Keyboard Stability Fix (March 13, 2026)
 

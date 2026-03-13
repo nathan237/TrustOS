@@ -37,6 +37,7 @@ pub static FB_ADDR: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
 pub static FB_WIDTH: AtomicU64 = AtomicU64::new(0);
 pub static FB_HEIGHT: AtomicU64 = AtomicU64::new(0);
 pub static FB_PITCH: AtomicU64 = AtomicU64::new(0);
+pub static FB_BPP: AtomicU64 = AtomicU64::new(32); // bits per pixel (default 32)
 
 // Double buffering
 static BACKBUFFER: Mutex<Option<Box<[u32]>>> = Mutex::new(None);
@@ -320,13 +321,22 @@ static CONSOLE: Mutex<Console> = Mutex::new(Console {
 const CHAR_WIDTH: usize = 8;
 const CHAR_HEIGHT: usize = 16;
 
+/// Maximum framebuffer size for backbuffer allocation (16 MB = ~2560×1600×4)
+const MAX_BACKBUFFER_BYTES: usize = 16 * 1024 * 1024;
+
 /// Initialize framebuffer with Limine info
 /// NOTE: This does NOT allocate memory. Call init_scrollback() after heap is ready.
 pub fn init(addr: *mut u8, width: u64, height: u64, pitch: u64, bpp: u16) {
+    // Safety: only support 32bpp framebuffers (all pixel code uses u32)
+    if bpp != 32 {
+        crate::serial_println!("[FB] WARNING: unsupported bpp={}, forcing 32bpp interpretation (may have color artifacts)", bpp);
+    }
+
     FB_ADDR.store(addr, Ordering::SeqCst);
     FB_WIDTH.store(width, Ordering::SeqCst);
     FB_HEIGHT.store(height, Ordering::SeqCst);
     FB_PITCH.store(pitch, Ordering::SeqCst);
+    FB_BPP.store(bpp as u64, Ordering::SeqCst);
     
     // NOTE: Do NOT call init_scrollback() here! It allocates memory.
     // Call it after heap initialization in main.rs
@@ -609,10 +619,18 @@ pub fn init_double_buffer() {
     }
     
     let size = width * height;
+    let size_bytes = size * 4; // u32 per pixel
+    
+    if size_bytes > MAX_BACKBUFFER_BYTES {
+        crate::serial_println!("[FB] WARNING: Framebuffer {}x{} = {} KB too large for backbuffer (max {} KB), disabling double buffer",
+            width, height, size_bytes / 1024, MAX_BACKBUFFER_BYTES / 1024);
+        return;
+    }
+    
     let buffer = alloc::vec![0u32; size].into_boxed_slice();
     
     *BACKBUFFER.lock() = Some(buffer);
-    crate::serial_println!("[FB] Double buffer allocated: {}x{} ({} KB)", width, height, size * 4 / 1024);
+    crate::serial_println!("[FB] Double buffer allocated: {}x{} ({} KB)", width, height, size_bytes / 1024);
 }
 
 /// Enable/disable double buffering mode
@@ -1318,7 +1336,7 @@ fn write_char(c: char) {
 }
 
 /// Scroll the screen up by one line
-fn scroll_up() {
+pub fn scroll_up() {
     let addr = FB_ADDR.load(Ordering::SeqCst);
     if addr.is_null() {
         return;

@@ -134,8 +134,12 @@ fn enable_lapic() {
     }
 }
 
+/// Conservative default: ~1000 ticks/ms works for most CPUs when PIT calibration fails.
+/// At divider 16, this corresponds to a ~16 MHz bus clock — safe minimum for any x86.
+const FALLBACK_TICKS_PER_MS: u64 = 1000;
+
 /// Calibrate LAPIC timer using PIT (one-time on BSP)
-/// Returns ticks per millisecond
+/// Returns ticks per millisecond (guaranteed non-zero: uses fallback if PIT fails)
 fn calibrate_timer() -> u64 {
     unsafe {
         // Configure timer: divide by 16, one-shot, masked
@@ -157,6 +161,12 @@ fn calibrate_timer() -> u64 {
         
         // ticks per ms = elapsed / 10
         let tpm = elapsed / 10;
+        
+        if tpm == 0 {
+            crate::serial_println!("[APIC] WARNING: PIT calibration failed (elapsed={}), using fallback {} ticks/ms", elapsed, FALLBACK_TICKS_PER_MS);
+            return FALLBACK_TICKS_PER_MS;
+        }
+        
         crate::serial_println!("[APIC] Timer calibrated: {} ticks/ms ({} ticks in 10ms)", tpm, elapsed);
         tpm
     }
@@ -165,10 +175,11 @@ fn calibrate_timer() -> u64 {
 /// Start LAPIC timer in periodic mode
 /// `interval_ms` = time between interrupts
 pub fn start_timer(interval_ms: u64) {
-    let tpm = TICKS_PER_MS.load(Ordering::Relaxed);
+    let mut tpm = TICKS_PER_MS.load(Ordering::Relaxed);
     if tpm == 0 {
-        crate::serial_println!("[APIC] WARNING: Timer not calibrated, cannot start");
-        return;
+        crate::serial_println!("[APIC] WARNING: Timer not calibrated, using fallback {} ticks/ms", FALLBACK_TICKS_PER_MS);
+        tpm = FALLBACK_TICKS_PER_MS;
+        TICKS_PER_MS.store(tpm, Ordering::SeqCst);
     }
     
     let count = tpm * interval_ms;
