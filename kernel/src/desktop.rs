@@ -14963,8 +14963,13 @@ pub fn run() {
         let frame_start = engine::now_us();
         
         // ═══════════════════════════════════════════════════════════════
-        // Input Processing
+        // Input Processing (skip first 3 frames for safe startup)
         // ═══════════════════════════════════════════════════════════════
+        
+        if loop_frame < 3 {
+            // Skip input on first 3 frames to guarantee draw() runs
+            if loop_frame == 0 { run_diag(7, "run: frame 0 skip input -> draw"); }
+        } else {
         
         // Process mouse
         let mouse = crate::mouse::get_state();
@@ -15402,6 +15407,8 @@ pub fn run() {
                 drop(d);
             }
         }
+
+        } // end of if loop_frame >= 3 (input processing)
 
         // ═══════════════════════════════════════════════════════════════
         // Rendering
