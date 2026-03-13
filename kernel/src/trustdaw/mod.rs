@@ -28,6 +28,7 @@ pub mod ui;
 pub mod beat_studio;
 pub mod audio_viz;
 pub mod disk_audio;
+pub mod live_viz;
 
 use alloc::string::String;
 use alloc::format;

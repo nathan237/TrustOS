@@ -3184,6 +3184,176 @@ pub(super) fn cmd_synth_pattern(args: &[&str]) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Live Visualizer Effects (TrustLang-scripted, no recompile)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub(super) fn cmd_vizfx(args: &[&str]) {
+    match args.first().copied() {
+        None | Some("help") | Some("--help") => {
+            crate::println_color!(COLOR_CYAN, "vizfx — Live Visualizer Effects (TrustLang)");
+            crate::println_color!(COLOR_CYAN, "═══════════════════════════════════════════");
+            crate::println!();
+            crate::println_color!(COLOR_BRIGHT_GREEN, "Create visual effects with TrustLang scripts.");
+            crate::println_color!(COLOR_BRIGHT_GREEN, "Effects react to audio in real-time — no reboot!");
+            crate::println!();
+            crate::println_color!(COLOR_BRIGHT_GREEN, "Commands:");
+            crate::println!("  vizfx list                List all effects");
+            crate::println!("  vizfx new <name> <code>   Create effect (inline code)");
+            crate::println!("  vizfx edit <name> <code>  Update effect source");
+            crate::println!("  vizfx select <name>       Set active effect");
+            crate::println!("  vizfx remove <name>       Delete effect");
+            crate::println!("  vizfx show <name>         Show effect source code");
+            crate::println!("  vizfx on / off            Enable/disable live effects");
+            crate::println!("  vizfx demo                Load 3 demo effects");
+            crate::println!();
+            crate::println_color!(COLOR_BRIGHT_GREEN, "Audio Builtins (available in scripts):");
+            crate::println!("  beat()      → 0.0–1.0   Beat pulse");
+            crate::println!("  bass()      → 0.0–1.0   Bass energy");
+            crate::println!("  sub_bass()  → 0.0–1.0   Sub-bass energy");
+            crate::println!("  mid()       → 0.0–1.0   Mid frequency energy");
+            crate::println!("  high_mid()  → 0.0–1.0   High-mid energy");
+            crate::println!("  treble()    → 0.0–1.0   Treble energy");
+            crate::println!("  energy()    → 0.0–1.5   Overall energy");
+            crate::println!("  frame_num() → int       Current frame number");
+            crate::println!("  sin_f(x)    → float     Sine function");
+            crate::println!("  cos_f(x)    → float     Cosine function");
+            crate::println!();
+            crate::println_color!(COLOR_BRIGHT_GREEN, "Graphics Builtins:");
+            crate::println!("  pixel(x,y,r,g,b)         Set pixel color");
+            crate::println!("  fill_rect(x,y,w,h,r,g,b) Fill rectangle");
+            crate::println!("  draw_circle(cx,cy,r,R,G,B) Draw circle");
+            crate::println!("  draw_line(x1,y1,x2,y2,r,g,b) Draw line");
+            crate::println!("  screen_w() / screen_h()  Screen dimensions");
+            crate::println!();
+            crate::println_color!(COLOR_YELLOW, "Workflow for promo video:");
+            crate::println!("  1. vizfx new myeffect fn main() {{ ... }}");
+            crate::println!("  2. vizfx select myeffect");
+            crate::println!("  3. play /music/song.wav");
+            crate::println!("  → Effect runs live over the audio visualizer!");
+        }
+        Some("list") | Some("ls") => {
+            let effects = crate::trustdaw::live_viz::list_effects();
+            if effects.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "No effects loaded. Try 'vizfx demo' to load demos.");
+            } else {
+                crate::println_color!(COLOR_CYAN, "Live Visualizer Effects:");
+                for (name, active) in &effects {
+                    if *active {
+                        crate::println_color!(COLOR_BRIGHT_GREEN, "  ▶ {} (ACTIVE)", name);
+                    } else {
+                        crate::println!("    {}", name);
+                    }
+                }
+            }
+        }
+        Some("new") | Some("add") | Some("create") => {
+            if args.len() < 3 {
+                crate::println_color!(COLOR_YELLOW, "Usage: vizfx new <name> <trustlang code>");
+                crate::println!("Example: vizfx new rings fn main() {{ let b = beat(); draw_circle(screen_w()/2, screen_h()/2, to_int(b * 100.0), 0, 255, 100); }}");
+                return;
+            }
+            let name = args[1];
+            // Join remaining args as the source code
+            let source: alloc::string::String = args[2..].join(" ");
+            match crate::trustdaw::live_viz::add_effect(name, &source) {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "Effect '{}' created ✓", name);
+                    if crate::trustdaw::live_viz::is_active() {
+                        crate::println!("Active and ready — play a song to see it!");
+                    }
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("edit") | Some("update") => {
+            if args.len() < 3 {
+                crate::println_color!(COLOR_YELLOW, "Usage: vizfx edit <name> <new code>");
+                return;
+            }
+            let name = args[1];
+            let source: alloc::string::String = args[2..].join(" ");
+            match crate::trustdaw::live_viz::edit_effect(name, &source) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Effect '{}' updated ✓", name),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("select") | Some("use") | Some("set") => {
+            if args.len() < 2 {
+                crate::println_color!(COLOR_YELLOW, "Usage: vizfx select <name>");
+                return;
+            }
+            match crate::trustdaw::live_viz::select_effect(args[1]) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Active effect: {} ✓", args[1]),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("remove") | Some("rm") | Some("delete") => {
+            if args.len() < 2 {
+                crate::println_color!(COLOR_YELLOW, "Usage: vizfx remove <name>");
+                return;
+            }
+            match crate::trustdaw::live_viz::remove_effect(args[1]) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Effect '{}' removed", args[1]),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("show") | Some("source") | Some("cat") => {
+            if args.len() < 2 {
+                crate::println_color!(COLOR_YELLOW, "Usage: vizfx show <name>");
+                return;
+            }
+            match crate::trustdaw::live_viz::get_source(args[1]) {
+                Some(src) => {
+                    crate::println_color!(COLOR_CYAN, "─── {} ───", args[1]);
+                    crate::println!("{}", src);
+                    crate::println_color!(COLOR_CYAN, "─────────────────");
+                }
+                None => crate::println_color!(COLOR_RED, "Effect not found: {}", args[1]),
+            }
+        }
+        Some("on") | Some("enable") => {
+            match crate::trustdaw::live_viz::enable() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Live viz effects enabled ✓"),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("off") | Some("disable") => {
+            crate::trustdaw::live_viz::disable();
+            crate::println_color!(COLOR_YELLOW, "Live viz effects disabled");
+        }
+        Some("demo") | Some("demos") => {
+            crate::println_color!(COLOR_GREEN, "Loading demo effects...");
+            match crate::trustdaw::live_viz::load_demo_pulse_rings() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "  ✓ pulse-rings"),
+                Err(e) => crate::println_color!(COLOR_RED, "  ✗ pulse-rings: {}", e),
+            }
+            match crate::trustdaw::live_viz::load_demo_spectrum_bars() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "  ✓ spectrum-bars"),
+                Err(e) => crate::println_color!(COLOR_RED, "  ✗ spectrum-bars: {}", e),
+            }
+            match crate::trustdaw::live_viz::load_demo_beat_flash() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "  ✓ beat-flash"),
+                Err(e) => crate::println_color!(COLOR_RED, "  ✗ beat-flash: {}", e),
+            }
+            crate::println!();
+            crate::println!("Use 'vizfx list' to see all effects");
+            crate::println!("Use 'vizfx select <name>' to choose one");
+            crate::println!("Then 'play <file.wav>' to see it in action!");
+        }
+        Some(x) => {
+            // Try as effect name (shortcut for select)
+            match crate::trustdaw::live_viz::select_effect(x) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Active effect: {} ✓", x),
+                Err(_) => {
+                    crate::println_color!(COLOR_RED, "Unknown command: {}", x);
+                    crate::println!("Use 'vizfx help' for usage");
+                }
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Audio File Player / Visualizer
 // ═══════════════════════════════════════════════════════════════════════════════
 

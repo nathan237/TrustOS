@@ -174,6 +174,17 @@ const BUILTIN_DRAW_TEXT: u8 = 16;
 const BUILTIN_SLEEP: u8 = 17;
 const BUILTIN_TO_FLOAT: u8 = 18;
 const BUILTIN_READ_LINE: u8 = 19;
+// Audio visualizer builtins (live_viz)
+const BUILTIN_BEAT: u8 = 20;
+const BUILTIN_BASS: u8 = 21;
+const BUILTIN_SUB_BASS: u8 = 22;
+const BUILTIN_MID: u8 = 23;
+const BUILTIN_HIGH_MID: u8 = 24;
+const BUILTIN_TREBLE: u8 = 25;
+const BUILTIN_ENERGY: u8 = 26;
+const BUILTIN_FRAME_NUM: u8 = 27;
+const BUILTIN_SIN_F: u8 = 28;
+const BUILTIN_COS_F: u8 = 29;
 
 /// Resolve builtin name → ID
 pub fn builtin_id(name: &str) -> Option<u8> {
@@ -198,6 +209,17 @@ pub fn builtin_id(name: &str) -> Option<u8> {
         "draw_text" => Some(BUILTIN_DRAW_TEXT),
         "sleep" => Some(BUILTIN_SLEEP),
         "read_line" => Some(BUILTIN_READ_LINE),
+        // Audio visualizer builtins
+        "beat" => Some(BUILTIN_BEAT),
+        "bass" => Some(BUILTIN_BASS),
+        "sub_bass" => Some(BUILTIN_SUB_BASS),
+        "mid" => Some(BUILTIN_MID),
+        "high_mid" => Some(BUILTIN_HIGH_MID),
+        "treble" => Some(BUILTIN_TREBLE),
+        "energy" => Some(BUILTIN_ENERGY),
+        "frame_num" => Some(BUILTIN_FRAME_NUM),
+        "sin_f" => Some(BUILTIN_SIN_F),
+        "cos_f" => Some(BUILTIN_COS_F),
         _ => None,
     }
 }
@@ -781,6 +803,25 @@ fn exec_builtin(id: u8, args: &[Value], output: &mut String) -> Result<Value, St
             // read_line() — read a line from keyboard
             let line = crate::shell::read_line();
             Ok(Value::Str(line))
+        }
+        // ══════════════════════════════════════════════════
+        // Audio visualizer builtins — live_viz data
+        // ══════════════════════════════════════════════════
+        BUILTIN_BEAT => Ok(Value::F64(crate::trustdaw::live_viz::get_beat() as f64)),
+        BUILTIN_BASS => Ok(Value::F64(crate::trustdaw::live_viz::get_bass() as f64)),
+        BUILTIN_SUB_BASS => Ok(Value::F64(crate::trustdaw::live_viz::get_sub_bass() as f64)),
+        BUILTIN_MID => Ok(Value::F64(crate::trustdaw::live_viz::get_mid() as f64)),
+        BUILTIN_HIGH_MID => Ok(Value::F64(crate::trustdaw::live_viz::get_high_mid() as f64)),
+        BUILTIN_TREBLE => Ok(Value::F64(crate::trustdaw::live_viz::get_treble() as f64)),
+        BUILTIN_ENERGY => Ok(Value::F64(crate::trustdaw::live_viz::get_energy() as f64)),
+        BUILTIN_FRAME_NUM => Ok(Value::I64(crate::trustdaw::live_viz::get_frame_num() as i64)),
+        BUILTIN_SIN_F => {
+            let x = args.first().unwrap_or(&Value::F64(0.0)).as_f64().unwrap_or(0.0);
+            Ok(Value::F64(libm::sin(x)))
+        }
+        BUILTIN_COS_F => {
+            let x = args.first().unwrap_or(&Value::F64(0.0)).as_f64().unwrap_or(0.0);
+            Ok(Value::F64(libm::cos(x)))
         }
         _ => Err(format!("unknown builtin id: {}", id)),
     }

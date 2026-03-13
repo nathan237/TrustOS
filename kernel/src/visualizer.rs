@@ -92,9 +92,9 @@ pub const MODE_NAMES: [&str; 13] = [
 // Color palettes
 // ═══════════════════════════════════════
 
-pub const NUM_PALETTES: u8 = 23;
+pub const NUM_PALETTES: u8 = 24;
 
-pub const PALETTE_NAMES: [&str; 23] = [
+pub const PALETTE_NAMES: [&str; 24] = [
     // ── Base single-color (0-12) ──
     "Matrix",     // 0  green
     "Cyber",      // 1  cyan/magenta
@@ -120,6 +120,8 @@ pub const PALETTE_NAMES: [&str; 23] = [
     "Vampire",    // 20  Red + Purple + Pink
     "Nebula",     // 21  Blue + Purple + Pink
     "Inferno",    // 22  Red + Fire + Yellow
+    // ── Special ──
+    "Random",     // 23  random color per character
 ];
 
 /// Returns (r, g, b) target colors for a palette given frequency band dominance
@@ -324,7 +326,26 @@ fn rainbow_color(t: f32) -> (f32, f32, f32) {
     }
 }
 
-/// Get color for any palette index (base 0-12, multi 13-22)
+/// Random: hash t into a pseudo-random vivid color (high saturation)
+fn random_color(t: f32) -> (f32, f32, f32) {
+    // Use t bits as a hash seed for a pseudo-random hue
+    let bits = t.to_bits();
+    let hash = bits.wrapping_mul(2654435761); // Knuth multiplicative hash
+    let hue = (hash % 360) as f32 / 360.0;
+    rainbow_color(hue)
+}
+
+/// Public random color for rain characters — uses col+row+frame as seed
+pub fn rain_random_color(col: usize, row: usize, frame: u32) -> (u8, u8, u8) {
+    let seed = (col as u32).wrapping_mul(2654435761)
+        ^ (row as u32).wrapping_mul(1103515245)
+        ^ frame.wrapping_mul(214013).wrapping_add(2531011);
+    let hue = (seed % 360) as f32 / 360.0;
+    let (r, g, b) = rainbow_color(hue);
+    (r.min(255.0) as u8, g.min(255.0) as u8, b.min(255.0) as u8)
+}
+
+/// Get color for any palette index (base 0-12, multi 13-23)
 pub fn get_palette_color(palette: u8, t: f32) -> (f32, f32, f32) {
     match palette {
         0..=12 => palette_color(palette, t),
@@ -337,7 +358,8 @@ pub fn get_palette_color(palette: u8, t: f32) -> (f32, f32, f32) {
         19 => combo_palette(0, 10, 11, t),          // Toxic: Matrix + Yellow + Cyan
         20 => combo_palette(6, 8, 9, t),            // Vampire: Red + Purple + Pink
         21 => combo_palette(7, 8, 9, t),            // Nebula: Blue + Purple + Pink
-        _  => combo_palette(6, 2, 10, t),           // Inferno: Red + Fire + Yellow
+        22 => combo_palette(6, 2, 10, t),           // Inferno: Red + Fire + Yellow
+        _  => random_color(t),                      // Random: per-character random color
     }
 }
 
@@ -455,7 +477,7 @@ struct Particle {
 impl VisualizerState {
     pub const fn new() -> Self {
         Self {
-            mode: 0,
+            mode: 9,
             verts: Vec::new(), edges: Vec::new(),
             pverts: Vec::new(), proj_z: Vec::new(),
             rot_x: 0, rot_y: 0, rot_z: 0,

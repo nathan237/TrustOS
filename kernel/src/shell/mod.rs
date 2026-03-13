@@ -217,7 +217,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // USB / checkm8
     "lsusb", "checkm8",
     // Audio
-    "beep", "audio", "synth", "play",
+    "beep", "audio", "synth", "play", "vizfx",
     // Network
     "ifconfig", "ip", "ipconfig", "ping", "curl", "wget", "download",
     "nslookup", "dig", "arp", "route", "netstat",
@@ -1099,6 +1099,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "audio" => vm::cmd_audio(args),
         "synth" => vm::cmd_synth(args),
         "play" => vm::cmd_play(args),
+        "vizfx" | "liveviz" => vm::cmd_vizfx(args),
         "daw" | "trustdaw" => vm::cmd_daw(args),
         "ifconfig" | "ip" => vm::cmd_ifconfig(),
         "ipconfig" => vm::cmd_ipconfig(args),

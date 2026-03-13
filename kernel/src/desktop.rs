@@ -8372,15 +8372,26 @@ struct AppConfig {
                     // TRAIL: speed drives brightness floor + green purity
                     let fade = brightness as f32 / 255.0;
                     let fi = freq_intensity;
-                    let speed_green = 0.8 + speed_norm * 0.4; // faster = greener
-                    let tr = 0i16; // Zero red in trail — pure green only
-                    let tg = ((band_g_base as f32 * fi * fade * speed_green).min(255.0)) as i16;
-                    let tb = 0i16; // No blue in trail
-                    // Atmospheric shift
-                    let fr = 0u8; // Absolutely no red in trail
-                    let fg = (tg + atmo_g).max(0).min(255) as u8;
-                    let fb = 0u8; // Absolutely no blue in trail
-                    (fr, fg, fb)
+                    if self.visualizer.palette == 23 {
+                        // Random palette: vivid random color per character
+                        let (cr, cg, cb) = crate::visualizer::rain_random_color(
+                            col, i, self.matrix_seeds[idx],
+                        );
+                        let fr = (cr as f32 * fade * fi).min(255.0) as u8;
+                        let fg = (cg as f32 * fade * fi).min(255.0) as u8;
+                        let fb = (cb as f32 * fade * fi).min(255.0) as u8;
+                        (fr, fg, fb)
+                    } else {
+                        let speed_green = 0.8 + speed_norm * 0.4; // faster = greener
+                        let tr = 0i16; // Zero red in trail — pure green only
+                        let tg = ((band_g_base as f32 * fi * fade * speed_green).min(255.0)) as i16;
+                        let tb = 0i16; // No blue in trail
+                        // Atmospheric shift
+                        let fr = 0u8; // Absolutely no red in trail
+                        let fg = (tg + atmo_g).max(0).min(255) as u8;
+                        let fb = 0u8; // Absolutely no blue in trail
+                        (fr, fg, fb)
+                    }
                 };
                 
                 // ── Visualizer: modulate rain through invisible 3D shape ──
@@ -9621,59 +9632,78 @@ struct AppConfig {
             }
         }
         
-        // ── System tray (right side) ──
-        // FPS counter
-        let fps_str = format!("{}fps", self.fps_current);
-        let fps_color = if self.fps_current >= 55 { GREEN_SECONDARY } else if self.fps_current >= 30 { ACCENT_AMBER } else { ACCENT_RED };
-        self.draw_text_smooth((self.width - 200) as i32, (y + 17) as i32, &fps_str, fps_color);
+        // ── System tray (right side) — layout right-to-left with proper spacing ──
+        // Layout anchors (right to left): ShowDesktop(8) | Gear(20) | Clock(56) | CPU/MEM(36) | FPS(48) | A11y(50) | WiFi/Vol/Bat(80)
+        let tray_gap = 8u32; // gap between each tray element
         
-        // Clock (larger, centered vertically)
+        // Cursor starts after ShowDesktop button (8px + gap)
+        let mut tray_cursor = self.width - 8 - 8 - tray_gap; // skip ShowDesktop zone
+        
+        // ── Settings gear icon ──
+        let gear_w = 20u32;
+        let gear_x = tray_cursor - gear_w;
+        let gear_y = y + 16;
+        tray_cursor = gear_x - tray_gap;
+        
+        // ── Clock + Date ──
+        let clock_w = 56u32;
+        let clock_x = tray_cursor - clock_w;
         let time = self.get_time_string();
-        self.draw_text_smooth((self.width - 130) as i32, (y + 10) as i32, &time, hc(GREEN_PRIMARY, 0xFFFFFFFF));
+        self.draw_text_smooth(clock_x as i32, (y + 10) as i32, &time, hc(GREEN_PRIMARY, 0xFFFFFFFF));
         // Bold effect for clock
-        self.draw_text_smooth((self.width - 129) as i32, (y + 10) as i32, &time, hc(GREEN_PRIMARY, 0xFFFFFFFF));
-        
-        // Date below clock
+        self.draw_text_smooth((clock_x + 1) as i32, (y + 10) as i32, &time, hc(GREEN_PRIMARY, 0xFFFFFFFF));
         let date = self.get_date_string();
-        self.draw_text_smooth((self.width - 130) as i32, (y + 27) as i32, &date, hc(GREEN_TERTIARY, 0xFFCCCCCC));
+        self.draw_text_smooth(clock_x as i32, (y + 27) as i32, &date, hc(GREEN_TERTIARY, 0xFFCCCCCC));
+        tray_cursor = clock_x - tray_gap;
         
-        // Accessibility status indicators
-        let a11y_str = crate::accessibility::status_indicators();
-        if !a11y_str.is_empty() {
-            let a11y_x = (self.width - 210) as i32;
-            self.draw_text_smooth(a11y_x, (y + 17) as i32, &a11y_str, hc(ACCENT_AMBER, 0xFFFFFF00));
-        }
-        
-        // ── System tray indicators (WiFi, Volume, Battery) ──
-        self.draw_sys_tray_indicators(self.width - 290, y + 10);
-
-        // System indicators (CPU + MEM mini-bars)
-        let ind_x = self.width - 50;
+        // ── CPU + MEM mini-bars ──
+        let bars_w = 36u32;
+        let ind_x = tray_cursor - bars_w;
         let ind_y = y + 8;
         let cpu_level = ((self.frame_count % 7) + 2).min(6) as u32;
-        self.draw_text((ind_x - 24) as i32, (ind_y + 2) as i32, "C", GREEN_GHOST);
+        self.draw_text(ind_x as i32, (ind_y + 2) as i32, "C", GREEN_GHOST);
+        let bar_start_x = ind_x + 12;
         for seg in 0..8u32 {
             let seg_color = if seg < cpu_level {
                 if cpu_level > 6 { ACCENT_RED } else { GREEN_PRIMARY }
             } else { GREEN_GHOST };
-            framebuffer::fill_rect(ind_x + seg * 3, ind_y + 3, 2, 8, seg_color);
+            framebuffer::fill_rect(bar_start_x + seg * 3, ind_y + 3, 2, 8, seg_color);
         }
         let mem_level = {
             let total = 16u32;
             let used = ((self.windows.len() as u32 * 2) + 4).min(total);
             (used * 8 / total).min(8)
         };
-        self.draw_text((ind_x - 24) as i32, (ind_y + 17) as i32, "M", GREEN_GHOST);
+        self.draw_text(ind_x as i32, (ind_y + 17) as i32, "M", GREEN_GHOST);
         for seg in 0..8u32 {
             let seg_color = if seg < mem_level {
                 if mem_level > 6 { ACCENT_AMBER } else { GREEN_PRIMARY }
             } else { GREEN_GHOST };
-            framebuffer::fill_rect(ind_x + seg * 3, ind_y + 18, 2, 8, seg_color);
+            framebuffer::fill_rect(bar_start_x + seg * 3, ind_y + 18, 2, 8, seg_color);
+        }
+        tray_cursor = ind_x - tray_gap;
+        
+        // ── FPS counter ──
+        let fps_str = format!("{}fps", self.fps_current);
+        let fps_color = if self.fps_current >= 55 { GREEN_SECONDARY } else if self.fps_current >= 30 { ACCENT_AMBER } else { ACCENT_RED };
+        let fps_w = (fps_str.len() as u32) * 8 + 4;
+        let fps_x = tray_cursor - fps_w;
+        self.draw_text_smooth(fps_x as i32, (y + 17) as i32, &fps_str, fps_color);
+        tray_cursor = fps_x - tray_gap;
+        
+        // ── Accessibility status indicators ──
+        let a11y_str = crate::accessibility::status_indicators();
+        if !a11y_str.is_empty() {
+            let a11y_w = (a11y_str.len() as u32) * 8 + 4;
+            let a11y_x = tray_cursor - a11y_w;
+            self.draw_text_smooth(a11y_x as i32, (y + 17) as i32, &a11y_str, hc(ACCENT_AMBER, 0xFFFFFF00));
+            tray_cursor = a11y_x - tray_gap;
         }
         
-        // ── Settings gear icon ──
-        let gear_x = self.width - 80;
-        let gear_y = y + 16;
+        // ── System tray indicators (WiFi, Volume, Battery) ──
+        let tray_icons_w = 80u32;
+        let tray_icons_x = tray_cursor - tray_icons_w;
+        self.draw_sys_tray_indicators(tray_icons_x, y + 10);
         let gear_hover = self.cursor_x >= (gear_x as i32 - 4) && self.cursor_x < (gear_x as i32 + 20)
             && self.cursor_y >= y as i32;
         let gear_color = if gear_hover { GREEN_PRIMARY } else { GREEN_TERTIARY };

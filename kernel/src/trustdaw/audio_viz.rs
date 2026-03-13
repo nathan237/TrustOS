@@ -933,9 +933,20 @@ pub fn launch_visualizer(audio: &[i16], title: &str) -> Result<(), &'static str>
         // ── Audio analysis ──
         beat_state.update(audio, audio_pos);
 
+        // ── Inject audio data for live TrustLang effects ──
+        crate::trustdaw::live_viz::set_audio_data(
+            beat_state.beat, beat_state.bass, beat_state.sub_bass,
+            beat_state.mid, beat_state.high_mid, beat_state.treble,
+            beat_state.energy, vis_frame,
+        );
+
         // ── Overlay update + render ──
         overlay.tick(&beat_state);
         overlay.draw_frame(&beat_state);
+
+        // ── Run live vizfx script (if active) ──
+        crate::trustdaw::live_viz::run_frame();
+
         draw_overlay_hud(fb_w, fb_h, title, elapsed_s, total_s, progress_pct);
         crate::framebuffer::swap_buffers();
 
