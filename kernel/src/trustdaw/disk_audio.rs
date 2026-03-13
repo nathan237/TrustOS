@@ -10,26 +10,17 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 use alloc::vec;
+use core::sync::atomic::{AtomicU8, Ordering};
 
 const SECTOR_SIZE: usize = 512;
-/// Read 8 sectors at a time (4KB = one page, DMA-safe).
-/// Using a small page-aligned intermediate buffer avoids issues with large heap
-/// allocations whose physical addresses may not be contiguous across pages.
-const DMA_READ_SECTORS: u16 = 8;
-const DMA_READ_BYTES: usize = DMA_READ_SECTORS as usize * SECTOR_SIZE; // 4096
+/// Read 128 sectors at a time (64KB) for fast bulk loading.
+/// AHCI supports up to 128 sectors per command; larger batches = fewer commands.
+const DMA_READ_SECTORS: u16 = 128;
+const DMA_READ_BYTES: usize = DMA_READ_SECTORS as usize * SECTOR_SIZE; // 65536
 /// Maximum tracks in v2 format
 const MAX_TRACKS: usize = 10;
 /// Bytes per track entry in header
 const ENTRY_SIZE: usize = 48;
-
-/// Page-aligned intermediate buffer for AHCI DMA reads.
-/// AHCI DMA requires a physically contiguous buffer. The kernel heap may
-/// not guarantee physical contiguity for large allocations.
-/// This small buffer is always within a single 4KB page.
-#[repr(C, align(4096))]
-struct DmaReadBuf([u8; DMA_READ_BYTES]);
-
-static mut DMA_READ_BUF: DmaReadBuf = DmaReadBuf([0u8; DMA_READ_BYTES]);
 
 /// Track info parsed from the disk header
 #[derive(Clone)]
@@ -46,22 +37,33 @@ pub struct DiskTrackTable {
     pub tracks: Vec<TrackInfo>,
 }
 
+/// Cached AHCI port number for TWAV disk (0xFE = not scanned yet, 0xFF = not found)
+static CACHED_PORT: AtomicU8 = AtomicU8::new(0xFE);
+
 /// Try to find which AHCI port has our audio data disk.
+/// Result is cached after first scan to avoid repeated port probing.
 fn find_data_port() -> Option<u8> {
+    let cached = CACHED_PORT.load(Ordering::Relaxed);
+    if cached != 0xFE {
+        return if cached == 0xFF { None } else { Some(cached) };
+    }
     if !crate::drivers::ahci::is_initialized() {
         return None;
     }
     let devices = crate::drivers::ahci::list_devices();
     for dev in &devices {
-        if dev.port_num == 2 {
-            return Some(2);
+        if dev.device_type == crate::drivers::ahci::AhciDeviceType::Sata && dev.sector_count > 64 {
+            let mut probe = alloc::vec![0u8; 512];
+            if crate::drivers::ahci::read_sectors(dev.port_num, 0, 1, &mut probe).is_ok() {
+                if probe.len() >= 4 && &probe[0..4] == b"TWAV" {
+                    crate::serial_println!("[DISK-AUDIO] Found TWAV disk on port {}", dev.port_num);
+                    CACHED_PORT.store(dev.port_num, Ordering::Relaxed);
+                    return Some(dev.port_num);
+                }
+            }
         }
     }
-    for dev in &devices {
-        if dev.port_num > 1 && dev.device_type == crate::drivers::ahci::AhciDeviceType::Sata {
-            return Some(dev.port_num);
-        }
-    }
+    CACHED_PORT.store(0xFF, Ordering::Relaxed);
     None
 }
 
@@ -155,8 +157,10 @@ pub fn load_track_from_disk(track_idx: usize) -> Result<(Vec<u8>, String), &'sta
 }
 
 /// Load track data given a TrackInfo.
-/// Uses a small page-aligned DMA buffer to avoid physical address issues
-/// with large heap allocations.
+/// Uses a heap-allocated page-aligned DMA buffer so AHCI virt_to_phys
+/// (which subtracts HHDM offset) maps correctly.  Static .bss buffers
+/// live at the kernel's linked VA, outside the HHDM window, so DMA
+/// writes to the wrong physical address and we read back zeros.
 fn load_track_data(track: &TrackInfo) -> Result<(Vec<u8>, String), &'static str> {
     let port = find_data_port().ok_or("No data disk found on AHCI")?;
 
@@ -167,34 +171,37 @@ fn load_track_data(track: &TrackInfo) -> Result<(Vec<u8>, String), &'static str>
     crate::serial_println!("[DISK-AUDIO] Loading '{}': {} bytes, {} sectors from LBA {}",
         track.name, track.wav_size, track.sector_count, track.start_lba);
 
+    // Allocate DMA buffer FIRST (small, 64KB) before the large WAV buffer
+    // so the allocator can service it from a clean free-list.
+    let mut dma_buf = vec![0u8; DMA_READ_BYTES];
+
     let mut wav_buf = Vec::with_capacity(track.wav_size);
 
     let mut sectors_remaining = track.sector_count;
     let mut current_lba = track.start_lba;
 
     while sectors_remaining > 0 {
-        let chunk = (sectors_remaining as u16).min(DMA_READ_SECTORS);
-        let chunk_bytes = chunk as usize * SECTOR_SIZE;
+        // Compute chunk in usize FIRST, then cast to u16.
+        // Avoids truncation: e.g. 102496_usize as u16 = 37120, but
+        // 102496_usize.min(128) = 128 then as u16 = 128.
+        let chunk_sectors = sectors_remaining.min(DMA_READ_SECTORS as usize);
+        let chunk = chunk_sectors as u16;
+        let chunk_bytes = chunk_sectors * SECTOR_SIZE;
 
-        // Read into page-aligned DMA-safe intermediate buffer
-        let bytes_read = unsafe {
-            crate::drivers::ahci::read_sectors(
-                port, current_lba, chunk,
-                &mut DMA_READ_BUF.0[..chunk_bytes],
-            )?
-        };
+        crate::drivers::ahci::read_sectors(
+            port, current_lba, chunk,
+            &mut dma_buf[..chunk_bytes],
+        )?;
 
         // Copy from DMA buffer to target Vec (only up to what we still need)
         let needed = track.wav_size.saturating_sub(wav_buf.len());
-        let to_copy = bytes_read.min(needed);
+        let to_copy = chunk_bytes.min(needed);
         if to_copy > 0 {
-            unsafe {
-                wav_buf.extend_from_slice(&DMA_READ_BUF.0[..to_copy]);
-            }
+            wav_buf.extend_from_slice(&dma_buf[..to_copy]);
         }
 
-        current_lba += chunk as u64;
-        sectors_remaining -= chunk as usize;
+        current_lba += chunk_sectors as u64;
+        sectors_remaining -= chunk_sectors;
     }
 
     wav_buf.truncate(track.wav_size);
@@ -212,4 +219,12 @@ pub fn track_count() -> usize {
 pub fn load_wav_from_disk() -> Result<Vec<u8>, &'static str> {
     let (data, _name) = load_track_from_disk(0)?;
     Ok(data)
+}
+
+/// Get track names for the UI (reads header only, fast).
+pub fn get_track_names() -> Vec<String> {
+    match read_track_table() {
+        Ok(table) => table.tracks.iter().map(|t| t.name.clone()).collect(),
+        Err(_) => Vec::new(),
+    }
 }

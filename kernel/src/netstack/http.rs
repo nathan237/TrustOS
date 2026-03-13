@@ -142,7 +142,8 @@ fn request_inner(method: &str, url: &str, content_type: Option<&str>, body: Opti
             break;
         }
         
-        core::hint::spin_loop();
+        // Yield to other threads so desktop stays responsive during fetch
+        crate::thread::yield_thread();
     }
     
     // Send FIN to close connection

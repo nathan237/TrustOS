@@ -26,7 +26,7 @@ fn ensure_network_ready() {
             }
             
             // Small delay
-            for _ in 0..10000 { core::hint::spin_loop(); }
+            crate::thread::yield_thread();
         }
         
         if crate::netstack::dhcp::is_bound() {
@@ -135,8 +135,8 @@ fn get_inner(url: &str, depth: u32) -> Result<HttpsResponse, HttpsError> {
                     return Ok(len);
                 }
                 
-                // Small delay
-                for _ in 0..10000 { core::hint::spin_loop(); }
+                // Yield to other threads
+                crate::thread::yield_thread();
             }
             
             recv_attempts += 1;
@@ -201,7 +201,7 @@ fn get_inner(url: &str, depth: u32) -> Result<HttpsResponse, HttpsError> {
             break;
         }
         
-        for _ in 0..10000 { core::hint::spin_loop(); }
+        crate::thread::yield_thread();
     }
     
     // Close connection

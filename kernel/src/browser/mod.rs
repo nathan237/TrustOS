@@ -288,7 +288,7 @@ impl Browser {
     }
     
     /// Extract external resources from the document
-    fn extract_resources(&mut self, base_url: &str) {
+    pub fn extract_resources(&mut self, base_url: &str) {
         self.pending_resources.clear();
         self.resources.clear();
         

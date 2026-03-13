@@ -158,6 +158,21 @@ pub fn draw_about_icon(x: u32, y: u32, color: u32, _bg: u32) {
     framebuffer::fill_rect(x + 12, y + 24, 8, 2, light); // base
 }
 
+/// Draw a 32x32 music note icon
+pub fn draw_music_icon(x: u32, y: u32, color: u32, _bg: u32) {
+    let light = lighten(color, 1.3);
+    // Eighth note: oval head + stem + flag
+    // Note head (filled oval at bottom-left)
+    draw_filled_circle(x + 10, y + 24, 5, light);
+    draw_filled_circle(x + 10, y + 24, 4, color);
+    // Stem (vertical line going up-right)
+    framebuffer::fill_rect(x + 14, y + 6, 2, 19, light);
+    // Flag (curved line at top)
+    framebuffer::fill_rect(x + 16, y + 6, 2, 4, light);
+    framebuffer::fill_rect(x + 18, y + 8, 2, 4, light);
+    framebuffer::fill_rect(x + 20, y + 10, 2, 4, light);
+}
+
 /// Draw a 32x32 game controller icon (for games like Snake)
 pub fn draw_game_icon(x: u32, y: u32, color: u32, _bg: u32) {
     let dark = darken(color, 0.7);
@@ -283,6 +298,7 @@ pub enum IconType {
     Calculator,
     Network,
     About,
+    Music,
     Game,
     Editor,
     OpenGL,
@@ -302,6 +318,7 @@ pub fn draw_icon(icon_type: IconType, x: u32, y: u32, color: u32, bg: u32) {
         IconType::Calculator => draw_calculator_icon(x, y, color, bg),
         IconType::Network => draw_network_icon(x, y, color, bg),
         IconType::About => draw_about_icon(x, y, color, bg),
+        IconType::Music => draw_music_icon(x, y, color, bg),
         IconType::Game => draw_game_icon(x, y, color, bg),
         IconType::Editor => draw_editor_icon(x, y, color, bg),
         IconType::OpenGL => draw_opengl_icon(x, y, color, bg),

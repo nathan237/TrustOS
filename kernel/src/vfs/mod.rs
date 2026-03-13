@@ -280,8 +280,17 @@ pub fn init() {
     if !root_mounted && crate::drivers::ahci::is_initialized() {
         let devices = crate::drivers::ahci::list_devices();
         // Use the first non-optical AHCI port with sectors > 0
+        // Skip disks that have TWAV magic (audio data disks)
         for dev in &devices {
             if dev.sector_count > 64 {
+                // Check if this disk has TWAV magic — skip audio data disks
+                let mut probe = alloc::vec![0u8; 512];
+                if crate::drivers::ahci::read_sectors(dev.port_num, 0, 1, &mut probe).is_ok() {
+                    if probe.len() >= 4 && &probe[0..4] == b"TWAV" {
+                        crate::log!("[VFS] Skipping AHCI port {} (TWAV audio data disk)", dev.port_num);
+                        continue;
+                    }
+                }
                 let backend = Arc::new(fat32::AhciBlockReader::new(dev.port_num as usize, 0));
                 match trustfs::TrustFs::new(backend, dev.sector_count) {
                     Ok(trustfs) => {

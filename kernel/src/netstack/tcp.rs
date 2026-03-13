@@ -862,7 +862,8 @@ pub fn wait_for_established(dest_ip: [u8; 4], dest_port: u16, src_port: u16, tim
         if spins > 2_000_000 {
             return false;
         }
-        core::hint::spin_loop();
+        // Yield to other threads so desktop frame loop stays responsive
+        crate::thread::yield_thread();
     }
 }
 
@@ -910,7 +911,7 @@ pub fn send_data(dest_ip: [u8; 4], dest_port: u16, src_port: u16, data: &[u8]) -
                 Err(e) if retries < 200 => {
                     // TX queue full or transient error — poll and retry
                     crate::netstack::poll();
-                    for _ in 0..2000 { core::hint::spin_loop(); }
+                    crate::thread::yield_thread();
                     retries += 1;
                 }
                 Err(e) => return Err(e),
@@ -920,14 +921,8 @@ pub fn send_data(dest_ip: [u8; 4], dest_port: u16, src_port: u16, data: &[u8]) -
         // Poll and pace between batches to let receiver process
         if (i + 1) % BATCH == 0 {
             crate::netstack::poll();
-            // Wait ~1ms real time to avoid overwhelming receiver
-            let wait_start = crate::time::uptime_ms();
-            loop {
-                core::hint::spin_loop();
-                if crate::time::uptime_ms().wrapping_sub(wait_start) >= 1 {
-                    break;
-                }
-            }
+            // Yield to let other threads run between batches
+            crate::thread::yield_thread();
         }
         
     }

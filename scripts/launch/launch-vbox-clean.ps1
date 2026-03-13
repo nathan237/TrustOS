@@ -61,6 +61,20 @@ Write-Output "Step 4: Configure VM..."
 & $VBM storagectl $VMName --name "SATA" --add sata --controller IntelAhci --portcount 4 2>&1
 & $VBM storageattach $VMName --storagectl "SATA" --port 0 --device 0 --type dvddrive --medium $ISOPath 2>&1
 
+# Audio data disk on AHCI port 3 (raw sectors with WAV tracks)
+# Port 2 is used by TrustFS for the root filesystem
+$DataDisk = "C:\Users\nathan\Documents\Scripts\OSrust\builds\trustos_data.img"
+if (Test-Path $DataDisk) {
+    # Convert raw .img to VDI for VirtualBox
+    $DataVDI = "C:\Users\nathan\Documents\Scripts\OSrust\builds\trustos_data.vdi"
+    Remove-Item $DataVDI -ErrorAction SilentlyContinue
+    & $VBM convertfromraw $DataDisk $DataVDI --format VDI 2>&1
+    & $VBM storageattach $VMName --storagectl "SATA" --port 3 --device 0 --type hdd --medium $DataVDI 2>&1
+    Write-Output "Audio data disk attached on SATA port 3"
+} else {
+    Write-Output "WARNING: No audio data disk found at $DataDisk"
+}
+
 # Serial
 Remove-Item $SerialLog -ErrorAction SilentlyContinue
 & $VBM modifyvm $VMName --uart1 0x3F8 4 --uartmode1 file $SerialLog 2>&1
