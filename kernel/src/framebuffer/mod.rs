@@ -738,7 +738,7 @@ fn swap_buffers_mmio_diff(addr: *mut u8, width: usize, height: usize, pitch: usi
                     let src = b.as_ptr().add(src_offset);
                     let dst = addr.add(dst_offset) as *mut u32;
                     #[cfg(target_arch = "x86_64")]
-                    crate::graphics::simd::copy_row_sse2_nt(dst, src, width);
+                    crate::graphics::simd::copy_row_sse2(dst, src, width);
                     #[cfg(not(target_arch = "x86_64"))]
                     core::ptr::copy_nonoverlapping(src, dst, width);
                 }
@@ -803,7 +803,7 @@ fn swap_buffers_mmio_diff(addr: *mut u8, width: usize, height: usize, pitch: usi
                 let src = bb_row.as_ptr();
                 let dst = addr.add(dst_offset) as *mut u32;
                 #[cfg(target_arch = "x86_64")]
-                crate::graphics::simd::copy_row_sse2_nt(dst, src, width);
+                crate::graphics::simd::copy_row_sse2(dst, src, width);
                 #[cfg(not(target_arch = "x86_64"))]
                 core::ptr::copy_nonoverlapping(src, dst, width);
             }
@@ -825,7 +825,7 @@ fn swap_buffers_mmio(addr: *mut u8, width: usize, height: usize, pitch: usize) {
                 let src = buf.as_ptr().add(src_offset);
                 let dst = addr.add(dst_offset) as *mut u32;
                 #[cfg(target_arch = "x86_64")]
-                crate::graphics::simd::copy_row_sse2_nt(dst, src, width);
+                crate::graphics::simd::copy_row_sse2(dst, src, width);
                 #[cfg(not(target_arch = "x86_64"))]
                 core::ptr::copy_nonoverlapping(src, dst, width);
             }

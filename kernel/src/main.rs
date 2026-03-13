@@ -300,10 +300,12 @@ static KERNEL_ADDRESS_REQUEST: KernelAddressRequest = KernelAddressRequest::new(
 #[unsafe(link_section = ".requests")]
 static KERNEL_FILE_REQUEST: KernelFileRequest = KernelFileRequest::new();
 
-/// Request larger stack (256 KB) from Limine to support deep desktop rendering + interrupts
+/// Request larger stack (512 KB) from Limine to support deep desktop rendering + interrupts
+/// 256 KB was insufficient for the desktop's nested draw_background() call chain
+/// (4-layer matrix rain × 256 columns × visualizer + drone_swarm per frame)
 #[used]
 #[unsafe(link_section = ".requests")]
-static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new().with_size(256 * 1024);
+static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new().with_size(512 * 1024);
 
 /// Limine requests end marker
 #[used]

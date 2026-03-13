@@ -67,7 +67,7 @@ fn writeback_rows_parallel(start: usize, end: usize, data: *mut u8) {
             let dst = params.dst.add(dst_offset);
             
             #[cfg(target_arch = "x86_64")]
-            crate::graphics::simd::copy_row_sse2_nt(dst, src, params.width);
+            crate::graphics::simd::copy_row_sse2(dst, src, params.width);
             #[cfg(not(target_arch = "x86_64"))]
             core::ptr::copy_nonoverlapping(src, dst, params.width);
         }

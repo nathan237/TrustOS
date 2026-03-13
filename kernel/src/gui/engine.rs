@@ -59,30 +59,17 @@ fn read_tsc() -> u64 {
     crate::arch::timestamp()
 }
 
-/// Sleep until next frame (uses HLT to save CPU)
+/// Sleep until next frame (spin-loop, no HLT — safe on all hardware)
 pub fn wait_for_next_frame(frame_start_us: u64) {
     let elapsed = now_us().saturating_sub(frame_start_us);
     
     if elapsed < TARGET_FRAME_US {
-        let wait_us = TARGET_FRAME_US - elapsed;
-        
-        // Use HLT for long waits (>1ms), spin for short waits
-        if wait_us > 1000 {
-            // HLT will wake on next interrupt (timer, keyboard, mouse)
-            // This drops CPU from 100% to ~1%
-            unsafe {
-                // Enable interrupts and halt until interrupt
-                #[cfg(target_arch = "x86_64")]
-                core::arch::asm!("sti; hlt", options(nomem, nostack));
-                #[cfg(not(target_arch = "x86_64"))]
-                crate::arch::halt();
-            }
-        } else {
-            // Short spin for precise timing
-            let target = frame_start_us + TARGET_FRAME_US;
-            while now_us() < target {
-                core::hint::spin_loop();
-            }
+        let target = frame_start_us + TARGET_FRAME_US;
+        let mut bail = 0u32;
+        while now_us() < target {
+            bail += 1;
+            if bail >= 2_000_000 { break; } // safety bail-out
+            core::hint::spin_loop();
         }
     }
     

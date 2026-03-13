@@ -100,26 +100,27 @@ pub fn frame_end(frame_start_us: u64) {
     update_smooth_fps();
 }
 
-/// Adaptive sleep: HLT loop for long waits, spin for short waits.
-/// More precise than a single HLT — loops until the target time.
+/// Frame sleep: spin-loop with bail-out to prevent infinite hang.
+/// Uses spin_loop_hint for CPU power savings on modern CPUs.
+/// Avoids HLT which can hang on real hardware if interrupt routing
+/// (PIC/APIC) is not perfectly configured.
 fn adaptive_sleep(target_us: u64) {
+    // Cap sleep to 50ms max — never block longer than ~3 frames
+    let capped = target_us.min(50_000);
     let start = super::engine::now_us();
-    let end = start + target_us;
-    
-    // Phase 1: HLT loop for waits > 2ms (each HLT wakes on timer IRQ ~1ms)
-    while super::engine::now_us() + 2000 < end {
-        unsafe {
-            #[cfg(target_arch = "x86_64")]
-            core::arch::asm!("sti; hlt", options(nomem, nostack));
-            #[cfg(not(target_arch = "x86_64"))]
-            {
-                core::arch::asm!("wfe", options(nomem, nostack));
-            }
-        }
-    }
-    
-    // Phase 2: Spin-wait for the last ~2ms (precise timing)
-    while super::engine::now_us() < end {
+    let end = start + capped;
+
+    // Bail-out counter: even if now_us() is broken (returns 0),
+    // we'll exit after ~2M iterations (~16ms at 3GHz spin rate)
+    let mut bail = 0u32;
+    const MAX_SPINS: u32 = 2_000_000;
+
+    loop {
+        let now = super::engine::now_us();
+        if now >= end { break; }
+        // Safety: if now_us() isn't advancing, bail out
+        bail += 1;
+        if bail >= MAX_SPINS { break; }
         core::hint::spin_loop();
     }
 }

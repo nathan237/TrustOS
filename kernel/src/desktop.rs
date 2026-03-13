@@ -2735,7 +2735,15 @@ impl Desktop {
         // Initialize double buffering
         crate::serial_println!("[Desktop] init_double_buffer...");
         framebuffer::init_double_buffer();
-        framebuffer::set_double_buffer_mode(true);
+        // Verify backbuffer was actually allocated — if it failed (OOM),
+        // fall back to direct framebuffer mode to avoid invisible desktop
+        if framebuffer::get_backbuffer_ptr().is_some() {
+            framebuffer::set_double_buffer_mode(true);
+            crate::serial_println!("[Desktop] double buffer: OK");
+        } else {
+            framebuffer::set_double_buffer_mode(false);
+            crate::serial_println!("[Desktop] WARNING: backbuffer alloc failed, using direct FB mode");
+        }
         
         // Initialize background cache for fast redraws
         crate::serial_println!("[Desktop] init_background_cache...");
@@ -3014,22 +3022,28 @@ struct AppConfig {
         // Estimate CPU speed via TSC (in MHz)
         let tsc_mhz = crate::cpu::tsc_frequency() / 1_000_000;
         
-        // Compute a capability score:
-        //   RAM contribution: 1 point per 128 MB
-        //   CPU contribution: 1 point per 500 MHz
-        //   Core contribution: 1 point per core
+        // Compute a capability score weighted toward CPU throughput.
+        // Full tier requires real rendering power — RAM alone isn't enough.
+        //   RAM contribution: 1 point per 256 MB (capped at 8 — diminishing returns)
+        //   CPU contribution: 1 point per 400 MHz (weighted more than RAM)
+        //   Core contribution: 2 points per core (parallelism matters for rendering)
         //   Resolution penalty: -1 per million pixels above 1M
-        let ram_score = (phys_mb / 128) as i64;
-        let cpu_score = if tsc_mhz > 0 { (tsc_mhz / 500) as i64 } else { 2 }; // assume moderate if unknown
-        let core_score = cpus as i64;
+        let ram_score = ((phys_mb / 256) as i64).min(8);
+        let cpu_score = if tsc_mhz > 0 { (tsc_mhz / 400) as i64 } else { 2 };
+        let core_score = (cpus as i64) * 2;
         let res_penalty = ((pixels as i64) - 1_000_000) / 1_000_000;
         let score = ram_score + cpu_score + core_score - res_penalty;
         
+        // Hard cap: old dual-core CPUs (< 3 GHz) cannot sustain Full tier.
+        // The 4-layer matrix rain + visualizer + drone swarm need at least
+        // ~3 GHz × 4 cores or equivalent throughput to hit stable 30 FPS.
+        let cpu_limited = tsc_mhz > 0 && tsc_mhz < 3000 && cpus <= 2;
+        
         let tier = if phys_mb < 128 || heap_free_mb < 8 {
             DesktopTier::CliOnly
-        } else if score <= 3 || phys_mb < 256 {
+        } else if score <= 4 || phys_mb < 256 {
             DesktopTier::Minimal
-        } else if score <= 6 || phys_mb < 512 {
+        } else if score <= 8 || phys_mb < 512 || cpu_limited {
             DesktopTier::Standard
         } else {
             DesktopTier::Full
@@ -3041,8 +3055,8 @@ struct AppConfig {
         self.fps_high_count = 0;
         
         crate::serial_println!(
-            "[Desktop] Tier={:?} (score={}, RAM={}MB, heap={}MB, CPUs={}, TSC={}MHz, {}x{})",
-            tier, score, phys_mb, heap_free_mb, cpus, tsc_mhz, self.width, self.height
+            "[Desktop] Tier={:?} (score={}, RAM={}MB, heap={}MB, CPUs={}, TSC={}MHz, {}x{}, cpu_limited={})",
+            tier, score, phys_mb, heap_free_mb, cpus, tsc_mhz, self.width, self.height, cpu_limited
         );
     }
     
@@ -7200,6 +7214,33 @@ struct AppConfig {
     /// Draw the desktop with double buffering
     pub fn draw(&mut self) {
         self.frame_count += 1;
+        
+        // ── Safe startup: first 3 frames do MINIMAL rendering ──
+        // Eliminates all heavy code (matrix rain, audio analysis, game ticks,
+        // animations) from the initial frames. If this fixes the T61 freeze,
+        // the bug is in one of the skipped subsystems.
+        if self.frame_count <= 3 {
+            crate::serial_println!("[Desktop] safe frame {} / 3", self.frame_count);
+            // Get mouse state for cursor
+            let mouse = crate::mouse::get_state();
+            
+            framebuffer::clear_backbuffer(0xFF010200);
+            framebuffer::begin_frame();
+            // Just draw icons + taskbar + cursor — no rain, no audio, no effects
+            self.draw_desktop_icons();
+            self.draw_taskbar();
+            self.draw_cursor();
+            // Update tracking state
+            self.last_cursor_x = mouse.x;
+            self.last_cursor_y = mouse.y;
+            self.last_window_count = self.windows.len();
+            self.last_start_menu_open = self.start_menu_open;
+            self.last_context_menu_visible = self.context_menu.visible;
+            framebuffer::end_frame();
+            framebuffer::swap_buffers();
+            crate::serial_println!("[Desktop] safe frame {} done", self.frame_count);
+            return;
+        }
         
         // ── Auto-adjust tier based on sustained FPS ──
         self.auto_adjust_tier();
@@ -14803,7 +14844,33 @@ pub fn run() {
     
     crate::serial_println!("[GUI] Starting desktop environment...");
     crate::serial_println!("[GUI] Hotkeys: Alt+Tab, Win+Arrows, Alt+F4, Win=Start");
-    crate::serial_println!("[GUI] Target: ~60 FPS (16.6ms) with HLT-based frame limiting");
+    crate::serial_println!("[GUI] Target: ~60 FPS (16.6ms) with spin-loop frame limiting");
+    
+    // ── Visual proof-of-life: write directly to framebuffer (bypass backbuffer) ──
+    // If this shows on screen but the desktop doesn't, the issue is in drawing/swap.
+    // If this doesn't show, the code never reaches run().
+    {
+        let fb = crate::framebuffer::get_framebuffer();
+        let w = crate::framebuffer::FB_WIDTH.load(core::sync::atomic::Ordering::Relaxed) as usize;
+        let pitch = crate::framebuffer::FB_PITCH.load(core::sync::atomic::Ordering::Relaxed) as usize;
+        if !fb.is_null() && w > 0 && pitch > 0 {
+            // Draw a bright green bar at top-left corner (16×4 pixels)
+            for y in 0..4usize {
+                for x in 0..16usize {
+                    if x < w {
+                        unsafe {
+                            let dst = (fb as *mut u8).add(y * pitch).add(x * 4) as *mut u32;
+                            dst.write_volatile(0xFF00FF00); // bright green
+                        }
+                    }
+                }
+            }
+            crate::serial_println!("[GUI] Proof-of-life pixels written to framebuffer");
+        }
+    }
+    
+    // Frame counter for safe startup (skip heavy work on first few frames)
+    let mut loop_frame: u32 = 0;
     
     loop {
         // Check exit flag
@@ -15303,7 +15370,7 @@ pub fn run() {
         }
         
         // ═══════════════════════════════════════════════════════════════
-        // VSync frame pacing (adaptive HLT sleep + spin for precision)
+        // VSync frame pacing (spin-loop sleep with bail-out)
         // ═══════════════════════════════════════════════════════════════
         let render_time_us = engine::now_us().saturating_sub(frame_start);
         // Log FPS to serial every 120 frames for performance monitoring
@@ -15317,6 +15384,7 @@ pub fn run() {
             }
         }
         crate::gui::vsync::frame_end(frame_start);
+        loop_frame = loop_frame.saturating_add(1);
     }
     
     // ═══════════════════════════════════════════════════════════════
