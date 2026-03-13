@@ -12,31 +12,30 @@
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
 [![Lines](https://img.shields.io/badge/code-257%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.9.2-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.9.4-orange?style=for-the-badge)]()
 [![Tests](https://img.shields.io/badge/tests-96%2F96%20(100%25)-brightgreen?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
 [![Watch the demo](https://img.shields.io/badge/%E2%96%B6%20Watch%20Demo-YouTube-red?style=for-the-badge&logo=youtube&logoColor=white)](https://youtu.be/RBJJi8jW1_g)
 
-[What's New](#-whats-new-in-v092) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
+[What's New](#-whats-new-in-v094) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
 
 ---
 
 </div>
 
-## 🆕 What's New in v0.9.2
+## 🆕 What's New in v0.9.4
 
-> **March 12, 2026** — Legacy BIOS Boot, Boot Fixes, Audio Viz, Music Player
+> **March 13, 2026** — Keyboard Stability Fix for Real Hardware
 
-- 🖥 **Legacy BIOS boot support** — TrustOS now boots on PCs without UEFI. Hybrid ISO works on both UEFI and Legacy BIOS machines. Limine `bios-install` + Rock Ridge/Joliet ISO for maximum hardware compatibility.
-- 🔧 **Boot ALLOC ERROR crash fixed** — Checkpoints and memory map used heap before allocator init. Replaced with fixed-size arrays.
-- 🔧 **Build pipeline fixed** — xorriso stderr no longer kills the PowerShell build script.
-- 🎨 **Transparent logo** — Boot splash logo now renders transparently over the matrix rain.
-- 🎵 **Music player overhaul** — New TrustPlayer with waveform visualizer, playlist management, playback controls.
-- 🔊 **Audio visualizer** in desktop taskbar.
-- 🌐 **Chrome-style browser** — Tab bar, nav bar with omnibox, rounded buttons, lock icon.
-- ✅ **96/96 self-tests passing** (100%).
+- 🔧 **Critical deadlock fix** — Keyboard IRQ handler could deadlock the kernel when pressing keys while the shell held the input buffer lock. All user-side buffer accesses now wrapped in `without_interrupts`. IRQ-side pushes use `try_lock` (drops keystroke rather than deadlock).
+- 🔧 **Bootstrap guard on keyboard IRQ** — Both PIC and APIC keyboard handlers now check `BOOTSTRAP_READY` before processing scancodes. Prevents panic when keys are pressed during early boot.
+- ⌨️ **i8042 timeout 10x increase** — PS/2 controller timeouts raised from 100K to 1M iterations for slow hardware (tested on Lenovo T61, circa 2008).
+- ⌨️ **Pause/Break key handled** — E1 prefix sequence (6 bytes) now properly consumed instead of being misinterpreted as Ctrl+garbage.
+- ⌨️ **Right Ctrl / Right Alt fixed** — Extended modifier key releases (E0 1D, E0 38) were silently dropped, causing modifiers to get "stuck". Now properly tracked.
+- ⌨️ **Extra PS/2 response filtered** — Added 0xAB (interface test pass) to spurious scancode filter.
+- ✅ **Tested on real hardware** — Lenovo ThinkPad T61 Legacy BIOS boot.
 - 📊 **257,000+ lines** across 473 source files, 3 architectures.
 
 ---
@@ -57,7 +56,13 @@ qemu-system-x86_64 -cdrom trustos.iso -m 512M -cpu max -smp 4 -display gtk -vga 
 
 > 💡 Or flash to a USB drive and boot on real hardware — TrustOS runs bare-metal on x86_64 PCs (UEFI or Legacy BIOS), ARM64 phones/tablets, and RISC-V boards.
 >
-> **For Legacy BIOS machines:** Use [Rufus](https://rufus.ie/) in **DD Image mode** (not ISO mode) to flash the ISO to USB. Or on Linux: `dd if=trustos.iso of=/dev/sdX bs=4M status=progress`.
+> **Flash to USB with [Rufus](https://rufus.ie/):**
+> 1. Open Rufus → select your USB drive → click **SELECT** → pick the `.iso`
+> 2. Rufus will ask: **ISO mode** or **DD Image mode** → pick **DD Image mode**
+> 3. Click **START** — the target system field stays greyed out, that's normal in DD mode
+> 4. Boot your PC from USB (F12 / DEL at startup) — works on both UEFI and Legacy BIOS
+>
+> On Linux: `dd if=trustos.iso of=/dev/sdX bs=4M status=progress`
 
 All releases: [**github.com/nathan237/TrustOS/releases**](https://github.com/nathan237/TrustOS/releases)
 
@@ -375,6 +380,20 @@ TrustOS/
 ---
 
 ## 📋 Changelog
+
+### v0.9.4 — Keyboard Stability Fix (March 13, 2026)
+
+- **Deadlock fix** — Keyboard IRQ + shell input buffer lock race eliminated with `without_interrupts` + `try_lock`.
+- **Bootstrap guard** — Keyboard IRQ handlers gated behind `BOOTSTRAP_READY` (matches timer handler pattern).
+- **i8042 timeout 10x** — 100K → 1M spin iterations for slow PS/2 controllers.
+- **Pause/Break key** — E1 prefix (6-byte sequence) properly consumed.
+- **Right Ctrl/Alt release tracking** — Extended modifier releases no longer silently dropped.
+- **PS/2 response filter** — Added 0xAB to spurious scancode filter.
+
+### v0.9.3 — Taskbar Fix & Framebuffer Cleanup (March 12, 2026)
+
+- **Taskbar tray spacing** — Fixed tray icon overlap.
+- **Aura removed** — Cleaned framebuffer effects.
 
 ### v0.9.2 — Legacy BIOS Boot & Audio Viz (March 12, 2026)
 

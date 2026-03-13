@@ -244,10 +244,11 @@ pub extern "x86-interrupt" fn apic_timer_handler(_stack_frame: InterruptStackFra
 pub extern "x86-interrupt" fn apic_keyboard_handler(_stack_frame: InterruptStackFrame) {
     use x86_64::instructions::port::Port;
     
-    // Check if data is from mouse (bit 5 of status register)
+    // Always read port 0x60 to clear the IRQ, even if not ready
     let mut status_port = Port::<u8>::new(0x64);
     let status: u8 = unsafe { status_port.read() };
     
+    // Check if data is from mouse (bit 5 of status register)
     if status & 0x20 != 0 {
         let mut data_port = Port::<u8>::new(0x60);
         let _: u8 = unsafe { data_port.read() };
@@ -257,6 +258,12 @@ pub extern "x86-interrupt" fn apic_keyboard_handler(_stack_frame: InterruptStack
     
     let mut port = Port::new(0x60);
     let scancode: u8 = unsafe { port.read() };
+    
+    // Don't process keys until kernel is fully initialized
+    if !BOOTSTRAP_READY.load(Ordering::Relaxed) {
+        crate::apic::lapic_eoi();
+        return;
+    }
     
     crate::keyboard::handle_scancode(scancode);
     
@@ -297,6 +304,14 @@ pub extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: Interrupt
     
     let mut port = Port::new(0x60);
     let scancode: u8 = unsafe { port.read() };
+    
+    // Don't process keys until kernel is fully initialized
+    if !BOOTSTRAP_READY.load(Ordering::Relaxed) {
+        unsafe {
+            PICS.lock().notify_end_of_interrupt(pic::InterruptIndex::Keyboard.as_u8());
+        }
+        return;
+    }
     
     // Process scancode through keyboard driver
     crate::keyboard::handle_scancode(scancode);

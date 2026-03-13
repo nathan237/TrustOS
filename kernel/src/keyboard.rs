@@ -93,7 +93,8 @@ fn i8042_cmd(cmd: u8) {
     let mut status = Port::<u8>::new(PS2_STATUS);
     let mut command = Port::<u8>::new(PS2_COMMAND);
     // Wait for input buffer empty (bit 1 = 0)
-    for _ in 0..100_000 {
+    // Use large timeout for slow controllers (e.g. Lenovo T61)
+    for _ in 0..1_000_000 {
         if unsafe { status.read() } & 0x02 == 0 { break; }
         core::hint::spin_loop();
     }
@@ -104,7 +105,7 @@ fn i8042_cmd(cmd: u8) {
 fn i8042_write_data(data: u8) {
     let mut status = Port::<u8>::new(PS2_STATUS);
     let mut port = Port::<u8>::new(PS2_DATA);
-    for _ in 0..100_000 {
+    for _ in 0..1_000_000 {
         if unsafe { status.read() } & 0x02 == 0 { break; }
         core::hint::spin_loop();
     }
@@ -115,7 +116,7 @@ fn i8042_write_data(data: u8) {
 fn i8042_read_data() -> u8 {
     let mut status = Port::<u8>::new(PS2_STATUS);
     let mut port = Port::<u8>::new(PS2_DATA);
-    for _ in 0..100_000 {
+    for _ in 0..1_000_000 {
         if unsafe { status.read() } & 0x01 != 0 {
             return unsafe { port.read() };
         }
@@ -306,6 +307,9 @@ static CLIPBOARD: Mutex<Option<String>> = Mutex::new(None);
 /// Extended scancode flag (0xE0 prefix)
 static EXTENDED_KEY: AtomicBool = AtomicBool::new(false);
 
+/// E1 prefix counter (Pause/Break key sends E1 1D 45 E1 9D C5)
+static E1_SKIP: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
 /// Alt key state for hotkeys
 static ALT_PRESSED: AtomicBool = AtomicBool::new(false);
 
@@ -388,18 +392,41 @@ const SCANCODE_TO_ASCII_SHIFT: [u8; 128] = [
     0, 0, 0, 0, 0, 0, 0, // 0x79-0x7F
 ];
 
+/// Safely push a byte into the keyboard buffer from IRQ context.
+/// Uses try_lock to avoid deadlock if user code holds the lock
+/// (should not happen with without_interrupts wrapping, but defense-in-depth).
+#[inline]
+fn buffer_push(byte: u8) {
+    if let Some(mut buf) = KEYBOARD_BUFFER.try_lock() {
+        buf.push(byte);
+    }
+    // If lock fails, drop the keystroke (better than deadlock)
+}
+
 /// Process a scancode from the keyboard interrupt
 pub fn handle_scancode(scancode: u8) {
     // Debug: log all scancodes (disabled — too noisy for serial automation)
     // crate::serial_println!("[KB-IRQ] scancode=0x{:02X}", scancode);
     
+    // Handle E1 prefix (Pause/Break key: E1 1D 45 E1 9D C5)
+    let skip = E1_SKIP.load(Ordering::SeqCst);
+    if skip > 0 {
+        E1_SKIP.store(skip - 1, Ordering::SeqCst);
+        return;
+    }
+    if scancode == 0xE1 {
+        // Pause/Break sends 6-byte sequence; skip remaining 5
+        E1_SKIP.store(5, Ordering::SeqCst);
+        return;
+    }
+    
     // Ignore invalid/spurious scancodes and PS/2 controller responses
-    // 0xFA = ACK, 0xFE = Resend, 0xFC = Error, 0xEE = Echo
+    // 0xFA = ACK, 0xFE = Resend, 0xFC = Error, 0xEE = Echo, 0xAB = interface test pass
     // NOTE: 0xAA (BAT OK) is NOT filtered because it's also Left Shift release
     // (scancode 0x2A | 0x80 = 0xAA). Filtering it caused Shift to get "stuck".
     if scancode == 0x00 || scancode == 0xFF || scancode == 0xFA 
         || scancode == 0xFE || scancode == 0xFC
-        || scancode == 0xEE {
+        || scancode == 0xEE || scancode == 0xAB {
         return;
     }
     
@@ -427,7 +454,7 @@ pub fn handle_scancode(scancode: u8) {
                     _ => None,
                 };
                 if let Some(k) = special {
-                    KEYBOARD_BUFFER.lock().push(k);
+                    buffer_push(k);
                 }
             }
             return;
@@ -450,45 +477,62 @@ pub fn handle_scancode(scancode: u8) {
     // Update key state tracking for Alt+Tab and hotkeys
     update_key_state(key, !is_release);
     
-    // Handle extended keys (arrows, etc.)
-    if is_extended && !is_release {
-        let alt = ALT_PRESSED.load(Ordering::SeqCst);
-        let ctrl = CTRL_PRESSED.load(Ordering::SeqCst);
+    // Handle extended keys (arrows, navigation, and right-side modifiers)
+    if is_extended {
+        // Extended modifier keys: Right Ctrl (E0 1D) and Right Alt (E0 38)
+        if key == 0x1D {
+            CTRL_PRESSED.store(!is_release, Ordering::SeqCst);
+            if !is_release {
+                crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Ctrl);
+            }
+            return;
+        }
+        if key == 0x38 {
+            ALT_PRESSED.store(!is_release, Ordering::SeqCst);
+            if !is_release {
+                crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Alt);
+            }
+            return;
+        }
         
-        // Check modifier+arrow combos FIRST (before plain arrows)
-        let special = match key {
-            0x48 if alt  => Some(KEY_ALT_UP),      // Alt+Up: move line up
-            0x50 if alt  => Some(KEY_ALT_DOWN),     // Alt+Down: move line down
-            0x4B if ctrl => Some(KEY_CTRL_LEFT),    // Ctrl+Left: word left
-            0x4D if ctrl => Some(KEY_CTRL_RIGHT),   // Ctrl+Right: word right
-            // Plain extended keys
-            0x48 => Some(KEY_UP),
-            0x50 => Some(KEY_DOWN),
-            0x4B => Some(KEY_LEFT),
-            0x4D => Some(KEY_RIGHT),
-            0x47 => Some(KEY_HOME),
-            0x4F => Some(KEY_END),
-            0x53 => Some(KEY_DELETE),
-            0x71 => Some(KEY_DELETE), // Set 2 Delete
-            0x75 => Some(KEY_UP),      // Set 2 Up
-            0x72 => Some(KEY_DOWN),    // Set 2 Down
-            0x6B => Some(KEY_LEFT),    // Set 2 Left
-            0x74 => Some(KEY_RIGHT),   // Set 2 Right
-            0x6C => Some(KEY_HOME),    // Set 2 Home
-            0x69 => Some(KEY_END),     // Set 2 End
-            0x49 => Some(KEY_PGUP),
-            0x51 => Some(KEY_PGDOWN),
-            _ => None,
-        };
-        if let Some(k) = special {
-            KEYBOARD_BUFFER.lock().push(k);
+        // Extended navigation keys (press only)
+        if !is_release {
+            let alt = ALT_PRESSED.load(Ordering::SeqCst);
+            let ctrl = CTRL_PRESSED.load(Ordering::SeqCst);
+            
+            let special = match key {
+                0x48 if alt  => Some(KEY_ALT_UP),
+                0x50 if alt  => Some(KEY_ALT_DOWN),
+                0x4B if ctrl => Some(KEY_CTRL_LEFT),
+                0x4D if ctrl => Some(KEY_CTRL_RIGHT),
+                0x48 => Some(KEY_UP),
+                0x50 => Some(KEY_DOWN),
+                0x4B => Some(KEY_LEFT),
+                0x4D => Some(KEY_RIGHT),
+                0x47 => Some(KEY_HOME),
+                0x4F => Some(KEY_END),
+                0x53 => Some(KEY_DELETE),
+                0x71 => Some(KEY_DELETE), // Set 2 Delete
+                0x75 => Some(KEY_UP),      // Set 2 Up
+                0x72 => Some(KEY_DOWN),    // Set 2 Down
+                0x6B => Some(KEY_LEFT),    // Set 2 Left
+                0x74 => Some(KEY_RIGHT),   // Set 2 Right
+                0x6C => Some(KEY_HOME),    // Set 2 Home
+                0x69 => Some(KEY_END),     // Set 2 End
+                0x49 => Some(KEY_PGUP),
+                0x51 => Some(KEY_PGDOWN),
+                _ => None,
+            };
+            if let Some(k) = special {
+                buffer_push(k);
+            }
         }
         return;
     }
 
     // Fallback for space on set 2 keyboards
     if !is_extended && !is_release && key == 0x29 {
-        KEYBOARD_BUFFER.lock().push(b' ');
+        buffer_push(b' ');
         return;
     }
     
@@ -533,86 +577,85 @@ pub fn handle_scancode(scancode: u8) {
     
     // Handle Ctrl+A (select all)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x1E {
-        KEYBOARD_BUFFER.lock().push(1); // ASCII SOH
+        buffer_push(1); // ASCII SOH
         return;
     }
 
     // Handle Ctrl+C
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x2E {
-        // Ctrl+C - could be used for interrupt
-        KEYBOARD_BUFFER.lock().push(3); // ASCII ETX
+        buffer_push(3); // ASCII ETX
         return;
     }
 
     // Handle Ctrl+V (paste)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x2F {
-        KEYBOARD_BUFFER.lock().push(0x16); // ASCII SYN
+        buffer_push(0x16); // ASCII SYN
         return;
     }
 
     // Handle Ctrl+X (cut)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x2D {
-        KEYBOARD_BUFFER.lock().push(0x18); // ASCII CAN (cut)
+        buffer_push(0x18); // ASCII CAN (cut)
         return;
     }
 
     // Handle Ctrl+L (clear)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x26 {
-        KEYBOARD_BUFFER.lock().push(12); // ASCII FF (form feed)
+        buffer_push(12); // ASCII FF (form feed)
         return;
     }
 
     // Handle Ctrl+S (save)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x1F {
-        KEYBOARD_BUFFER.lock().push(0x13); // ASCII DC3 (save)
+        buffer_push(0x13); // ASCII DC3 (save)
         return;
     }
 
     // Handle Ctrl+G (goto line)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x22 {
-        KEYBOARD_BUFFER.lock().push(0x07); // ASCII BEL (goto)
+        buffer_push(0x07); // ASCII BEL (goto)
         return;
     }
 
     // Handle Ctrl+F (find)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x21 {
-        KEYBOARD_BUFFER.lock().push(0x06); // ASCII ACK (find)
+        buffer_push(0x06); // ASCII ACK (find)
         return;
     }
 
     // Handle Ctrl+H (replace)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x23 {
-        KEYBOARD_BUFFER.lock().push(0x12); // ASCII DC2 (replace)
+        buffer_push(0x12); // ASCII DC2 (replace)
         return;
     }
 
     // Handle Ctrl+Z (undo)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x2C {
-        KEYBOARD_BUFFER.lock().push(0x1A); // ASCII SUB (undo)
+        buffer_push(0x1A); // ASCII SUB (undo)
         return;
     }
 
     // Handle Ctrl+Y (redo)
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x15 {
-        KEYBOARD_BUFFER.lock().push(0x19); // ASCII EM (redo)
+        buffer_push(0x19); // ASCII EM (redo)
         return;
     }
 
     // Handle Ctrl+/ (toggle comment) — scancode 0x35 = '/'
     if CTRL_PRESSED.load(Ordering::SeqCst) && key == 0x35 {
-        KEYBOARD_BUFFER.lock().push(KEY_CTRL_SLASH);
+        buffer_push(KEY_CTRL_SLASH);
         return;
     }
 
     // Handle Ctrl+Shift+K (delete line) — scancode 0x25 = 'K'
     if CTRL_PRESSED.load(Ordering::SeqCst) && SHIFT_PRESSED.load(Ordering::SeqCst) && key == 0x25 {
-        KEYBOARD_BUFFER.lock().push(KEY_CTRL_SHIFT_K);
+        buffer_push(KEY_CTRL_SHIFT_K);
         return;
     }
 
     // Handle Ctrl+Shift+D (duplicate line) — scancode 0x20 = 'D'
     if CTRL_PRESSED.load(Ordering::SeqCst) && SHIFT_PRESSED.load(Ordering::SeqCst) && key == 0x20 {
-        KEYBOARD_BUFFER.lock().push(KEY_CTRL_SHIFT_D);
+        buffer_push(KEY_CTRL_SHIFT_D);
         return;
     }
 
@@ -643,7 +686,7 @@ pub fn handle_scancode(scancode: u8) {
     // If valid ASCII, add to buffer
     if ascii != 0 {
         // crate::serial_println!("[KB-BUF] push ascii={} (0x{:02X}) char='{}'", ascii, ascii, ascii as char);
-        KEYBOARD_BUFFER.lock().push(ascii);
+        buffer_push(ascii);
         // Sticky keys: consume latched modifiers after a non-modifier key
         crate::accessibility::sticky_consume_latched();
     }
@@ -651,7 +694,12 @@ pub fn handle_scancode(scancode: u8) {
 
 /// Read a character from the keyboard buffer (non-blocking)
 pub fn read_char() -> Option<u8> {
-    if let Some(b) = KEYBOARD_BUFFER.lock().pop() {
+    // Disable interrupts while holding the buffer lock to prevent deadlock
+    // with keyboard IRQ handler which also locks KEYBOARD_BUFFER
+    let result = crate::arch::without_interrupts(|| {
+        KEYBOARD_BUFFER.lock().pop()
+    });
+    if let Some(b) = result {
         return Some(b);
     }
     serial::read_byte()
@@ -660,38 +708,44 @@ pub fn read_char() -> Option<u8> {
 /// Push a key from USB HID keyboard (or any external source)
 pub fn push_key(ascii: u8) {
     if ascii != 0 {
-        KEYBOARD_BUFFER.lock().push(ascii);
+        crate::arch::without_interrupts(|| {
+            KEYBOARD_BUFFER.lock().push(ascii);
+        });
     }
 }
 
 /// Check if there's input available
 pub fn has_input() -> bool {
-    !KEYBOARD_BUFFER.lock().is_empty()
+    crate::arch::without_interrupts(|| {
+        !KEYBOARD_BUFFER.lock().is_empty()
+    })
 }
 
 /// Check if a specific key (by scancode) is currently pressed
 /// Used for checking modifier keys like Alt during Alt+Tab
 pub fn is_key_pressed(scancode: u8) -> bool {
-    // Special handling for modifier keys (+ sticky keys support)
-    match scancode {
-        0x38 => ALT_PRESSED.load(Ordering::Relaxed)
-            || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Alt),
-        0x1D => CTRL_PRESSED.load(Ordering::Relaxed)
-            || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Ctrl),
-        0x2A | 0x36 => SHIFT_PRESSED.load(Ordering::Relaxed)
-            || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Shift),
-        _ => {
-            // Check key state bitmap
-            let state = KEY_STATE.lock();
-            let byte_idx = (scancode / 8) as usize;
-            let bit_idx = scancode % 8;
-            if byte_idx < 32 {
-                (state[byte_idx] & (1 << bit_idx)) != 0
-            } else {
-                false
+    // Disable interrupts to prevent deadlock with keyboard IRQ handler
+    // which locks KEY_STATE and STICKY_* mutexes
+    crate::arch::without_interrupts(|| {
+        match scancode {
+            0x38 => ALT_PRESSED.load(Ordering::Relaxed)
+                || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Alt),
+            0x1D => CTRL_PRESSED.load(Ordering::Relaxed)
+                || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Ctrl),
+            0x2A | 0x36 => SHIFT_PRESSED.load(Ordering::Relaxed)
+                || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Shift),
+            _ => {
+                let state = KEY_STATE.lock();
+                let byte_idx = (scancode / 8) as usize;
+                let bit_idx = scancode % 8;
+                if byte_idx < 32 {
+                    (state[byte_idx] & (1 << bit_idx)) != 0
+                } else {
+                    false
+                }
             }
         }
-    }
+    })
 }
 
 /// Update key state when a key is pressed or released
