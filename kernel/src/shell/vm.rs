@@ -2883,8 +2883,13 @@ pub(super) fn cmd_audio(args: &[&str]) {
             }
             crate::println_color!(COLOR_GREEN, "Done");
         }
+        Some("diag") => {
+            crate::println_color!(COLOR_CYAN, "Audio Diagnostics");
+            let diag = crate::drivers::hda::diag();
+            crate::println!("{}", diag);
+        }
         Some(other) => {
-            crate::println_color!(COLOR_YELLOW, "Usage: audio [init|status|stop|test]");
+            crate::println_color!(COLOR_YELLOW, "Usage: audio [init|status|stop|test|diag]");
         }
     }
 }

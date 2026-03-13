@@ -403,6 +403,26 @@ pub fn config_read8(bus: u8, device: u8, function: u8, offset: u8) -> u8 {
     ((value >> ((offset & 3) * 8)) & 0xFF) as u8
 }
 
+/// Write 8-bit value to PCI config (read-modify-write)
+pub fn config_write8(bus: u8, device: u8, function: u8, offset: u8, value: u8) {
+    let aligned = offset & 0xFC;
+    let shift = (offset & 3) * 8;
+    let old = config_read(bus, device, function, aligned);
+    let mask = !(0xFFu32 << shift);
+    let new = (old & mask) | ((value as u32) << shift);
+    config_write(bus, device, function, aligned, new);
+}
+
+/// Write 16-bit value to PCI config (read-modify-write)
+pub fn config_write16(bus: u8, device: u8, function: u8, offset: u8, value: u16) {
+    let aligned = offset & 0xFC;
+    let shift = (offset & 2) * 8;
+    let old = config_read(bus, device, function, aligned);
+    let mask = !(0xFFFFu32 << shift);
+    let new = (old & mask) | ((value as u32) << shift);
+    config_write(bus, device, function, aligned, new);
+}
+
 /// Scan a single function
 fn scan_function(bus: u8, device: u8, function: u8) -> Option<PciDevice> {
     let vendor_device = config_read(bus, device, function, 0x00);

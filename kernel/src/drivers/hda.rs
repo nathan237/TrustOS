@@ -34,6 +34,7 @@ mod reg {
     pub const INTCTL: u32   = 0x20;  // 32-bit: Interrupt Control
     pub const INTSTS: u32   = 0x24;  // 32-bit: Interrupt Status
     pub const WALCLK: u32   = 0x30;  // 32-bit: Wall Clock Counter
+    pub const SSYNC: u32    = 0x38;  // 32-bit: Stream Synchronization
 
     // CORB registers
     pub const CORBLBASE: u32 = 0x40;  // 32-bit: CORB Lower Base Address
@@ -477,6 +478,15 @@ impl HdaController {
             // Enable unsolicited responses
             let gctl = self.read32(reg::GCTL);
             self.write32(reg::GCTL, gctl | gctl::UNSOL);
+
+            // Clear SSYNC — if any bits are set, output streams won't start
+            // when the RUN bit is set (they wait for a sync event).
+            self.write32(reg::SSYNC, 0x00000000);
+
+            // Enable DMA Position Buffer (DPLBASE bit 0).
+            // Some chipsets (including ICH8) need this for LPIB to update.
+            self.write32(reg::DPUBASE, 0);
+            self.write32(reg::DPLBASE, 0x01); // bit 0 = enable
 
             crate::serial_println!("[HDA]   STATESTS = {:#06X} (codec presence)", statests);
 
@@ -1404,6 +1414,106 @@ pub fn status() -> String {
         Some(ctrl) => ctrl.status_info(),
         None => String::from("HDA: not initialized"),
     }
+}
+
+/// Comprehensive hardware diagnostic — dumps all relevant register state
+pub fn diag() -> String {
+    let mut s = String::new();
+    let mut hda = HDA.lock();
+    let ctrl = match hda.as_mut() {
+        Some(c) => c,
+        None => {
+            s.push_str("HDA: not initialized\n");
+            return s;
+        }
+    };
+
+    unsafe {
+        // Global state
+        let gcap = ctrl.read16(reg::GCAP);
+        let gctl = ctrl.read32(reg::GCTL);
+        let intctl = ctrl.read32(reg::INTCTL);
+        let intsts = ctrl.read32(0x24); // INTSTS
+        let ssync = ctrl.read32(reg::SSYNC);
+        let walclk = ctrl.read32(reg::WALCLK);
+        let statests = ctrl.read16(reg::STATESTS);
+
+        s.push_str(&format!("=== HDA Hardware Diagnostic ===\n"));
+        s.push_str(&format!("GCAP={:#06X} GCTL={:#010X}\n", gcap, gctl));
+        s.push_str(&format!("INTCTL={:#010X} INTSTS={:#010X}\n", intctl, intsts));
+        s.push_str(&format!("SSYNC={:#010X} WALCLK={}\n", ssync, walclk));
+        s.push_str(&format!("STATESTS={:#06X}\n", statests));
+        s.push_str(&format!("CRST={} UNSOL={}\n",
+            if gctl & gctl::CRST != 0 { "OK" } else { "IN RESET!" },
+            if gctl & gctl::UNSOL != 0 { "on" } else { "off" }));
+
+        // Output stream descriptor
+        let sd_base = ctrl.osd_base(0);
+        let ctl0 = ctrl.read8(sd_base + sd::CTL);
+        let ctl2 = ctrl.read8(sd_base + sd::CTL + 2);
+        let sts = ctrl.read8(sd_base + sd::STS);
+        let lpib = ctrl.read32(sd_base + sd::LPIB);
+        let cbl = ctrl.read32(sd_base + sd::CBL);
+        let lvi = ctrl.read16(sd_base + sd::LVI);
+        let fifos = ctrl.read16(sd_base + sd::FIFOS);
+        let fmt = ctrl.read16(sd_base + sd::FMT);
+        let bdlpl = ctrl.read32(sd_base + sd::BDLPL);
+        let bdlpu = ctrl.read32(sd_base + sd::BDLPU);
+
+        s.push_str(&format!("\n--- Output Stream 0 (base={:#X}) ---\n", sd_base));
+        s.push_str(&format!("CTL[0]={:#04X} CTL[2]={:#04X} (RUN={} SRST={} TAG={})\n",
+            ctl0, ctl2,
+            if ctl0 & sctl::RUN as u8 != 0 { "YES" } else { "no" },
+            if ctl0 & sctl::SRST as u8 != 0 { "YES!" } else { "no" },
+            ctl2 >> 4));
+        s.push_str(&format!("STS={:#04X} (BCIS={} FIFOE={} DESE={} FIFORDY={})\n",
+            sts,
+            if sts & ssts::BCIS != 0 { "Y" } else { "n" },
+            if sts & ssts::FIFOE != 0 { "ERR" } else { "ok" },
+            if sts & ssts::DESE != 0 { "ERR" } else { "ok" },
+            if sts & ssts::FIFORDY != 0 { "Y" } else { "n" }));
+        s.push_str(&format!("LPIB={} CBL={} LVI={} FIFOS={}\n", lpib, cbl, lvi, fifos));
+        s.push_str(&format!("FMT={:#06X} (48kHz/16bit/stereo=0x0011)\n", fmt));
+        s.push_str(&format!("BDL={:#010X}:{:#010X}\n", bdlpu, bdlpl));
+        s.push_str(&format!("Audio buf phys={:#010X} size={}\n", ctrl.audio_buf_phys, ctrl.audio_buf_size));
+
+        // Codec path check
+        if !ctrl.codecs.is_empty() && !ctrl.output_paths.is_empty() {
+            let codec = ctrl.codecs[0];
+            let path = ctrl.output_paths[0].clone();
+            s.push_str(&format!("\n--- Codec {} Path ---\n", codec));
+            s.push_str(&format!("Path: {:?} Type={}\n", path.path, path.device_type));
+
+            // Read back power states
+            for &nid in &path.path {
+                if let Ok(ps) = ctrl.codec_cmd(codec, nid, verb::GET_POWER_STATE, 0) {
+                    let actual = ps & 0xF;
+                    let target = (ps >> 4) & 0xF;
+                    s.push_str(&format!("  NID {}: power D{}/D{}{}\n",
+                        nid, actual, target,
+                        if actual != 0 { " NOT D0!" } else { "" }));
+                }
+            }
+
+            // Read back pin control and EAPD
+            if let Ok(pc) = ctrl.codec_cmd(codec, path.pin_nid, verb::GET_PIN_CONTROL, 0) {
+                s.push_str(&format!("  Pin {} PIN_CTL={:#04X} (out={})\n",
+                    path.pin_nid, pc, if pc & 0x40 != 0 { "YES" } else { "NO!" }));
+            }
+            if let Ok(ea) = ctrl.codec_cmd(codec, path.pin_nid, verb::GET_EAPD, 0) {
+                s.push_str(&format!("  Pin {} EAPD={:#04X} (on={})\n",
+                    path.pin_nid, ea, if ea & 0x02 != 0 { "YES" } else { "NO!" }));
+            }
+
+            // Read back DAC stream assignment
+            if let Ok(sc) = ctrl.codec_cmd(codec, path.dac_nid, verb::GET_CHANNEL_STREAM, 0) {
+                let tag = (sc >> 4) & 0xF;
+                s.push_str(&format!("  DAC {} STREAM_TAG={} (expect {})\n",
+                    path.dac_nid, tag, ctrl.stream_tag));
+            }
+        }
+    }
+    s
 }
 
 /// Write raw audio samples to the DMA buffer and play for a given duration
