@@ -2009,7 +2009,16 @@ fn redraw_from_scrollback(scroll_offset: usize, total_lines: usize, visible_rows
     // Calculate which lines to display
     // scroll_offset=0 means we're at the bottom (most recent)
     // scroll_offset=N means we've scrolled up N lines
-    let start_line = total_lines.saturating_sub(visible_rows + scroll_offset);
+    //
+    // At live view (offset=0), reserve the last row for the current_line
+    // (prompt + typed input). Without this, when total_lines >= visible_rows,
+    // all rows are filled with history and the input line is never drawn.
+    let history_rows = if scroll_offset == 0 {
+        visible_rows.saturating_sub(1)
+    } else {
+        visible_rows
+    };
+    let start_line = total_lines.saturating_sub(history_rows + scroll_offset);
     let end_line = total_lines.saturating_sub(scroll_offset);
     
     let mut live_cursor_col = 0usize;

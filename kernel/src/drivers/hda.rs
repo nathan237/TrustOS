@@ -1050,37 +1050,58 @@ impl HdaController {
         crate::serial_println!("[HDA]   Unmuted all {} widget amps (separate OUT/IN, afg_out={} afg_in={})",
             all_widget_conns.len(), afg_out_steps, afg_in_steps);
 
-        // ── Explicit per-path amp setup ──
-        // The brute-force unmute may not reach pin widgets that don't have Out Amp Present
-        // in wcaps but still have functional amps (common on AD1984/AD1884).
+        // ── Explicit per-path amp setup for ALL output paths ──
         // Force-set the output amp on each path's pin widget using AFG gain.
-        let pin_nid = path.pin_nid;
+        // Also power on all widgets in each path.
         let afg_gain = if afg_out_steps > 0 { afg_out_steps } else { 3u16 };
-        // Output amp: L+R, unmuted, gain = AFG max (or 3 as absolute fallback)
-        let pin_amp: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (afg_gain & 0x7F);
-        let _ = self.set_verb_16(codec, pin_nid, 0x300, pin_amp);
-        crate::serial_println!("[HDA]   Pin NID {} amp OUT forced: gain={} (payload={:#06X})",
-            pin_nid, afg_gain, pin_amp);
-
-        // Also force-unmute input amp on pin (some pins have input amps too)
-        let pin_amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (afg_gain & 0x7F);
-        let _ = self.set_verb_16(codec, pin_nid, 0x300, pin_amp_in);
-
-        // Set connector selects along the discovered path
-        let path_widget_info: Vec<(u16, WidgetType, Vec<u16>)> = path.path.iter()
-            .filter_map(|&nid| self.widgets.iter().find(|w| w.nid == nid)
-                .map(|w| (nid, w.widget_type, w.connections.clone())))
+        let all_path_info: Vec<(u16, Vec<u16>)> = self.output_paths.iter()
+            .map(|p| (p.pin_nid, p.path.clone()))
             .collect();
 
-        for (nid, wtype, connections) in &path_widget_info {
-            if *wtype == WidgetType::AudioSelector || *wtype == WidgetType::AudioMixer {
-                let next_in_path = path.path.iter()
+        for (pin_nid, path_nids) in &all_path_info {
+            // Power on all widgets in this path
+            for &nid in path_nids {
+                let _ = self.codec_cmd(codec, nid, verb::SET_POWER_STATE, 0x00);
+            }
+            // Output amp: L+R, unmuted, gain = AFG max
+            let pin_amp: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (afg_gain & 0x7F);
+            let _ = self.set_verb_16(codec, *pin_nid, 0x300, pin_amp);
+            // Input amp: L+R, unmuted, gain = AFG max
+            let pin_amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (afg_gain & 0x7F);
+            let _ = self.set_verb_16(codec, *pin_nid, 0x300, pin_amp_in);
+            // Pin control: output enable + HP amp enable + EAPD
+            let _ = self.codec_cmd(codec, *pin_nid, verb::SET_PIN_CONTROL, 0xC0);
+            let _ = self.codec_cmd(codec, *pin_nid, verb::SET_EAPD, 0x02);
+            crate::serial_println!("[HDA]   Path pin NID {} -> amp forced gain={}, EAPD+OUT",
+                pin_nid, afg_gain);
+        }
+
+        // Set connector selects for ALL output paths, not just the primary one.
+        // This ensures the Speaker path (path[1]) and all others have their
+        // pin widgets and mixers/selectors properly routed.
+        let all_paths: Vec<Vec<u16>> = self.output_paths.iter()
+            .map(|p| p.path.clone())
+            .collect();
+
+        for out_path in &all_paths {
+            let path_widget_info: Vec<(u16, WidgetType, Vec<u16>)> = out_path.iter()
+                .filter_map(|&nid| self.widgets.iter().find(|w| w.nid == nid)
+                    .map(|w| (nid, w.widget_type, w.connections.clone())))
+                .collect();
+
+            for (nid, _wtype, connections) in &path_widget_info {
+                // Set conn_sel for ALL widget types (including PinComplex).
+                // Pin widgets need conn_sel to select which mixer/selector feeds them.
+                // Without this, the pin may point to the wrong source → no audio.
+                let next_in_path = out_path.iter()
                     .position(|&n| n == *nid)
-                    .and_then(|pos| path.path.get(pos + 1))
+                    .and_then(|pos| out_path.get(pos + 1))
                     .copied();
                 if let Some(next_nid) = next_in_path {
                     if let Some(idx) = connections.iter().position(|&c| c == next_nid) {
                         let _ = self.codec_cmd(codec, *nid, verb::SET_CONN_SELECT, idx as u8);
+                        crate::serial_println!("[HDA]   NID {} conn_sel={} (-> NID {})",
+                            nid, idx, next_nid);
                     }
                 }
             }

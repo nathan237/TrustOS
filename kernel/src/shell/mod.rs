@@ -561,6 +561,13 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                 }
                 KEY_PGDOWN => {
                     crate::framebuffer::scroll_down(10);
+                    // If we scrolled all the way back to live view, update input_row
+                    // so the cursor stays on the correct row.
+                    if !crate::framebuffer::is_scrolled_back() {
+                        let (_, row) = crate::framebuffer::get_cursor();
+                        input_row = row;
+                        crate::framebuffer::set_cursor(input_col_start + cursor, input_row);
+                    }
                 }
                 27 => {
                     // Escape - reset scroll to bottom (live view)
