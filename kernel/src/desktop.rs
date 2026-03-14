@@ -1995,6 +1995,10 @@ pub struct Desktop {
     pub file_clipboard: Option<FileClipboardEntry>,
     /// Drag-and-drop state
     pub drag_state: Option<DragState>,
+    /// Settings panel: active category index (0=Display, 1=Sound, 2=Taskbar, 3=Personalization, 4=Accessibility, 5=Network, 6=Apps, 7=About)
+    pub settings_category: u8,
+    /// NetScan: active tab index (0=Dashboard, 1=PortScan, 2=Discovery, 3=Sniffer, 4=Traceroute, 5=VulnScan)
+    pub netscan_tab: u8,
     /// Lock screen active
     pub lock_screen_active: bool,
     /// Lock screen PIN input buffer
@@ -2632,6 +2636,8 @@ impl Desktop {
             image_viewer_states: BTreeMap::new(),
             file_clipboard: None,
             drag_state: None,
+            settings_category: 0,
+            netscan_tab: 0,
             lock_screen_active: false,
             lock_screen_input: String::new(),
             lock_screen_shake: 0,
@@ -3187,8 +3193,9 @@ struct AppConfig {
             ("Files", IconType::Folder, IconAction::OpenFileManager),
             ("Editor", IconType::Editor, IconAction::OpenEditor),
             ("Calc", IconType::Calculator, IconAction::OpenCalculator),
-            ("Network", IconType::Network, IconAction::OpenNetwork),
-            ("Games", IconType::Game, IconAction::OpenGame),
+            ("NetScan", IconType::Network, IconAction::OpenNetwork),
+            ("Chess 3D", IconType::Chess, IconAction::OpenGame),
+
             ("Browser", IconType::Browser, IconAction::OpenBrowser),
             ("TrustEd", IconType::ModelEditor, IconAction::OpenModelEditor),
             ("Settings", IconType::Settings, IconAction::OpenSettings),
@@ -3323,21 +3330,7 @@ struct AppConfig {
                 self.editor_states.insert(window.id, editor);
             },
             WindowType::NetworkInfo => {
-                window.content.push(String::from("=== Network Status ==="));
-                window.content.push(String::from(""));
-                if let Some(mac) = crate::network::get_mac_address() {
-                    window.content.push(format!("MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                        mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]));
-                } else {
-                    window.content.push(String::from("MAC: Not available"));
-                }
-                window.content.push(String::from("IP: Waiting for DHCP..."));
-                window.content.push(String::from(""));
-                if crate::virtio_net::is_initialized() {
-                    window.content.push(String::from("Driver: virtio-net (active)"));
-                } else {
-                    window.content.push(String::from("Driver: none"));
-                }
+                // NetScan uses custom GUI drawing — no static content needed
             },
             WindowType::Settings => {
                 window.content.push(String::from("=== Settings ==="));
@@ -4904,7 +4897,7 @@ struct AppConfig {
                 self.create_window("Calculator", 350 + offset, 100 + offset, 300, 380, WindowType::Calculator)
             },
             IconAction::OpenNetwork => {
-                self.create_window("Network", 180 + offset, 100 + offset, 420, 300, WindowType::NetworkInfo)
+                self.create_window("NetScan", 140 + offset, 80 + offset, 640, 440, WindowType::NetworkInfo)
             },
             IconAction::OpenSettings => {
                 self.create_window("Settings", 250 + offset, 120 + offset, 440, 340, WindowType::Settings)
@@ -4918,7 +4911,13 @@ struct AppConfig {
                 self.create_window("Music Player", mp_x, mp_y.max(20), 320, 580, WindowType::MusicPlayer)
             },
             IconAction::OpenGame => {
-                self.create_window("Snake Game", 220 + offset, 80 + offset, 380, 400, WindowType::Game)
+                let sw = self.width;
+                let sh = self.height;
+                let id = self.create_window("TrustChess 3D", 0, 0, sw, sh - TASKBAR_HEIGHT, WindowType::Chess3D);
+                if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
+                    w.maximized = true;
+                }
+                id
             },
             IconAction::OpenEditor => {
                 self.create_window("TrustCode", 120 + offset, 50 + offset, 780, 560, WindowType::TextEditor)
@@ -5018,8 +5017,8 @@ struct AppConfig {
                 return;
             }
         }
-        // Create new settings window
-        self.create_window("Settings", 220, 100, 460, 380, WindowType::Settings);
+        // Create new settings window (wider for sidebar layout)
+        self.create_window("Settings", 180, 80, 620, 440, WindowType::Settings);
     }
     
     /// Menu actions enum — must match draw_start_menu layout exactly
@@ -5105,7 +5104,7 @@ struct AppConfig {
     fn handle_menu_action(&mut self, action: u8) {
         // Matches draw_start_menu items array order:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Snake, 8=Chess, 9=Chess3D, 10=NES, 11=GameBoy, 12=TrustLab, 13=MusicPlayer, 14=Settings, 15=Exit Desktop, 16=Shutdown, 17=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Chess3D, 8=Chess2D, 9=Snake, 10=NES, 11=GameBoy, 12=TrustLab, 13=MusicPlayer, 14=Settings, 15=Exit Desktop, 16=Shutdown, 17=Reboot
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
@@ -5118,8 +5117,8 @@ struct AppConfig {
             2 => { // Calculator
                 self.create_window("Calculator", 350, 100, 300, 380, WindowType::Calculator);
             },
-            3 => { // Network
-                self.create_window("Network", 180, 100, 420, 300, WindowType::NetworkInfo);
+            3 => { // NetScan
+                self.create_window("NetScan", 140, 80, 640, 440, WindowType::NetworkInfo);
             },
             4 => { // Text Editor (TrustCode)
                 self.create_window("TrustCode", 120, 50, 780, 560, WindowType::TextEditor);
@@ -5130,13 +5129,7 @@ struct AppConfig {
             6 => { // Browser
                 self.create_window("TrustBrowser", 100, 40, 720, 520, WindowType::Browser);
             },
-            7 => { // Snake
-                self.create_window("Snake Game", 220, 80, 380, 400, WindowType::Game);
-            },
-            8 => { // Chess
-                self.create_window("TrustChess", 180, 60, 520, 560, WindowType::Chess);
-            },
-            9 => { // Chess 3D — open fullscreen
+            7 => { // Chess 3D — open fullscreen
                 let sw = self.width;
                 let sh = self.height;
                 let id = self.create_window("TrustChess 3D", 0, 0, sw, sh - TASKBAR_HEIGHT, WindowType::Chess3D);
@@ -5144,6 +5137,12 @@ struct AppConfig {
                 if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
                     w.maximized = true;
                 }
+            },
+            8 => { // Chess 2D
+                self.create_window("TrustChess", 180, 60, 520, 560, WindowType::Chess);
+            },
+            9 => { // Snake
+                self.create_window("Snake Game", 220, 80, 380, 400, WindowType::Game);
             },
             10 => { // NES Emulator
                 #[cfg(feature = "emulators")]
@@ -5321,6 +5320,9 @@ struct AppConfig {
                 },
                 WindowType::Settings => {
                     self.handle_settings_key(key);
+                },
+                WindowType::NetworkInfo => {
+                    self.handle_netscan_key(key);
                 },
                 WindowType::TextEditor => {
                     // Forward to TrustCode editor state
@@ -6094,46 +6096,800 @@ struct AppConfig {
     
     /// Handle settings keyboard input
     fn handle_settings_key(&mut self, key: u8) {
-        if key == b'1' {
-            // Toggle animations
-            toggle_animations();
-            self.refresh_settings_window();
-        } else if key == b'2' {
-            // Cycle animation speed: 0.5 -> 1.0 -> 2.0 -> 0.5
-            let current = *ANIMATION_SPEED.lock();
-            let next = if current <= 0.5 { 1.0 } else if current <= 1.0 { 2.0 } else { 0.5 };
-            *ANIMATION_SPEED.lock() = next;
-            self.refresh_settings_window();
-        } else if key == b'3' {
-            // Open file associations
-            let offset = (self.windows.len() as i32 * 20) % 100;
-            self.create_window("File Associations", 250 + offset, 130 + offset, 500, 400, WindowType::FileAssociations);
-        } else if key == b'4' {
-            // About
-            let offset = (self.windows.len() as i32 * 20) % 100;
-            self.create_window("About TrustOS", 280 + offset, 150 + offset, 350, 200, WindowType::About);
-        } else if key == b'5' {
-            // Toggle high contrast
-            crate::accessibility::toggle_high_contrast();
-            self.needs_full_redraw = true;
-            self.background_cached = false;
-            self.refresh_settings_window();
-        } else if key == b'6' {
-            // Cycle font size
-            crate::accessibility::cycle_font_size();
-            self.refresh_settings_window();
-        } else if key == b'7' {
-            // Cycle cursor size
-            crate::accessibility::cycle_cursor_size();
-            self.refresh_settings_window();
-        } else if key == b'8' {
-            // Toggle sticky keys
-            crate::accessibility::toggle_sticky_keys();
-            self.refresh_settings_window();
-        } else if key == b'9' {
-            // Cycle mouse speed
-            crate::accessibility::cycle_mouse_speed();
-            self.refresh_settings_window();
+        use crate::keyboard::{KEY_UP, KEY_DOWN};
+        
+        // Left sidebar navigation: Up/Down to switch category
+        if key == KEY_UP {
+            if self.settings_category > 0 {
+                self.settings_category -= 1;
+            }
+            return;
+        }
+        if key == KEY_DOWN {
+            if self.settings_category < 7 {
+                self.settings_category += 1;
+            }
+            return;
+        }
+        
+        match self.settings_category {
+            0 => { // Display
+                if key == b'1' {
+                    toggle_animations();
+                } else if key == b'2' {
+                    let current = *ANIMATION_SPEED.lock();
+                    let next = if current <= 0.5 { 1.0 } else if current <= 1.0 { 2.0 } else { 0.5 };
+                    *ANIMATION_SPEED.lock() = next;
+                }
+            },
+            1 => { // Sound
+                if key == b'1' {
+                    let vol = &mut DESKTOP.lock().sys_volume;
+                    *vol = (*vol + 10).min(100);
+                } else if key == b'2' {
+                    let vol = &mut DESKTOP.lock().sys_volume;
+                    *vol = vol.saturating_sub(10);
+                }
+            },
+            2 => { // Taskbar
+                // Taskbar options handled through theme
+            },
+            3 => { // Personalization
+                if key == b'1' {
+                    // Cycle between dark_green and windows11_dark
+                    let current = crate::theme::THEME.read().name.clone();
+                    let next = if current == "windows11_dark" { "dark" } else { "windows11" };
+                    crate::theme::set_builtin_theme(next);
+                    self.needs_full_redraw = true;
+                    self.background_cached = false;
+                }
+            },
+            4 => { // Accessibility
+                if key == b'1' {
+                    crate::accessibility::toggle_high_contrast();
+                    self.needs_full_redraw = true;
+                    self.background_cached = false;
+                } else if key == b'2' {
+                    crate::accessibility::cycle_font_size();
+                } else if key == b'3' {
+                    crate::accessibility::cycle_cursor_size();
+                } else if key == b'4' {
+                    crate::accessibility::toggle_sticky_keys();
+                } else if key == b'5' {
+                    crate::accessibility::cycle_mouse_speed();
+                }
+            },
+            5 => { // Network
+                // Read-only status
+            },
+            6 => { // Apps
+                if key == b'3' || key == 0x0D {
+                    let offset = (self.windows.len() as i32 * 20) % 100;
+                    self.create_window("File Associations", 250 + offset, 130 + offset, 500, 400, WindowType::FileAssociations);
+                }
+            },
+            7 => { // About
+                // Read-only info
+            },
+            _ => {}
+        }
+    }
+    
+    /// Draw the Settings GUI panel with sidebar + content
+    fn draw_settings_gui(&self, window: &Window) {
+        let wx = window.x;
+        let wy = window.y;
+        let ww = window.width;
+        let wh = window.height;
+        
+        if ww < 200 || wh < 160 { return; }
+        
+        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+        let safe_x = wx.max(0) as u32;
+        
+        let is_hc = crate::accessibility::is_high_contrast();
+        let bg_sidebar = if is_hc { 0xFF0A0A0A } else { 0xFF060E08 };
+        let bg_content = if is_hc { 0xFF000000 } else { 0xFF0A140C };
+        let green_dim = 0xFF2A6A3Au32;
+        let green_accent = GREEN_PRIMARY;
+        let text_label = 0xFF88AA88;
+        let text_value = 0xFFBBDDBB;
+        let text_dim = 0xFF446644;
+        
+        // ── Sidebar ──
+        let sidebar_w = 140u32;
+        framebuffer::fill_rect(safe_x, content_y as u32, sidebar_w, content_h, bg_sidebar);
+        
+        let categories = [
+            ("Display",      "@"),
+            ("Sound",        "~"),
+            ("Taskbar",      "_"),
+            ("Personal.",    "*"),
+            ("Access.",      "A"),
+            ("Network",      "N"),
+            ("Apps",         "#"),
+            ("About",        "?"),
+        ];
+        
+        let item_h = 32i32;
+        let mut sy = content_y + 8;
+        for (i, (label, icon)) in categories.iter().enumerate() {
+            let is_active = i as u8 == self.settings_category;
+            
+            if is_active {
+                draw_rounded_rect(safe_x as i32 + 4, sy - 1, sidebar_w - 8, item_h as u32 - 2, 4, 0xFF0C2A14);
+                framebuffer::fill_rect(safe_x + 2, (sy + 2) as u32, 3, (item_h - 6) as u32, green_accent);
+            }
+            
+            let c = if is_active { green_accent } else { text_label };
+            self.draw_text_smooth(safe_x as i32 + 14, sy + 8, icon, if is_active { green_accent } else { text_dim });
+            self.draw_text_smooth(safe_x as i32 + 28, sy + 8, label, c);
+            sy += item_h;
+        }
+        
+        // Separator
+        framebuffer::fill_rect(safe_x + sidebar_w - 1, content_y as u32, 1, content_h, 0xFF1A3A1A);
+        
+        // ── Content area ──
+        let cx = safe_x + sidebar_w;
+        let cw = ww.saturating_sub(sidebar_w);
+        framebuffer::fill_rect(cx, content_y as u32, cw, content_h, bg_content);
+        
+        let px = cx as i32 + 20; // padding x
+        let mut py = content_y + 16;  // current y
+        let line_h = 22i32;
+        
+        match self.settings_category {
+            0 => { // Display
+                self.draw_text_smooth(px, py, "Display", green_accent);
+                self.draw_text_smooth(px + 1, py, "Display", green_accent); // bold
+                py += line_h + 8;
+                
+                self.draw_text_smooth(px, py, "Resolution", text_label);
+                self.draw_text_smooth(px + 120, py, &alloc::format!("{}x{}", self.width, self.height), text_value);
+                py += line_h;
+                
+                let theme_name = crate::theme::THEME.read().name.clone();
+                self.draw_text_smooth(px, py, "Theme", text_label);
+                self.draw_text_smooth(px + 120, py, &theme_name, text_value);
+                py += line_h + 8;
+                
+                // Toggle: Animations
+                let anim_on = animations_enabled();
+                self.draw_settings_toggle(px, py, "[1] Animations", anim_on);
+                py += line_h;
+                
+                // Speed
+                let speed = *ANIMATION_SPEED.lock();
+                self.draw_text_smooth(px, py, "[2] Anim Speed", text_label);
+                self.draw_text_smooth(px + 180, py, &alloc::format!("{:.1}x", speed), text_value);
+                py += line_h;
+            },
+            1 => { // Sound
+                self.draw_text_smooth(px, py, "Sound", green_accent);
+                self.draw_text_smooth(px + 1, py, "Sound", green_accent);
+                py += line_h + 8;
+                
+                self.draw_text_smooth(px, py, "Master Volume", text_label);
+                let vol = self.sys_volume;
+                self.draw_settings_slider(px + 140, py, cw.saturating_sub(180) as i32, vol, 100);
+                py += line_h;
+                
+                self.draw_text_smooth(px, py, "[1] Volume +  [2] Volume -", text_dim);
+                py += line_h + 8;
+                
+                // Audio driver info
+                self.draw_text_smooth(px, py, "Audio Device", text_label);
+                py += line_h;
+                let driver_name = if crate::drivers::hda::is_initialized() { "Intel HDA (active)" } else { "Not detected" };
+                self.draw_text_smooth(px + 12, py, driver_name, text_dim);
+            },
+            2 => { // Taskbar
+                self.draw_text_smooth(px, py, "Taskbar", green_accent);
+                self.draw_text_smooth(px + 1, py, "Taskbar", green_accent);
+                py += line_h + 8;
+                
+                let tb = crate::theme::taskbar();
+                self.draw_text_smooth(px, py, "Position", text_label);
+                let pos_str = match tb.position {
+                    crate::theme::TaskbarPosition::Bottom => "Bottom",
+                    crate::theme::TaskbarPosition::Top => "Top",
+                    crate::theme::TaskbarPosition::Left => "Left",
+                    crate::theme::TaskbarPosition::Right => "Right",
+                };
+                self.draw_text_smooth(px + 120, py, pos_str, text_value);
+                py += line_h;
+                
+                self.draw_text_smooth(px, py, "Height", text_label);
+                self.draw_text_smooth(px + 120, py, &alloc::format!("{}px", tb.height), text_value);
+                py += line_h;
+                
+                self.draw_settings_toggle(px, py, "Show Clock", tb.show_clock);
+                py += line_h;
+                
+                self.draw_settings_toggle(px, py, "Show Date", tb.show_date);
+                py += line_h;
+                
+                self.draw_settings_toggle(px, py, "Centered Icons", tb.centered_icons);
+            },
+            3 => { // Personalization
+                self.draw_text_smooth(px, py, "Personalization", green_accent);
+                self.draw_text_smooth(px + 1, py, "Personalization", green_accent);
+                py += line_h + 8;
+                
+                let theme_name = crate::theme::THEME.read().name.clone();
+                self.draw_text_smooth(px, py, "[1] Theme", text_label);
+                self.draw_text_smooth(px + 120, py, &theme_name, text_value);
+                py += line_h;
+                
+                self.draw_text_smooth(px, py, "Available themes:", text_dim);
+                py += line_h;
+                let themes = ["dark_green", "windows11_dark"];
+                let labels = ["TrustOS Dark", "Windows 11 Dark"];
+                for (i, label) in labels.iter().enumerate() {
+                    let is_current = theme_name == themes[i];
+                    let c = if is_current { green_accent } else { text_label };
+                    let marker = if is_current { " *" } else { "  " };
+                    self.draw_text_smooth(px + 16, py, &alloc::format!("{}{}", marker, label), c);
+                    py += line_h;
+                }
+                py += 8;
+                
+                let colors = crate::theme::colors();
+                self.draw_text_smooth(px, py, "Accent Color", text_label);
+                // Draw color swatch
+                framebuffer::fill_rect((px + 120) as u32, py as u32, 20, 14, colors.accent);
+                py += line_h;
+                
+                self.draw_text_smooth(px, py, "Background", text_label);
+                framebuffer::fill_rect((px + 120) as u32, py as u32, 20, 14, colors.background);
+            },
+            4 => { // Accessibility
+                self.draw_text_smooth(px, py, "Accessibility", green_accent);
+                self.draw_text_smooth(px + 1, py, "Accessibility", green_accent);
+                py += line_h + 8;
+                
+                self.draw_settings_toggle(px, py, "[1] High Contrast", crate::accessibility::is_high_contrast());
+                py += line_h;
+                
+                self.draw_text_smooth(px, py, "[2] Font Size", text_label);
+                self.draw_text_smooth(px + 160, py, crate::accessibility::get_font_size().label(), text_value);
+                py += line_h;
+                
+                self.draw_text_smooth(px, py, "[3] Cursor Size", text_label);
+                self.draw_text_smooth(px + 160, py, crate::accessibility::get_cursor_size().label(), text_value);
+                py += line_h;
+                
+                self.draw_settings_toggle(px, py, "[4] Sticky Keys", crate::accessibility::is_sticky_keys());
+                py += line_h;
+                
+                self.draw_text_smooth(px, py, "[5] Mouse Speed", text_label);
+                self.draw_text_smooth(px + 160, py, crate::accessibility::get_mouse_speed().label(), text_value);
+            },
+            5 => { // Network
+                self.draw_text_smooth(px, py, "Network", green_accent);
+                self.draw_text_smooth(px + 1, py, "Network", green_accent);
+                py += line_h + 8;
+                
+                // Interface info
+                self.draw_text_smooth(px, py, "Interface", text_label);
+                py += line_h;
+                
+                if let Some(mac) = crate::network::get_mac_address() {
+                    self.draw_text_smooth(px + 12, py, &alloc::format!("MAC: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]), text_value);
+                } else {
+                    self.draw_text_smooth(px + 12, py, "MAC: Not available", text_dim);
+                }
+                py += line_h;
+                
+                if let Some((ip, mask, gw)) = crate::network::get_ipv4_config() {
+                    self.draw_text_smooth(px + 12, py, &alloc::format!("IP:   {}", ip), text_value);
+                    py += line_h;
+                    self.draw_text_smooth(px + 12, py, &alloc::format!("Mask: {}", mask), text_value);
+                    py += line_h;
+                    if let Some(g) = gw {
+                        self.draw_text_smooth(px + 12, py, &alloc::format!("GW:   {}", g), text_value);
+                    }
+                } else {
+                    self.draw_text_smooth(px + 12, py, "IP: Waiting for DHCP...", text_dim);
+                }
+                py += line_h + 8;
+                
+                let driver = if crate::virtio_net::is_initialized() { "virtio-net (active)" }
+                    else if crate::drivers::net::has_driver() { "RTL8169/e1000 (active)" }
+                    else { "No driver loaded" };
+                self.draw_text_smooth(px, py, "Driver", text_label);
+                self.draw_text_smooth(px + 80, py, driver, text_value);
+            },
+            6 => { // Apps
+                self.draw_text_smooth(px, py, "Default Apps", green_accent);
+                self.draw_text_smooth(px + 1, py, "Default Apps", green_accent);
+                py += line_h + 8;
+                
+                let assocs = crate::file_assoc::list_associations();
+                self.draw_text_smooth(px, py, "Extension", text_dim);
+                self.draw_text_smooth(px + 100, py, "Program", text_dim);
+                self.draw_text_smooth(px + 220, py, "Type", text_dim);
+                py += 4;
+                framebuffer::draw_hline((px) as u32, (py + 12) as u32, cw.saturating_sub(40), 0xFF1A3A1A);
+                py += line_h;
+                
+                for (ext, prog, desc) in assocs.iter().take(10) {
+                    self.draw_text_smooth(px, py, &alloc::format!(".{}", ext), text_value);
+                    self.draw_text_smooth(px + 100, py, prog, text_label);
+                    self.draw_text_smooth(px + 220, py, desc, text_dim);
+                    py += line_h;
+                }
+                py += 8;
+                self.draw_text_smooth(px, py, "[3] Edit File Associations...", text_label);
+            },
+            7 => { // About
+                self.draw_text_smooth(px, py, "About TrustOS", green_accent);
+                self.draw_text_smooth(px + 1, py, "About TrustOS", green_accent);
+                py += line_h + 8;
+                
+                self.draw_text_smooth(px, py, "TrustOS", 0xFFCCEECC);
+                self.draw_text_smooth(px + 1, py, "TrustOS", 0xFFCCEECC);
+                py += line_h;
+                self.draw_text_smooth(px, py, "Version 0.2.0", text_value);
+                py += line_h;
+                self.draw_text_smooth(px, py, "Bare-metal OS written in Rust", text_label);
+                py += line_h + 8;
+                
+                self.draw_text_smooth(px, py, "Kernel", text_dim);
+                self.draw_text_smooth(px + 80, py, "trustos_kernel (x86_64)", text_value);
+                py += line_h;
+                
+                self.draw_text_smooth(px, py, "Arch", text_dim);
+                self.draw_text_smooth(px + 80, py, "x86_64", text_value);
+                py += line_h;
+                
+                self.draw_text_smooth(px, py, "Display", text_dim);
+                self.draw_text_smooth(px + 80, py, &alloc::format!("{}x{}", self.width, self.height), text_value);
+                py += line_h;
+                
+                self.draw_text_smooth(px, py, "AI", text_dim);
+                self.draw_text_smooth(px + 80, py, "JARVIS (Transformer 4.4M params)", text_value);
+                py += line_h + 8;
+                
+                self.draw_text_smooth(px, py, "(c) 2026 Nathan", text_label);
+            },
+            _ => {}
+        }
+    }
+    
+    /// Draw a toggle switch widget
+    fn draw_settings_toggle(&self, x: i32, y: i32, label: &str, enabled: bool) {
+        let text_label = 0xFF88AA88;
+        let green_accent = GREEN_PRIMARY;
+        self.draw_text_smooth(x, y, label, text_label);
+        
+        let tx = x + 180;
+        let tw = 36u32;
+        let th = 16u32;
+        let track_color = if enabled { 0xFF1A5A2A } else { 0xFF1A1A1A };
+        draw_rounded_rect(tx, y, tw, th, 8, track_color);
+        draw_rounded_rect_border(tx, y, tw, th, 8, if enabled { green_accent } else { 0xFF333333 });
+        
+        let knob_x = if enabled { tx + tw as i32 - 14 } else { tx + 2 };
+        let knob_color = if enabled { green_accent } else { 0xFF666666 };
+        for dy in 0..12u32 {
+            for dx in 0..12u32 {
+                let ddx = dx as i32 - 6;
+                let ddy = dy as i32 - 6;
+                if ddx * ddx + ddy * ddy <= 36 {
+                    framebuffer::put_pixel_fast((knob_x + dx as i32) as u32, (y as u32 + 2 + dy), knob_color);
+                }
+            }
+        }
+    }
+    
+    /// Draw a horizontal slider widget
+    fn draw_settings_slider(&self, x: i32, y: i32, width: i32, value: u32, max_val: u32) {
+        let track_w = width.max(40) as u32;
+        let track_h = 6u32;
+        let ty = y + 5;
+        
+        // Track background
+        draw_rounded_rect(x, ty, track_w, track_h, 3, 0xFF1A1A1A);
+        
+        // Filled portion
+        let fill_w = ((value as u64 * track_w as u64) / max_val.max(1) as u64) as u32;
+        if fill_w > 0 {
+            draw_rounded_rect(x, ty, fill_w.min(track_w), track_h, 3, 0xFF1A5A2A);
+        }
+        
+        // Knob
+        let knob_x = x + fill_w as i32;
+        for dy in 0..10u32 {
+            for dx in 0..10u32 {
+                let ddx = dx as i32 - 5;
+                let ddy = dy as i32 - 5;
+                if ddx * ddx + ddy * ddy <= 25 {
+                    framebuffer::put_pixel_fast((knob_x + dx as i32 - 5).max(0) as u32, (ty as u32 - 2 + dy), GREEN_PRIMARY);
+                }
+            }
+        }
+        
+        // Value label
+        self.draw_text_smooth(x + track_w as i32 + 8, y, &alloc::format!("{}", value), 0xFFBBDDBB);
+    }
+    
+    /// Handle NetScan keyboard input
+    fn handle_netscan_key(&mut self, key: u8) {
+        // Tab switching: 1-6 for tabs, Left/Right arrows
+        if key >= b'1' && key <= b'6' {
+            self.netscan_tab = key - b'1';
+            return;
+        }
+        use crate::keyboard::{KEY_LEFT, KEY_RIGHT};
+        if key == KEY_LEFT {
+            self.netscan_tab = self.netscan_tab.saturating_sub(1);
+            return;
+        }
+        if key == KEY_RIGHT {
+            if self.netscan_tab < 5 { self.netscan_tab += 1; }
+            return;
+        }
+        
+        match self.netscan_tab {
+            1 => { // PortScan
+                if key == b's' || key == b'S' {
+                    if let Some((_ip, _mask, gw)) = crate::network::get_ipv4_config() {
+                        if let Some(g) = gw {
+                            let target = *g.as_bytes();
+                            let (results, stats) = crate::netscan::port_scanner::quick_scan(target);
+                            if let Some(window) = self.windows.iter_mut().find(|w| w.window_type == WindowType::NetworkInfo) {
+                                window.content.clear();
+                                window.content.push(alloc::format!("Scan: {} | Open: {} | Closed: {} | {:.0}ms",
+                                    crate::netscan::format_ip(target), stats.open, stats.closed, stats.elapsed_ms));
+                                for pr in &results {
+                                    let state_str = match pr.state {
+                                        crate::netscan::port_scanner::PortState::Open => "OPEN",
+                                        crate::netscan::port_scanner::PortState::Closed => "closed",
+                                        crate::netscan::port_scanner::PortState::Filtered => "filtered",
+                                        _ => "unknown",
+                                    };
+                                    window.content.push(alloc::format!("  Port {}: {} ({})", pr.port, state_str, pr.service));
+                                }
+                                if results.is_empty() {
+                                    window.content.push(String::from("  No open ports found"));
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            2 => { // Discovery
+                if key == b'd' || key == b'D' {
+                    let hosts = crate::netscan::discovery::arp_sweep_local(3000);
+                    if let Some(window) = self.windows.iter_mut().find(|w| w.window_type == WindowType::NetworkInfo) {
+                        window.content.clear();
+                        window.content.push(alloc::format!("ARP Sweep: {} hosts found", hosts.len()));
+                        for host in &hosts {
+                            let mac_str = match host.mac {
+                                Some(m) => crate::netscan::format_mac(m),
+                                None => String::from("??:??:??:??:??:??"),
+                            };
+                            window.content.push(alloc::format!("  {} - {} ({}ms)",
+                                crate::netscan::format_ip(host.ip), mac_str, host.rtt_ms));
+                        }
+                        if hosts.is_empty() {
+                            window.content.push(String::from("  No hosts discovered"));
+                        }
+                    }
+                }
+            },
+            3 => { // Sniffer
+                if key == b's' || key == b'S' {
+                    if crate::netscan::sniffer::is_capturing() {
+                        crate::netscan::sniffer::stop_capture();
+                    } else {
+                        crate::netscan::sniffer::start_capture();
+                    }
+                }
+            },
+            4 => { // Traceroute
+                if key == b't' || key == b'T' {
+                    if let Some((_ip, _mask, gw)) = crate::network::get_ipv4_config() {
+                        if let Some(g) = gw {
+                            let target = *g.as_bytes();
+                            let hops = crate::netscan::traceroute::trace(target, 30, 5000);
+                            let formatted = crate::netscan::traceroute::format_trace(&hops);
+                            if let Some(window) = self.windows.iter_mut().find(|w| w.window_type == WindowType::NetworkInfo) {
+                                window.content.clear();
+                                for line in formatted.lines() {
+                                    window.content.push(String::from(line));
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            5 => { // VulnScan
+                if key == b'v' || key == b'V' {
+                    if let Some((_ip, _mask, gw)) = crate::network::get_ipv4_config() {
+                        if let Some(g) = gw {
+                            let target = *g.as_bytes();
+                            // First do a quick scan to get open ports, then vuln scan those
+                            let (port_results, _) = crate::netscan::port_scanner::quick_scan(target);
+                            let open_ports: alloc::vec::Vec<u16> = port_results.iter()
+                                .filter(|p| matches!(p.state, crate::netscan::port_scanner::PortState::Open))
+                                .map(|p| p.port)
+                                .collect();
+                            let results = crate::netscan::vuln::scan(target, &open_ports);
+                            let report = crate::netscan::vuln::format_report(target, &results);
+                            if let Some(window) = self.windows.iter_mut().find(|w| w.window_type == WindowType::NetworkInfo) {
+                                window.content.clear();
+                                for line in report.lines() {
+                                    window.content.push(String::from(line));
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            _ => {}
+        }
+    }
+    
+    /// Draw the NetScan tabbed GUI
+    fn draw_netscan_gui(&self, window: &Window) {
+        let wx = window.x;
+        let wy = window.y;
+        let ww = window.width;
+        let wh = window.height;
+        
+        if ww < 200 || wh < 120 { return; }
+        
+        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+        let safe_x = wx.max(0) as u32;
+        
+        let bg = 0xFF0A140Cu32;
+        let tab_bg = 0xFF060E08u32;
+        let tab_active_bg = 0xFF0C2A14u32;
+        let green_accent = GREEN_PRIMARY;
+        let text_label = 0xFF88AA88u32;
+        let text_value = 0xFFBBDDBBu32;
+        let text_dim = 0xFF446644u32;
+        let border_color = 0xFF1A3A1Au32;
+        
+        // ── Background ──
+        framebuffer::fill_rect(safe_x, content_y as u32, ww, content_h, bg);
+        
+        // ── Tab bar ──
+        let tab_h = 28u32;
+        framebuffer::fill_rect(safe_x, content_y as u32, ww, tab_h, tab_bg);
+        framebuffer::fill_rect(safe_x, (content_y + tab_h as i32) as u32, ww, 1, border_color);
+        
+        let tabs = ["Dashboard", "PortScan", "Discovery", "Sniffer", "Traceroute", "VulnScan"];
+        let tab_w = (ww / tabs.len() as u32).max(80);
+        
+        for (i, label) in tabs.iter().enumerate() {
+            let tx = safe_x + (i as u32 * tab_w);
+            let is_active = i as u8 == self.netscan_tab;
+            
+            if is_active {
+                framebuffer::fill_rect(tx, content_y as u32, tab_w, tab_h, tab_active_bg);
+                // Green underline for active tab
+                framebuffer::fill_rect(tx + 4, (content_y + tab_h as i32 - 2) as u32, tab_w - 8, 2, green_accent);
+            }
+            
+            let c = if is_active { green_accent } else { text_dim };
+            // Center text in tab
+            let text_w = label.len() as i32 * 8;
+            let text_x = tx as i32 + (tab_w as i32 - text_w) / 2;
+            self.draw_text_smooth(text_x, content_y + 7, label, c);
+        }
+        
+        // ── Content area ──
+        let cx = safe_x as i32 + 16;
+        let mut cy = content_y + tab_h as i32 + 12;
+        let line_h = 20i32;
+        let area_w = ww.saturating_sub(32);
+        
+        match self.netscan_tab {
+            0 => { // Dashboard
+                self.draw_text_smooth(cx, cy, "Network Dashboard", green_accent);
+                self.draw_text_smooth(cx + 1, cy, "Network Dashboard", green_accent);
+                cy += line_h + 8;
+                
+                // Connection status
+                let connected = crate::virtio_net::is_initialized() || crate::drivers::net::has_driver();
+                let status_color = if connected { 0xFF33DD66u32 } else { 0xFFDD3333u32 };
+                let status_text = if connected { "Connected" } else { "Disconnected" };
+                self.draw_text_smooth(cx, cy, "Status:", text_label);
+                // Status dot
+                for dy in 0..8u32 {
+                    for dx in 0..8u32 {
+                        let ddx = dx as i32 - 4;
+                        let ddy = dy as i32 - 4;
+                        if ddx * ddx + ddy * ddy <= 16 {
+                            framebuffer::put_pixel_fast((cx + 70 + dx as i32) as u32, (cy + 4 + dy as i32) as u32, status_color);
+                        }
+                    }
+                }
+                self.draw_text_smooth(cx + 84, cy, status_text, status_color);
+                cy += line_h;
+                
+                // Driver
+                let driver = if crate::virtio_net::is_initialized() { "virtio-net" }
+                    else if crate::drivers::net::has_driver() { "RTL8169/e1000" }
+                    else { "None" };
+                self.draw_text_smooth(cx, cy, "Driver:", text_label);
+                self.draw_text_smooth(cx + 70, cy, driver, text_value);
+                cy += line_h;
+                
+                // MAC
+                if let Some(mac) = crate::network::get_mac_address() {
+                    self.draw_text_smooth(cx, cy, "MAC:", text_label);
+                    self.draw_text_smooth(cx + 70, cy, &alloc::format!("{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]), text_value);
+                }
+                cy += line_h;
+                
+                // IPv4
+                if let Some((ip, mask, gw)) = crate::network::get_ipv4_config() {
+                    self.draw_text_smooth(cx, cy, "IP:", text_label);
+                    self.draw_text_smooth(cx + 70, cy, &alloc::format!("{}", ip), text_value);
+                    cy += line_h;
+                    self.draw_text_smooth(cx, cy, "Subnet:", text_label);
+                    self.draw_text_smooth(cx + 70, cy, &alloc::format!("{}", mask), text_value);
+                    cy += line_h;
+                    if let Some(g) = gw {
+                        self.draw_text_smooth(cx, cy, "Gateway:", text_label);
+                        self.draw_text_smooth(cx + 70, cy, &alloc::format!("{}", g), text_value);
+                        cy += line_h;
+                    }
+                } else {
+                    self.draw_text_smooth(cx, cy, "IPv4:", text_label);
+                    self.draw_text_smooth(cx + 70, cy, "Waiting for DHCP...", text_dim);
+                    cy += line_h;
+                }
+                
+                cy += 8;
+                // Packet stats
+                let stats = crate::network::get_stats();
+                self.draw_text_smooth(cx, cy, "Packets", text_dim);
+                cy += line_h;
+                self.draw_text_smooth(cx + 8, cy, &alloc::format!("TX: {}  RX: {}", stats.packets_sent, stats.packets_received), text_value);
+                cy += line_h;
+                self.draw_text_smooth(cx + 8, cy, &alloc::format!("Bytes TX: {}  RX: {}", stats.bytes_sent, stats.bytes_received), text_value);
+                
+                cy += line_h + 8;
+                self.draw_text_smooth(cx, cy, "Use tabs [1-6] or Left/Right to navigate", text_dim);
+            },
+            1 => { // PortScan
+                self.draw_text_smooth(cx, cy, "Port Scanner", green_accent);
+                self.draw_text_smooth(cx + 1, cy, "Port Scanner", green_accent);
+                cy += line_h + 8;
+                
+                if let Some((_ip, _mask, gw)) = crate::network::get_ipv4_config() {
+                    if let Some(g) = gw {
+                        self.draw_text_smooth(cx, cy, "Target:", text_label);
+                        self.draw_text_smooth(cx + 70, cy, &alloc::format!("{} (gateway)", g), text_value);
+                        cy += line_h + 4;
+                    }
+                }
+                
+                self.draw_text_smooth(cx, cy, "[S] Start Quick Scan", text_label);
+                cy += line_h + 8;
+                
+                // Display results from window.content
+                if !window.content.is_empty() {
+                    framebuffer::fill_rect(safe_x + 8, cy as u32, area_w, 1, border_color);
+                    cy += 6;
+                    self.draw_text_smooth(cx, cy, "Results:", text_dim);
+                    cy += line_h;
+                    for line in window.content.iter() {
+                        if cy > wy + wh as i32 - 20 { break; }
+                        let c = if line.contains("OPEN") { 0xFF33DD66u32 } else { text_value };
+                        self.draw_text_smooth(cx + 8, cy, line, c);
+                        cy += line_h;
+                    }
+                }
+            },
+            2 => { // Discovery
+                self.draw_text_smooth(cx, cy, "Network Discovery", green_accent);
+                self.draw_text_smooth(cx + 1, cy, "Network Discovery", green_accent);
+                cy += line_h + 8;
+                
+                self.draw_text_smooth(cx, cy, "[D] Run ARP Sweep", text_label);
+                cy += line_h + 8;
+                
+                if !window.content.is_empty() {
+                    framebuffer::fill_rect(safe_x + 8, cy as u32, area_w, 1, border_color);
+                    cy += 6;
+                    for line in window.content.iter() {
+                        if cy > wy + wh as i32 - 20 { break; }
+                        self.draw_text_smooth(cx + 8, cy, line, text_value);
+                        cy += line_h;
+                    }
+                }
+            },
+            3 => { // Sniffer
+                self.draw_text_smooth(cx, cy, "Packet Sniffer", green_accent);
+                self.draw_text_smooth(cx + 1, cy, "Packet Sniffer", green_accent);
+                cy += line_h + 8;
+                
+                let capturing = crate::netscan::sniffer::is_capturing();
+                let status = if capturing { "Capturing..." } else { "Idle" };
+                let sc = if capturing { 0xFF33DD66u32 } else { text_dim };
+                self.draw_text_smooth(cx, cy, "Status:", text_label);
+                self.draw_text_smooth(cx + 70, cy, status, sc);
+                cy += line_h;
+                
+                let toggle_label = if capturing { "[S] Stop Capture" } else { "[S] Start Capture" };
+                self.draw_text_smooth(cx, cy, toggle_label, text_label);
+                cy += line_h + 8;
+                
+                let (total_pkts, total_bytes, buffered) = crate::netscan::sniffer::get_stats();
+                self.draw_text_smooth(cx, cy, "Captured:", text_label);
+                self.draw_text_smooth(cx + 80, cy, &alloc::format!("{} packets", total_pkts), text_value);
+                cy += line_h;
+                self.draw_text_smooth(cx, cy, "Bytes:", text_label);
+                self.draw_text_smooth(cx + 80, cy, &alloc::format!("{}", total_bytes), text_value);
+                cy += line_h;
+                self.draw_text_smooth(cx, cy, "Buffered:", text_label);
+                self.draw_text_smooth(cx + 80, cy, &alloc::format!("{}", buffered), text_value);
+            },
+            4 => { // Traceroute
+                self.draw_text_smooth(cx, cy, "Traceroute", green_accent);
+                self.draw_text_smooth(cx + 1, cy, "Traceroute", green_accent);
+                cy += line_h + 8;
+                
+                if let Some((_ip, _mask, gw)) = crate::network::get_ipv4_config() {
+                    if let Some(g) = gw {
+                        self.draw_text_smooth(cx, cy, "Target:", text_label);
+                        self.draw_text_smooth(cx + 70, cy, &alloc::format!("{}", g), text_value);
+                        cy += line_h + 4;
+                    }
+                }
+                
+                self.draw_text_smooth(cx, cy, "[T] Run Traceroute", text_label);
+                cy += line_h + 8;
+                
+                if !window.content.is_empty() {
+                    framebuffer::fill_rect(safe_x + 8, cy as u32, area_w, 1, border_color);
+                    cy += 6;
+                    for line in window.content.iter() {
+                        if cy > wy + wh as i32 - 20 { break; }
+                        self.draw_text_smooth(cx + 8, cy, line, text_value);
+                        cy += line_h;
+                    }
+                }
+            },
+            5 => { // VulnScan
+                self.draw_text_smooth(cx, cy, "Vulnerability Scanner", green_accent);
+                self.draw_text_smooth(cx + 1, cy, "Vulnerability Scanner", green_accent);
+                cy += line_h + 8;
+                
+                if let Some((_ip, _mask, gw)) = crate::network::get_ipv4_config() {
+                    if let Some(g) = gw {
+                        self.draw_text_smooth(cx, cy, "Target:", text_label);
+                        self.draw_text_smooth(cx + 70, cy, &alloc::format!("{}", g), text_value);
+                        cy += line_h + 4;
+                    }
+                }
+                
+                self.draw_text_smooth(cx, cy, "[V] Run Vulnerability Scan", text_label);
+                cy += line_h + 8;
+                
+                if !window.content.is_empty() {
+                    framebuffer::fill_rect(safe_x + 8, cy as u32, area_w, 1, border_color);
+                    cy += 6;
+                    for line in window.content.iter() {
+                        if cy > wy + wh as i32 - 20 { break; }
+                        let c = if line.contains("VULN") || line.contains("HIGH") { 0xFFDD3333u32 }
+                            else if line.contains("WARN") || line.contains("MEDIUM") { 0xFFDDAA33u32 }
+                            else { text_value };
+                        self.draw_text_smooth(cx + 8, cy, line, c);
+                        cy += line_h;
+                    }
+                }
+            },
+            _ => {}
         }
     }
     
@@ -6258,8 +7014,25 @@ struct AppConfig {
     
     /// Handle terminal keyboard input
     fn handle_terminal_key(&mut self, key: u8) {
+        use crate::keyboard::{KEY_PGUP, KEY_PGDOWN};
         // Clear old suggestion lines so content.last() is the prompt again
         self.clear_terminal_suggestions();
+        
+        // PageUp / PageDown — scroll terminal output
+        if key == KEY_PGUP || key == KEY_PGDOWN {
+            if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
+                let line_height = 16usize;
+                let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT as usize + 16);
+                let visible_lines = if line_height > 0 { content_area_h / line_height } else { 1 };
+                let max_scroll = window.content.len().saturating_sub(visible_lines);
+                if key == KEY_PGUP {
+                    window.scroll_offset = window.scroll_offset.saturating_sub(visible_lines);
+                } else {
+                    window.scroll_offset = (window.scroll_offset + visible_lines).min(max_scroll);
+                }
+            }
+            return;
+        }
         
         if key == 0x08 { // Backspace
             if !self.input_buffer.is_empty() {
@@ -9527,6 +10300,7 @@ struct AppConfig {
                 IconType::Calculator => 0xFFCC6633u32, // Orange
                 IconType::Network => 0xFF40AADDu32,    // Cyan
                 IconType::Game => 0xFFCC4444u32,       // Red
+                IconType::Chess => 0xFFEECC88u32,      // Gold/ivory
                 IconType::Settings => 0xFF9988BBu32,   // Purple/lilac
                 IconType::Browser => 0xFF4488DDu32,    // Blue
                 IconType::GameBoy => 0xFF88BB44u32,    // Yellow-green
@@ -9675,6 +10449,23 @@ struct AppConfig {
                     framebuffer::fill_rect(cx + 8, cy - 1, 3, 3, ACCENT_RED);  // red (right)
                     framebuffer::fill_rect(cx + 4, cy + 1, 3, 3, 0xFF44DD44);  // green (bottom)
                     framebuffer::fill_rect(cx + 1, cy - 1, 3, 3, 0xFFDDDD44);  // yellow (left)
+                },
+                IconType::Chess => {
+                    // Chess king piece — crown silhouette
+                    let pc = if is_hovered { 0xFFFFDD88 } else { draw_color };
+                    // Base
+                    framebuffer::fill_rect(cx - 8, cy + 6, 16, 4, pc);
+                    // Pedestal
+                    framebuffer::fill_rect(cx - 6, cy + 2, 12, 4, pc);
+                    // Body (narrower)
+                    framebuffer::fill_rect(cx - 4, cy - 6, 8, 8, pc);
+                    // Crown prongs
+                    framebuffer::fill_rect(cx - 6, cy - 10, 3, 5, pc);
+                    framebuffer::fill_rect(cx - 1, cy - 12, 2, 7, pc);
+                    framebuffer::fill_rect(cx + 3, cy - 10, 3, 5, pc);
+                    // Cross on top
+                    framebuffer::fill_rect(cx - 1, cy - 14, 2, 4, pc);
+                    framebuffer::fill_rect(cx - 2, cy - 13, 4, 2, pc);
                 },
                 IconType::Settings => {
                     // Gear: proper circle with teeth
@@ -10170,13 +10961,13 @@ struct AppConfig {
             (">_", "Terminal", false),
             ("[]", "Files", false),
             ("##", "Calculator", false),
-            ("~~", "Network", false),
+            ("~~", "NetScan", false),
             ("Tx", "Text Editor", false),
             ("/\\", "TrustEdit 3D", false),
             ("WW", "Browser", false),
-            ("Sk", "Snake", false),
-            ("Kk", "Chess", false),
             ("C3", "Chess 3D", false),
+            ("Kk", "Chess 2D", false),
+            ("Sk", "Snake", false),
             ("NE", "NES Emulator", false),
             ("GB", "Game Boy", false),
             ("Lb", "TrustLab", false),
@@ -10696,6 +11487,22 @@ struct AppConfig {
         // Special rendering for Browser
         if window.window_type == WindowType::Browser {
             self.draw_browser(window);
+            return;
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // SETTINGS — Graphical panel with sidebar categories
+        // ═══════════════════════════════════════════════════════════════
+        if window.window_type == WindowType::Settings {
+            self.draw_settings_gui(window);
+            return;
+        }
+        
+        // ═══════════════════════════════════════════════════════════════
+        // NETSCAN — Tabbed network toolkit GUI
+        // ═══════════════════════════════════════════════════════════════
+        if window.window_type == WindowType::NetworkInfo {
+            self.draw_netscan_gui(window);
             return;
         }
         
@@ -12111,21 +12918,31 @@ struct AppConfig {
                 framebuffer::fill_rect(icon_x + 6, icon_y + 14, 16, 2, 0xFF302A10);
                 framebuffer::fill_rect(icon_x + 6, icon_y + 18, 12, 2, 0xFF302A10);
             } else {
-                // Large file icon
-                let fc = if is_selected { 0xFF80DD99 } else { icon_file };
+                // Large file icon — color-coded by extension
+                let ext = Self::extract_name_from_entry(entry);
+                let (fc, badge_color, ext_label) = if ext.ends_with(".rs") || ext.ends_with(".c") || ext.ends_with(".h") {
+                    (if is_selected { 0xFFFFAA66 } else { 0xFFDD7733 }, 0xFFFF6633, "RS")
+                } else if ext.ends_with(".txt") || ext.ends_with(".md") || ext.ends_with(".log") {
+                    (if is_selected { 0xFF88BBEE } else { 0xFF4488CC }, 0xFF4488CC, if ext.ends_with(".md") { "MD" } else { "TXT" })
+                } else if ext.ends_with(".toml") || ext.ends_with(".json") || ext.ends_with(".cfg") {
+                    (if is_selected { 0xFFEEDD66 } else { 0xFFDDAA00 }, 0xFFDDAA00, "CFG")
+                } else if ext.ends_with(".bmp") || ext.ends_with(".png") || ext.ends_with(".jpg") {
+                    (if is_selected { 0xFF66DD88 } else { 0xFF33BB66 }, 0xFF33BB66, "IMG")
+                } else if ext.ends_with(".wav") || ext.ends_with(".mp3") {
+                    (if is_selected { 0xFFFF88CC } else { 0xFFEE55AA }, 0xFFEE55AA, "SND")
+                } else if ext.ends_with(".sh") || ext.ends_with(".elf") {
+                    (if is_selected { 0xFFCC88FF } else { 0xFF9966DD }, 0xFF9966DD, "EXE")
+                } else {
+                    (if is_selected { 0xFF80DD99 } else { icon_file }, 0xFF60AA80, "")
+                };
                 framebuffer::fill_rect(icon_x, icon_y, 28, 28, fc);
                 framebuffer::fill_rect(icon_x + 18, icon_y, 10, 10, 0xFF0A140A);
                 framebuffer::fill_rect(icon_x + 18, icon_y, 2, 10, fc);
                 framebuffer::fill_rect(icon_x + 18, icon_y + 8, 10, 2, fc);
                 framebuffer::fill_rect(icon_x + 3, icon_y + 12, 22, 14, 0xFF040A04);
+                // Badge color stripe on left side
+                framebuffer::fill_rect(icon_x, icon_y, 3, 28, badge_color);
                 // File type hint
-                let ext = Self::extract_name_from_entry(entry);
-                let ext_label = if ext.ends_with(".rs") { "RS" }
-                    else if ext.ends_with(".txt") { "TXT" }
-                    else if ext.ends_with(".bmp") { "BMP" }
-                    else if ext.ends_with(".sh") { "SH" }
-                    else if ext.ends_with(".toml") { "TML" }
-                    else { "" };
                 if !ext_label.is_empty() {
                     self.draw_text((icon_x + 5) as i32, (icon_y + 15) as i32, ext_label, 0xFF203020);
                 }
@@ -12328,13 +13145,15 @@ struct AppConfig {
             let grid_w = ww as i32 - sidebar_w;
             let cols = ((grid_w - 20) / icon_cell_w).max(1);
             let padding_x = (grid_w - cols * icon_cell_w) / 2;
+            let scroll_row = (self.windows.iter().find(|w| w.id == window_id).map(|w| w.scroll_offset).unwrap_or(0) / cols as usize) as i32;
             
             let rel_x = x - content_x - padding_x;
             let rel_y = y - grid_start_y;
             if rel_x >= 0 && rel_y >= 0 {
                 let col = rel_x / icon_cell_w;
-                let row = rel_y / icon_cell_h;
-                let idx = row * cols + col;
+                let display_row = rel_y / icon_cell_h;
+                let actual_row = display_row + scroll_row;
+                let idx = actual_row * cols + col;
                 if idx >= 0 && (idx as usize) < file_count {
                     let click_idx = idx as usize;
                     if click_idx == selected_idx && crate::mouse::is_double_click() {
@@ -15611,7 +16430,7 @@ fn window_type_icon(wtype: WindowType) -> &'static str {
         WindowType::Calculator => "[#]",
         WindowType::FileManager => "[/]",
         WindowType::TextEditor => "[=]",
-        WindowType::NetworkInfo => "<~>",
+        WindowType::NetworkInfo => "[~]",
         WindowType::Settings => "{*}",
         WindowType::ImageViewer => "[^]",
         WindowType::Browser => "</>",
@@ -15635,7 +16454,7 @@ fn window_type_label(wtype: WindowType) -> &'static str {
         WindowType::Calculator => "Calc",
         WindowType::FileManager => "Files",
         WindowType::TextEditor => "Editor",
-        WindowType::NetworkInfo => "Network",
+        WindowType::NetworkInfo => "NetScan",
         WindowType::Settings => "Settings",
         WindowType::ImageViewer => "Images",
         WindowType::Browser => "Browser",

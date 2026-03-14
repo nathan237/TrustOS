@@ -1,21 +1,20 @@
 <div align="center">
 
-<!-- To add a logo: place a logo.png in media/ and uncomment the line below -->
-<!-- <img src="media/logo.png" alt="TrustOS" width="200"/> -->
+<img src="media/logo.png" alt="TrustOS" width="280"/>
 
 # TrustOS
 
 ### The OS you can actually read.
 
-**A bare-metal operating system written entirely in Rust — 261,000+ lines, zero C, zero binary blobs, zero secrets.**
+**A bare-metal operating system written entirely in Rust — 263,000+ lines, zero C, zero binary blobs, zero secrets.**
 
 *Built by one developer. Auditable by anyone.*
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-261%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-263%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.10.0-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.10.1-orange?style=for-the-badge)]()
 [![Tests](https://img.shields.io/badge/tests-96%2F96%20(100%25)-brightgreen?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -30,16 +29,17 @@
 
 </div>
 
-## 🆕 What's New in v0.10.0
+## 🆕 What's New in v0.10.1
 
-> **March 13, 2026** — Real Hardware Stability (Lenovo T61 Tested)
+> **March 14, 2026** — Desktop Apps & Shell Polish
 
-- 🔧 **Desktop freeze fixed** — Root cause: `serial::read_byte()` didn't check `SERIAL_PRESENT` on hardware with no cable. UART noise caused the keyboard loop to spin forever. Now gated + loop capped at 32 keys/frame.
-- 🔊 **HDA audio on real hardware** — ICH8 codec wake timeout raised to 50ms, Analog Devices AD198x / Conexant CX205xx quirks, EAPD enable, proper amp unmute for L+R channels.
-- 🛡️ **SIMD/FPU safe on real BIOS** — `fninit` + `ldmxcsr 0x1F80` in `enable_sse()` masks all SIMD/FPU exceptions (real BIOS leaves dirty state). New IDT handlers for #NM, #SS, #MF, #XM.
-- 🖥️ **Fallible buffer allocations** — Framebuffer double buffer, background cache, and OpenGL depth buffer now use `try_reserve_exact` instead of panicking on OOM.
-- 🔧 **Serial/APIC/4K hardening (v0.9.5)** — UART loopback detection, APIC timer fallback, backbuffer capped at 16 MB, BPP validation.
-- 📊 **261,000+ lines** across 476 source files, 3 architectures.
+- �️ **Settings GUI** — Full desktop settings panel with sidebar navigation (Display, Sound, Taskbar, Personalization, Accessibility, Network, Apps, About). Toggle switches, volume sliders, live preview.
+- 🔍 **NetScan GUI** — Tabbed network security toolkit in desktop: Dashboard, Port Scanner, Discovery, Packet Sniffer, Traceroute, Vulnerability Scanner.
+- 🔧 **Shell scrollback fix** — PageUp/PageDown now properly restores live view. Auto-snap to bottom on any keypress. Input line stays pinned to correct position after scrolling.
+- ⌨️ **Tab autocomplete fix** — Tab/Enter with suggestions no longer displaces the cursor to the wrong screen row.
+- ⚡ **ACPI shutdown hardening** — VM-specific shutdown ports tried first (QEMU, Bochs, VirtualBox, Cloud Hypervisor), then standard ACPI PM1a with multi-type scan.
+- 🎮 **Desktop app rename** — "Chess 3D" replaces generic "Games" icon.
+- 📊 **263,000+ lines** across 476 source files, 3 architectures.
 
 ---
 
@@ -325,7 +325,7 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 
 | | |
 |---|---|
-| **261,000+ lines** of pure Rust | **96/96** self-tests passing (100%) |
+| **263,000+ lines** of pure Rust | **96/96** self-tests passing (100%) |
 | **476** source files | **144 FPS** SIMD desktop |
 | **3** architectures (x86_64, ARM64, RISC-V) | **< 1 sec** boot time |
 | **4.4M** AI parameters in kernel space | **0** lines of C |
@@ -423,6 +423,15 @@ TrustOS/
 ---
 
 ## 📋 Changelog
+
+### v0.10.1 — Desktop Apps & Shell Polish (March 14, 2026)
+
+- **Settings GUI** — Full settings panel in COSMIC2 desktop: 8 categories with sidebar navigation. Display (resolution info, animations toggle), Sound (volume slider), Taskbar (clock/date/centered icons toggles), Personalization, Accessibility (high contrast toggle), Network, Apps, About.
+- **NetScan GUI** — Network security toolkit as a tabbed desktop app: Dashboard overview, Port Scanner, Host Discovery, Packet Sniffer, Traceroute, Vulnerability Scanner. Keyboard-navigable tabs.
+- **Shell scrollback fix** — `scroll_down()` now redraws at offset=0 (was a no-op). `redraw_from_scrollback` renders the current uncommitted line at live view. Auto-snap to bottom on any non-PageUp/PageDown keypress. New `restore_live_view()` API.
+- **Tab autocomplete cursor fix** — `clear_suggestions_at_row()` left cursor on suggestion rows; Tab/Enter now restore cursor to input row before clearing.
+- **ACPI shutdown hardening** — Try QEMU (0x604), Bochs (0xB004), VirtualBox (0x4004), Cloud Hypervisor (0x600) shutdown ports before standard ACPI PM1a multi-type scan.
+- **Desktop icon rename** — "Chess 3D" replaces generic "Games".
 
 ### v0.10.0 — Real Hardware Stability (March 13, 2026)
 
@@ -583,7 +592,7 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 
 Created by [Nated0ge](https://github.com/nathan237) — March 2026
 
-261,000+ lines | Native x86_64 compiler | JARVIS AI (4.4M params) | x86_64 + ARM64 + RISC-V | Zero C
+263,000+ lines | Native x86_64 compiler | JARVIS AI (4.4M params) | x86_64 + ARM64 + RISC-V | Zero C
 
 [Report Bug](https://github.com/nathan237/TrustOS/issues) | [Request Feature](https://github.com/nathan237/TrustOS/issues) | [Watch Demo](https://youtu.be/RBJJi8jW1_g)
 

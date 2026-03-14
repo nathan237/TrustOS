@@ -8146,8 +8146,8 @@ pub(super) fn cmd_cosmic_desktop() {
                         // Handle click on menu item
                         if click_this_frame {
                             match *item {
-                                "Shutdown" => running = false,
-                                "Restart" => { /* Would restart */ running = false; },
+                                "Shutdown" => { crate::acpi::shutdown(); },
+                                "Restart" => { crate::acpi::reboot(); },
                                 "Sign Out" => { running = false; },
                                 "Settings" => { active_app = 4; menu_open = false; },
                                 "Terminal" => { active_app = 1; menu_open = false; },

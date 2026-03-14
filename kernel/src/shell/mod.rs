@@ -321,7 +321,7 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
     // Cursor blinking state
     let mut cursor_visible = true;
     let mut blink_counter: u32 = 0;
-    const BLINK_INTERVAL: u32 = 50000;
+    const BLINK_INTERVAL: u32 = 500000;
     
     history_reset();
     
@@ -330,6 +330,20 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
     
     loop {
         if let Some(c) = read_char() {
+            // Auto-snap to live view on any non-scroll keypress
+            if c != KEY_PGUP && c != KEY_PGDOWN && crate::framebuffer::is_scrolled_back() {
+                let (col, row) = crate::framebuffer::restore_live_view();
+                input_row = row;
+                // Restore prompt cursor position and re-echo typed input
+                crate::framebuffer::set_cursor(col, row);
+                for i in 0..pos {
+                    crate::print!("{}", buffer[i] as char);
+                }
+                for _ in cursor..pos {
+                    crate::print_fb_only!("\x08");
+                }
+            }
+            
             // Hide cursor before processing
             let under_cursor = if cursor < pos { buffer[cursor] as char } else { ' ' };
             crate::print_fb_only!("{}", under_cursor);
@@ -346,7 +360,8 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                     if suggestion_idx >= 0 && (suggestion_idx as usize) < suggestions.len() {
                         let selected = suggestions[suggestion_idx as usize];
                         clear_suggestions_at_row(input_row, suggestions.len());
-                        // Replace buffer with selected command
+                        // Restore cursor to input line before clearing
+                        crate::framebuffer::set_cursor(input_col_start + cursor, input_row);
                         clear_line_display(cursor, pos);
                         let bytes = selected.as_bytes();
                         let len = bytes.len().min(buffer.len() - 1);
@@ -372,6 +387,8 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                         let idx = if suggestion_idx >= 0 { suggestion_idx as usize } else { 0 };
                         let selected = suggestions[idx];
                         clear_suggestions_at_row(input_row, suggestions.len());
+                        // Restore cursor to input line before clearing
+                        crate::framebuffer::set_cursor(input_col_start + cursor, input_row);
                         clear_line_display(cursor, pos);
                         let bytes = selected.as_bytes();
                         let len = bytes.len().min(buffer.len() - 1);
@@ -557,10 +574,10 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                 27 => {
                     // Escape - reset scroll to bottom (live view)
                     if crate::framebuffer::is_scrolled_back() {
-                        crate::framebuffer::scroll_to_bottom();
-                        // Redraw current screen (need to force redraw)
-                        crate::framebuffer::clear();
-                        print_prompt();
+                        let (col, row) = crate::framebuffer::restore_live_view();
+                        input_row = row;
+                        // Place cursor after the prompt text, then re-type user input
+                        crate::framebuffer::set_cursor(col, row);
                         for i in 0..pos {
                             crate::print!("{}", buffer[i] as char);
                         }

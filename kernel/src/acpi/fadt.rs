@@ -244,78 +244,106 @@ pub fn parse(fadt_virt: u64, _hhdm: u64) -> Option<FadtInfo> {
 pub fn shutdown(fadt: &FadtInfo) {
     crate::serial_println!("[ACPI] Attempting ACPI shutdown...");
     
-    // For S5 (soft-off), we need to write SLP_TYPx | SLP_EN to PM1a_CNT
-    // The SLP_TYPx value should come from \_S5 in DSDT, but we'll try common values
+    // ── Step 0: Try VM-specific shutdown ports FIRST ───────────────
+    // These are no-ops on real hardware (reads 0xFF / ignored writes)
+    // but provide instant shutdown on QEMU, Bochs, VirtualBox, Cloud Hypervisor.
+    unsafe {
+        // QEMU PIIX4-PM / ICH9 (i440fx & q35 machine types)
+        x86_64::instructions::port::Port::<u16>::new(0x604).write(0x2000);
+        for _ in 0..100_000 { core::hint::spin_loop(); }
+        
+        // Bochs / older QEMU
+        x86_64::instructions::port::Port::<u16>::new(0xB004).write(0x2000);
+        for _ in 0..100_000 { core::hint::spin_loop(); }
+        
+        // VirtualBox (ACPI port)
+        x86_64::instructions::port::Port::<u16>::new(0x4004).write(0x3400);
+        for _ in 0..100_000 { core::hint::spin_loop(); }
+        
+        // Cloud Hypervisor
+        x86_64::instructions::port::Port::<u8>::new(0x600).write(0x34);
+        for _ in 0..100_000 { core::hint::spin_loop(); }
+    }
     
-    // Common S5 sleep type values
-    const SLP_TYP_S5_TYPICAL: u16 = 0x00 << 10;  // Some systems
-    const SLP_TYP_S5_COMMON: u16 = 0x05 << 10;   // Common value
-    const SLP_TYP_S5_ALT: u16 = 0x07 << 10;      // Alternative
-    const SLP_EN: u16 = 1 << 13;
+    crate::serial_println!("[ACPI] VM ports didn't work, trying ACPI PM1...");
     
-    // Try HW-reduced ACPI first if available
-    if fadt.is_hw_reduced() {
-        if let Some(ref sleep_ctrl) = fadt.sleep_ctrl_reg {
-            unsafe {
-                // Write S5 type + enable
-                sleep_ctrl.write((SLP_TYP_S5_COMMON >> 10) as u64 | 0x20);
+    // ── Step 1: Ensure ACPI mode is enabled ────────────────────────
+    if fadt.smi_cmd != 0 && fadt.acpi_enable != 0 {
+        unsafe {
+            // Check if SCI_EN is already set
+            if fadt.pm1a_cnt_blk != 0 {
+                let current = x86_64::instructions::port::Port::<u16>::new(fadt.pm1a_cnt_blk as u16).read();
+                if (current & 0x0001) == 0 {
+                    // ACPI not enabled — send ACPI_ENABLE to SMI_CMD
+                    crate::serial_println!("[ACPI] Enabling ACPI mode via SMI_CMD={:#x}", fadt.smi_cmd);
+                    x86_64::instructions::port::Port::<u8>::new(fadt.smi_cmd as u16)
+                        .write(fadt.acpi_enable);
+                    // Wait for SCI_EN to become set (up to ~100ms)
+                    for _ in 0..10_000_000 {
+                        let val = x86_64::instructions::port::Port::<u16>::new(fadt.pm1a_cnt_blk as u16).read();
+                        if (val & 0x0001) != 0 { break; }
+                        core::hint::spin_loop();
+                    }
+                }
             }
-            // If we're here, it didn't work
         }
     }
     
-    // Traditional ACPI shutdown via PM1a_CNT
+    // ── Step 2: HW-reduced ACPI (modern systems) ───────────────────
+    if fadt.is_hw_reduced() {
+        if let Some(ref sleep_ctrl) = fadt.sleep_ctrl_reg {
+            // SLP_TYP=0 + SLP_EN(bit 5) for HW-reduced
+            unsafe { sleep_ctrl.write(0x20); }
+            for _ in 0..1_000_000 { core::hint::spin_loop(); }
+        }
+    }
+    
+    // ── Step 3: Traditional ACPI S5 via PM1a_CNT ───────────────────
+    // SLP_TYP for S5 should come from DSDT \_S5_ object.
+    // We try the most common values in order of likelihood.
+    const SLP_EN: u16 = 1 << 13;
+    // SLP_TYP values (bits 12:10): different firmware use different values
+    let s5_types: [u16; 4] = [
+        0x00 << 10,  // QEMU (i440fx, q35), many modern BIOS
+        0x05 << 10,  // PIIX4, some older BIOS
+        0x07 << 10,  // VirtualBox, some Lenovo
+        0x02 << 10,  // Some Dell / HP
+    ];
+    
     if fadt.pm1a_cnt_blk != 0 {
-        unsafe {
-            // Try different S5 type values
-            let port = fadt.pm1a_cnt_blk as u16;
-            
-            // Read current value and preserve bits
-            let current = x86_64::instructions::port::Port::<u16>::new(port).read();
-            let preserved = current & 0x0203; // Preserve SCI_EN and some bits
-            
-            // Try common S5 value
-            x86_64::instructions::port::Port::<u16>::new(port)
-                .write(preserved | SLP_TYP_S5_COMMON | SLP_EN);
-            
-            // Small delay
-            for _ in 0..1000000 { core::hint::spin_loop(); }
-            
-            // Try typical S5 value
-            x86_64::instructions::port::Port::<u16>::new(port)
-                .write(preserved | SLP_TYP_S5_TYPICAL | SLP_EN);
-            
-            // Small delay
-            for _ in 0..1000000 { core::hint::spin_loop(); }
-            
-            // Try alternative S5 value
-            x86_64::instructions::port::Port::<u16>::new(port)
-                .write(preserved | SLP_TYP_S5_ALT | SLP_EN);
+        let port = fadt.pm1a_cnt_blk as u16;
+        
+        for &slp_typ in &s5_types {
+            unsafe {
+                // Read current, preserve SCI_EN (bit 0) only
+                let current = x86_64::instructions::port::Port::<u16>::new(port).read();
+                let sci_en = current & 0x0001;
+                
+                crate::serial_println!("[ACPI] S5: writing SLP_TYP={:#06x} | SLP_EN to PM1a_CNT port {:#x}",
+                    slp_typ, port);
+                
+                x86_64::instructions::port::Port::<u16>::new(port)
+                    .write(sci_en | slp_typ | SLP_EN);
+                
+                // Wait to see if it took effect
+                for _ in 0..500_000 { core::hint::spin_loop(); }
+            }
         }
         
         // Also try PM1b if present
         if fadt.pm1b_cnt_blk != 0 {
-            unsafe {
-                let port = fadt.pm1b_cnt_blk as u16;
-                x86_64::instructions::port::Port::<u16>::new(port)
-                    .write(SLP_TYP_S5_COMMON | SLP_EN);
+            let port_b = fadt.pm1b_cnt_blk as u16;
+            for &slp_typ in &s5_types {
+                unsafe {
+                    x86_64::instructions::port::Port::<u16>::new(port_b)
+                        .write(slp_typ | SLP_EN);
+                    for _ in 0..200_000 { core::hint::spin_loop(); }
+                }
             }
         }
     }
     
-    crate::serial_println!("[ACPI] Shutdown via PM1 failed, trying QEMU/Bochs...");
-    
-    // Fallback: QEMU shutdown via debug port
-    unsafe {
-        // QEMU debug exit
-        x86_64::instructions::port::Port::<u8>::new(0xf4).write(0x00);
-        
-        // Bochs/older QEMU shutdown
-        x86_64::instructions::port::Port::<u16>::new(0xB004).write(0x2000);
-        
-        // Another common QEMU shutdown port
-        x86_64::instructions::port::Port::<u16>::new(0x604).write(0x2000);
-    }
+    crate::serial_println!("[ACPI] All shutdown methods failed");
 }
 
 /// Reset the system using ACPI

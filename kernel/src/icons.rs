@@ -306,6 +306,7 @@ pub enum IconType {
     ModelEditor,
     GameBoy,
     GameLab,
+    Chess,
 }
 
 /// Draw an icon by type
@@ -326,6 +327,7 @@ pub fn draw_icon(icon_type: IconType, x: u32, y: u32, color: u32, bg: u32) {
         IconType::ModelEditor => draw_model_editor_icon(x, y, color, bg),
         IconType::GameBoy => draw_game_icon(x, y, color, bg), // reuse game icon for now
         IconType::GameLab => draw_gamelab_icon(x, y, color, bg),
+        IconType::Chess => draw_game_icon(x, y, color, bg), // placeholder
     }
 }
 

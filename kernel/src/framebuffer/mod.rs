@@ -1902,16 +1902,11 @@ pub fn scroll_down(lines: usize) {
         sb.scroll_offset = sb.scroll_offset.saturating_sub(lines);
         sb.is_scrolled = sb.scroll_offset > 0;
         
-        if sb.is_scrolled {
-            let offset = sb.scroll_offset;
-            let total = sb.total_lines();
-            drop(scrollback);
-            redraw_from_scrollback(offset, total, visible_rows);
-        } else {
-            // Back to live view
-            drop(scrollback);
-            // Just let normal output resume
-        }
+        let offset = sb.scroll_offset;
+        let total = sb.total_lines();
+        drop(scrollback);
+        // Redraw at new position (including live view at offset=0)
+        redraw_from_scrollback(offset, total, visible_rows);
     }
 }
 
@@ -1921,6 +1916,31 @@ pub fn scroll_to_bottom() {
         sb.scroll_offset = 0;
         sb.is_scrolled = false;
     }
+}
+
+/// Restore live view: snap to bottom and fully redraw the screen
+/// Returns the (col, row) of the cursor after redraw
+pub fn restore_live_view() -> (usize, usize) {
+    let total = {
+        let mut scrollback = SCROLLBACK.lock();
+        if let Some(ref mut sb) = *scrollback {
+            sb.scroll_offset = 0;
+            sb.is_scrolled = false;
+            sb.total_lines()
+        } else {
+            return (0, 0);
+        }
+    };
+
+    let height = FB_HEIGHT.load(Ordering::SeqCst) as usize;
+    if height == 0 {
+        return (0, 0);
+    }
+    let visible_rows = height / CHAR_HEIGHT;
+    redraw_from_scrollback(0, total, visible_rows);
+
+    let console = CONSOLE.lock();
+    (console.cursor_x, console.cursor_y)
 }
 
 /// Check if we're in scrollback mode
@@ -1956,6 +1976,10 @@ fn redraw_from_scrollback(scroll_offset: usize, total_lines: usize, visible_rows
     let start_line = total_lines.saturating_sub(visible_rows + scroll_offset);
     let end_line = total_lines.saturating_sub(scroll_offset);
     
+    let mut live_cursor_col = 0usize;
+    let mut live_cursor_row = 0usize;
+    let mut has_current_line = false;
+    
     let scrollback = SCROLLBACK.lock();
     if let Some(ref sb) = *scrollback {
         for (screen_row, line_idx) in (start_line..end_line).enumerate() {
@@ -1971,6 +1995,37 @@ fn redraw_from_scrollback(scroll_offset: usize, total_lines: usize, visible_rows
                 draw_char(c, px, py, fg, bg);
             }
         }
+        
+        // When at live view (scroll_offset=0), also draw the current uncommitted line
+        // This is the prompt + any partially typed input
+        if scroll_offset == 0 {
+            let screen_row = end_line.saturating_sub(start_line);
+            if screen_row < visible_rows && sb.current_line.len > 0 {
+                for col in 0..sb.current_line.len.min(cols) {
+                    let c = sb.current_line.chars[col];
+                    let (fg, bg) = sb.current_line.colors[col];
+                    let px = col * CHAR_WIDTH;
+                    let py = screen_row * CHAR_HEIGHT;
+                    draw_char(c, px, py, fg, bg);
+                }
+                live_cursor_row = screen_row;
+                live_cursor_col = sb.current_line.len.min(cols);
+                has_current_line = true;
+            } else if screen_row < visible_rows {
+                // Empty current line - cursor at start of row
+                live_cursor_row = screen_row;
+                live_cursor_col = 0;
+                has_current_line = true;
+            }
+        }
+    }
+    drop(scrollback);
+    
+    // Update cursor position for live view
+    if scroll_offset == 0 && has_current_line {
+        let mut console = CONSOLE.lock();
+        console.cursor_y = live_cursor_row;
+        console.cursor_x = live_cursor_col;
     }
     
     // Show scroll indicator at top right
