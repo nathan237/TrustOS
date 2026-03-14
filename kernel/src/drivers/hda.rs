@@ -918,10 +918,11 @@ impl HdaController {
             }
 
             // Also try to unmute the AFG output/input amps (node 1) — separate commands
+            // Use conservative gain=0x27 (39 = typical AD1984 max steps)
             let _ = self.set_verb_16(codec, 1, 0x300,
-                (1u16 << 15) | (1 << 13) | (1 << 12) | 0x7F);
+                (1u16 << 15) | (1 << 13) | (1 << 12) | 0x27);
             let _ = self.set_verb_16(codec, 1, 0x300,
-                (1u16 << 14) | (1 << 13) | (1 << 12) | 0x7F);
+                (1u16 << 14) | (1 << 13) | (1 << 12) | 0x27);
 
             // ── GPIO1 enable — powers the external speaker/HP amplifier ──
             // Required on ThinkPad T61 (and many AD1984 laptops).
@@ -964,25 +965,33 @@ impl HdaController {
 
         // Unmute ALL widget amps in the entire codec — brute force approach
         // to ensure nothing is accidentally muted (path discovery may miss intermediate nodes)
-        // Collect widget info with connection counts for indexed amp unmute
-        let all_widget_conns: Vec<(u16, u32, usize)> = self.widgets.iter()
-            .map(|w| (w.nid, w.caps, w.connections.len()))
+        // Collect widget info with connection counts and amp caps for valid gain range
+        let all_widget_conns: Vec<(u16, u32, usize, u32, u32)> = self.widgets.iter()
+            .map(|w| (w.nid, w.caps, w.connections.len(), w.amp_out_caps, w.amp_in_caps))
             .collect();
 
-        for &(nid, caps, num_conns) in &all_widget_conns {
+        for &(nid, caps, num_conns, out_caps, in_caps) in &all_widget_conns {
+            // Extract max gain from amp caps: numsteps is bits [14:8]
+            // AD1984 silently ignores gain values > numsteps!
+            let out_steps = ((out_caps >> 8) & 0x7F) as u16;
+            let in_steps = ((in_caps >> 8) & 0x7F) as u16;
+            // Use numsteps as gain (= max volume). If no amp caps, use 0 (passthrough).
+            let out_gain = if out_steps > 0 { out_steps } else { 0x7F };
+            let in_gain = if in_steps > 0 { in_steps } else { 0x7F };
+
             // Send SEPARATE output and input amp SET commands.
             // AD1984 and some codecs silently discard combined bit15+bit14 commands.
-            // Output amp: bit 15, L+R, unmuted, max gain
-            let amp_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | 0x7F;
+            // Output amp: bit 15, L+R, unmuted, gain=numsteps
+            let amp_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (out_gain & 0x7F);
             let _ = self.set_verb_16(codec, nid, 0x300, amp_out);
-            // Input amp index 0: bit 14, L+R, unmuted, max gain
-            let amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | 0x7F;
+            // Input amp index 0: bit 14, L+R, unmuted, gain=numsteps
+            let amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (in_gain & 0x7F);
             let _ = self.set_verb_16(codec, nid, 0x300, amp_in);
 
             // For widgets with multiple connections, unmute each input index
             if num_conns > 1 {
                 for idx in 1..num_conns.min(16) {
-                    let amp_in_idx: u16 = (1 << 14) | (1 << 13) | (1 << 12) | ((idx as u16 & 0xF) << 8) | 0x7F;
+                    let amp_in_idx: u16 = (1 << 14) | (1 << 13) | (1 << 12) | ((idx as u16 & 0xF) << 8) | (in_gain & 0x7F);
                     let _ = self.set_verb_16(codec, nid, 0x300, amp_in_idx);
                 }
             }
@@ -1786,11 +1795,19 @@ pub fn amp_probe() -> String {
             let before_out_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0xC0).unwrap_or(0xDEAD);
             let before_in_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x40).unwrap_or(0xDEAD);
 
-            // SET output amp: gain = 0x3F, unmuted, L+R
-            let set_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | 0x3F;
+            // Query amp caps to get valid gain range
+            let out_caps = if has_out_amp { ctrl.get_param(codec, nid, verb::PARAM_AMP_OUT_CAPS).unwrap_or(0) } else { 0 };
+            let in_caps = if has_in_amp { ctrl.get_param(codec, nid, verb::PARAM_AMP_IN_CAPS).unwrap_or(0) } else { 0 };
+            let out_steps = ((out_caps >> 8) & 0x7F) as u16;
+            let in_steps = ((in_caps >> 8) & 0x7F) as u16;
+            let out_gain = if out_steps > 0 { out_steps } else { 0x1F };
+            let in_gain = if in_steps > 0 { in_steps } else { 0x1F };
+
+            // SET output amp: gain = numsteps (max), unmuted, L+R
+            let set_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (out_gain & 0x7F);
             let out_res = ctrl.set_verb_16(codec, nid, 0x300, set_out);
-            // SET input amp index 0: gain = 0x3F, unmuted, L+R
-            let set_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | 0x3F;
+            // SET input amp index 0: gain = numsteps (max), unmuted, L+R
+            let set_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (in_gain & 0x7F);
             let in_res = ctrl.set_verb_16(codec, nid, 0x300, set_in);
 
             // Read AFTER
@@ -1800,16 +1817,18 @@ pub fn amp_probe() -> String {
             let changed_out = before_out_l != after_out_l;
             let changed_in = before_in_l != after_in_l;
 
-            s.push_str(&format!("NID {:2} type={} oamp={} iamp={}\n",
-                nid, wtype, has_out_amp, has_in_amp));
-            s.push_str(&format!("  OUT: {:#04X}->{:#04X} {} set={}\n",
+            s.push_str(&format!("NID {:2} type={} oamp={}({}) iamp={}({})\n",
+                nid, wtype, has_out_amp, out_steps, has_in_amp, in_steps));
+            s.push_str(&format!("  OUT: {:#04X}->{:#04X} {} set={} gain={}\n",
                 before_out_l, after_out_l,
                 if changed_out { "CHANGED" } else { "same" },
-                if out_res.is_ok() { "ok" } else { "ERR" }));
-            s.push_str(&format!("  IN:  {:#04X}->{:#04X} {} set={}\n",
+                if out_res.is_ok() { "ok" } else { "ERR" },
+                out_gain));
+            s.push_str(&format!("  IN:  {:#04X}->{:#04X} {} set={} gain={}\n",
                 before_in_l, after_in_l,
                 if changed_in { "CHANGED" } else { "same" },
-                if in_res.is_ok() { "ok" } else { "ERR" }));
+                if in_res.is_ok() { "ok" } else { "ERR" },
+                in_gain));
         }
     }
 
@@ -1886,16 +1905,23 @@ pub fn set_volume(level: u8) -> Result<(), &'static str> {
     let codec = ctrl.codecs[0];
     let path = ctrl.output_paths[0].clone();
     
-    // Convert 0-100 to 0-127 amp gain
-    let gain = ((level as u32) * 127 / 100) as u16;
+    // Convert 0-100 to gain scaled to actual amp numsteps (not 0-127)
+    // AD1984 DACs have 39 steps — gain > numsteps is silently ignored!
+    let path_dac_nid = path.dac_nid;
+    let max_gain = ctrl.widgets.iter()
+        .find(|w| w.nid == path_dac_nid)
+        .map(|w| ((w.amp_out_caps >> 8) & 0x7F) as u16)
+        .unwrap_or(39);
+    let max_gain = if max_gain == 0 { 39 } else { max_gain };
+    let gain = ((level as u32) * (max_gain as u32) / 100) as u16;
     
     // Set amp gain on all widgets in the output path (separate output and input amps)
     for &nid in &path.path {
         // Output amp: bit 15 only + L+R + gain
-        let amp_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | gain;
+        let amp_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (gain & 0x7F);
         let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_out);
         // Input amp: bit 14 only + L+R + gain
-        let amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | gain;
+        let amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (gain & 0x7F);
         let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_in);
     }
     
