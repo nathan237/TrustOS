@@ -2840,7 +2840,15 @@ pub(super) fn cmd_beep(args: &[&str]) {
 
     crate::println!("Playing {}Hz for {}ms...", freq, duration);
     match crate::drivers::hda::play_tone(freq, duration) {
-        Ok(()) => crate::println_color!(COLOR_GREEN, "Done"),
+        Ok(()) => {
+            // Show DMA position info for debugging
+            let lpib = crate::drivers::hda::get_lpib();
+            if lpib == 0 {
+                crate::println_color!(COLOR_RED, "Done (LPIB=0 — DMA not running!)");
+            } else {
+                crate::println_color!(COLOR_GREEN, "Done (LPIB={})", lpib);
+            }
+        },
         Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
     }
 }
@@ -2898,8 +2906,24 @@ pub(super) fn cmd_audio(args: &[&str]) {
             let probe = crate::drivers::hda::amp_probe();
             crate::println!("{}", probe);
         }
+        Some("gpio") => {
+            // audio gpio <0|1|2> — set GPIO DATA value on AFG
+            let val = match args.get(1).and_then(|s| s.parse::<u8>().ok()) {
+                Some(v) => v,
+                None => {
+                    crate::println_color!(COLOR_YELLOW, "Usage: audio gpio <0|1|2>");
+                    crate::println!("  0 = GPIO1 LOW (active for some amps)");
+                    crate::println!("  2 = GPIO1 HIGH");
+                    return;
+                }
+            };
+            match crate::drivers::hda::set_gpio(val) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "GPIO DATA set to {:#04X}", val),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
         Some(other) => {
-            crate::println_color!(COLOR_YELLOW, "Usage: audio [init|status|stop|test|diag|dump|probe]");
+            crate::println_color!(COLOR_YELLOW, "Usage: audio [init|status|stop|test|diag|dump|probe|gpio]");
         }
     }
 }

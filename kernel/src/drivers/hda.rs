@@ -110,26 +110,34 @@ mod ssts {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 mod verb {
-    // GET verbs (12-bit)
+    // GET verbs (12-bit verb, 8-bit payload)
     pub const GET_PARAMETER: u32        = 0xF00;
     pub const GET_CONN_LIST: u32        = 0xF02;
     pub const GET_CONN_SELECT: u32      = 0xF01;
-    pub const GET_AMP_GAIN: u32         = 0xB00;
     pub const GET_PIN_CONTROL: u32      = 0xF07;
     pub const GET_CONFIG_DEFAULT: u32   = 0xF1C;
     pub const GET_EAPD: u32             = 0xF0C;
     pub const GET_POWER_STATE: u32      = 0xF05;
-    pub const GET_STREAM_FORMAT: u32    = 0xA00;
     pub const GET_CHANNEL_STREAM: u32   = 0xF06;
 
-    // SET verbs (4-bit verb + 8-bit payload → or 12-bit verb variants)
+    // GET verbs (4-bit verb, 16-bit payload) — use with set_verb_16()
+    pub const GET_AMP_GAIN: u32         = 0xB00;  // 4-bit! payload: bit15=out, bit13=left, bits3:0=idx
+    pub const GET_STREAM_FORMAT: u32    = 0xA00;  // 4-bit! same as SET but returns current value
+
+    // SET verbs (12-bit verb, 8-bit payload)
     pub const SET_CONN_SELECT: u32      = 0x701;
     pub const SET_POWER_STATE: u32      = 0x705;
     pub const SET_CHANNEL_STREAM: u32   = 0x706;
     pub const SET_PIN_CONTROL: u32      = 0x707;
     pub const SET_EAPD: u32             = 0x70C;
-    pub const SET_AMP_GAIN_MUTE: u32    = 0x300;  // 4-bit verb, 16-bit payload
-    pub const SET_STREAM_FORMAT: u32    = 0x200;  // 4-bit verb, 16-bit payload
+
+    // SET/GET verbs (4-bit verb, 16-bit payload) — use with set_verb_16()
+    pub const SET_AMP_GAIN_MUTE: u32    = 0x300;
+    pub const SET_STREAM_FORMAT: u32    = 0x200;
+    pub const SET_COEF_INDEX: u32       = 0x500;  // Processing Coefficient Index
+    pub const SET_PROC_COEF: u32        = 0x400;  // Processing Coefficient Data
+    pub const GET_COEF_INDEX: u32       = 0xD00;  // Read back coef index
+    pub const GET_PROC_COEF: u32        = 0xC00;  // Read back coef data
 
     // GPIO verbs (12-bit verb, 8-bit data) — sent to AFG node (NID 1)
     pub const SET_GPIO_DATA: u32        = 0x715;
@@ -917,6 +925,15 @@ impl HdaController {
                 crate::serial_println!("[HDA]   Pin NID {} -> EAPD=0x02, PIN_CTL=0xC0", nid);
             }
 
+            // ── ThinkPad DMIC coefficient init (from Linux patch_analog.c) ──
+            // AD1884_FIXUP_DMIC_COEF: required for AD1984 ThinkPad internal routing.
+            // Without these, the codec's internal DSP may not route DAC→output properly.
+            if is_ad198x {
+                let _ = self.set_verb_16(codec, 1, verb::SET_COEF_INDEX, 0x13f7);
+                let _ = self.set_verb_16(codec, 1, verb::SET_PROC_COEF, 0x0008);
+                crate::serial_println!("[HDA]   AD1984 DMIC COEF: idx=0x13f7 val=0x08");
+            }
+
             // Also try to unmute the AFG output/input amps (node 1) — separate commands
             // Use conservative gain=0x27 (39 = typical AD1984 max steps)
             let _ = self.set_verb_16(codec, 1, 0x300,
@@ -925,13 +942,14 @@ impl HdaController {
                 (1u16 << 14) | (1 << 13) | (1 << 12) | 0x27);
 
             // ── GPIO1 enable — powers the external speaker/HP amplifier ──
-            // Required on ThinkPad T61 (and many AD1984 laptops).
-            // Without this, codec is configured but amplifier stays off = silence.
-            // Reference: Linux kernel patch_analog.c ad1984_thinkpad_init_verbs
+            // Linux HP fixup: GPIO1=LOW(0x00)=enabled, GPIO1=HIGH(0x02)=muted.
+            // Linux ThinkPad fixup doesn't use GPIO (uses EAPD instead).
+            // We set GPIO1 mask+dir to allow control, but set DATA=0x00 (active low).
+            // If this doesn't work, user can try `audio gpio 1` to set HIGH.
             let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_MASK, 0x02); // Enable GPIO1
             let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DIR,  0x02); // GPIO1 = output
-            let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DATA, 0x02); // GPIO1 = HIGH
-            crate::serial_println!("[HDA]   GPIO1 enabled (speaker amp power)");
+            let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DATA, 0x00); // GPIO1 = LOW (active)
+            crate::serial_println!("[HDA]   GPIO1 configured (mask=0x02 dir=0x02 data=0x00)");
         }
 
         // Configure the pin: OUT enable + HP amp enable
@@ -1306,7 +1324,14 @@ pub fn play_tone(freq_hz: u32, duration_ms: u32) -> Result<(), &'static str> {
     // Reset stream to zero LPIB before each tone — prevents stale position
     ctrl.reset_output_stream();
     ctrl.fill_tone(freq_hz, duration_ms);
+
+    // Read LPIB before play
+    let pos_before = ctrl.stream_position();
     ctrl.play(true);
+
+    // Brief delay then check if LPIB is advancing (DMA running check)
+    HdaController::delay_us(5000); // 5ms
+    let pos_early = ctrl.stream_position();
 
     // Busy-wait for the duration
     let sample_rate = 48000u32;
@@ -1321,7 +1346,27 @@ pub fn play_tone(freq_hz: u32, duration_ms: u32) -> Result<(), &'static str> {
         }
     }
 
+    let pos_after = ctrl.stream_position();
     ctrl.play(false);
+
+    // Log DMA status for debugging
+    crate::serial_println!("[HDA] play_tone: LPIB before={} early={} after={} target={}",
+        pos_before, pos_early, pos_after, target);
+    if pos_early == 0 && pos_after == 0 {
+        crate::serial_println!("[HDA] WARNING: LPIB never advanced! DMA may not be running.");
+    }
+
+    Ok(())
+}
+
+/// Toggle GPIO data on AFG node 1. val: 0=LOW (active for some amps), 2=HIGH.
+pub fn set_gpio(val: u8) -> Result<(), &'static str> {
+    let mut hda = HDA.lock();
+    let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
+    if ctrl.codecs.is_empty() { return Err("No codecs"); }
+    let codec = ctrl.codecs[0];
+    let _ = ctrl.codec_cmd(codec, 1, verb::SET_GPIO_DATA, val);
+    crate::serial_println!("[HDA] GPIO DATA set to {:#04X}", val);
     Ok(())
 }
 
@@ -1331,6 +1376,15 @@ pub fn stop() -> Result<(), &'static str> {
     let ctrl = hda.as_mut().ok_or("HDA: not initialized")?;
     ctrl.play(false);
     Ok(())
+}
+
+/// Get current LPIB (stream position) — 0 means DMA not running
+pub fn get_lpib() -> u32 {
+    let hda = HDA.lock();
+    match hda.as_ref() {
+        Some(ctrl) => ctrl.stream_position(),
+        None => 0,
+    }
 }
 
 /// Reset the output stream (SRST): clears LPIB, FIFOs, and all stream state.
@@ -1670,7 +1724,8 @@ pub fn codec_dump() -> String {
         let pin_ctl = ctrl.codec_cmd(codec, *nid, verb::GET_PIN_CONTROL, 0).unwrap_or(0);
         let eapd = ctrl.codec_cmd(codec, *nid, verb::GET_EAPD, 0).unwrap_or(0);
         let power = ctrl.codec_cmd(codec, *nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
-        let amp_out = ctrl.codec_cmd(codec, *nid, verb::GET_AMP_GAIN, 0x80).unwrap_or(0);
+        // GET_AMP is 4-bit verb: bit15=output, bit13=left, bits3:0=index
+        let amp_out = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0); // output, right
         let pin_caps = ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAM_PIN_CAPS as u8).unwrap_or(0);
 
         let out_en = pin_ctl & 0x40 != 0;
@@ -1697,13 +1752,14 @@ pub fn codec_dump() -> String {
     for nid in &dac_widgets {
         let power = ctrl.codec_cmd(codec, *nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
         let stream = ctrl.codec_cmd(codec, *nid, verb::GET_CHANNEL_STREAM, 0).unwrap_or(0);
-        let fmt = ctrl.codec_cmd(codec, *nid, verb::GET_STREAM_FORMAT, 0).unwrap_or(0);
+        // GET_STREAM_FORMAT is also 4-bit verb
+        let fmt = ctrl.set_verb_16(codec, *nid, verb::GET_STREAM_FORMAT, 0).unwrap_or(0);
         let wcaps = ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAM_AUDIO_CAPS as u8).unwrap_or(0);
         let has_out_amp = wcaps & (1 << 2) != 0;
         let has_in_amp = wcaps & (1 << 1) != 0;
-        // Read output amp (left and right)
-        let amp_out_l = ctrl.codec_cmd(codec, *nid, verb::GET_AMP_GAIN, 0xC0).unwrap_or(0);
-        let amp_out_r = ctrl.codec_cmd(codec, *nid, verb::GET_AMP_GAIN, 0x80).unwrap_or(0);
+        // GET_AMP is 4-bit verb: payload bit15=output, bit13=left, bits3:0=index
+        let amp_out_l = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0); // out, left
+        let amp_out_r = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0); // out, right
         // Read amp capabilities
         let amp_ocaps = if has_out_amp { ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAM_AMP_OUT_CAPS as u8).unwrap_or(0) } else { 0 };
 
@@ -1732,10 +1788,11 @@ pub fn codec_dump() -> String {
                 let wcaps = ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAM_AUDIO_CAPS as u8).unwrap_or(0);
                 let has_out_amp = wcaps & (1 << 2) != 0;
                 let has_in_amp = wcaps & (1 << 1) != 0;
-                let amp_out_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0xC0).unwrap_or(0);
-                let amp_out_r = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x80).unwrap_or(0);
-                let amp_in_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x40).unwrap_or(0);
-                let amp_in_r = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x00).unwrap_or(0);
+                // 4-bit verb GET_AMP: bit15=output, bit13=left, bits3:0=index
+                let amp_out_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0);
+                let amp_out_r = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0);
+                let amp_in_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x2000).unwrap_or(0);
+                let amp_in_r = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x0000).unwrap_or(0);
                 let amp_ocaps = if has_out_amp { ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAM_AMP_OUT_CAPS as u8).unwrap_or(0) } else { 0 };
                 let amp_icaps = if has_in_amp { ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAM_AMP_IN_CAPS as u8).unwrap_or(0) } else { 0 };
                 let conn_sel = ctrl.codec_cmd(codec, nid, verb::GET_CONN_SELECT, 0).unwrap_or(0);
@@ -1791,9 +1848,9 @@ pub fn amp_probe() -> String {
             let has_out_amp = wcaps & (1 << 2) != 0;
             let has_in_amp = wcaps & (1 << 1) != 0;
 
-            // Read BEFORE
-            let before_out_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0xC0).unwrap_or(0xDEAD);
-            let before_in_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x40).unwrap_or(0xDEAD);
+            // Read BEFORE (4-bit verb: bit15=output, bit13=left)
+            let before_out_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0xDEAD); // out, left
+            let before_in_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x2000).unwrap_or(0xDEAD);  // in, left
 
             // Query amp caps to get valid gain range
             let out_caps = if has_out_amp { ctrl.get_param(codec, nid, verb::PARAM_AMP_OUT_CAPS).unwrap_or(0) } else { 0 };
@@ -1810,9 +1867,9 @@ pub fn amp_probe() -> String {
             let set_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (in_gain & 0x7F);
             let in_res = ctrl.set_verb_16(codec, nid, 0x300, set_in);
 
-            // Read AFTER
-            let after_out_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0xC0).unwrap_or(0xDEAD);
-            let after_in_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x40).unwrap_or(0xDEAD);
+            // Read AFTER (same 4-bit GET encoding)
+            let after_out_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0xDEAD);
+            let after_in_l = ctrl.set_verb_16(codec, nid, verb::GET_AMP_GAIN, 0x2000).unwrap_or(0xDEAD);
 
             let changed_out = before_out_l != after_out_l;
             let changed_in = before_in_l != after_in_l;
