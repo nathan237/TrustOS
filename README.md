@@ -14,7 +14,7 @@
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
 [![Lines](https://img.shields.io/badge/code-263%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.10.1-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.10.2-orange?style=for-the-badge)]()
 [![Tests](https://img.shields.io/badge/tests-96%2F96%20(100%25)-brightgreen?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -23,23 +23,23 @@
 
 <img src="media/screenshots/screenshot_desktop.png" alt="TrustOS Desktop" width="720"/>
 
-[What's New](#-whats-new-in-v0100) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
+[What's New](#-whats-new-in-v0102) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
 
 ---
 
 </div>
 
-## 🆕 What's New in v0.10.1
+## 🆕 What's New in v0.10.2
 
-> **March 14, 2026** — Desktop Apps & Shell Polish
+> **March 14, 2026** — ThinkPad Hardware Control & HDA Audio Fixes
 
-- �️ **Settings GUI** — Full desktop settings panel with sidebar navigation (Display, Sound, Taskbar, Personalization, Accessibility, Network, Apps, About). Toggle switches, volume sliders, live preview.
-- 🔍 **NetScan GUI** — Tabbed network security toolkit in desktop: Dashboard, Port Scanner, Discovery, Packet Sniffer, Traceroute, Vulnerability Scanner.
-- 🔧 **Shell scrollback fix** — PageUp/PageDown now properly restores live view. Auto-snap to bottom on any keypress. Input line stays pinned to correct position after scrolling.
-- ⌨️ **Tab autocomplete fix** — Tab/Enter with suggestions no longer displaces the cursor to the wrong screen row.
-- ⚡ **ACPI shutdown hardening** — VM-specific shutdown ports tried first (QEMU, Bochs, VirtualBox, Cloud Hypervisor), then standard ACPI PM1a with multi-type scan.
-- 🎮 **Desktop app rename** — "Chess 3D" replaces generic "Games" icon.
-- 📊 **263,000+ lines** across 476 source files, 3 architectures.
+- 🌡️ **ThinkPad EC driver** — Full Embedded Controller support via ports 0x62/0x66. Read 8 temperature sensors (CPU, GPU, HDD, battery...), control fan speed (manual 0-7, auto, full), read fan RPM. New commands: `fan`, `temp`, `sensors`.
+- ⚡ **CPU frequency/voltage control** — Intel SpeedStep (EIST) via MSR 0x198/0x199. Read/set P-states, frequency multiplier, VID voltage. Predefined T61 Core 2 Duo profiles (800 MHz–2.0 GHz). New command: `cpufreq`.
+- 🔊 **HDA speaker path fix** — Critical bug: only the headphone path had connection selects configured. Speaker path (NID 18→10→4) never received audio — what sounded like "hard drive knocking" was DMA start/stop pops with no actual signal. Now all output paths (HP, Speaker, SPDIF) are fully wired.
+- 🔊 **HDA GPIO1 polarity fix** — T61 amp uses direct polarity (HIGH=on), not inverted like HP laptops. GPIO1=LOW was silencing the amplifier.
+- 🔊 **HDA Amp Param Override** — Per HDA spec 7.3.4.7: when override bit is clear, always use AFG amp caps. AD1984 widgets returned non-zero caps with numsteps=0, causing silent output.
+- 🔧 **Shell scrollback fix** — Backspace tracking in scrollback buffer, raw pixel rendering for suggestions/tab-complete to prevent buffer corruption, auto-snap on live view restore.
+- 📊 **263,000+ lines** across 476+ source files, 3 architectures.
 
 ---
 
@@ -423,6 +423,16 @@ TrustOS/
 ---
 
 ## 📋 Changelog
+
+### v0.10.2 — ThinkPad Hardware Control (March 14, 2026)
+
+- **ThinkPad EC driver** — Embedded Controller communication (ports 0x62/0x66) with IBF/OBF handshake and timeout. 8 temperature sensors, fan level get/set (0-7, auto, full speed, off), fan RPM readout.
+- **CPU frequency/voltage** — Intel Enhanced SpeedStep via MSR 0x198/0x199. Read current freq/voltage, set P-states by FID/VID, predefined T61 Core 2 Duo profiles. CPU DTS thermal readout via MSR 0x19C.
+- **HDA speaker path** — Fixed critical bug where only the headphone route had `conn_sel` set. Speaker path NID 18→10→4 never received audio. All output paths now fully configured.
+- **HDA GPIO1 polarity** — T61 needs GPIO1=HIGH for amp power (not LOW like HP laptops). Confirmed via hardware testing.
+- **HDA Amp Param Override** — Per spec 7.3.4.7, use AFG amp caps when widget override bit is clear. AD1984 widgets returned non-zero caps with numsteps=0.
+- **Shell scrollback** — Backspace tracking, raw pixel suggestion rendering, auto-snap on restore. Tab autocomplete uses direct pixel clearing to avoid buffer corruption.
+- **New commands:** `fan`, `temp`/`sensors`, `cpufreq`/`speedstep`.
 
 ### v0.10.1 — Desktop Apps & Shell Polish (March 14, 2026)
 

@@ -16,6 +16,7 @@ pub mod partition;
 pub mod virtio_gpu;
 pub mod hda;
 pub mod amdgpu;
+pub mod thinkpad_ec;
 
 /// Apple Silicon hardware drivers (AIC, UART, DART, PMGR)
 /// Used for iPhone/iPad bare-metal boot via checkm8/PongoOS

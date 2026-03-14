@@ -218,6 +218,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "lsusb", "checkm8",
     // Audio
     "beep", "audio", "synth", "play", "vizfx",
+    // ThinkPad EC / Power
+    "fan", "temp", "sensors", "cpufreq", "speedstep",
     // Network
     "ifconfig", "ip", "ipconfig", "ping", "curl", "wget", "download",
     "nslookup", "dig", "arp", "route", "netstat",
@@ -1299,6 +1301,11 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "cpuid" => unix::cmd_cpuid(args),
         "memmap" => unix::cmd_memmap(),
         "watchdog" | "wdt" => unix::cmd_watchdog(args),
+
+        // -- ThinkPad EC: Fan, Thermal, CPU Frequency --
+        "fan" => crate::drivers::thinkpad_ec::cmd_fan(args),
+        "temp" | "sensors" => crate::drivers::thinkpad_ec::cmd_temp(args),
+        "cpufreq" | "speedstep" => crate::drivers::thinkpad_ec::cmd_cpufreq(args),
 
         // -- apps module: TrustLang, Film, Transpile, Video, Lab, Gterm, Wayland --
         "wayland" | "wl" => apps::cmd_wayland(args),
