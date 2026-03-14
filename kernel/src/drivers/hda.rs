@@ -128,8 +128,17 @@ mod verb {
     pub const SET_CHANNEL_STREAM: u32   = 0x706;
     pub const SET_PIN_CONTROL: u32      = 0x707;
     pub const SET_EAPD: u32             = 0x70C;
-    pub const SET_AMP_GAIN_MUTE: u32    = 0x300;  // 12-bit verb, 8-bit payload in command
-    pub const SET_STREAM_FORMAT: u32    = 0x200;  // 12-bit verb, 16-bit payload
+    pub const SET_AMP_GAIN_MUTE: u32    = 0x300;  // 4-bit verb, 16-bit payload
+    pub const SET_STREAM_FORMAT: u32    = 0x200;  // 4-bit verb, 16-bit payload
+
+    // GPIO verbs (12-bit verb, 8-bit data) — sent to AFG node (NID 1)
+    pub const SET_GPIO_DATA: u32        = 0x715;
+    pub const SET_GPIO_MASK: u32        = 0x716;
+    pub const SET_GPIO_DIR: u32         = 0x717;
+    pub const GET_GPIO_DATA: u32        = 0xF15;
+    pub const GET_GPIO_MASK: u32        = 0xF16;
+    pub const GET_GPIO_DIR: u32         = 0xF17;
+    pub const PARAM_GPIO_COUNT: u32    = 0x11;  // GPIO Count parameter
 
     // Parameters (used with GET_PARAMETER)
     pub const PARAM_VENDOR_ID: u32     = 0x00;
@@ -913,6 +922,15 @@ impl HdaController {
                 (1u16 << 15) | (1 << 13) | (1 << 12) | 0x7F);
             let _ = self.set_verb_16(codec, 1, 0x300,
                 (1u16 << 14) | (1 << 13) | (1 << 12) | 0x7F);
+
+            // ── GPIO1 enable — powers the external speaker/HP amplifier ──
+            // Required on ThinkPad T61 (and many AD1984 laptops).
+            // Without this, codec is configured but amplifier stays off = silence.
+            // Reference: Linux kernel patch_analog.c ad1984_thinkpad_init_verbs
+            let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_MASK, 0x02); // Enable GPIO1
+            let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DIR,  0x02); // GPIO1 = output
+            let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DATA, 0x02); // GPIO1 = HIGH
+            crate::serial_println!("[HDA]   GPIO1 enabled (speaker amp power)");
         }
 
         // Configure the pin: OUT enable + HP amp enable
@@ -1612,6 +1630,14 @@ pub fn codec_dump() -> String {
         s.push_str(&format!("  Path[{}]: pin={} dac={} type={} route={:?}\n",
             i, p.pin_nid, p.dac_nid, p.device_type, p.path));
     }
+
+    // GPIO state (sent to AFG node 1)
+    let gpio_data = ctrl.codec_cmd(codec, 1, verb::GET_GPIO_DATA, 0).unwrap_or(0);
+    let gpio_mask = ctrl.codec_cmd(codec, 1, verb::GET_GPIO_MASK, 0).unwrap_or(0);
+    let gpio_dir  = ctrl.codec_cmd(codec, 1, verb::GET_GPIO_DIR,  0).unwrap_or(0);
+    let gpio_count = ctrl.get_param(codec, 1, verb::PARAM_GPIO_COUNT).unwrap_or(0);
+    s.push_str(&format!("GPIO: count={} mask={:#04X} dir={:#04X} data={:#04X}\n",
+        gpio_count & 0xFF, gpio_mask, gpio_dir, gpio_data));
 
     // Dump all pin complexes with their actual hardware state
     s.push_str(&format!("\n--- Pin Widgets ---\n"));
