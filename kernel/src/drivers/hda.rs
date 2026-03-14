@@ -942,14 +942,13 @@ impl HdaController {
                 (1u16 << 14) | (1 << 13) | (1 << 12) | 0x27);
 
             // ── GPIO1 enable — powers the external speaker/HP amplifier ──
-            // Linux HP fixup: GPIO1=LOW(0x00)=enabled, GPIO1=HIGH(0x02)=muted.
-            // Linux ThinkPad fixup doesn't use GPIO (uses EAPD instead).
-            // We set GPIO1 mask+dir to allow control, but set DATA=0x00 (active low).
-            // If this doesn't work, user can try `audio gpio 1` to set HIGH.
+            // T61 ThinkPad: GPIO1=HIGH powers the amplifier (confirmed by amp pop test).
+            // Linux HP fixup inverts this (GPIO1=LOW=on), but T61 uses direct polarity.
+            // Test data=0x01(GPIO1 LOW) = silence, data=0x03(GPIO1 HIGH) = sound.
             let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_MASK, 0x02); // Enable GPIO1
             let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DIR,  0x02); // GPIO1 = output
-            let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DATA, 0x00); // GPIO1 = LOW (active)
-            crate::serial_println!("[HDA]   GPIO1 configured (mask=0x02 dir=0x02 data=0x00)");
+            let _ = self.codec_cmd(codec, 1, verb::SET_GPIO_DATA, 0x02); // GPIO1 = HIGH (amp on)
+            crate::serial_println!("[HDA]   GPIO1 HIGH (speaker amp power on)");
         }
 
         // Configure the pin: OUT enable + HP amp enable
@@ -993,10 +992,10 @@ impl HdaController {
             // AD1984 silently ignores gain values > numsteps!
             let out_steps = ((out_caps >> 8) & 0x7F) as u16;
             let in_steps = ((in_caps >> 8) & 0x7F) as u16;
-            // Use ~75% of max gain to avoid overdriving the speaker.
-            // Max gain (0x27=39) on AD1984 was causing distortion.
-            let out_gain = if out_steps > 0 { (out_steps * 3 / 4).max(1) } else { 0x7F };
-            let in_gain = if in_steps > 0 { (in_steps * 3 / 4).max(1) } else { 0x7F };
+            // Use full numsteps gain — distortion was from waveform i16 overflow (now fixed),
+            // not from amp volume. Waveform amplitude is already moderate (16000 / 32767).
+            let out_gain = if out_steps > 0 { out_steps } else { 0x7F };
+            let in_gain = if in_steps > 0 { in_steps } else { 0x7F };
 
             // Send SEPARATE output and input amp SET commands.
             // AD1984 and some codecs silently discard combined bit15+bit14 commands.
