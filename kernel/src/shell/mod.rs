@@ -332,16 +332,11 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
         if let Some(c) = read_char() {
             // Auto-snap to live view on any non-scroll keypress
             if c != KEY_PGUP && c != KEY_PGDOWN && crate::framebuffer::is_scrolled_back() {
-                let (col, row) = crate::framebuffer::restore_live_view();
+                let (_col, row) = crate::framebuffer::restore_live_view();
                 input_row = row;
-                // Restore prompt cursor position and re-echo typed input
-                crate::framebuffer::set_cursor(col, row);
-                for i in 0..pos {
-                    crate::print!("{}", buffer[i] as char);
-                }
-                for _ in cursor..pos {
-                    crate::print_fb_only!("\x08");
-                }
+                // current_line already contains prompt + typed text (scrollback tracks it).
+                // Just position the cursor at the right spot within the input.
+                crate::framebuffer::set_cursor(input_col_start + cursor, input_row);
             }
             
             // Hide cursor before processing
@@ -360,9 +355,7 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                     if suggestion_idx >= 0 && (suggestion_idx as usize) < suggestions.len() {
                         let selected = suggestions[suggestion_idx as usize];
                         clear_suggestions_at_row(input_row, suggestions.len());
-                        // Restore cursor to input line before clearing
-                        crate::framebuffer::set_cursor(input_col_start + cursor, input_row);
-                        clear_line_display(cursor, pos);
+                        clear_line_display(input_col_start, input_row, pos);
                         let bytes = selected.as_bytes();
                         let len = bytes.len().min(buffer.len() - 1);
                         buffer[..len].copy_from_slice(&bytes[..len]);
@@ -387,9 +380,7 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                         let idx = if suggestion_idx >= 0 { suggestion_idx as usize } else { 0 };
                         let selected = suggestions[idx];
                         clear_suggestions_at_row(input_row, suggestions.len());
-                        // Restore cursor to input line before clearing
-                        crate::framebuffer::set_cursor(input_col_start + cursor, input_row);
-                        clear_line_display(cursor, pos);
+                        clear_line_display(input_col_start, input_row, pos);
                         let bytes = selected.as_bytes();
                         let len = bytes.len().min(buffer.len() - 1);
                         buffer[..len].copy_from_slice(&bytes[..len]);
@@ -498,7 +489,7 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                             cursor = len;
                             crate::print!("{}", &next[..len]);
                         } else {
-                            clear_line_display(cursor, pos);
+                            clear_line_display(input_col_start, input_row, pos);
                             pos = 0;
                             cursor = 0;
                         }
@@ -574,16 +565,10 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                 27 => {
                     // Escape - reset scroll to bottom (live view)
                     if crate::framebuffer::is_scrolled_back() {
-                        let (col, row) = crate::framebuffer::restore_live_view();
+                        let (_col, row) = crate::framebuffer::restore_live_view();
                         input_row = row;
-                        // Place cursor after the prompt text, then re-type user input
-                        crate::framebuffer::set_cursor(col, row);
-                        for i in 0..pos {
-                            crate::print!("{}", buffer[i] as char);
-                        }
-                        for _ in cursor..pos {
-                            crate::print_fb_only!("\x08");
-                        }
+                        // current_line already has the content; just position cursor
+                        crate::framebuffer::set_cursor(input_col_start + cursor, input_row);
                     }
                 }
                 3 => {
@@ -724,7 +709,8 @@ fn update_suggestions(buffer: &[u8], pos: usize, suggestions: &mut Vec<&'static 
     }
 }
 
-/// Display suggestions starting from the row below input
+/// Display suggestions starting from the row below input.
+/// Uses raw drawing to avoid corrupting the scrollback buffer.
 fn show_suggestions_at_row(input_row: usize, suggestions: &[&str], selected_idx: i32) {
     if suggestions.is_empty() {
         return;
@@ -733,51 +719,47 @@ fn show_suggestions_at_row(input_row: usize, suggestions: &[&str], selected_idx:
     // Screen bounds: don't render suggestions beyond the visible area
     let (_width, height) = crate::framebuffer::get_dimensions();
     let max_row = (height as usize) / 16; // CHAR_HEIGHT = 16
+    let fg = crate::framebuffer::get_fg_color();
+    let bg = 0xFF000000u32; // black background
     
-    // Use direct Writer access to guarantee no serial output
-    use core::fmt::Write;
     for (i, cmd) in suggestions.iter().enumerate() {
         let row = input_row + 1 + i;
         if row >= max_row { break; } // Stop rendering off-screen
-        crate::framebuffer::set_cursor(0, row);
+        crate::framebuffer::clear_char_row(row);
         if i as i32 == selected_idx {
-            let _ = write!(crate::framebuffer::Writer, " > {}", cmd);
+            let prefix = alloc::format!(" > {}", cmd);
+            crate::framebuffer::draw_text_raw(0, row, &prefix, fg, bg);
         } else {
-            let _ = write!(crate::framebuffer::Writer, "   {}", cmd);
+            let prefix = alloc::format!("   {}", cmd);
+            crate::framebuffer::draw_text_raw(0, row, &prefix, fg, bg);
         }
     }
 }
 
-/// Clear the suggestions display at given row
+/// Clear the suggestions display at given row.
+/// Uses raw pixel clearing to avoid corrupting the scrollback buffer.
 fn clear_suggestions_at_row(input_row: usize, count: usize) {
     let (_width, height) = crate::framebuffer::get_dimensions();
     let max_row = (height as usize) / 16; // CHAR_HEIGHT = 16
-    use core::fmt::Write;
     for i in 0..count {
         let row = input_row + 1 + i;
-        if row >= max_row { break; } // Don't clear off-screen
-        crate::framebuffer::set_cursor(0, row);
-        for _ in 0..40 {
-            let _ = write!(crate::framebuffer::Writer, " ");
-        }
+        if row >= max_row { break; }
+        crate::framebuffer::clear_char_row(row);
     }
 }
 
-/// Clear the current input line display
-fn clear_line_display(cursor: usize, pos: usize) {
-    use core::fmt::Write;
-    // Move cursor to start of input
-    for _ in 0..cursor {
-        let _ = write!(crate::framebuffer::Writer, "\x08");
-    }
-    // Clear all characters
-    for _ in 0..pos {
-        let _ = write!(crate::framebuffer::Writer, " ");
-    }
-    // Move back to start
-    for _ in 0..pos {
-        let _ = write!(crate::framebuffer::Writer, "\x08");
-    }
+/// Clear the current input line display (from input_col_start to end of input).
+/// Uses raw pixel clearing for the character cells, then repositions the console cursor.
+fn clear_line_display(input_col_start: usize, input_row: usize, pos: usize) {
+    let (width, _) = crate::framebuffer::get_dimensions();
+    let cols = (width as usize) / 8; // CHAR_WIDTH = 8
+    // Clear from input_col_start to end of typed text (plus some margin)
+    let clear_len = (pos + 2).min(cols.saturating_sub(input_col_start));
+    // Draw spaces directly on the framebuffer (bypasses Writer/scrollback)
+    let spaces: alloc::string::String = core::iter::repeat(' ').take(clear_len).collect();
+    crate::framebuffer::draw_text_raw(input_col_start, input_row, &spaces, 0xFF000000, 0xFF000000);
+    // Position cursor at start of input area
+    crate::framebuffer::set_cursor(input_col_start, input_row);
 }
 
 fn print_banner() {

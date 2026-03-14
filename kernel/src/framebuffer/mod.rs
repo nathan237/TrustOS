@@ -187,7 +187,12 @@ impl ScrollbackBuffer {
         } else if c == '\r' {
             // Carriage return - reset to beginning of line
             self.current_line.len = 0;
-        } else if c != '\x08' && c.is_ascii_graphic() || c == ' ' {
+        } else if c == '\x08' {
+            // Backspace — remove last character from current line
+            if self.current_line.len > 0 {
+                self.current_line.len -= 1;
+            }
+        } else if c.is_ascii_graphic() || c == ' ' {
             if self.current_line.len < SCROLLBACK_LINE_WIDTH {
                 self.current_line.chars[self.current_line.len] = c;
                 self.current_line.colors[self.current_line.len] = (fg, bg);
@@ -1522,6 +1527,37 @@ pub fn draw_separator(y: u32, color: u32) {
     let (width, _) = get_dimensions();
     let margin = width / 10;
     draw_hline(margin, y, width - 2 * margin, color);
+}
+
+/// Clear a character row directly with background pixels — bypasses Writer/scrollback.
+/// Use this for UI decorations (suggestions, etc.) that shouldn't affect scrollback state.
+pub fn clear_char_row(row: usize) {
+    let width = FB_WIDTH.load(Ordering::SeqCst) as usize;
+    let height = FB_HEIGHT.load(Ordering::SeqCst) as usize;
+    if width == 0 || height == 0 { return; }
+    let py = row * CHAR_HEIGHT;
+    if py + CHAR_HEIGHT > height { return; }
+    let bg = CONSOLE.lock().bg_color;
+    fill_rect(0, py as u32, width as u32, CHAR_HEIGHT as u32, bg);
+}
+
+/// Draw text at a character row/col directly — bypasses Writer/scrollback.
+/// Returns the number of characters drawn.
+pub fn draw_text_raw(col: usize, row: usize, text: &str, fg: u32, bg: u32) -> usize {
+    let width = FB_WIDTH.load(Ordering::SeqCst) as usize;
+    let height = FB_HEIGHT.load(Ordering::SeqCst) as usize;
+    if width == 0 || height == 0 { return 0; }
+    let cols = width / CHAR_WIDTH;
+    let py = row * CHAR_HEIGHT;
+    if py + CHAR_HEIGHT > height { return 0; }
+    let mut count = 0;
+    for (i, ch) in text.chars().enumerate() {
+        let c = col + i;
+        if c >= cols { break; }
+        draw_char(ch, c * CHAR_WIDTH, py, fg, bg);
+        count += 1;
+    }
+    count
 }
 
 /// Set cursor position (in character coordinates)

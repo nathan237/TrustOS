@@ -778,17 +778,28 @@ impl HdaController {
                         widget.pin_config = self.codec_cmd(caddr, nid, verb::GET_CONFIG_DEFAULT, 0)?;
                     }
 
-                    // Amp capabilities  (HDA spec: bit 1 = In Amp Present, bit 2 = Out Amp Present)
+                    // Amp capabilities  (HDA spec §7.3.4.7)
+                    // Bit 3 = Amp Param Override: if SET, use widget's own params.
+                    // If CLEAR, ALWAYS use AFG params (even if widget returns non-zero).
+                    let amp_override = caps & (1 << 3) != 0;
                     if caps & (1 << 2) != 0 { // Out Amp Present
-                        widget.amp_out_caps = self.get_param(caddr, nid, verb::PARAM_AMP_OUT_CAPS)?;
-                        // HDA spec §7.3.4.7: if widget returns 0, inherit from AFG
-                        if widget.amp_out_caps == 0 {
+                        if amp_override {
+                            widget.amp_out_caps = self.get_param(caddr, nid, verb::PARAM_AMP_OUT_CAPS)?;
+                            if widget.amp_out_caps == 0 {
+                                widget.amp_out_caps = self.afg_amp_out_caps;
+                            }
+                        } else {
+                            // No override bit → always use AFG caps per spec
                             widget.amp_out_caps = self.afg_amp_out_caps;
                         }
                     }
                     if caps & (1 << 1) != 0 { // In Amp Present
-                        widget.amp_in_caps = self.get_param(caddr, nid, verb::PARAM_AMP_IN_CAPS)?;
-                        if widget.amp_in_caps == 0 {
+                        if amp_override {
+                            widget.amp_in_caps = self.get_param(caddr, nid, verb::PARAM_AMP_IN_CAPS)?;
+                            if widget.amp_in_caps == 0 {
+                                widget.amp_in_caps = self.afg_amp_in_caps;
+                            }
+                        } else {
                             widget.amp_in_caps = self.afg_amp_in_caps;
                         }
                     }
@@ -944,12 +955,11 @@ impl HdaController {
             }
 
             // ── ThinkPad DMIC coefficient init (from Linux patch_analog.c) ──
-            // AD1884_FIXUP_DMIC_COEF: required for AD1984 ThinkPad internal routing.
-            // Without these, the codec's internal DSP may not route DAC→output properly.
+            // AD1884_FIXUP_DMIC_COEF: Linux writes SET_PROC_COEF=0x0008 to AFG
+            // without setting a coef index first (uses codec's default index).
             if is_ad198x {
-                let _ = self.set_verb_16(codec, 1, verb::SET_COEF_INDEX, 0x13f7);
                 let _ = self.set_verb_16(codec, 1, verb::SET_PROC_COEF, 0x0008);
-                crate::serial_println!("[HDA]   AD1984 DMIC COEF: idx=0x13f7 val=0x08");
+                crate::serial_println!("[HDA]   AD1984 DMIC COEF: val=0x08 (default index)");
             }
 
             // Also try to unmute the AFG output/input amps (node 1) — separate commands
@@ -1005,15 +1015,20 @@ impl HdaController {
             .map(|w| (w.nid, w.caps, w.connections.len(), w.amp_out_caps, w.amp_in_caps))
             .collect();
 
+        // AFG amp caps as fallback for widgets with numsteps=0
+        let afg_out_steps = ((self.afg_amp_out_caps >> 8) & 0x7F) as u16;
+        let afg_in_steps = ((self.afg_amp_in_caps >> 8) & 0x7F) as u16;
+
         for &(nid, caps, num_conns, out_caps, in_caps) in &all_widget_conns {
             // Extract max gain from amp caps: numsteps is bits [14:8]
             // AD1984 silently ignores gain values > numsteps!
             let out_steps = ((out_caps >> 8) & 0x7F) as u16;
             let in_steps = ((in_caps >> 8) & 0x7F) as u16;
-            // Use full numsteps gain. AFG inheritance already resolved during discovery,
-            // so if caps has numsteps>0 use it; if 0, it's genuinely a pass-through amp.
-            let out_gain = out_steps;
-            let in_gain = in_steps;
+            // If widget reports 0 steps, fall back to AFG steps.
+            // Pin widgets often don't advertise Out Amp Present but still have amps
+            // that respond to SET_AMP_GAIN_MUTE.
+            let out_gain = if out_steps > 0 { out_steps } else { afg_out_steps };
+            let in_gain = if in_steps > 0 { in_steps } else { afg_in_steps };
 
             // Send SEPARATE output and input amp SET commands.
             // AD1984 and some codecs silently discard combined bit15+bit14 commands.
@@ -1032,7 +1047,24 @@ impl HdaController {
                 }
             }
         }
-        crate::serial_println!("[HDA]   Unmuted all {} widget amps (separate OUT/IN)", all_widget_conns.len());
+        crate::serial_println!("[HDA]   Unmuted all {} widget amps (separate OUT/IN, afg_out={} afg_in={})",
+            all_widget_conns.len(), afg_out_steps, afg_in_steps);
+
+        // ── Explicit per-path amp setup ──
+        // The brute-force unmute may not reach pin widgets that don't have Out Amp Present
+        // in wcaps but still have functional amps (common on AD1984/AD1884).
+        // Force-set the output amp on each path's pin widget using AFG gain.
+        let pin_nid = path.pin_nid;
+        let afg_gain = if afg_out_steps > 0 { afg_out_steps } else { 3u16 };
+        // Output amp: L+R, unmuted, gain = AFG max (or 3 as absolute fallback)
+        let pin_amp: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (afg_gain & 0x7F);
+        let _ = self.set_verb_16(codec, pin_nid, 0x300, pin_amp);
+        crate::serial_println!("[HDA]   Pin NID {} amp OUT forced: gain={} (payload={:#06X})",
+            pin_nid, afg_gain, pin_amp);
+
+        // Also force-unmute input amp on pin (some pins have input amps too)
+        let pin_amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (afg_gain & 0x7F);
+        let _ = self.set_verb_16(codec, pin_nid, 0x300, pin_amp_in);
 
         // Set connector selects along the discovered path
         let path_widget_info: Vec<(u16, WidgetType, Vec<u16>)> = path.path.iter()
@@ -1742,8 +1774,10 @@ pub fn codec_dump() -> String {
         let pin_ctl = ctrl.codec_cmd(codec, *nid, verb::GET_PIN_CONTROL, 0).unwrap_or(0);
         let eapd = ctrl.codec_cmd(codec, *nid, verb::GET_EAPD, 0).unwrap_or(0);
         let power = ctrl.codec_cmd(codec, *nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
+        let wcaps = ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAM_AUDIO_CAPS as u8).unwrap_or(0);
         // GET_AMP is 4-bit verb: bit15=output, bit13=left, bits3:0=index
-        let amp_out = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0); // output, right
+        let amp_out_l = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0xA000).unwrap_or(0); // output, left
+        let amp_out_r = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0); // output, right
         let pin_caps = ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAM_PIN_CAPS as u8).unwrap_or(0);
         // Also read amp_out_caps (may be inherited from AFG)
         let widget_amp_caps = ctrl.widgets.iter().find(|w| w.nid == *nid).map(|w| w.amp_out_caps).unwrap_or(0);
@@ -1753,13 +1787,17 @@ pub fn codec_dump() -> String {
         let eapd_en = eapd & 0x02 != 0;
         let has_eapd = pin_caps & (1 << 16) != 0;
         let has_out = pin_caps & (1 << 4) != 0;
+        let has_out_amp = wcaps & (1 << 2) != 0;
+        let has_amp_ovrd = wcaps & (1 << 3) != 0;
 
         s.push_str(&format!("  NID {:2}: {} ({}) loc={:#04X} cfg={:#010X}\n",
             nid, dev, connectivity, location, cfg));
+        s.push_str(&format!("         wcaps={:#010X}(out_amp={} amp_ovrd={}) pin_caps={:#010X}\n",
+            wcaps, has_out_amp, has_amp_ovrd, pin_caps));
         s.push_str(&format!("         pin_ctl={:#04X}(out={} hp={}) eapd={:#04X}(on={} has={})\n",
             pin_ctl, out_en, hp_en, eapd, eapd_en, has_eapd));
-        s.push_str(&format!("         power=D{} amp_out={:#04X} amp_caps={:#010X}(can_out={})\n",
-            power & 0xF, amp_out, widget_amp_caps, has_out));
+        s.push_str(&format!("         power=D{} amp_out L={:#04X} R={:#04X} amp_caps={:#010X}\n",
+            power & 0xF, amp_out_l, amp_out_r, widget_amp_caps));
     }
 
     // Dump DACs with amp capabilities
