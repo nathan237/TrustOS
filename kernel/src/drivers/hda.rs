@@ -312,6 +312,9 @@ pub struct HdaController {
 
     /// Is audio currently playing?
     playing: bool,
+    /// AFG (Audio Function Group) default amp capabilities (inherited by widgets with caps=0)
+    afg_amp_out_caps: u32,
+    afg_amp_in_caps: u32,
 }
 
 /// Global HDA controller instance
@@ -403,6 +406,8 @@ impl HdaController {
             audio_buf_virt: 0, audio_buf_phys: 0, audio_buf_size: 0,
             bdl_virt: 0, bdl_phys: 0,
             playing: false,
+            afg_amp_out_caps: 0,
+            afg_amp_in_caps: 0,
         };
 
         // Read capabilities
@@ -722,6 +727,12 @@ impl HdaController {
                 // Power on the AFG
                 let _ = self.codec_cmd(caddr, fg_nid, verb::SET_POWER_STATE, 0x00); // D0
 
+                // Read AFG-level default amp capabilities (inherited by widgets with caps=0)
+                self.afg_amp_out_caps = self.get_param(caddr, fg_nid, verb::PARAM_AMP_OUT_CAPS).unwrap_or(0);
+                self.afg_amp_in_caps = self.get_param(caddr, fg_nid, verb::PARAM_AMP_IN_CAPS).unwrap_or(0);
+                crate::serial_println!("[HDA]   AFG amp caps: out={:#010X} in={:#010X}",
+                    self.afg_amp_out_caps, self.afg_amp_in_caps);
+
                 // Get sub-nodes of this function group
                 let sub_count = self.get_param(caddr, fg_nid, verb::PARAM_NODE_COUNT)?;
                 let w_start = ((sub_count >> 16) & 0xFF) as u16;
@@ -770,9 +781,16 @@ impl HdaController {
                     // Amp capabilities  (HDA spec: bit 1 = In Amp Present, bit 2 = Out Amp Present)
                     if caps & (1 << 2) != 0 { // Out Amp Present
                         widget.amp_out_caps = self.get_param(caddr, nid, verb::PARAM_AMP_OUT_CAPS)?;
+                        // HDA spec §7.3.4.7: if widget returns 0, inherit from AFG
+                        if widget.amp_out_caps == 0 {
+                            widget.amp_out_caps = self.afg_amp_out_caps;
+                        }
                     }
                     if caps & (1 << 1) != 0 { // In Amp Present
                         widget.amp_in_caps = self.get_param(caddr, nid, verb::PARAM_AMP_IN_CAPS)?;
+                        if widget.amp_in_caps == 0 {
+                            widget.amp_in_caps = self.afg_amp_in_caps;
+                        }
                     }
 
                     crate::serial_println!("[HDA]     NID {:3}: {} conns={:?}{}",
@@ -992,10 +1010,10 @@ impl HdaController {
             // AD1984 silently ignores gain values > numsteps!
             let out_steps = ((out_caps >> 8) & 0x7F) as u16;
             let in_steps = ((in_caps >> 8) & 0x7F) as u16;
-            // Use full numsteps gain — distortion was from waveform i16 overflow (now fixed),
-            // not from amp volume. Waveform amplitude is already moderate (16000 / 32767).
-            let out_gain = if out_steps > 0 { out_steps } else { 0x7F };
-            let in_gain = if in_steps > 0 { in_steps } else { 0x7F };
+            // Use full numsteps gain. AFG inheritance already resolved during discovery,
+            // so if caps has numsteps>0 use it; if 0, it's genuinely a pass-through amp.
+            let out_gain = out_steps;
+            let in_gain = in_steps;
 
             // Send SEPARATE output and input amp SET commands.
             // AD1984 and some codecs silently discard combined bit15+bit14 commands.
@@ -1727,6 +1745,8 @@ pub fn codec_dump() -> String {
         // GET_AMP is 4-bit verb: bit15=output, bit13=left, bits3:0=index
         let amp_out = ctrl.set_verb_16(codec, *nid, verb::GET_AMP_GAIN, 0x8000).unwrap_or(0); // output, right
         let pin_caps = ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAM_PIN_CAPS as u8).unwrap_or(0);
+        // Also read amp_out_caps (may be inherited from AFG)
+        let widget_amp_caps = ctrl.widgets.iter().find(|w| w.nid == *nid).map(|w| w.amp_out_caps).unwrap_or(0);
 
         let out_en = pin_ctl & 0x40 != 0;
         let hp_en = pin_ctl & 0x80 != 0;
@@ -1738,8 +1758,8 @@ pub fn codec_dump() -> String {
             nid, dev, connectivity, location, cfg));
         s.push_str(&format!("         pin_ctl={:#04X}(out={} hp={}) eapd={:#04X}(on={} has={})\n",
             pin_ctl, out_en, hp_en, eapd, eapd_en, has_eapd));
-        s.push_str(&format!("         power=D{} amp_out={:#04X} caps={:#010X}(can_out={})\n",
-            power & 0xF, amp_out, pin_caps, has_out));
+        s.push_str(&format!("         power=D{} amp_out={:#04X} amp_caps={:#010X}(can_out={})\n",
+            power & 0xF, amp_out, widget_amp_caps, has_out));
     }
 
     // Dump DACs with amp capabilities
