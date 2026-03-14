@@ -993,9 +993,10 @@ impl HdaController {
             // AD1984 silently ignores gain values > numsteps!
             let out_steps = ((out_caps >> 8) & 0x7F) as u16;
             let in_steps = ((in_caps >> 8) & 0x7F) as u16;
-            // Use numsteps as gain (= max volume). If no amp caps, use 0 (passthrough).
-            let out_gain = if out_steps > 0 { out_steps } else { 0x7F };
-            let in_gain = if in_steps > 0 { in_steps } else { 0x7F };
+            // Use ~75% of max gain to avoid overdriving the speaker.
+            // Max gain (0x27=39) on AD1984 was causing distortion.
+            let out_gain = if out_steps > 0 { (out_steps * 3 / 4).max(1) } else { 0x7F };
+            let in_gain = if in_steps > 0 { (in_steps * 3 / 4).max(1) } else { 0x7F };
 
             // Send SEPARATE output and input amp SET commands.
             // AD1984 and some codecs silently discard combined bit15+bit14 commands.
@@ -1175,26 +1176,26 @@ impl HdaController {
 
         let buf = self.audio_buf_virt as *mut i16;
 
-        // Integer sine approximation (triangle wave approximation scaled)
-        // Period in samples
+        // Triangle wave generation — clean integer math, no i16 overflow
         let period = sample_rate / freq_hz;
-        let half = period / 2;
-        let quarter = period / 4;
+        if period == 0 { return; }
+        let quarter = (period / 4).max(1);
+        let amplitude: i32 = 16000; // Well below i16 max (32767), comfortable volume
 
         unsafe {
             for i in 0..samples_to_fill {
                 let pos = (i as u32) % period;
-                // Triangle wave → pseudo-sine
-                let sample: i16 = if pos < quarter {
-                    // Rising 0→max
-                    (pos as i32 * 24000 / quarter as i32) as i16
-                } else if pos < half + quarter {
-                    // Falling max→-max
-                    ((half as i32 - (pos as i32 - quarter as i32)) * 24000 / quarter as i32) as i16
+                // Triangle wave: 4 segments of ~quarter each
+                // 0..Q: rise 0→+A, Q..3Q: fall +A→-A, 3Q..P: rise -A→0
+                let sample_i32: i32 = if pos < quarter {
+                    amplitude * pos as i32 / quarter as i32
+                } else if pos < 3 * quarter {
+                    amplitude * (2 * quarter as i32 - pos as i32) / quarter as i32
                 } else {
-                    // Rising -max→0
-                    (((pos as i32) - period as i32) * 24000 / quarter as i32) as i16
+                    amplitude * (pos as i32 - period as i32) / quarter as i32
                 };
+                // Clamp to i16 range (safety net)
+                let sample = sample_i32.clamp(-32000, 32000) as i16;
 
                 // Write to both channels (stereo interleaved)
                 let idx = i * channels as usize;
