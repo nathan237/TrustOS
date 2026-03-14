@@ -668,10 +668,7 @@ impl HdaController {
     /// Set verb (4-bit verb ID in bits [19:16], 16-bit payload in [15:0])
     fn set_verb_16(&mut self, codec: u8, nid: u16, verb_id: u32, payload: u16) -> Result<u32, &'static str> {
         // 4-bit verbs: [19:16]=verb, [15:0]=payload 
-        // verb_id like 0x200, 0x300 already include position
-        let full = (verb_id & 0xF0000) | ((verb_id & 0xFFF) << 8) | 0;
-        // Actually let's use the raw 20-bit approach:
-        // For SET_STREAM_FORMAT (verb 0x2, 16-bit payload): cmd[19:16]=0x2, cmd[15:0]=payload
+        // verb_id like 0x200 (SET_STREAM_FORMAT), 0x300 (SET_AMP_GAIN_MUTE)
         let raw20 = ((verb_id & 0xF00) << 8) | (payload as u32);
         self.send_verb(codec, nid, raw20, 0)
     }
@@ -753,11 +750,11 @@ impl HdaController {
                         widget.pin_config = self.codec_cmd(caddr, nid, verb::GET_CONFIG_DEFAULT, 0)?;
                     }
 
-                    // Amp capabilities
-                    if caps & (1 << 1) != 0 { // Has output amp
+                    // Amp capabilities  (HDA spec: bit 1 = In Amp Present, bit 2 = Out Amp Present)
+                    if caps & (1 << 2) != 0 { // Out Amp Present
                         widget.amp_out_caps = self.get_param(caddr, nid, verb::PARAM_AMP_OUT_CAPS)?;
                     }
-                    if caps & (1 << 2) != 0 { // Has input amp
+                    if caps & (1 << 1) != 0 { // In Amp Present
                         widget.amp_in_caps = self.get_param(caddr, nid, verb::PARAM_AMP_IN_CAPS)?;
                     }
 
@@ -911,9 +908,11 @@ impl HdaController {
                 crate::serial_println!("[HDA]   Pin NID {} -> EAPD=0x02, PIN_CTL=0xC0", nid);
             }
 
-            // Also try to unmute the AFG output amp (node 1)
+            // Also try to unmute the AFG output/input amps (node 1) — separate commands
             let _ = self.set_verb_16(codec, 1, 0x300,
-                (1u16 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | 0x7F);
+                (1u16 << 15) | (1 << 13) | (1 << 12) | 0x7F);
+            let _ = self.set_verb_16(codec, 1, 0x300,
+                (1u16 << 14) | (1 << 13) | (1 << 12) | 0x7F);
         }
 
         // Configure the pin: OUT enable + HP amp enable
@@ -947,28 +946,30 @@ impl HdaController {
 
         // Unmute ALL widget amps in the entire codec — brute force approach
         // to ensure nothing is accidentally muted (path discovery may miss intermediate nodes)
-        let all_widget_info: Vec<(u16, u32)> = self.widgets.iter()
-            .map(|w| (w.nid, w.caps))
+        // Collect widget info with connection counts for indexed amp unmute
+        let all_widget_conns: Vec<(u16, u32, usize)> = self.widgets.iter()
+            .map(|w| (w.nid, w.caps, w.connections.len()))
             .collect();
 
-        for &(nid, caps) in &all_widget_info {
-            // Unconditionally set BOTH output and input amps on every widget.
-            // Widgets without a given amp type simply ignore the command.
-            // Payload: [15]=set output, [14]=set input, [13]=L, [12]=R, [7]=mute(0), [6:0]=gain
-            let amp_both: u16 = (1 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | 0x7F;
-            let _ = self.set_verb_16(codec, nid, 0x300, amp_both);
+        for &(nid, caps, num_conns) in &all_widget_conns {
+            // Send SEPARATE output and input amp SET commands.
+            // AD1984 and some codecs silently discard combined bit15+bit14 commands.
+            // Output amp: bit 15, L+R, unmuted, max gain
+            let amp_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | 0x7F;
+            let _ = self.set_verb_16(codec, nid, 0x300, amp_out);
+            // Input amp index 0: bit 14, L+R, unmuted, max gain
+            let amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | 0x7F;
+            let _ = self.set_verb_16(codec, nid, 0x300, amp_in);
 
-            // For widgets with input amps and multiple connections, also unmute each index
-            // Audio Widget Caps bit 1 = In Amp Present
-            if caps & (1 << 1) != 0 {
-                let conn_len = (caps >> 8) & 0x7F;
-                for idx in 1..conn_len.min(16) {
+            // For widgets with multiple connections, unmute each input index
+            if num_conns > 1 {
+                for idx in 1..num_conns.min(16) {
                     let amp_in_idx: u16 = (1 << 14) | (1 << 13) | (1 << 12) | ((idx as u16 & 0xF) << 8) | 0x7F;
                     let _ = self.set_verb_16(codec, nid, 0x300, amp_in_idx);
                 }
             }
         }
-        crate::serial_println!("[HDA]   Unmuted all {} widget amps", all_widget_info.len());
+        crate::serial_println!("[HDA]   Unmuted all {} widget amps (separate OUT/IN)", all_widget_conns.len());
 
         // Set connector selects along the discovered path
         let path_widget_info: Vec<(u16, WidgetType, Vec<u16>)> = path.path.iter()
@@ -1651,7 +1652,7 @@ pub fn codec_dump() -> String {
             power & 0xF, amp_out, pin_caps, has_out));
     }
 
-    // Dump DACs 
+    // Dump DACs with amp capabilities
     s.push_str(&format!("\n--- DAC Widgets ---\n"));
     let dac_widgets: Vec<u16> = ctrl.widgets.iter()
         .filter(|w| w.widget_type == WidgetType::AudioOutput)
@@ -1662,10 +1663,128 @@ pub fn codec_dump() -> String {
         let power = ctrl.codec_cmd(codec, *nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
         let stream = ctrl.codec_cmd(codec, *nid, verb::GET_CHANNEL_STREAM, 0).unwrap_or(0);
         let fmt = ctrl.codec_cmd(codec, *nid, verb::GET_STREAM_FORMAT, 0).unwrap_or(0);
-        let amp_out = ctrl.codec_cmd(codec, *nid, verb::GET_AMP_GAIN, 0x80).unwrap_or(0);
+        let wcaps = ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAM_AUDIO_CAPS as u8).unwrap_or(0);
+        let has_out_amp = wcaps & (1 << 2) != 0;
+        let has_in_amp = wcaps & (1 << 1) != 0;
+        // Read output amp (left and right)
+        let amp_out_l = ctrl.codec_cmd(codec, *nid, verb::GET_AMP_GAIN, 0xC0).unwrap_or(0);
+        let amp_out_r = ctrl.codec_cmd(codec, *nid, verb::GET_AMP_GAIN, 0x80).unwrap_or(0);
+        // Read amp capabilities
+        let amp_ocaps = if has_out_amp { ctrl.codec_cmd(codec, *nid, verb::GET_PARAMETER, verb::PARAM_AMP_OUT_CAPS as u8).unwrap_or(0) } else { 0 };
 
-        s.push_str(&format!("  NID {:2}: power=D{} stream_tag={} chan={} fmt={:#06X} amp={:#04X}\n",
-            nid, power & 0xF, (stream >> 4) & 0xF, stream & 0xF, fmt, amp_out));
+        s.push_str(&format!("  NID {:2}: power=D{} stream_tag={} chan={} fmt={:#06X}\n",
+            nid, power & 0xF, (stream >> 4) & 0xF, stream & 0xF, fmt));
+        s.push_str(&format!("         wcaps={:#010X}(out_amp={} in_amp={})\n",
+            wcaps, has_out_amp, has_in_amp));
+        s.push_str(&format!("         amp_out L={:#04X} R={:#04X} caps={:#010X}\n",
+            amp_out_l, amp_out_r, amp_ocaps));
+    }
+
+    // Dump Mixer/Selector widgets in audio paths
+    s.push_str(&format!("\n--- Path Mixer/Selector ---\n"));
+    let mut seen_nids: Vec<u16> = Vec::new();
+    let paths_clone: Vec<Vec<u16>> = ctrl.output_paths.iter().map(|p| p.path.clone()).collect();
+    let widgets_snapshot: Vec<(u16, WidgetType, Vec<u16>)> = ctrl.widgets.iter()
+        .map(|w| (w.nid, w.widget_type, w.connections.clone()))
+        .collect();
+    for path in &paths_clone {
+        for &nid in path {
+            let winfo = widgets_snapshot.iter().find(|w| w.0 == nid);
+            if let Some((_, wtype, conns)) = winfo {
+                if *wtype != WidgetType::AudioMixer && *wtype != WidgetType::AudioSelector { continue; }
+                if seen_nids.contains(&nid) { continue; }
+                seen_nids.push(nid);
+                let wcaps = ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAM_AUDIO_CAPS as u8).unwrap_or(0);
+                let has_out_amp = wcaps & (1 << 2) != 0;
+                let has_in_amp = wcaps & (1 << 1) != 0;
+                let amp_out_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0xC0).unwrap_or(0);
+                let amp_out_r = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x80).unwrap_or(0);
+                let amp_in_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x40).unwrap_or(0);
+                let amp_in_r = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x00).unwrap_or(0);
+                let amp_ocaps = if has_out_amp { ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAM_AMP_OUT_CAPS as u8).unwrap_or(0) } else { 0 };
+                let amp_icaps = if has_in_amp { ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAM_AMP_IN_CAPS as u8).unwrap_or(0) } else { 0 };
+                let conn_sel = ctrl.codec_cmd(codec, nid, verb::GET_CONN_SELECT, 0).unwrap_or(0);
+                let power = ctrl.codec_cmd(codec, nid, verb::GET_POWER_STATE, 0).unwrap_or(0);
+
+                s.push_str(&format!("  NID {:2}: {} conns={:?}\n", nid, wtype.name(), conns));
+                s.push_str(&format!("         wcaps={:#010X}(out_amp={} in_amp={})\n",
+                    wcaps, has_out_amp, has_in_amp));
+                s.push_str(&format!("         out L={:#04X} R={:#04X} ocaps={:#010X}\n",
+                    amp_out_l, amp_out_r, amp_ocaps));
+                s.push_str(&format!("         in[0] L={:#04X} R={:#04X} icaps={:#010X}\n",
+                    amp_in_l, amp_in_r, amp_icaps));
+                s.push_str(&format!("         conn_sel={} power=D{}\n", conn_sel, power & 0xF));
+            }
+        }
+    }
+
+    s
+}
+
+/// Probe amp SET/GET on every widget in the first output path.
+/// For each widget, reads amp BEFORE, sets gain=0x3F (output amp only),
+/// reads amp AFTER — proving whether SET_AMP_GAIN_MUTE actually works.
+pub fn amp_probe() -> String {
+    let mut s = String::new();
+    let mut hda = HDA.lock();
+    let ctrl = match hda.as_mut() {
+        Some(c) => c,
+        None => {
+            s.push_str("HDA: not initialized\n");
+            return s;
+        }
+    };
+
+    if ctrl.codecs.is_empty() || ctrl.output_paths.is_empty() {
+        s.push_str("No codecs or paths\n");
+        return s;
+    }
+
+    let codec = ctrl.codecs[0];
+    s.push_str("=== Amp Probe (SET then GET) ===\n");
+
+    // Probe all widgets in output paths
+    let mut probed: Vec<u16> = Vec::new();
+    let paths: Vec<Vec<u16>> = ctrl.output_paths.iter().map(|p| p.path.clone()).collect();
+    for path in &paths {
+        for &nid in path {
+            if probed.contains(&nid) { continue; }
+            probed.push(nid);
+
+            let wcaps = ctrl.codec_cmd(codec, nid, verb::GET_PARAMETER, verb::PARAM_AUDIO_CAPS as u8).unwrap_or(0);
+            let wtype = (wcaps >> 20) & 0xF;
+            let has_out_amp = wcaps & (1 << 2) != 0;
+            let has_in_amp = wcaps & (1 << 1) != 0;
+
+            // Read BEFORE
+            let before_out_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0xC0).unwrap_or(0xDEAD);
+            let before_in_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x40).unwrap_or(0xDEAD);
+
+            // SET output amp: gain = 0x3F, unmuted, L+R
+            let set_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | 0x3F;
+            let out_res = ctrl.set_verb_16(codec, nid, 0x300, set_out);
+            // SET input amp index 0: gain = 0x3F, unmuted, L+R
+            let set_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | 0x3F;
+            let in_res = ctrl.set_verb_16(codec, nid, 0x300, set_in);
+
+            // Read AFTER
+            let after_out_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0xC0).unwrap_or(0xDEAD);
+            let after_in_l = ctrl.codec_cmd(codec, nid, verb::GET_AMP_GAIN, 0x40).unwrap_or(0xDEAD);
+
+            let changed_out = before_out_l != after_out_l;
+            let changed_in = before_in_l != after_in_l;
+
+            s.push_str(&format!("NID {:2} type={} oamp={} iamp={}\n",
+                nid, wtype, has_out_amp, has_in_amp));
+            s.push_str(&format!("  OUT: {:#04X}->{:#04X} {} set={}\n",
+                before_out_l, after_out_l,
+                if changed_out { "CHANGED" } else { "same" },
+                if out_res.is_ok() { "ok" } else { "ERR" }));
+            s.push_str(&format!("  IN:  {:#04X}->{:#04X} {} set={}\n",
+                before_in_l, after_in_l,
+                if changed_in { "CHANGED" } else { "same" },
+                if in_res.is_ok() { "ok" } else { "ERR" }));
+        }
     }
 
     s
@@ -1744,11 +1863,14 @@ pub fn set_volume(level: u8) -> Result<(), &'static str> {
     // Convert 0-100 to 0-127 amp gain
     let gain = ((level as u32) * 127 / 100) as u16;
     
-    // Set amp gain on all widgets in the output path (both output and input amps)
+    // Set amp gain on all widgets in the output path (separate output and input amps)
     for &nid in &path.path {
-        // Set both output amp (bit 15) and input amp (bit 14), both channels, with gain
-        let amp_data: u16 = (1 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | gain;
-        let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_data);
+        // Output amp: bit 15 only + L+R + gain
+        let amp_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | gain;
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_out);
+        // Input amp: bit 14 only + L+R + gain
+        let amp_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | gain;
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_in);
     }
     
     crate::serial_println!("[HDA] Volume set to {}% (gain={})", level, gain);
@@ -1773,9 +1895,12 @@ pub fn mute() -> Result<(), &'static str> {
     let path = ctrl.output_paths[0].clone();
     
     for &nid in &path.path {
-        // Mute both output+input amps, both channels: bit 7 = mute
-        let amp_mute: u16 = (1 << 15) | (1 << 14) | (1 << 13) | (1 << 12) | (1 << 7);
-        let _ = ctrl.set_verb_16(codec, nid, 0x300, amp_mute);
+        // Mute output amp: bit 15 + L+R + mute bit
+        let mute_out: u16 = (1 << 15) | (1 << 13) | (1 << 12) | (1 << 7);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, mute_out);
+        // Mute input amp: bit 14 + L+R + mute bit
+        let mute_in: u16 = (1 << 14) | (1 << 13) | (1 << 12) | (1 << 7);
+        let _ = ctrl.set_verb_16(codec, nid, 0x300, mute_in);
     }
     
     Ok(())

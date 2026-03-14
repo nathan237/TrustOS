@@ -2893,8 +2893,13 @@ pub(super) fn cmd_audio(args: &[&str]) {
             let dump = crate::drivers::hda::codec_dump();
             crate::println!("{}", dump);
         }
+        Some("probe") => {
+            crate::println_color!(COLOR_CYAN, "Amp Probe (SET then GET)");
+            let probe = crate::drivers::hda::amp_probe();
+            crate::println!("{}", probe);
+        }
         Some(other) => {
-            crate::println_color!(COLOR_YELLOW, "Usage: audio [init|status|stop|test|diag|dump]");
+            crate::println_color!(COLOR_YELLOW, "Usage: audio [init|status|stop|test|diag|dump|probe]");
         }
     }
 }
