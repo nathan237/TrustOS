@@ -33,10 +33,17 @@ desktop.ini
 *.raw
 *.vdi
 NvVars
+# All loose logs now live in logs/ (which is gitignored above)
+# These patterns catch any stragglers at root
 qemu_*.txt
 serial_*.txt
 build_output.txt
 vbox_serial.txt
+boot_serial_output.txt
+browser_test_results.txt
+build_err_latest.txt
+serial.log
+qemu_debug.log
 
 # UEFI firmware (large binary files)
 *.fd
@@ -108,6 +115,9 @@ apple/tools/ipsw-analyst/phase*_out.txt
 build/
 builds/
 iso_root/
+
+# Root-level build script output
+trustos.iso
 iso_root_aarch64/
 pxe_tftp/*.sys
 pxe_tftp/trustos_kernel
@@ -198,8 +208,18 @@ rustc-ice-*.txt
 
 # Reorganized directories (binary/generated content)
 logs/
-media/
 firmware/
+
+# Media - ignore generated but keep logo
+media/ppm/
+media/screenshots/
+!media/logo.png
+!media/trustos_logo.png
+
+# Translated build artifacts (sources are tracked, build outputs are not)
+translated/*/target/
+translated/*/iso_root/
+translated/*/build.log
 
 # QEMU logs and screenshots
 qemu_*.png
@@ -212,8 +232,8 @@ tools/config/
 tools/tokens/
 tools/trustlangdemo_temp.mp4
 
-# Local usage guide (not for GitHub -- available on request)
-TRUSTOS_USAGE_GUIDE.md
+# Local usage guide (moved to docs/)
+# TRUSTOS_USAGE_GUIDE.md is now in docs/ and tracked there
 
 # Local planning docs (not for GitHub)
 docs/showcaseplan.md

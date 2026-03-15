@@ -1,0 +1,90 @@
+use std::path::PathBuf;
+
+fn main() {
+    // ── Linker script (architecture-aware) ──
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let target = std::env::var("TARGET").unwrap_or_default();
+    let ld_name = if target.starts_with("aarch64") {
+        "linker-aarch64.ld"
+    } else if target.starts_with("riscv64") {
+        "linker-riscv64.ld"
+    } else {
+        "linker.ld"
+    };
+    let linker_script = PathBuf::from(&manifest_dir).join(ld_name);
+    println!("cargo:rustc-link-arg=-T{}", linker_script.display());
+    println!("cargo:rerun-if-changed={}", linker_script.display());
+
+    // Get the path to the kernel binary
+    let kernel_path = std::env::var("CARGO_BIN_FILE_TRUSTOS_KERNEL")
+        .map(PathBuf::from)
+        .ok();
+    
+    if let Some(path) = kernel_path {
+        println!("cargo:rustc-env=KERNEL_PATH={}", path.display());
+    }
+    
+    // Tell cargo to rerun if kernel changes
+    println!("cargo:rerun-if-changed=src/");
+
+    // Embed build timestamp
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| {
+            let secs = d.as_secs();
+            // Simple UTC date format
+            let days = secs / 86400;
+            let time_of_day = secs % 86400;
+            let hours = time_of_day / 3600;
+            let minutes = (time_of_day % 3600) / 60;
+            let seconds = time_of_day % 60;
+            // Approximate date from days since epoch
+            let mut y = 1970i64;
+            let mut remaining = days as i64;
+            loop {
+                let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+                let days_in_year: i64 = if leap { 366 } else { 365 };
+                if remaining < days_in_year { break; }
+                remaining -= days_in_year;
+                y += 1;
+            }
+            let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+            let month_days: [i64; 12] = [31, if leap {29} else {28}, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+            let mut m = 0usize;
+            for i in 0..12 {
+                if remaining < month_days[i] { m = i; break; }
+                remaining -= month_days[i];
+            }
+            format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02} UTC", y, m + 1, remaining + 1, hours, minutes, seconds)
+        })
+        .unwrap_or_else(|_| "unknown".to_string());
+    println!("cargo:rustc-env=TRUSTOS_BUILD_TIME={}", now);
+
+    // ── ROM embedding: detect .nes and .gb files in roms/ directory ──
+    let roms_dir = PathBuf::from(&manifest_dir).join("roms");
+    println!("cargo:rerun-if-changed={}", roms_dir.display());
+    
+    if roms_dir.exists() {
+        // Find .nes ROM
+        if let Ok(entries) = std::fs::read_dir(&roms_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if let Some(ext) = path.extension() {
+                    let ext = ext.to_string_lossy().to_lowercase();
+                    if ext == "nes" {
+                        println!("cargo:rustc-cfg=has_nes_rom");
+                        println!("cargo:rustc-env=NES_ROM_PATH={}", path.display());
+                        println!("cargo:rerun-if-changed={}", path.display());
+                        eprintln!("  [ROM] Found NES ROM: {}", path.display());
+                    }
+                    if ext == "gb" || ext == "gbc" {
+                        println!("cargo:rustc-cfg=has_gb_rom");
+                        println!("cargo:rustc-env=GB_ROM_PATH={}", path.display());
+                        println!("cargo:rerun-if-changed={}", path.display());
+                        eprintln!("  [ROM] Found GB ROM: {}", path.display());
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,1064 @@
+//! NVMe Driver — NVM Express 1.4 over PCIe
+//!
+//! Implements the NVMe specification for SSD storage:
+//! - Controller reset and initialization
+//! - Admin Submission/Completion Queue pair
+//! - I/O Submission/Completion Queue pair
+//! - Identify Controller / Identify Namespace
+//! - Read / Write commands (LBA-based)
+//! - Polling-based completion (no MSI-X)
+//!
+//! Reference: NVM Express Base Specification 1.4
+
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::sync::atomic::{AtomicBool, Ordering};
+use spin::Mutex;
+
+// ═══════════════════════════════════════════════════════════════════════
+// NVMe Register Offsets (MMIO BAR0)
+// ═══════════════════════════════════════════════════════════════════════
+
+const REGISTER_CAPABILITY: u64 = 0x00;     // Controller Capabilities (64-bit)
+const REGISTER_VS: u64 = 0x08;      // Version
+const REGISTER_INTMS: u64 = 0x0C;   // Interrupt Mask Set
+const REGISTER_INTMC: u64 = 0x10;   // Interrupt Mask Clear
+const REGISTER_CC: u64 = 0x14;      // Controller Configuration
+const REGISTER_CSTS: u64 = 0x1C;    // Controller Status
+const REGISTER_AQA: u64 = 0x24;     // Admin Queue Attributes
+const REGISTER_ASQ: u64 = 0x28;     // Admin Submission Queue Base (64-bit)
+const REGISTER_ACQ: u64 = 0x30;     // Admin Completion Queue Base (64-bit)
+
+// Doorbell stride is variable — base at 0x1000, stride from CAP.DSTRD
+const DOORBELL_BASE: u64 = 0x1000;
+
+// Controller Configuration bits
+const CC_EN: u32 = 1 << 0;         // Enable
+const CC_CSS_NVM: u32 = 0 << 4;    // I/O Command Set: NVM
+const CC_MPS_4K: u32 = 0 << 7;     // Memory Page Size: 4KB (2^(12+0))
+const CC_AMS_RR: u32 = 0 << 11;    // Arbitration: Round Robin
+const CC_IOSQES: u32 = 6 << 16;    // I/O SQ Entry Size: 2^6 = 64 bytes
+const CC_IOCQES: u32 = 4 << 20;    // I/O CQ Entry Size: 2^4 = 16 bytes
+
+// Controller Status bits
+const CSTS_RDY: u32 = 1 << 0;      // Ready
+const CSTS_CFS: u32 = 1 << 1;      // Controller Fatal Status
+
+// ═══════════════════════════════════════════════════════════════════════
+// NVMe Command Opcodes
+// ═══════════════════════════════════════════════════════════════════════
+
+// Admin commands
+const ADMIN_DELETE_IO_SQ: u8 = 0x00;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const ADMIN_CREATE_IO_SQ: u8 = 0x01;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const ADMIN_DELETE_IO_CQ: u8 = 0x04;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const ADMIN_CREATE_IO_CQ: u8 = 0x05;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const ADMIN_IDENTIFY: u8 = 0x06;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const ADMIN_SET_FEATURES: u8 = 0x09;
+
+// NVM I/O commands
+const IO_FLUSH: u8 = 0x00;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const IO_WRITE: u8 = 0x01;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const IO_READ: u8 = 0x02;
+
+// Identify CNS values
+const IDENTIFY_NAMESPACE: u32 = 0x00;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const IDENTIFY_CONTROLLER: u32 = 0x01;
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const IDENTIFY_ACTIVE_NSID_LIST: u32 = 0x02;
+
+// ═══════════════════════════════════════════════════════════════════════
+// NVMe Data Structures
+// ═══════════════════════════════════════════════════════════════════════
+
+/// NVMe Submission Queue Entry (64 bytes)
+#[derive(Clone, Copy, Default)]
+#[repr(C)]
+struct SqEntry {
+    /// Opcode + flags + command ID
+    cdw0: u32,
+    /// Namespace ID
+    nsid: u32,
+    /// Reserved
+    cdw2: u32,
+    cdw3: u32,
+    /// Metadata pointer
+    mptr: u64,
+    /// PRP Entry 1 (data pointer)
+    prp1: u64,
+    /// PRP Entry 2 (data pointer or PRP list pointer)
+    prp2: u64,
+    /// Command-specific DWORDs 10-15
+    cdw10: u32,
+    cdw11: u32,
+    cdw12: u32,
+    cdw13: u32,
+    cdw14: u32,
+    cdw15: u32,
+}
+
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const _: () = assert!(core::mem::size_of::<SqEntry>() == 64);
+
+/// NVMe Completion Queue Entry (16 bytes)
+#[derive(Clone, Copy, Default)]
+#[repr(C)]
+struct CqEntry {
+    /// Command-specific result
+    dw0: u32,
+    /// Reserved
+    dw1: u32,
+    /// SQ Head Pointer (15:0) + SQ Identifier (31:16)
+    sq_head_sqid: u32,
+    /// Command ID (15:0) + Phase Tag (bit 16) + Status Field (31:17)
+    cid_status: u32,
+}
+
+// Compile-time constant — evaluated at compilation, zero runtime cost.
+const _: () = assert!(core::mem::size_of::<CqEntry>() == 16);
+
+// Implementation block — defines methods for the type above.
+impl CqEntry {
+    fn phase(&self) -> bool {
+        self.cid_status & (1 << 16) != 0
+    }
+
+    fn status_code(&self) -> u16 {
+        ((self.cid_status >> 17) & 0x7FF) as u16
+    }
+
+    fn command_id(&self) -> u16 {
+        (self.cid_status & 0xFFFF) as u16
+    }
+}
+
+/// Queue pair (submission + completion) with physical addresses
+struct QueuePair {
+    /// Virtual address of SQ (array of SqEntry)
+    sq_virt: u64,
+    /// Physical address of SQ
+    sq_physical: u64,
+    /// Virtual address of CQ (array of CqEntry)
+    cq_virt: u64,
+    /// Physical address of CQ
+    cq_physical: u64,
+    /// Queue depth (number of entries)
+    depth: u16,
+    /// SQ tail (next entry to write)
+    sq_tail: u16,
+    /// CQ head (next entry to read)
+    cq_head: u16,
+    /// Expected phase bit (toggles each wrap-around)
+    cq_phase: bool,
+    /// Next command ID
+    next_cid: u16,
+    /// Queue ID (0 = admin, 1+ = I/O)
+    qid: u16,
+}
+
+// Implementation block — defines methods for the type above.
+impl QueuePair {
+    /// Allocate a new queue pair using physical frame allocator
+    fn new(qid: u16, depth: u16) -> Option<Self> {
+        // SQ: depth × 64 bytes. One 4KB page fits 64 entries.
+        let sq_physical = crate::memory::frame::allocator_frame_zeroed()?;
+        let sq_virt = crate::memory::physical_to_virt(sq_physical);
+        
+        // CQ: depth × 16 bytes. One 4KB page fits 256 entries.
+        let cq_physical = crate::memory::frame::allocator_frame_zeroed()?;
+        let cq_virt = crate::memory::physical_to_virt(cq_physical);
+        
+        Some(Self {
+            sq_virt,
+            sq_physical,
+            cq_virt,
+            cq_physical,
+            depth,
+            sq_tail: 0,
+            cq_head: 0,
+            cq_phase: true,     // Phase starts at 1
+            next_cid: 0,
+            qid,
+        })
+    }
+    
+    /// Submit a command to the SQ. Returns the command ID.
+    fn submit(&mut self, mut cmd: SqEntry) -> u16 {
+        let cid = self.next_cid;
+        self.next_cid = self.next_cid.wrapping_add(1);
+        
+        // Set command ID in CDW0 bits [31:16]
+        cmd.cdw0 = (cmd.cdw0 & 0x0000FFFF) | ((cid as u32) << 16);
+        
+        // Write to SQ[tail]
+        let offset = self.sq_tail as usize * core::mem::size_of::<SqEntry>();
+                // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+            let ptr = (self.sq_virt + offset as u64) as *mut SqEntry;
+            core::ptr::write_volatile(ptr, cmd);
+        }
+        
+        // Advance tail (wrap around)
+        self.sq_tail = (self.sq_tail + 1) % self.depth;
+        
+        cid
+    }
+    
+    /// Poll CQ for a completion. Returns (CqEntry, true) if found.
+    fn poll_completion(&mut self) -> Option<CqEntry> {
+        let offset = self.cq_head as usize * core::mem::size_of::<CqEntry>();
+        let entry = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+            let ptr = (self.cq_virt + offset as u64) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const CqEntry;
+            core::ptr::read_volatile(ptr)
+        };
+        
+        // Check phase bit matches expected
+        if entry.phase() == self.cq_phase {
+            // Advance CQ head
+            self.cq_head += 1;
+            if self.cq_head >= self.depth {
+                self.cq_head = 0;
+                self.cq_phase = !self.cq_phase;
+            }
+            Some(entry)
+        } else {
+            None
+        }
+    }
+}
+
+/// A single NVMe namespace
+#[derive(Clone)]
+// Public structure — visible outside this module.
+pub struct NvmeNamespace {
+    /// Namespace ID
+    pub nsid: u32,
+    /// Size in LBAs
+    pub size_lbas: u64,
+    /// LBA data size in bytes (typically 512 or 4096)
+    pub lba_size: u32,
+}
+
+/// NVMe Controller
+struct NvmeController {
+    /// MMIO base virtual address
+    bar_virt: u64,
+    /// Doorbell stride (in bytes) = 4 << CAP.DSTRD
+    doorbell_stride: u32,
+    /// Admin queue pair
+    admin: QueuePair,
+    /// I/O queue pair (queue ID 1)
+    io: Option<QueuePair>,
+    /// Controller serial number
+    serial: String,
+    /// Controller model
+    model: String,
+    /// Namespace 1 size in LBAs (kept for backwards compat)
+    ns1_size: u64,
+    /// Namespace 1 LBA data size (bytes, typically 512)
+    ns1_lba_size: u32,
+    /// All discovered namespaces
+    namespaces: Vec<NvmeNamespace>,
+    /// Maximum transfer size (in pages)
+    maximum_transfer_pages: u32,
+}
+
+// Implementation block — defines methods for the type above.
+impl NvmeController {
+    // ─── MMIO register access ────────────────────────────────────
+    
+    #[inline]
+    fn read32(&self, offset: u64) -> u32 {
+                // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::read_volatile((self.bar_virt + offset) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32) }
+    }
+    
+    #[inline]
+    fn write32(&self, offset: u64, value: u32) {
+                // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::write_volatile((self.bar_virt + offset) as *mut u32, value) }
+    }
+    
+    #[inline]
+    fn read64(&self, offset: u64) -> u64 {
+        let lo = self.read32(offset) as u64;
+        let hi = self.read32(offset + 4) as u64;
+        lo | (hi << 32)
+    }
+    
+    #[inline]
+    fn write64(&self, offset: u64, value: u64) {
+        self.write32(offset, value as u32);
+        self.write32(offset + 4, (value >> 32) as u32);
+    }
+    
+    // ─── Doorbell access ─────────────────────────────────────────
+    
+    /// Ring the Submission Queue tail doorbell
+    fn ring_sq_doorbell(&self, qid: u16, new_tail: u16) {
+        let offset = DOORBELL_BASE + (2 * qid as u64) * self.doorbell_stride as u64;
+        self.write32(offset, new_tail as u32);
+    }
+    
+    /// Ring the Completion Queue head doorbell
+    fn ring_cq_doorbell(&self, qid: u16, new_head: u16) {
+        let offset = DOORBELL_BASE + (2 * qid as u64 + 1) * self.doorbell_stride as u64;
+        self.write32(offset, new_head as u32);
+    }
+    
+    // ─── Command submission + polling ────────────────────────────
+    
+    /// Submit an admin command and wait for completion (polling).
+    fn admin_command(&mut self, cmd: SqEntry) -> Result<CqEntry, &'static str> {
+        let _cid = self.admin.submit(cmd);
+        self.ring_sq_doorbell(0, self.admin.sq_tail);
+        
+        // Poll for completion with timeout
+        for _ in 0..1_000_000u32 {
+            if let Some(cqe) = self.admin.poll_completion() {
+                // Update CQ doorbell
+                self.ring_cq_doorbell(0, self.admin.cq_head);
+                
+                if cqe.status_code() != 0 {
+                    crate::serial_println!("[NVMe] Admin cmd failed: status={:#x}", cqe.status_code());
+                    return Err("NVMe admin command failed");
+                }
+                return Ok(cqe);
+            }
+            core::hint::spin_loop();
+        }
+        Err("NVMe admin command timeout")
+    }
+    
+    /// Submit an I/O command and wait for completion (polling).
+    fn io_command(&mut self, cmd: SqEntry) -> Result<CqEntry, &'static str> {
+        // Submit and extract sq_tail before releasing borrow
+        let sq_tail = {
+            let io = self.io.as_mut().ok_or("NVMe I/O queue not initialized")?;
+            let _cid = io.submit(cmd);
+            io.sq_tail
+        };
+        self.ring_sq_doorbell(1, sq_tail);
+        
+        // Poll for completion
+        for _ in 0..10_000_000u32 {
+            let io = self.io.as_mut().unwrap();
+            if let Some(cqe) = io.poll_completion() {
+                let cq_head = io.cq_head;
+                self.ring_cq_doorbell(1, cq_head);
+                
+                if cqe.status_code() != 0 {
+                    crate::serial_println!("[NVMe] I/O cmd failed: status={:#x}", cqe.status_code());
+                    return Err("NVMe I/O command failed");
+                }
+                return Ok(cqe);
+            }
+            core::hint::spin_loop();
+        }
+        Err("NVMe I/O command timeout")
+    }
+    
+    // ─── Identify commands ───────────────────────────────────────
+    
+    /// Identify Controller (CNS=1). Writes 4KB data to `buf_phys`.
+    fn identify_controller(&mut self) -> Result<(), &'static str> {
+        let buffer_physical = crate::memory::frame::allocator_frame_zeroed()
+            .ok_or("NVMe: OOM for identify buffer")?;
+        let buffer_virt = crate::memory::physical_to_virt(buffer_physical);
+        
+        let cmd = SqEntry {
+            cdw0: ADMIN_IDENTIFY as u32,
+            prp1: buffer_physical,
+            cdw10: IDENTIFY_CONTROLLER,
+            ..Default::default()
+        };
+        
+        self.admin_command(cmd)?;
+        
+        // Parse Identify Controller data
+        unsafe {
+            let data = buffer_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u8;
+            
+            // Serial Number: bytes 4-23 (20 chars, ASCII)
+            let mut sn = [0u8; 20];
+            core::ptr::copy_nonoverlapping(data.add(4), sn.as_mut_pointer(), 20);
+            self.serial = core::str::from_utf8(&sn)
+                .unwrap_or("?")
+                .trim()
+                .into();
+            
+            // Model Number: bytes 24-63 (40 chars, ASCII)
+            let mut mn = [0u8; 40];
+            core::ptr::copy_nonoverlapping(data.add(24), mn.as_mut_pointer(), 40);
+            self.model = core::str::from_utf8(&mn)
+                .unwrap_or("?")
+                .trim()
+                .into();
+            
+            // MDTS (Maximum Data Transfer Size): byte 77
+            // 0 = no limit, else 2^(MDTS) pages
+            let mdts = *data.add(77);
+            self.maximum_transfer_pages = if mdts == 0 { 256 } else { 1u32 << mdts };
+        }
+        
+        crate::memory::frame::free_frame(buffer_physical);
+        Ok(())
+    }
+    
+    /// Identify Namespace (CNS=0) for a given NSID. Returns (size_lbas, lba_size).
+    fn identify_namespace_by_id(&mut self, nsid: u32) -> Result<(u64, u32), &'static str> {
+        let buffer_physical = crate::memory::frame::allocator_frame_zeroed()
+            .ok_or("NVMe: OOM for identify namespace buffer")?;
+        let buffer_virt = crate::memory::physical_to_virt(buffer_physical);
+        
+        let cmd = SqEntry {
+            cdw0: ADMIN_IDENTIFY as u32,
+            nsid,
+            prp1: buffer_physical,
+            cdw10: IDENTIFY_NAMESPACE,
+            ..Default::default()
+        };
+        
+        self.admin_command(cmd)?;
+        
+        let (nsze, lba_size) = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+            let data = buffer_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u8;
+            
+            // NSZE (Namespace Size): bytes 0-7, in LBAs
+            let nsze = core::ptr::read_unaligned(data as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u64);
+            
+            // FLBAS (Formatted LBA Size): byte 26, bits [3:0] = LBA format index
+            let flbas = *data.add(26) & 0x0F;
+            
+            // LBAF[flbas]: starts at offset 128, each is 4 bytes
+            // bits [23:16] = LBADS (LBA Data Size as power of 2)
+            let lbaf_offset = 128 + (flbas as usize) * 4;
+            let lbaf = core::ptr::read_unaligned(data.add(lbaf_offset) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32);
+            let lbads = (lbaf >> 16) & 0xFF;
+            let lba_size = 1u32 << lbads;
+            
+            (nsze, lba_size)
+        };
+        
+        crate::memory::frame::free_frame(buffer_physical);
+        Ok((nsze, lba_size))
+    }
+    
+    /// Legacy wrapper: Identify Namespace 1 and store in ns1_size/ns1_lba_size.
+    fn identify_namespace(&mut self) -> Result<(), &'static str> {
+        let (nsze, lba_size) = self.identify_namespace_by_id(1)?;
+        self.ns1_size = nsze;
+        self.ns1_lba_size = lba_size;
+        Ok(())
+    }
+    
+    /// Enumerate all active namespaces using Identify Active Namespace ID List (CNS=0x02).
+    /// Falls back to NS1-only if the command fails (e.g. older controllers).
+    fn enumerate_namespaces(&mut self) -> Result<(), &'static str> {
+        let buffer_physical = crate::memory::frame::allocator_frame_zeroed()
+            .ok_or("NVMe: OOM for NS list buffer")?;
+        let buffer_virt = crate::memory::physical_to_virt(buffer_physical);
+        
+        let cmd = SqEntry {
+            cdw0: ADMIN_IDENTIFY as u32,
+            nsid: 0, // start from NSID 0 to get all
+            prp1: buffer_physical,
+            cdw10: IDENTIFY_ACTIVE_NSID_LIST,
+            ..Default::default()
+        };
+        
+        let ns_ids: Vec<u32>;
+        
+                // Pattern matching — Rust's exhaustive branching construct.
+match self.admin_command(cmd) {
+            Ok(_) => {
+                // The returned buffer is a list of up to 1024 active NSIDs (u32 each),
+                // terminated by 0.
+                let mut ids = Vec::new();
+                                // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+                    let list = buffer_virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32;
+                    for i in 0..1024 {
+                        let nsid = core::ptr::read_volatile(list.add(i));
+                        if nsid == 0 { break; }
+                        ids.push(nsid);
+                    }
+                }
+                ns_ids = ids;
+            }
+            Err(_) => {
+                // CNS=0x02 not supported — fall back to NS1 only
+                crate::serial_println!("[NVMe] Active NSID list not supported, using NS1 only");
+                ns_ids = alloc::vec![1];
+            }
+        }
+        
+        crate::memory::frame::free_frame(buffer_physical);
+        
+        self.namespaces.clear();
+        
+        for &nsid in &ns_ids {
+                        // Pattern matching — Rust's exhaustive branching construct.
+match self.identify_namespace_by_id(nsid) {
+                Ok((nsze, lba_size)) => {
+                    if nsze > 0 {
+                        let size_mb = (nsze * lba_size as u64) / (1024 * 1024);
+                        crate::serial_println!("[NVMe] NS{}: {} LBAs x {} B = {} MB",
+                            nsid, nsze, lba_size, size_mb);
+                        self.namespaces.push(NvmeNamespace {
+                            nsid,
+                            size_lbas: nsze,
+                            lba_size,
+                        });
+                        // Keep ns1_* fields for backwards compatibility
+                        if nsid == 1 {
+                            self.ns1_size = nsze;
+                            self.ns1_lba_size = lba_size;
+                        }
+                    }
+                }
+                Err(e) => {
+                    crate::serial_println!("[NVMe] Failed to identify NS{}: {}", nsid, e);
+                }
+            }
+        }
+        
+        if self.namespaces.is_empty() {
+            return Err("NVMe: no usable namespaces found");
+        }
+        
+        Ok(())
+    }
+    
+    // ─── I/O Queue creation ──────────────────────────────────────
+    
+    /// Create I/O Completion Queue (admin command)
+    fn create_io_cq(&mut self, qid: u16, cq_physical: u64, depth: u16) -> Result<(), &'static str> {
+        let cmd = SqEntry {
+            cdw0: ADMIN_CREATE_IO_CQ as u32,
+            prp1: cq_physical,
+            // CDW10: QID (15:0) + Queue Size (31:16) — size is 0-based
+            cdw10: (qid as u32) | (((depth - 1) as u32) << 16),
+            // CDW11: PC=1 (Physically Contiguous), IEN=0, IV=0 (polling, no interrupts)
+            cdw11: 1,   // PC=1
+            ..Default::default()
+        };
+        
+        self.admin_command(cmd)?;
+        Ok(())
+    }
+    
+    /// Create I/O Submission Queue (admin command)
+    fn create_io_sq(&mut self, qid: u16, sq_physical: u64, cqid: u16, depth: u16) -> Result<(), &'static str> {
+        let cmd = SqEntry {
+            cdw0: ADMIN_CREATE_IO_SQ as u32,
+            prp1: sq_physical,
+            // CDW10: QID (15:0) + Queue Size (31:16) — size is 0-based
+            cdw10: (qid as u32) | (((depth - 1) as u32) << 16),
+            // CDW11: PC=1 (Physically Contiguous) + CQID (31:16)
+            cdw11: 1 | ((cqid as u32) << 16),
+            ..Default::default()
+        };
+        
+        self.admin_command(cmd)?;
+        Ok(())
+    }
+    
+    // ─── Read / Write ────────────────────────────────────────────
+    
+    /// Build PRP2 from a list of page physical addresses.
+    /// pages[0] is used as PRP1 (not included in PRP2 list).
+    /// Returns (prp2_value, optional_prp_list_phys_to_free).
+    fn build_prp2_scatter(&self, pages: &[u64]) -> Result<(u64, Option<u64>), &'static str> {
+        if pages.len() <= 1 {
+            // Single page: no PRP2 needed
+            Ok((0, None))
+        } else if pages.len() == 2 {
+            // Two pages: PRP2 = physical address of second page
+            Ok((pages[1], None))
+        } else {
+            // 3+ pages: PRP2 = PRP list page containing addresses of pages[1..N]
+            let list_physical = crate::memory::frame::allocator_frame_zeroed()
+                .ok_or("NVMe: OOM for PRP list")?;
+            let list_virt = crate::memory::physical_to_virt(list_physical);
+            
+            let remaining = pages.len() - 1; // pages[1..N]
+            if remaining > 512 {
+                crate::memory::frame::free_frame(list_physical);
+                return Err("NVMe: transfer too large for single PRP list");
+            }
+            
+                        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+                let entries = list_virt as *mut u64;
+                for i in 0..remaining {
+                    core::ptr::write_volatile(entries.add(i), pages[i + 1]);
+                }
+            }
+            
+            Ok((list_physical, Some(list_physical)))
+        }
+    }
+    
+    /// Read LBAs from namespace 1 using scatter-gather DMA pages.
+    fn read_lbas_scatter(&mut self, start_lba: u64, count: u16, pages: &[u64]) -> Result<(), &'static str> {
+        let (prp2, prp_list_page) = self.build_prp2_scatter(pages)?;
+        
+        let cmd = SqEntry {
+            cdw0: IO_READ as u32,
+            nsid: 1,
+            prp1: pages[0],
+            prp2,
+            cdw10: start_lba as u32,
+            cdw11: (start_lba >> 32) as u32,
+            cdw12: (count - 1) as u32,
+            ..Default::default()
+        };
+        
+        let result = self.io_command(cmd);
+        if let Some(physical) = prp_list_page {
+            crate::memory::frame::free_frame(physical);
+        }
+        result?;
+        Ok(())
+    }
+    
+    /// Write LBAs to namespace 1 using scatter-gather DMA pages.
+    fn write_lbas_scatter(&mut self, start_lba: u64, count: u16, pages: &[u64]) -> Result<(), &'static str> {
+        let (prp2, prp_list_page) = self.build_prp2_scatter(pages)?;
+        
+        let cmd = SqEntry {
+            cdw0: IO_WRITE as u32,
+            nsid: 1,
+            prp1: pages[0],
+            prp2,
+            cdw10: start_lba as u32,
+            cdw11: (start_lba >> 32) as u32,
+            cdw12: (count - 1) as u32,
+            ..Default::default()
+        };
+        
+        let result = self.io_command(cmd);
+        if let Some(physical) = prp_list_page {
+            crate::memory::frame::free_frame(physical);
+        }
+        result?;
+        Ok(())
+    }
+    
+    /// Flush (sync) namespace 1.
+    fn flush(&mut self) -> Result<(), &'static str> {
+        let cmd = SqEntry {
+            cdw0: IO_FLUSH as u32,
+            nsid: 1,
+            ..Default::default()
+        };
+        self.io_command(cmd)?;
+        Ok(())
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Global driver state
+// ═══════════════════════════════════════════════════════════════════════
+
+static NVME: Mutex<Option<NvmeController>> = Mutex::new(None);
+// Atomic variable — provides lock-free thread-safe access.
+static INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+/// Check if NVMe driver is initialized
+pub fn is_initialized() -> bool {
+    INITIALIZED.load(Ordering::Relaxed)
+}
+
+/// Get NVMe namespace capacity in LBAs
+pub fn capacity() -> u64 {
+    NVME.lock().as_ref().map(|c| c.ns1_size).unwrap_or(0)
+}
+
+/// Get LBA size in bytes
+pub fn lba_size() -> u32 {
+    NVME.lock().as_ref().map(|c| c.ns1_lba_size).unwrap_or(512)
+}
+
+/// Get NVMe drive info
+pub fn get_information() -> Option<(String, String, u64, u32)> {
+    let controller = NVME.lock();
+    let c = controller.as_ref()?;
+    Some((c.model.clone(), c.serial.clone(), c.ns1_size, c.ns1_lba_size))
+}
+
+/// List all active NVMe namespaces.
+pub fn list_namespaces() -> Vec<NvmeNamespace> {
+    NVME.lock().as_ref().map(|c| c.namespaces.clone()).unwrap_or_default()
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Initialization
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Initialize the NVMe driver for a given PCI device.
+///
+/// Performs the full NVMe init sequence:
+/// 1. Map BAR0 MMIO
+/// 2. Disable controller (CC.EN=0)
+/// 3. Allocate admin queues
+/// 4. Configure AQA, ASQ, ACQ registers
+/// 5. Enable controller (CC.EN=1), wait for CSTS.RDY
+/// 6. Identify Controller + Identify Namespace
+/// 7. Create I/O queue pair
+pub fn init(pci_device: &crate::pci::PciDevice) -> Result<(), &'static str> {
+    crate::serial_println!("[NVMe] Initializing {:02X}:{:02X}.{} ({:04X}:{:04X})",
+        pci_device.bus, pci_device.device, pci_device.function,
+        pci_device.vendor_id, pci_device.device_id);
+    
+    // ── Step 0: Enable PCI bus mastering + memory space ──
+    crate::pci::enable_bus_master(pci_device);
+    crate::pci::enable_memory_space(pci_device);
+    
+    // Disable interrupts via PCI command register (we use polling)
+    let cmd = crate::pci::config_read16(pci_device.bus, pci_device.device, pci_device.function, 0x04);
+    crate::pci::config_write(pci_device.bus, pci_device.device, pci_device.function, 0x04,
+        (cmd | (1 << 10)) as u32); // Interrupt Disable bit
+    
+    // ── Step 1: Map BAR0 (MMIO) ──
+    let bar0_physical = pci_device.bar_address(0).ok_or("NVMe: no BAR0")?;
+    if bar0_physical == 0 {
+        return Err("NVMe: BAR0 is zero");
+    }
+    
+    // NVMe BAR0 is typically 16KB-64KB. Map 64KB to be safe.
+    let bar_virt = crate::memory::map_mmio(bar0_physical, 0x10000)?;
+    
+    crate::serial_println!("[NVMe] BAR0: phys={:#x}, virt={:#x}", bar0_physical, bar_virt);
+    
+    // ── Step 2: Read capabilities ──
+    let capability = {
+        let lo = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::read_volatile((bar_virt + REGISTER_CAPABILITY) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32) } as u64;
+        let hi = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::read_volatile((bar_virt + REGISTER_CAPABILITY + 4) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32) } as u64;
+        lo | (hi << 32)
+    };
+    
+    let mqes = (capability & 0xFFFF) as u16 + 1;  // Maximum Queue Entries Supported (0-based)
+    let dstrd = ((capability >> 32) & 0xF) as u32; // Doorbell Stride (4 << DSTRD)
+    let doorbell_stride = 4u32 << dstrd;
+    let mpsmin = ((capability >> 48) & 0xF) as u32; // Min Memory Page Size (2^(12+MPSMIN))
+    let timeout_500ms = ((capability >> 24) & 0xFF) as u32; // Timeout in 500ms units
+    
+    let vs = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::read_volatile((bar_virt + REGISTER_VS) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32) };
+    let major = (vs >> 16) & 0xFFFF;
+    let minor = (vs >> 8) & 0xFF;
+    
+    crate::serial_println!("[NVMe] Version: {}.{}, MQES={}, DSTRD={}, MPS_MIN={}KB, Timeout={}ms",
+        major, minor, mqes, dstrd, 4 << mpsmin, timeout_500ms * 500);
+    
+    // Use smaller of MQES and 64 entries (keeps within 1 page)
+    let queue_depth = mqes.minimum(64) as u16;
+    
+    // ── Step 3: Disable controller ──
+    let cc = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::read_volatile((bar_virt + REGISTER_CC) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32) };
+    if cc & CC_EN != 0 {
+        // Controller is enabled, disable it
+        unsafe { core::ptr::write_volatile((bar_virt + REGISTER_CC) as *mut u32, cc & !CC_EN) };
+        
+        // Wait for CSTS.RDY = 0
+        for _ in 0..1_000_000u32 {
+            let csts = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::read_volatile((bar_virt + REGISTER_CSTS) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32) };
+            if csts & CSTS_RDY == 0 {
+                break;
+            }
+            core::hint::spin_loop();
+        }
+    }
+    
+    // ── Step 4: Allocate admin queues ──
+    let admin = QueuePair::new(0, queue_depth)
+        .ok_or("NVMe: OOM for admin queues")?;
+    
+    crate::serial_println!("[NVMe] Admin SQ phys={:#x}, CQ phys={:#x}, depth={}",
+        admin.sq_physical, admin.cq_physical, queue_depth);
+    
+    // ── Step 5: Configure admin queue registers ──
+    // AQA: Admin Queue Attributes — ACQS (27:16) + ASQS (11:0), both 0-based
+    let aqa = ((queue_depth - 1) as u32) | (((queue_depth - 1) as u32) << 16);
+        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+        core::ptr::write_volatile((bar_virt + REGISTER_AQA) as *mut u32, aqa);
+        // ASQ: Admin Submission Queue Base Address (64-bit, page-aligned)
+        core::ptr::write_volatile((bar_virt + REGISTER_ASQ) as *mut u32, admin.sq_physical as u32);
+        core::ptr::write_volatile((bar_virt + REGISTER_ASQ + 4) as *mut u32, (admin.sq_physical >> 32) as u32);
+        // ACQ: Admin Completion Queue Base Address (64-bit, page-aligned)
+        core::ptr::write_volatile((bar_virt + REGISTER_ACQ) as *mut u32, admin.cq_physical as u32);
+        core::ptr::write_volatile((bar_virt + REGISTER_ACQ + 4) as *mut u32, (admin.cq_physical >> 32) as u32);
+    }
+    
+    // Mask all interrupts (we use polling)
+    unsafe {
+        core::ptr::write_volatile((bar_virt + REGISTER_INTMS) as *mut u32, 0xFFFFFFFF);
+    }
+    
+    // ── Step 6: Enable controller ──
+    let cc_value = CC_EN | CC_CSS_NVM | CC_MPS_4K | CC_AMS_RR | CC_IOSQES | CC_IOCQES;
+        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+        core::ptr::write_volatile((bar_virt + REGISTER_CC) as *mut u32, cc_value);
+    }
+    
+    // Wait for CSTS.RDY = 1 (or CFS = 1)
+    let mut ready = false;
+    for _ in 0..5_000_000u32 {
+        let csts = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::read_volatile((bar_virt + REGISTER_CSTS) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32) };
+        if csts & CSTS_CFS != 0 {
+            return Err("NVMe: Controller Fatal Status during enable");
+        }
+        if csts & CSTS_RDY != 0 {
+            ready = true;
+            break;
+        }
+        core::hint::spin_loop();
+    }
+    
+    if !ready {
+        return Err("NVMe: Controller did not become ready");
+    }
+    
+    crate::serial_println!("[NVMe] Controller enabled and ready");
+    
+    // ── Step 7: Build controller struct ──
+    let mut controller = NvmeController {
+        bar_virt,
+        doorbell_stride,
+        admin,
+        io: None,
+        serial: String::new(),
+        model: String::new(),
+        ns1_size: 0,
+        ns1_lba_size: 512,
+        namespaces: Vec::new(),
+        maximum_transfer_pages: 256,
+    };
+    
+    // ── Step 8: Identify Controller ──
+    controller.identify_controller()?;
+    crate::serial_println!("[NVMe] Model: '{}', Serial: '{}'", controller.model, controller.serial);
+    
+    // ── Step 9: Enumerate all active namespaces ──
+    controller.enumerate_namespaces()?;
+    let total_mb: u64 = controller.namespaces.iter()
+        .map(|ns| (ns.size_lbas * ns.lba_size as u64) / (1024 * 1024))
+        .sum();
+    crate::serial_println!("[NVMe] {} namespace(s), total {} MB", controller.namespaces.len(), total_mb);
+    
+    // ── Step 10: Create I/O Queue Pair (QID=1) ──
+    let io_depth = queue_depth;
+    let io_queue = QueuePair::new(1, io_depth)
+        .ok_or("NVMe: OOM for I/O queues")?;
+    
+    controller.create_io_cq(1, io_queue.cq_physical, io_depth)?;
+    controller.create_io_sq(1, io_queue.sq_physical, 1, io_depth)?;
+    controller.io = Some(io_queue);
+    
+    crate::serial_println!("[NVMe] I/O queue pair created (depth={})", io_depth);
+    
+    // ── Done! ──
+    let ns_count = controller.namespaces.len();
+    *NVME.lock() = Some(controller);
+    INITIALIZED.store(true, Ordering::Release);
+    
+    crate::serial_println!("[NVMe] ✓ Driver initialized — {} namespace(s), {} MB NVMe storage available",
+        ns_count, total_mb);
+    
+    Ok(())
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Public Read / Write API
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Read sectors from NVMe namespace 1.
+///
+/// `start_lba` — starting LBA
+/// `count` — number of sectors (LBAs) to read
+/// `buffer` — destination buffer (must be at least count × lba_size bytes)
+pub fn read_sectors(start_lba: u64, count: usize, buffer: &mut [u8]) -> Result<(), &'static str> {
+    let mut controller = NVME.lock();
+    let controller = controller.as_mut().ok_or("NVMe: not initialized")?;
+    
+    let lba_size = controller.ns1_lba_size as usize;
+    let total_bytes = count * lba_size;
+    
+    if buffer.len() < total_bytes {
+        return Err("NVMe: buffer too small");
+    }
+    
+    if start_lba + count as u64 > controller.ns1_size {
+        return Err("NVMe: read past end of namespace");
+    }
+    
+    // With PRP list support, we can transfer up to 512 pages (2MB) per command.
+    // Use up to 128 pages (512KB) per chunk for a good balance of speed vs memory.
+    let maximum_pages_per_chunk = 128usize;
+    let maximum_bytes_per_chunk = maximum_pages_per_chunk * 4096;
+    let maximum_lbas_per_chunk = (maximum_bytes_per_chunk / lba_size).maximum(1);
+    
+    let mut lba = start_lba;
+    let mut offset = 0usize;
+    let mut remaining = count;
+    
+    while remaining > 0 {
+        let chunk = remaining.minimum(maximum_lbas_per_chunk);
+        let chunk_bytes = chunk * lba_size;
+        let pages_needed = (chunk_bytes + 4095) / 4096;
+        
+        // Allocate DMA pages
+        let mut dma_pages: Vec<u64> = Vec::with_capacity(pages_needed);
+        for _ in 0..pages_needed {
+                        // Pattern matching — Rust's exhaustive branching construct.
+match crate::memory::frame::allocator_frame_zeroed() {
+                Some(physical) => dma_pages.push(physical),
+                None => {
+                    // Free already allocated pages
+                    for p in &dma_pages { crate::memory::frame::free_frame(*p); }
+                    return Err("NVMe: OOM for DMA read buffer");
+                }
+            }
+        }
+        
+        // Issue scatter-gather read
+        controller.read_lbas_scatter(lba, chunk as u16, &dma_pages)?;
+        
+        // Copy data from DMA pages to user buffer
+        let mut bytes_left = chunk_bytes;
+        for (i, &page_physical) in dma_pages.iter().enumerate() {
+            let copy_size = bytes_left.minimum(4096);
+            let virt = crate::memory::physical_to_virt(page_physical);
+                        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+                core::ptr::copy_nonoverlapping(
+                    virt as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u8,
+                    buffer[offset + i * 4096..].as_mut_pointer(),
+                    copy_size,
+                );
+            }
+            bytes_left -= copy_size;
+        }
+        
+        // Free DMA pages
+        for p in &dma_pages { crate::memory::frame::free_frame(*p); }
+        
+        lba += chunk as u64;
+        offset += chunk_bytes;
+        remaining -= chunk;
+    }
+    
+    Ok(())
+}
+
+/// Write sectors to NVMe namespace 1.
+pub fn write_sectors(start_lba: u64, count: usize, buffer: &[u8]) -> Result<(), &'static str> {
+    let mut controller = NVME.lock();
+    let controller = controller.as_mut().ok_or("NVMe: not initialized")?;
+    
+    let lba_size = controller.ns1_lba_size as usize;
+    let total_bytes = count * lba_size;
+    
+    if buffer.len() < total_bytes {
+        return Err("NVMe: buffer too small");
+    }
+    
+    if start_lba + count as u64 > controller.ns1_size {
+        return Err("NVMe: write past end of namespace");
+    }
+    
+    let maximum_pages_per_chunk = 128usize;
+    let maximum_bytes_per_chunk = maximum_pages_per_chunk * 4096;
+    let maximum_lbas_per_chunk = (maximum_bytes_per_chunk / lba_size).maximum(1);
+    
+    let mut lba = start_lba;
+    let mut offset = 0usize;
+    let mut remaining = count;
+    
+    while remaining > 0 {
+        let chunk = remaining.minimum(maximum_lbas_per_chunk);
+        let chunk_bytes = chunk * lba_size;
+        let pages_needed = (chunk_bytes + 4095) / 4096;
+        
+        // Allocate DMA pages
+        let mut dma_pages: Vec<u64> = Vec::with_capacity(pages_needed);
+        for _ in 0..pages_needed {
+                        // Pattern matching — Rust's exhaustive branching construct.
+match crate::memory::frame::allocator_frame_zeroed() {
+                Some(physical) => dma_pages.push(physical),
+                None => {
+                    for p in &dma_pages { crate::memory::frame::free_frame(*p); }
+                    return Err("NVMe: OOM for DMA write buffer");
+                }
+            }
+        }
+        
+        // Copy data from user buffer to DMA pages
+        let mut bytes_left = chunk_bytes;
+        for (i, &page_physical) in dma_pages.iter().enumerate() {
+            let copy_size = bytes_left.minimum(4096);
+            let virt = crate::memory::physical_to_virt(page_physical);
+                        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+                core::ptr::copy_nonoverlapping(
+                    buffer[offset + i * 4096..].as_pointer(),
+                    virt as *mut u8,
+                    copy_size,
+                );
+            }
+            bytes_left -= copy_size;
+        }
+        
+        // Issue scatter-gather write
+        controller.write_lbas_scatter(lba, chunk as u16, &dma_pages)?;
+        
+        // Free DMA pages
+        for p in &dma_pages { crate::memory::frame::free_frame(*p); }
+        
+        lba += chunk as u64;
+        offset += chunk_bytes;
+        remaining -= chunk;
+    }
+    
+    Ok(())
+}
+
+/// Flush pending writes
+pub fn flush() -> Result<(), &'static str> {
+    let mut controller = NVME.lock();
+    let controller = controller.as_mut().ok_or("NVMe: not initialized")?;
+    controller.flush()
+}

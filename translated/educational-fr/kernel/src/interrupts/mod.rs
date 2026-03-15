@@ -1,0 +1,148 @@
+//! Interrupt Handling Subsystem
+//! 
+//! Manages CPU interrupts, exceptions, and hardware IRQs.
+//! Routes interrupts to appropriate handlers.
+//!
+//! On x86_64: Uses IDT, PIC, APIC, and SYSCALL/SYSRET.
+//! On aarch64/riscv64: Stubs (interrupt controllers are arch-specific).
+
+#[cfg(target_arch = "x86_64")]
+mod idt;
+#[cfg(target_arch = "x86_64")]
+mod handlers;
+#[cfg(target_arch = "x86_64")]
+mod pic;
+#[cfg(target_arch = "x86_64")]
+pub mod syscall;
+
+#[cfg(not(target_arch = "x86_64"))]
+pub mod syscall {
+        // Fonction publique — appelable depuis d'autres modules.
+pub fn init() {}
+}
+
+#[cfg(target_arch = "x86_64")]
+use x86_64::structures::idt::InterruptDescriptorTable;
+#[cfg(target_arch = "x86_64")]
+use lazy_static::lazy_static;
+
+#[cfg(target_arch = "x86_64")]
+lazy_static! {
+    /// Interrupt Descriptor Table
+    static ref IDT: InterruptDescriptorTable = {
+        let mut idt = InterruptDescriptorTable::new();
+        
+        // CPU exceptions
+        idt.breakpoint.set_handler_fn(handlers::breakpoint_handler);
+        idt.double_fault.set_handler_fn(handlers::double_fault_handler);
+        idt.page_fault.set_handler_fn(handlers::page_fault_handler);
+        idt.general_protection_fault.set_handler_fn(handlers::general_protection_fault_handler);
+        idt.invalid_opcode.set_handler_fn(handlers::invalid_opcode_handler);
+        idt.divide_error.set_handler_fn(handlers::divide_error_handler);
+        idt.device_not_available.set_handler_fn(handlers::device_not_available_handler);
+        idt.stack_segment_fault.set_handler_fn(handlers::stack_segment_fault_handler);
+        idt.x87_floating_point.set_handler_fn(handlers::x87_fpu_error_handler);
+        idt.simd_floating_point.set_handler_fn(handlers::simd_floating_point_handler);
+        
+        // Hardware interrupts (legacy PIC vectors — used if APIC unavailable)
+        idt[pic::InterruptIndex::Timer.as_usize()]
+            .set_handler_fn(handlers::timer_interrupt_handler);
+        idt[pic::InterruptIndex::Keyboard.as_usize()]
+            .set_handler_fn(handlers::keyboard_interrupt_handler);
+        idt[pic::InterruptIndex::Mouse.as_usize()]
+            .set_handler_fn(handlers::mouse_interrupt_handler);
+        
+        // APIC vectors — used when APIC is enabled (replaces PIC)
+        idt[crate::apic::TIMER_VECTOR as usize]
+            .set_handler_fn(handlers::apic_timer_handler);
+        idt[crate::apic::KEYBOARD_VECTOR as usize]
+            .set_handler_fn(handlers::apic_keyboard_handler);
+        idt[crate::apic::MOUSE_VECTOR as usize]
+            .set_handler_fn(handlers::apic_mouse_handler);
+        
+        // SMP IPI wakeup vector (0xFE = 254) - wakes APs from HLT
+        idt[0xFE].set_handler_fn(handlers::smp_ipi_handler);
+        
+        // SMP reschedule IPI vector (0xFD = 253) - trigger schedule on target CPU
+        idt[0xFD].set_handler_fn(handlers::reschedule_ipi_handler);
+        
+        // VirtIO shared interrupt handler (vector 62) - for virtio-net/blk
+        idt[crate::apic::VIRTIO_VECTOR as usize]
+            .set_handler_fn(handlers::virtio_interrupt_handler);
+        
+        idt
+    };
+}
+
+/// Initialize interrupt handling
+pub fn init() {
+    #[cfg(target_arch = "x86_64")]
+    {
+        // Load IDT
+        IDT.load();
+        
+        // Initialize PIC
+        unsafe {
+            pic::PICS.lock().initialize();
+        }
+        
+        // Initialize SYSCALL/SYSRET for userland
+        syscall::init();
+    }
+    
+    #[cfg(target_arch = "aarch64")]
+    {
+        crate::arch::platform::interrupts::initialize_platform();
+    }
+    
+    // Enable interrupts (portable)
+    crate::arch::interrupts_enable();
+    
+    crate::log_debug!("Interrupts initialized and enabled");
+}
+
+/// Load IDT on an Application Processor (AP)
+/// Called from AP entry point so it can handle IPI vectors
+pub fn load_idt_on_ap() {
+    #[cfg(target_arch = "x86_64")]
+    IDT.load();
+}
+
+/// Disable interrupts and run closure
+pub fn without_interrupts<F, R>(f: F) -> R
+where
+    F: FnOnce() -> R,
+{
+    crate::arch::without_interrupts(f)
+}
+
+/// Allow timer handler to run once bootstrapping is ready
+pub fn set_bootstrap_ready(ready: bool) {
+    #[cfg(target_arch = "x86_64")]
+    handlers::set_bootstrap_ready(ready);
+    #[cfg(target_arch = "aarch64")]
+    {
+        AARCH64_BOOTSTRAP_READY.store(ready, core::sync::atomic::Ordering::SeqCst);
+        if ready {
+            // Start the preemptive timer NOW — it was deferred from init_platform()
+            crate::arch::platform::gic::enable_timer(10);
+            crate::serial_println!("[BOOTSTRAP] aarch64 timer started (10ms ticks)");
+        }
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    let _ = ready;
+}
+
+#[cfg(target_arch = "aarch64")]
+// Variable atomique — accès thread-safe sans verrou.
+static AARCH64_BOOTSTRAP_READY: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// Check if bootstrap is ready (used by aarch64 timer handler)
+pub fn is_bootstrap_ready() -> bool {
+    #[cfg(target_arch = "x86_64")]
+    { return true; } // x86_64 uses its own flag in handlers
+    #[cfg(target_arch = "aarch64")]
+    { return AARCH64_BOOTSTRAP_READY.load(core::sync::atomic::Ordering::SeqCst); }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    { false }
+}

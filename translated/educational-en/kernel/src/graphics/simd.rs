@@ -1,0 +1,926 @@
+//! SIMD Optimizations for Graphics
+//!
+//! Uses SSE2 intrinsics to process 4 pixels (16 bytes) at a time.
+//! Provides 2-4x speedup for fill and blit operations.
+//!
+//! ## Safety
+//! All SSE2 operations require 16-byte aligned data for optimal performance.
+//! The functions handle unaligned heads/tails with scalar operations.
+
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::*;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SSE2 OPTIMIZED FILL (4 pixels at a time)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Fill a row of pixels with a color using SSE2
+/// Processes 4 pixels (16 bytes) per iteration
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn fill_row_sse2(destination: *mut u32, count: usize, color: u32) {
+    if count == 0 { return; }
+    
+    // Broadcast color to all 4 lanes of XMM register
+    let color_vec = _mm_set1_epi32(color as i32);
+    
+    let mut ptr = destination;
+    let mut remaining = count;
+    
+    // Handle unaligned head (up to 3 pixels)
+    let align_offset = (ptr as usize) & 15; // 16-byte alignment
+    if align_offset != 0 {
+        let pixels_to_align = ((16 - align_offset) / 4).minimum(remaining);
+        for _ in 0..pixels_to_align {
+            *ptr = color;
+            ptr = ptr.add(1);
+            remaining -= 1;
+        }
+    }
+    
+    // Process 16 pixels (64 bytes) per iteration for better throughput
+    while remaining >= 16 {
+        _mm_store_si128(ptr as *mut __m128i, color_vec);
+        _mm_store_si128(ptr.add(4) as *mut __m128i, color_vec);
+        _mm_store_si128(ptr.add(8) as *mut __m128i, color_vec);
+        _mm_store_si128(ptr.add(12) as *mut __m128i, color_vec);
+        ptr = ptr.add(16);
+        remaining -= 16;
+    }
+    
+    // Process remaining 4-pixel chunks
+    while remaining >= 4 {
+        _mm_store_si128(ptr as *mut __m128i, color_vec);
+        ptr = ptr.add(4);
+        remaining -= 4;
+    }
+    
+    // Handle tail (up to 3 pixels)
+    for _ in 0..remaining {
+        *ptr = color;
+        ptr = ptr.add(1);
+    }
+}
+
+/// Copy a row of pixels using SSE2
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn copy_row_sse2(destination: *mut u32, source: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32, count: usize) {
+    if count == 0 { return; }
+    
+    let mut destination_pointer = destination;
+    let mut source_pointer = source;
+    let mut remaining = count;
+    
+    // Process 16 pixels at a time
+    while remaining >= 16 {
+        let v0 = _mm_loadu_si128(source_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m128i);
+        let v1 = _mm_loadu_si128(source_pointer.add(4) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m128i);
+        let v2 = _mm_loadu_si128(source_pointer.add(8) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m128i);
+        let v3 = _mm_loadu_si128(source_pointer.add(12) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m128i);
+        
+        _mm_storeu_si128(destination_pointer as *mut __m128i, v0);
+        _mm_storeu_si128(destination_pointer.add(4) as *mut __m128i, v1);
+        _mm_storeu_si128(destination_pointer.add(8) as *mut __m128i, v2);
+        _mm_storeu_si128(destination_pointer.add(12) as *mut __m128i, v3);
+        
+        source_pointer = source_pointer.add(16);
+        destination_pointer = destination_pointer.add(16);
+        remaining -= 16;
+    }
+    
+    // Process 4 pixels at a time
+    while remaining >= 4 {
+        let v = _mm_loadu_si128(source_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m128i);
+        _mm_storeu_si128(destination_pointer as *mut __m128i, v);
+        source_pointer = source_pointer.add(4);
+        destination_pointer = destination_pointer.add(4);
+        remaining -= 4;
+    }
+    
+    // Handle tail
+    for _ in 0..remaining {
+        *destination_pointer = *source_pointer;
+        source_pointer = source_pointer.add(1);
+        destination_pointer = destination_pointer.add(1);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SSE2 ALPHA BLENDING (4 pixels at a time)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NON-TEMPORAL (STREAMING) COPY — inspired by id Tech, Quake, DOOM engines
+// ═══════════════════════════════════════════════════════════════════════════════
+//
+// Game engines use non-temporal stores (`movntdq`) for framebuffer/VRAM writes.
+// Benefits:
+//   1. Bypasses CPU cache → no eviction of hot rendering data
+//   2. Writes combine into 64-byte bursts → faster bus throughput
+//   3. Critical for Write-Combining (WC) memory regions (GPU VRAM, PCI BARs)
+//   4. Reduces cache pollution → rendering code runs 10-30% faster
+//
+// Used by: Mesa/Gallium, NVIDIA drivers, Vulkan implementations, id Tech 4/5
+
+/// Non-temporal (streaming) copy — bypass cache, optimal for VRAM/framebuffer
+/// Uses `movnti` (64-bit GP register) to avoid XMM register target feature issues.
+/// Each `movnti` writes 8 bytes non-temporally (2 pixels). For a 64-byte cache
+/// line, we do 8 stores → full cache-line write-combining.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn copy_row_sse2_nt(destination: *mut u32, source: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32, count: usize) {
+    if count == 0 { return; }
+
+    let dst8 = destination as *mut u64;
+    let src8 = source as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u64;
+    let pairs = count / 2;  // Process 2 pixels (8 bytes) at a time
+    let mut i = 0usize;
+
+    // Process 8 pairs (64 bytes = 1 cache line) per iteration
+    while i + 8 <= pairs {
+        let s = src8.add(i);
+        let d = dst8.add(i);
+        let v0 = core::ptr::read_unaligned(s);
+        let v1 = core::ptr::read_unaligned(s.add(1));
+        let v2 = core::ptr::read_unaligned(s.add(2));
+        let v3 = core::ptr::read_unaligned(s.add(3));
+        let v4 = core::ptr::read_unaligned(s.add(4));
+        let v5 = core::ptr::read_unaligned(s.add(5));
+        let v6 = core::ptr::read_unaligned(s.add(6));
+        let v7 = core::ptr::read_unaligned(s.add(7));
+        core::arch::asm!(
+            "movnti [{d}], {v0}",
+            "movnti [{d} + 8], {v1}",
+            "movnti [{d} + 16], {v2}",
+            "movnti [{d} + 24], {v3}",
+            "movnti [{d} + 32], {v4}",
+            "movnti [{d} + 40], {v5}",
+            "movnti [{d} + 48], {v6}",
+            "movnti [{d} + 56], {v7}",
+            d = in(reg) d,
+            v0 = in(reg) v0,
+            v1 = in(reg) v1,
+            v2 = in(reg) v2,
+            v3 = in(reg) v3,
+            v4 = in(reg) v4,
+            v5 = in(reg) v5,
+            v6 = in(reg) v6,
+            v7 = in(reg) v7,
+            options(nostack),
+        );
+        i += 8;
+    }
+
+    // Remaining pairs
+    while i < pairs {
+        let v = core::ptr::read_unaligned(src8.add(i));
+        core::arch::asm!(
+            "movnti [{d}], {v}",
+            d = in(reg) dst8.add(i),
+            v = in(reg) v,
+            options(nostack),
+        );
+        i += 1;
+    }
+
+    // Odd tail pixel
+    if count & 1 != 0 {
+        *destination.add(count - 1) = *source.add(count - 1);
+    }
+
+    // Fence: guarantee all NT stores are globally visible before DMA reads
+    core::arch::asm!("sfence", options(nostack));
+}
+
+/// Non-temporal fill — bypass cache, optimal for clearing VRAM/framebuffer
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn fill_row_sse2_nt(destination: *mut u32, count: usize, color: u32) {
+    if count == 0 { return; }
+
+    let color64 = (color as u64) | ((color as u64) << 32);
+    let dst8 = destination as *mut u64;
+    let pairs = count / 2;
+    let mut i = 0usize;
+
+    while i + 8 <= pairs {
+        let d = dst8.add(i);
+        core::arch::asm!(
+            "movnti [{d}], {v}",
+            "movnti [{d} + 8], {v}",
+            "movnti [{d} + 16], {v}",
+            "movnti [{d} + 24], {v}",
+            "movnti [{d} + 32], {v}",
+            "movnti [{d} + 40], {v}",
+            "movnti [{d} + 48], {v}",
+            "movnti [{d} + 56], {v}",
+            d = in(reg) d,
+            v = in(reg) color64,
+            options(nostack),
+        );
+        i += 8;
+    }
+
+    while i < pairs {
+        core::arch::asm!(
+            "movnti [{d}], {v}",
+            d = in(reg) dst8.add(i),
+            v = in(reg) color64,
+            options(nostack),
+        );
+        i += 1;
+    }
+
+    if count & 1 != 0 {
+        *destination.add(count - 1) = color;
+    }
+
+    core::arch::asm!("sfence", options(nostack));
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SSE2 ALPHA BLENDING (4 pixels at a time)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Fast alpha blend using SSE2 — true SIMD: blends 4 pixels in parallel
+/// Blends src over dst: result = src * alpha + dst * (255 - alpha)
+/// Uses 16-bit unpacking to perform per-channel multiply+add in XMM registers.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn blend_row_sse2(destination: *mut u32, source: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32, count: usize) {
+    let mut destination_pointer = destination;
+    let mut source_pointer = source;
+    let mut remaining = count;
+
+    let zero = _mm_setzero_si128();
+
+    // Process 4 pixels at a time with true SIMD alpha blending
+    while remaining >= 4 {
+        let s = _mm_loadu_si128(source_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m128i);
+        let d = _mm_loadu_si128(destination_pointer as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m128i);
+
+        // Quick check: if all src alphas are 0 → skip, if all 255 → copy
+        let alpha_mask_value = _mm_srli_epi32(s, 24);
+        let all_zero = _mm_cmpeq_epi32(alpha_mask_value, zero);
+        if _mm_movemask_epi8(all_zero) == 0xFFFF {
+            // All 4 pixels fully transparent — skip
+            source_pointer = source_pointer.add(4);
+            destination_pointer = destination_pointer.add(4);
+            remaining -= 4;
+            continue;
+        }
+        let all_opaque = _mm_cmpeq_epi32(alpha_mask_value, _mm_set1_epi32(255));
+        if _mm_movemask_epi8(all_opaque) == 0xFFFF {
+            // All 4 pixels fully opaque — direct copy
+            _mm_storeu_si128(destination_pointer as *mut __m128i, s);
+            source_pointer = source_pointer.add(4);
+            destination_pointer = destination_pointer.add(4);
+            remaining -= 4;
+            continue;
+        }
+
+        // Full SIMD blend: process pixels 0-1 then pixels 2-3 (16-bit math)
+        // --- Pixels 0-1 ---
+        let s_lo = _mm_unpacklo_epi8(s, zero); // src RGBA as 16-bit [R0 G0 B0 A0 R1 G1 B1 A1]
+        let d_lo = _mm_unpacklo_epi8(d, zero); // dst RGBA as 16-bit
+
+        // Broadcast alpha of each pixel across its 4 channels
+        // Pixel 0 alpha is at position 3, pixel 1 alpha at position 7
+        let a0 = _mm_shufflelo_epi16(s_lo, 0xFF); // [A0 A0 A0 A0 ? ? ? ?]
+        let a_lo = _mm_shufflehi_epi16(a0, 0xFF);  // [A0 A0 A0 A0 A1 A1 A1 A1]
+        let inv_a_lo = _mm_sub_epi16(_mm_set1_epi16(255), a_lo);
+
+        // blend = (src * alpha + dst * inv_alpha + 128) >> 8
+        let source_mul = _mm_mullo_epi16(s_lo, a_lo);
+        let destination_mul = _mm_mullo_epi16(d_lo, inv_a_lo);
+        let sum_lo = _mm_add_epi16(_mm_add_epi16(source_mul, destination_mul), _mm_set1_epi16(128));
+        let result_lo = _mm_srli_epi16(sum_lo, 8);
+
+        // --- Pixels 2-3 ---
+        let s_hi = _mm_unpackhi_epi8(s, zero);
+        let d_hi = _mm_unpackhi_epi8(d, zero);
+
+        let a2 = _mm_shufflelo_epi16(s_hi, 0xFF);
+        let a_hi = _mm_shufflehi_epi16(a2, 0xFF);
+        let inv_a_hi = _mm_sub_epi16(_mm_set1_epi16(255), a_hi);
+
+        let source_mul_hi = _mm_mullo_epi16(s_hi, a_hi);
+        let destination_mul_hi = _mm_mullo_epi16(d_hi, inv_a_hi);
+        let sum_hi = _mm_add_epi16(_mm_add_epi16(source_mul_hi, destination_mul_hi), _mm_set1_epi16(128));
+        let result_hi = _mm_srli_epi16(sum_hi, 8);
+
+        // Pack 16-bit results back to 8-bit: [p0 p1 p2 p3]
+        let result = _mm_packus_epi16(result_lo, result_hi);
+        // Force alpha to 0xFF (fully opaque output)
+        let result = _mm_or_si128(result, _mm_set1_epi32(0xFF000000u32 as i32));
+        _mm_storeu_si128(destination_pointer as *mut __m128i, result);
+
+        source_pointer = source_pointer.add(4);
+        destination_pointer = destination_pointer.add(4);
+        remaining -= 4;
+    }
+
+    // Handle remaining pixels (1-3) with scalar
+    for _ in 0..remaining {
+        let alpha = (*source_pointer >> 24) as u32;
+        if alpha == 255 {
+            *destination_pointer = *source_pointer;
+        } else if alpha > 0 {
+            *destination_pointer = blend_pixel_fast(*source_pointer, *destination_pointer);
+        }
+        source_pointer = source_pointer.add(1);
+        destination_pointer = destination_pointer.add(1);
+    }
+}
+
+/// Fast single pixel alpha blend
+#[inline(always)]
+// Public function — callable from other modules.
+pub fn blend_pixel_fast(source: u32, destination: u32) -> u32 {
+    let alpha = (source >> 24) as u32;
+    if alpha == 0 { return destination; }
+    if alpha == 255 { return source; }
+    
+    let inv_alpha = 255 - alpha;
+    
+    let sr = (source >> 16) & 0xFF;
+    let sg = (source >> 8) & 0xFF;
+    let sb = source & 0xFF;
+    
+    let dr = (destination >> 16) & 0xFF;
+    let dg = (destination >> 8) & 0xFF;
+    let db = destination & 0xFF;
+    
+    // result = (src * alpha + dst * (255 - alpha)) / 255
+    // Use (x * a + 127) / 255 ≈ (x * a + 128) >> 8 for speed
+    let r = ((sr * alpha + dr * inv_alpha + 128) >> 8).minimum(255);
+    let g = ((sg * alpha + dg * inv_alpha + 128) >> 8).minimum(255);
+    let b = ((sb * alpha + db * inv_alpha + 128) >> 8).minimum(255);
+    
+    0xFF000000 | (r << 16) | (g << 8) | b
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SSE2 UNIFORM ALPHA FILL (blend solid color onto destination)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Blend a solid color with uniform alpha onto a row of destination pixels using SSE2.
+/// result = src_color * alpha + dst * (255 - alpha), per channel.
+/// Processes 4 pixels at a time — 4-8x faster than scalar for desktop glass/shadows.
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn blend_fill_row_sse2(destination: *mut u32, count: usize, color: u32, alpha: u32) {
+    if count == 0 { return; }
+    if alpha == 0 { return; }
+    if alpha >= 255 {
+        fill_row_sse2(destination, count, color | 0xFF000000);
+        return;
+    }
+
+    let inv_a = 255 - alpha;
+
+    // Use only broadcast intrinsics (_mm_set1_*) to avoid LLVM vector legalization issues
+    let source_pixel = _mm_set1_epi32(color as i32);
+    let alpha_vec = _mm_set1_epi16(alpha as i16);
+    let inv_a_vec = _mm_set1_epi16(inv_a as i16);
+    let round_vec = _mm_set1_epi16(128);
+    let zero = _mm_setzero_si128();
+    let alpha_mask = _mm_set1_epi32(0xFF000000u32 as i32);
+
+    // Pre-expand source color to 16-bit and pre-multiply by alpha (constant for entire row)
+    let s_lo = _mm_unpacklo_epi8(source_pixel, zero);
+    let s_hi = _mm_unpackhi_epi8(source_pixel, zero);
+    let source_a_lo = _mm_mullo_epi16(s_lo, alpha_vec);
+    let source_a_hi = _mm_mullo_epi16(s_hi, alpha_vec);
+
+    let mut ptr = destination;
+    let mut remaining = count;
+
+    // Process 4 pixels at a time
+    while remaining >= 4 {
+        let d = _mm_loadu_si128(ptr as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m128i);
+
+        // Pixels 0-1: dst * inv_alpha + src * alpha + 128
+        let d_lo = _mm_unpacklo_epi8(d, zero);
+        let destination_mul_lo = _mm_mullo_epi16(d_lo, inv_a_vec);
+        let sum_lo = _mm_add_epi16(_mm_add_epi16(source_a_lo, destination_mul_lo), round_vec);
+        let result_lo = _mm_srli_epi16(sum_lo, 8);
+
+        // Pixels 2-3
+        let d_hi = _mm_unpackhi_epi8(d, zero);
+        let destination_mul_hi = _mm_mullo_epi16(d_hi, inv_a_vec);
+        let sum_hi = _mm_add_epi16(_mm_add_epi16(source_a_hi, destination_mul_hi), round_vec);
+        let result_hi = _mm_srli_epi16(sum_hi, 8);
+
+        // Pack back to 8-bit and force alpha to 0xFF
+        let result = _mm_packus_epi16(result_lo, result_hi);
+        let result = _mm_or_si128(result, alpha_mask);
+        _mm_storeu_si128(ptr as *mut __m128i, result);
+
+        ptr = ptr.add(4);
+        remaining -= 4;
+    }
+
+    // Scalar tail
+    let sr = ((color >> 16) & 0xFF) as u32;
+    let sg = ((color >> 8) & 0xFF) as u32;
+    let sb = (color & 0xFF) as u32;
+    for _ in 0..remaining {
+        let existing = *ptr;
+        let dr = ((existing >> 16) & 0xFF) as u32;
+        let dg = ((existing >> 8) & 0xFF) as u32;
+        let db = (existing & 0xFF) as u32;
+        let r = ((sr * alpha + dr * inv_a + 128) >> 8).minimum(255);
+        let g = ((sg * alpha + dg * inv_a + 128) >> 8).minimum(255);
+        let b = ((sb * alpha + db * inv_a + 128) >> 8).minimum(255);
+        *ptr = 0xFF000000 | (r << 16) | (g << 8) | b;
+        ptr = ptr.add(1);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SSE2 FRAMEBUFFER OPERATIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Clear entire framebuffer with SSE2
+#[cfg(target_arch = "x86_64")]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn clear_framebuffer_sse2(framebuffer: *mut u32, width: usize, height: usize, pitch_pixels: usize, color: u32) {
+    for y in 0..height {
+        let row = framebuffer.add(y * pitch_pixels);
+        fill_row_sse2(row, width, color);
+    }
+}
+
+/// Fast blit to framebuffer using SSE2
+#[cfg(target_arch = "x86_64")]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn blit_to_framebuffer_sse2(
+    framebuffer: *mut u32,
+    framebuffer_pitch: usize,
+    source: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32,
+    source_width: usize,
+    source_height: usize,
+    destination_x: usize,
+    destination_y: usize,
+) {
+    for y in 0..source_height {
+        let source_row = source.add(y * source_width);
+        let destination_row = framebuffer.add((destination_y + y) * framebuffer_pitch + destination_x);
+        copy_row_sse2(destination_row, source_row, source_width);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GLYPH CACHE - Pre-rendered character bitmaps
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Cached glyph (pre-rendered character)
+pub struct CachedGlyph {
+    /// Pixel data (only foreground pixels, background is transparent)
+    pub pixels: [u32; 128], // 8x16 = 128 pixels max
+    /// Glyph width
+    pub width: u8,
+    /// Glyph height
+    pub height: u8,
+    /// Foreground color used to render
+    pub fg_color: u32,
+}
+
+/// Glyph cache for fast text rendering
+pub struct GlyphCache {
+    /// Cached glyphs indexed by (char, color) pair
+    glyphs: [Option<CachedGlyph>; 128],
+    /// Current foreground color
+    current_fg: u32,
+}
+
+// Implementation block — defines methods for the type above.
+impl GlyphCache {
+    pub const fn new() -> Self {
+                // Compile-time constant — evaluated at compilation, zero runtime cost.
+const NONE: Option<CachedGlyph> = None;
+        Self {
+            glyphs: [NONE; 128],
+            current_fg: 0xFF00FF66, // Matrix green
+        }
+    }
+    
+    /// Set the current foreground color (invalidates cache if changed)
+    pub fn set_fg_color(&mut self, color: u32) {
+        if self.current_fg != color {
+            self.current_fg = color;
+            // Invalidate all cached glyphs
+            for g in &mut self.glyphs {
+                *g = None;
+            }
+        }
+    }
+    
+    /// Get or create a cached glyph
+    pub fn get_glyph(&mut self, c: char) -> &CachedGlyph {
+        let index = (c as usize) & 127;
+        
+        if self.glyphs[index].is_none() || 
+           self.glyphs[index].as_ref().map(|g| g.fg_color) != Some(self.current_fg) {
+            // Render and cache the glyph
+            let glyph_data = crate::framebuffer::font::get_glyph(c);
+            let mut pixels = [0u32; 128];
+            
+            for (row_index, &row) in glyph_data.iter().enumerate() {
+                for bit in 0..8 {
+                    if (row >> (7 - bit)) & 1 == 1 {
+                        pixels[row_index * 8 + bit] = self.current_fg;
+                    }
+                }
+            }
+            
+            self.glyphs[index] = Some(CachedGlyph {
+                pixels,
+                width: 8,
+                height: 16,
+                fg_color: self.current_fg,
+            });
+        }
+        
+        self.glyphs[index].as_ref().unwrap()
+    }
+    
+    /// Draw a cached glyph to a buffer
+    #[inline]
+        // Public function — callable from other modules.
+pub fn draw_glyph_to_buffer(
+        &mut self,
+        buffer: &mut [u32],
+        stride: usize,
+        x: usize,
+        y: usize,
+        c: char,
+        fg: u32,
+        bg: u32,
+    ) {
+        let glyph_data = crate::framebuffer::font::get_glyph(c);
+        
+        for (row_index, &row) in glyph_data.iter().enumerate() {
+            let py = y + row_index;
+            let row_start = py * stride + x;
+            
+            if row_start + 8 > buffer.len() { continue; }
+            
+            // Process 8 pixels for this glyph row
+            for bit in 0..8u8 {
+                let color = if (row >> (7 - bit)) & 1 == 1 { fg } else { bg };
+                buffer[row_start + bit as usize] = color;
+            }
+        }
+    }
+}
+
+// Global glyph cache
+use spin::Mutex;
+pub // Global shared state guarded by a Mutex (mutual exclusion lock).
+static GLYPH_CACHE: Mutex<GlyphCache> = Mutex::new(GlyphCache::new());
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BATCH TEXT RENDERING
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Render an entire line of text in one go (much faster than char-by-char)
+pub fn render_text_line(
+    buffer: &mut [u32],
+    stride: usize,
+    x: usize,
+    y: usize,
+    text: &str,
+    fg: u32,
+    bg: u32,
+) {
+    let mut cache = GLYPH_CACHE.lock();
+    let mut cx = x;
+    
+    for c in text.chars() {
+        if cx + 8 > stride { break; }
+        cache.draw_glyph_to_buffer(buffer, stride, cx, y, c, fg, bg);
+        cx += 8;
+    }
+}
+
+/// Render multiple lines of text
+pub fn render_text_block(
+    buffer: &mut [u32],
+    stride: usize,
+    x: usize,
+    y: usize,
+    lines: &[&str],
+    fg: u32,
+    bg: u32,
+) {
+    let mut cy = y;
+    for line in lines {
+        render_text_line(buffer, stride, x, cy, line, fg, bg);
+        cy += 16;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SAFE WRAPPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Safe wrapper for SSE2 fill
+pub fn fill_buffer_fast(buffer: &mut [u32], color: u32) {
+    #[cfg(target_arch = "x86_64")]
+        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+        if buffer.len() >= 4 {
+            fill_row_sse2(buffer.as_mut_pointer(), buffer.len(), color);
+            return;
+        }
+    }
+    // Fallback
+    buffer.fill(color);
+}
+
+/// Safe wrapper for SSE2 copy
+pub fn copy_buffer_fast(destination: &mut [u32], source: &[u32]) {
+    let count = destination.len().minimum(source.len());
+    #[cfg(target_arch = "x86_64")]
+        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+        if count >= 4 {
+            copy_row_sse2(destination.as_mut_pointer(), source.as_pointer(), count);
+            return;
+        }
+    }
+    // Fallback
+    destination[..count].copy_from_slice(&source[..count]);
+}
+
+/// Safe wrapper for SSE2 alpha blend
+pub fn blend_buffer_fast(destination: &mut [u32], source: &[u32]) {
+    let count = destination.len().minimum(source.len());
+    #[cfg(target_arch = "x86_64")]
+        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+        if count >= 2 {
+            blend_row_sse2(destination.as_mut_pointer(), source.as_pointer(), count);
+            return;
+        }
+    }
+    // Fallback
+    for i in 0..count {
+        destination[i] = blend_pixel_fast(source[i], destination[i]);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AVX2 OPTIMIZED OPERATIONS (8 pixels at a time)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+use core::sync::atomic::{AtomicU8, Ordering};
+
+/// 0 = not checked, 1 = no AVX2, 2 = AVX2 available
+static AVX2_SUPPORT: AtomicU8 = AtomicU8::new(0);
+
+/// Check AVX2 support via CPUID
+#[cfg(target_arch = "x86_64")]
+fn has_avx2() -> bool {
+    let cached = AVX2_SUPPORT.load(Ordering::Relaxed);
+    if cached != 0 {
+        return cached == 2;
+    }
+    let result = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+        // CPUID leaf 7, subleaf 0: EBX bit 5 = AVX2
+        let ebx: u32;
+        core::arch::asm!(
+            "mov {tmp_rbx}, rbx",
+            "cpuid",
+            "mov {out}, ebx",
+            "mov rbx, {tmp_rbx}",
+            temporary_rbx = out(reg) _,
+            out = out(reg) ebx,
+            inout("eax") 7u32 => _,
+            inout("ecx") 0u32 => _,
+            out("edx") _,
+        );
+        (ebx & (1 << 5)) != 0
+    };
+    AVX2_SUPPORT.store(if result { 2 } else { 1 }, Ordering::Relaxed);
+    result
+}
+
+/// Fill a row of pixels with a color using AVX2
+/// Processes 8 pixels (32 bytes) per iteration
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn fill_row_avx2(destination: *mut u32, count: usize, color: u32) {
+    if count == 0 { return; }
+
+    let color_vec = _mm256_set1_epi32(color as i32);
+    let mut ptr = destination;
+    let mut remaining = count;
+
+    // Process 32 pixels per unrolled iteration
+    while remaining >= 32 {
+        _mm256_storeu_si256(ptr as *mut __m256i, color_vec);
+        _mm256_storeu_si256(ptr.add(8) as *mut __m256i, color_vec);
+        _mm256_storeu_si256(ptr.add(16) as *mut __m256i, color_vec);
+        _mm256_storeu_si256(ptr.add(24) as *mut __m256i, color_vec);
+        ptr = ptr.add(32);
+        remaining -= 32;
+    }
+    // 8 pixels at a time
+    while remaining >= 8 {
+        _mm256_storeu_si256(ptr as *mut __m256i, color_vec);
+        ptr = ptr.add(8);
+        remaining -= 8;
+    }
+    // Scalar tail
+    for i in 0..remaining {
+        *ptr.add(i) = color;
+    }
+}
+
+/// Copy a row of pixels using AVX2
+/// Processes 8 pixels (32 bytes) per iteration
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn copy_row_avx2(destination: *mut u32, source: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32, count: usize) {
+    if count == 0 { return; }
+
+    let mut d = destination;
+    let mut s = source;
+    let mut remaining = count;
+
+    // Process 32 pixels per unrolled iteration
+    while remaining >= 32 {
+        let a = _mm256_loadu_si256(s as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m256i);
+        let b = _mm256_loadu_si256(s.add(8) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m256i);
+        let c = _mm256_loadu_si256(s.add(16) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m256i);
+        let e = _mm256_loadu_si256(s.add(24) as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m256i);
+        _mm256_storeu_si256(d as *mut __m256i, a);
+        _mm256_storeu_si256(d.add(8) as *mut __m256i, b);
+        _mm256_storeu_si256(d.add(16) as *mut __m256i, c);
+        _mm256_storeu_si256(d.add(24) as *mut __m256i, e);
+        d = d.add(32);
+        s = s.add(32);
+        remaining -= 32;
+    }
+    // 8 pixels at a time
+    while remaining >= 8 {
+        _mm256_storeu_si256(d as *mut __m256i, _mm256_loadu_si256(s as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m256i));
+        d = d.add(8);
+        s = s.add(8);
+        remaining -= 8;
+    }
+    // Scalar tail
+    for i in 0..remaining {
+        *d.add(i) = *s.add(i);
+    }
+}
+
+/// Alpha blend a row of pixels using AVX2
+/// Processes 4 pixels per iteration (unpacked to 16-bit for multiply)
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn blend_row_avx2(destination: *mut u32, source: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32, count: usize) {
+    if count == 0 { return; }
+
+    let zero = _mm256_setzero_si256();
+    let half = _mm256_set1_epi16(128);
+
+    let mut d = destination;
+    let mut s = source;
+    let mut remaining = count;
+
+    // Process 8 pixels at a time using AVX2
+    while remaining >= 8 {
+        let source_pixel = _mm256_loadu_si256(s as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m256i);
+        let destination_pixel = _mm256_loadu_si256(d as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const __m256i);
+
+        // Check if all pixels are fully opaque or transparent
+        let alpha_mask = _mm256_srli_epi32(source_pixel, 24);
+        let all_opaque = _mm256_cmpeq_epi32(alpha_mask, _mm256_set1_epi32(0xFF));
+        let all_zero = _mm256_cmpeq_epi32(alpha_mask, zero);
+
+        if _mm256_movemask_epi8(all_opaque) == -1i32 {
+            _mm256_storeu_si256(d as *mut __m256i, source_pixel);
+        } else if _mm256_movemask_epi8(all_zero) != -1i32 {
+            // Process lo 4 pixels
+            let source_lo = _mm256_unpacklo_epi8(source_pixel, zero);
+            let destination_lo = _mm256_unpacklo_epi8(destination_pixel, zero);
+
+            // Extract alpha and broadcast to all channels for lo
+            let alpha_lo = _mm256_shufflehi_epi16(
+                _mm256_shufflelo_epi16(source_lo, 0xFF), 0xFF
+            );
+            let inv_alpha_lo = _mm256_sub_epi16(_mm256_set1_epi16(255), alpha_lo);
+
+            let blended_lo = _mm256_add_epi16(
+                _mm256_add_epi16(_mm256_mullo_epi16(source_lo, alpha_lo), half),
+                _mm256_mullo_epi16(destination_lo, inv_alpha_lo),
+            );
+            let result_lo = _mm256_srli_epi16(blended_lo, 8);
+
+            // Process hi 4 pixels
+            let source_hi = _mm256_unpackhi_epi8(source_pixel, zero);
+            let destination_hi = _mm256_unpackhi_epi8(destination_pixel, zero);
+
+            let alpha_hi = _mm256_shufflehi_epi16(
+                _mm256_shufflelo_epi16(source_hi, 0xFF), 0xFF
+            );
+            let inv_alpha_hi = _mm256_sub_epi16(_mm256_set1_epi16(255), alpha_hi);
+
+            let blended_hi = _mm256_add_epi16(
+                _mm256_add_epi16(_mm256_mullo_epi16(source_hi, alpha_hi), half),
+                _mm256_mullo_epi16(destination_hi, inv_alpha_hi),
+            );
+            let result_hi = _mm256_srli_epi16(blended_hi, 8);
+
+            _mm256_storeu_si256(d as *mut __m256i, _mm256_packus_epi16(result_lo, result_hi));
+        }
+        // else: all transparent, skip
+
+        d = d.add(8);
+        s = s.add(8);
+        remaining -= 8;
+    }
+    // Scalar tail
+    for i in 0..remaining {
+        *d.add(i) = blend_pixel_fast(*s.add(i), *d.add(i));
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AUTO-DISPATCH WRAPPERS (SSE2 → AVX2)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Fill with auto-dispatch: AVX2 if available, else SSE2
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn fill_row_fast(destination: *mut u32, count: usize, color: u32) {
+    if has_avx2() {
+        fill_row_avx2(destination, count, color);
+    } else {
+        fill_row_sse2(destination, count, color);
+    }
+}
+
+/// Copy with auto-dispatch: AVX2 if available, else SSE2
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn copy_row_fast(destination: *mut u32, source: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32, count: usize) {
+    if has_avx2() {
+        copy_row_avx2(destination, source, count);
+    } else {
+        copy_row_sse2(destination, source, count);
+    }
+}
+
+/// Blend with auto-dispatch: AVX2 if available, else SSE2
+#[cfg(target_arch = "x86_64")]
+#[inline]
+pub // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe fn blend_row_fast(destination: *mut u32, source: *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u32, count: usize) {
+    if has_avx2() {
+        blend_row_avx2(destination, source, count);
+    } else {
+        blend_row_sse2(destination, source, count);
+    }
+}

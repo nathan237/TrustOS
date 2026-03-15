@@ -1,4 +1,6 @@
 //! Syscall wrapper for userland
+#![allow(dead_code)]
+
 pub fn exit(code: u64) -> ! {
     unsafe {
         core::arch::asm!(

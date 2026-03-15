@@ -1,0 +1,1218 @@
+//! Keyboard driver
+//! 
+//! Converts PS/2 scancodes to ASCII characters and manages input buffer.
+//! Supports special keys (arrows) and command history.
+
+use spin::Mutex;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::sync::atomic::{AtomicBool, Ordering};
+use crate::serial;
+use crate::arch::Port;
+
+// ---- i8042 PS/2 controller ports ----
+const PS2_DATA: u16 = 0x60;
+// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const PS2_STATUS: u16 = 0x64;
+// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const PS2_COMMAND: u16 = 0x64;
+
+/// Initialize the i8042 PS/2 controller for the keyboard port.
+///
+/// On UEFI systems the controller may be absent or in an unknown state.
+/// This function brings it to a known state: first PS/2 port enabled,
+/// IRQ1 active, scan-code set 1 translation on.  Tolerant of missing hardware.
+pub fn initialize_i8042() {
+    crate::serial_println!("[i8042] Initializing PS/2 keyboard controller...");
+
+    // 1. Disable both PS/2 ports while we configure
+    i8042_command(0xAD); // disable first port  (keyboard)
+    i8042_command(0xA7); // disable second port (mouse — may not exist)
+
+    // 2. Flush the output buffer (drain any stale bytes)
+    {
+        let mut data = Port::<u8>::new(PS2_DATA);
+        let mut status = Port::<u8>::new(PS2_STATUS);
+        for _ in 0..64 {
+            if             // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { status.read() } & 0x01 == 0 { break; }
+                        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { data.read(); }
+        }
+    }
+
+    // 3. Read controller configuration byte (command 0x20)
+    i8042_command(0x20);
+    let cfg = i8042_read_data();
+    crate::serial_println!("[i8042] Config byte: {:#04x}", cfg);
+
+    // Set bit 0 = IRQ1 enable (keyboard), bit 6 = scancode translation
+    // Clear bit 4 = enable keyboard clock (0 = enabled)
+    let new_configuration = (cfg | 0x41) & !0x10;
+    i8042_command(0x60); // write config byte
+    i8042_write_data(new_configuration);
+
+    // 4. Controller self-test (command 0xAA → expect 0x55)
+    i8042_command(0xAA);
+    let test = i8042_read_data();
+    if test == 0x55 {
+        crate::serial_println!("[i8042] Self-test PASSED");
+    } else {
+        crate::serial_println!("[i8042] Self-test returned {:#04x} (expected 0x55) — continuing anyway", test);
+        // Some controllers return garbage; don't abort
+    }
+
+    // Self-test may reset the config byte on some chipsets → restore it
+    i8042_command(0x60);
+    i8042_write_data(new_configuration);
+
+    // 5. Enable first PS/2 port (keyboard)
+    i8042_command(0xAE);
+
+    // 6. Reset keyboard device (send 0xFF → expect 0xFA ACK, then 0xAA BAT pass)
+    i8042_write_data(0xFF);
+    let acknowledge = i8042_read_data();
+    if acknowledge == 0xFA {
+        let bat = i8042_read_data();
+        crate::serial_println!("[i8042] Keyboard reset: ACK={:#04x} BAT={:#04x}", acknowledge, bat);
+    } else {
+        crate::serial_println!("[i8042] Keyboard reset: response {:#04x} (no ACK)", acknowledge);
+    }
+
+    // 7. Flush again in case the reset produced extra bytes
+    {
+        let mut data = Port::<u8>::new(PS2_DATA);
+        let mut status = Port::<u8>::new(PS2_STATUS);
+        for _ in 0..64 {
+            if             // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { status.read() } & 0x01 == 0 { break; }
+                        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { data.read(); }
+        }
+    }
+
+    crate::serial_println!("[i8042] PS/2 keyboard controller ready");
+}
+
+/// Send a command byte to the i8042 controller (port 0x64)
+fn i8042_command(cmd: u8) {
+    let mut status = Port::<u8>::new(PS2_STATUS);
+    let mut command = Port::<u8>::new(PS2_COMMAND);
+    // Wait for input buffer empty (bit 1 = 0)
+    // Use large timeout for slow controllers (e.g. Lenovo T61)
+    for _ in 0..1_000_000 {
+        if         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { status.read() } & 0x02 == 0 { break; }
+        core::hint::spin_loop();
+    }
+        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { command.write(cmd); }
+}
+
+/// Write a data byte to port 0x60 (after waiting for input buffer empty)
+fn i8042_write_data(data: u8) {
+    let mut status = Port::<u8>::new(PS2_STATUS);
+    let mut port = Port::<u8>::new(PS2_DATA);
+    for _ in 0..1_000_000 {
+        if         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { status.read() } & 0x02 == 0 { break; }
+        core::hint::spin_loop();
+    }
+        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { port.write(data); }
+}
+
+/// Read a data byte from port 0x60 (waits for output buffer full, with timeout)
+fn i8042_read_data() -> u8 {
+    let mut status = Port::<u8>::new(PS2_STATUS);
+    let mut port = Port::<u8>::new(PS2_DATA);
+    for _ in 0..1_000_000 {
+        if         // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { status.read() } & 0x01 != 0 {
+            return             // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { port.read() };
+        }
+        core::hint::spin_loop();
+    }
+    0xFF // timeout — no data
+}
+
+/// Keyboard input buffer size
+const BUFFER_SIZE: usize = 256;
+
+/// Special key codes (virtual, not actual scancodes)
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_UP: u8 = 0xF0;
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_DOWN: u8 = 0xF1;
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_LEFT: u8 = 0xF2;
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_RIGHT: u8 = 0xF3;
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_HOME: u8 = 0xF4;
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_END: u8 = 0xF5;
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_DELETE: u8 = 0xF6;
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_PGUP: u8 = 0xF7;
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_PGDOWN: u8 = 0xF8;
+
+// Extended editor key codes (0xD0+ range, avoids 0xE0 PS/2 prefix conflict)
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_CONTROLLER_SLASH: u8 = 0xD0;      // Ctrl+/ toggle comment
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_CONTROLLER_SHIFT_K: u8 = 0xD1;    // Ctrl+Shift+K delete line
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_CONTROLLER_SHIFT_D: u8 = 0xD2;    // Ctrl+Shift+D duplicate line
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_ALT_UP: u8 = 0xD3;          // Alt+Up move line up
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_ALT_DOWN: u8 = 0xD4;        // Alt+Down move line down
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_CONTROLLER_LEFT: u8 = 0xD5;       // Ctrl+Left word left
+pub // Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const KEY_CONTROLLER_RIGHT: u8 = 0xD6;      // Ctrl+Right word right
+
+/// Ring buffer for keyboard input
+struct KeyboardBuffer {
+    buffer: [u8; BUFFER_SIZE],
+    read_position: usize,
+    write_position: usize,
+}
+
+// Bloc d'implémentation — définit les méthodes du type ci-dessus.
+impl KeyboardBuffer {
+    const fn new() -> Self {
+        Self {
+            buffer: [0; BUFFER_SIZE],
+            read_position: 0,
+            write_position: 0,
+        }
+    }
+
+    fn push(&mut self, byte: u8) {
+        let next_write = (self.write_position + 1) % BUFFER_SIZE;
+        if next_write != self.read_position {
+            self.buffer[self.write_position] = byte;
+            self.write_position = next_write;
+        }
+    }
+
+    fn pop(&mut self) -> Option<u8> {
+        if self.read_position == self.write_position {
+            None
+        } else {
+            let byte = self.buffer[self.read_position];
+            self.read_position = (self.read_position + 1) % BUFFER_SIZE;
+            Some(byte)
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.read_position == self.write_position
+    }
+}
+
+/// Command history
+const HISTORY_SIZE: usize = 32;
+
+struct CommandHistory {
+    entries: [Option<String>; HISTORY_SIZE],
+    write_position: usize,
+    browse_position: usize,
+    count: usize,
+}
+
+// Bloc d'implémentation — définit les méthodes du type ci-dessus.
+impl CommandHistory {
+    const fn new() -> Self {
+        // Can't use array initialization with Option<String> in const
+        Self {
+            entries: [
+                None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None,
+                None, None, None, None, None, None, None, None,
+            ],
+            write_position: 0,
+            browse_position: 0,
+            count: 0,
+        }
+    }
+    
+    fn add(&mut self, cmd: &str) {
+        if cmd.is_empty() {
+            return;
+        }
+        // Don't add duplicates of last command
+        if self.count > 0 {
+            let last_position = if self.write_position == 0 { HISTORY_SIZE - 1 } else { self.write_position - 1 };
+            if let Some(ref last) = self.entries[last_position] {
+                if last == cmd {
+                    self.browse_position = self.write_position;
+                    return;
+                }
+            }
+        }
+        
+        self.entries[self.write_position] = Some(String::from(cmd));
+        self.write_position = (self.write_position + 1) % HISTORY_SIZE;
+        if self.count < HISTORY_SIZE {
+            self.count += 1;
+        }
+        self.browse_position = self.write_position;
+    }
+    
+    fn get_previous(&mut self) -> Option<&str> {
+        if self.count == 0 {
+            return None;
+        }
+        
+        let new_position = if self.browse_position == 0 { 
+            HISTORY_SIZE - 1 
+        } else { 
+            self.browse_position - 1 
+        };
+        
+        // Don't go past oldest entry
+        let oldest = if self.count < HISTORY_SIZE {
+            0
+        } else {
+            self.write_position
+        };
+        
+        if new_position == oldest && self.browse_position == oldest {
+            // Already at oldest
+            return self.entries[self.browse_position].as_deref();
+        }
+        
+        if self.entries[new_position].is_some() {
+            self.browse_position = new_position;
+            self.entries[self.browse_position].as_deref()
+        } else {
+            None
+        }
+    }
+    
+    fn get_next(&mut self) -> Option<&str> {
+        if self.browse_position == self.write_position {
+            return None; // Already at newest
+        }
+        
+        self.browse_position = (self.browse_position + 1) % HISTORY_SIZE;
+        
+        if self.browse_position == self.write_position {
+            None // Reached end (current input)
+        } else {
+            self.entries[self.browse_position].as_deref()
+        }
+    }
+    
+    fn reset_browse(&mut self) {
+        self.browse_position = self.write_position;
+    }
+    
+    fn iter(&self) -> // Bloc d'implémentation — définit les méthodes du type ci-dessus.
+impl Iterator<Item = (usize, &str)> {
+        let count = self.count;
+        let start = if count < HISTORY_SIZE { 0 } else { self.write_position };
+        
+        (0..count).map(move |i| {
+            let index = (start + i) % HISTORY_SIZE;
+            (i + 1, self.entries[index].as_deref().unwrap_or(""))
+        })
+    }
+}
+
+/// Global keyboard buffer
+static KEYBOARD_BUFFER: Mutex<KeyboardBuffer> = Mutex::new(KeyboardBuffer::new());
+
+/// Global command history
+static COMMAND_HISTORY: Mutex<CommandHistory> = Mutex::new(CommandHistory::new());
+/// Internal clipboard for Ctrl+C/Ctrl+V
+static CLIPBOARD: Mutex<Option<String>> = Mutex::new(None);
+
+/// Extended scancode flag (0xE0 prefix)
+static EXTENDED_KEY: AtomicBool = AtomicBool::new(false);
+
+/// E1 prefix counter (Pause/Break key sends E1 1D 45 E1 9D C5)
+static E1_SKIP: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+/// Alt key state for hotkeys
+static ALT_PRESSED: AtomicBool = AtomicBool::new(false);
+
+/// Shift key state
+static SHIFT_PRESSED: AtomicBool = AtomicBool::new(false);
+/// Caps lock state
+static CAPS_LOCK: AtomicBool = AtomicBool::new(false);
+/// Num lock state (default OFF - numpad keys are navigation)
+static NUMBER_LOCK: AtomicBool = AtomicBool::new(false);
+/// Ctrl key state  
+static CONTROLLER_PRESSED: AtomicBool = AtomicBool::new(false);
+
+/// Key state bitmap (256 bits = 32 bytes, one bit per scancode)
+static KEY_STATE: Mutex<[u8; 32]> = Mutex::new([0u8; 32]);
+
+/// Last scancode for debouncing
+static LAST_SCANCODE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0xFF);
+/// Scancode repeat counter for debouncing
+static REPEAT_COUNT: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
+/// US keyboard scancode set 1 to ASCII (lowercase)
+const SCANCODE_TO_ASCII: [u8; 128] = [
+    0, 27, // 0x00, 0x01 - ESC
+    b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', b'-', b'=', 
+    0x08, // 0x0E Backspace (ASCII 8)
+    b'\t', // 0x0F Tab
+    b'q', b'w', b'e', b'r', b't', b'y', b'u', b'i', b'o', b'p', b'[', b']', 
+    b'\n', // 0x1C Enter
+    0, // 0x1D Ctrl
+    b'a', b's', b'd', b'f', b'g', b'h', b'j', b'k', b'l', b';', b'\'', b'`', // 0x1E-0x29
+    0, // 0x2A Left Shift
+    b'\\', b'z', b'x', b'c', b'v', b'b', b'n', b'm', b',', b'.', b'/', // 0x2B-0x35
+    0, // 0x36 Right Shift
+    b'*', // 0x37 Keypad *
+    0, // 0x38 Alt
+    b' ', // 0x39 Space (ASCII 32)
+    0, // 0x3A Caps Lock
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x3B-0x44 F1-F10
+    0, // 0x45 Num Lock
+    0, // 0x46 Scroll Lock
+    b'7', b'8', b'9', b'-', // 0x47-0x4A Keypad
+    b'4', b'5', b'6', b'+', // 0x4B-0x4E Keypad
+    b'1', b'2', b'3', // 0x4F-0x51 Keypad
+    b'0', b'.', // 0x52-0x53 Keypad
+    0, 0, 0, // 0x54-0x56 Unused
+    0, 0, // 0x57-0x58 F11, F12
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x59-0x68
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x69-0x78
+    0, 0, 0, 0, 0, 0, 0, // 0x79-0x7F
+];
+
+/// US keyboard scancode set 1 to ASCII (uppercase/shifted)
+const SCANCODE_TO_ASCII_SHIFT: [u8; 128] = [
+    0, 27, // 0x00, 0x01 - ESC
+    b'!', b'@', b'#', b'$', b'%', b'^', b'&', b'*', b'(', b')', b'_', b'+', 
+    0x08, // 0x0E Backspace (ASCII 8)
+    b'\t', // 0x0F Tab
+    b'Q', b'W', b'E', b'R', b'T', b'Y', b'U', b'I', b'O', b'P', b'{', b'}', 
+    b'\n', // 0x1C Enter
+    0, // 0x1D Ctrl
+    b'A', b'S', b'D', b'F', b'G', b'H', b'J', b'K', b'L', b':', b'"', b'~', // 0x1E-0x29
+    0, // 0x2A Left Shift
+    b'|', b'Z', b'X', b'C', b'V', b'B', b'N', b'M', b'<', b'>', b'?', // 0x2B-0x35
+    0, // 0x36 Right Shift
+    b'*', // 0x37 Keypad *
+    0, // 0x38 Alt
+    b' ', // 0x39 Space (ASCII 32)
+    0, // 0x3A Caps Lock
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x3B-0x44 F1-F10
+    0, // 0x45 Num Lock
+    0, // 0x46 Scroll Lock
+    b'7', b'8', b'9', b'-', // 0x47-0x4A Keypad
+    b'4', b'5', b'6', b'+', // 0x4B-0x4E Keypad
+    b'1', b'2', b'3', // 0x4F-0x51 Keypad
+    b'0', b'.', // 0x52-0x53 Keypad
+    0, 0, 0, // 0x54-0x56 Unused
+    0, 0, // 0x57-0x58 F11, F12
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x59-0x68
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0x69-0x78
+    0, 0, 0, 0, 0, 0, 0, // 0x79-0x7F
+];
+
+/// Safely push a byte into the keyboard buffer from IRQ context.
+/// Uses try_lock to avoid deadlock if user code holds the lock
+/// (should not happen with without_interrupts wrapping, but defense-in-depth).
+#[inline]
+fn buffer_push(byte: u8) {
+    if let Some(mut buffer) = KEYBOARD_BUFFER.try_lock() {
+        buffer.push(byte);
+    }
+    // If lock fails, drop the keystroke (better than deadlock)
+}
+
+/// Process a scancode from the keyboard interrupt
+pub fn handle_scancode(scancode: u8) {
+    // Debug: log all scancodes (disabled — too noisy for serial automation)
+    // crate::serial_println!("[KB-IRQ] scancode=0x{:02X}", scancode);
+    
+    // Handle E1 prefix (Pause/Break key: E1 1D 45 E1 9D C5)
+    let skip = E1_SKIP.load(Ordering::SeqCst);
+    if skip > 0 {
+        E1_SKIP.store(skip - 1, Ordering::SeqCst);
+        return;
+    }
+    if scancode == 0xE1 {
+        // Pause/Break sends 6-byte sequence; skip remaining 5
+        E1_SKIP.store(5, Ordering::SeqCst);
+        return;
+    }
+    
+    // Ignore invalid/spurious scancodes and PS/2 controller responses
+    // 0xFA = ACK, 0xFE = Resend, 0xFC = Error, 0xEE = Echo, 0xAB = interface test pass
+    // NOTE: 0xAA (BAT OK) is NOT filtered because it's also Left Shift release
+    // (scancode 0x2A | 0x80 = 0xAA). Filtering it caused Shift to get "stuck".
+    if scancode == 0x00 || scancode == 0xFF || scancode == 0xFA 
+        || scancode == 0xFE || scancode == 0xFC
+        || scancode == 0xEE || scancode == 0xAB {
+        return;
+    }
+    
+    // Ignore numpad keys (0x47-0x53) when not extended and NumLock is off
+    // This prevents spurious "7" appearing at boot in VirtualBox
+    // These scancodes are: 7,8,9,-,4,5,6,+,1,2,3,0,.
+    let key_without_release = scancode & 0x7F;
+    if key_without_release >= 0x47 && key_without_release <= 0x53 {
+        if !EXTENDED_KEY.load(Ordering::SeqCst) && !NUMBER_LOCK.load(Ordering::SeqCst) {
+            // NumLock off: treat numpad keys as navigation, not numbers
+            // 0x47=Home, 0x48=Up, 0x49=PgUp, 0x4B=Left, 0x4D=Right,
+            // 0x4F=End, 0x50=Down, 0x51=PgDn, 0x52=Ins, 0x53=Del
+            let is_release = scancode & 0x80 != 0;
+            if !is_release {
+                let special = // Correspondance de motifs — branchement exhaustif de Rust.
+match key_without_release {
+                    0x47 => Some(KEY_HOME),
+                    0x48 => Some(KEY_UP),
+                    0x49 => Some(KEY_PGUP),
+                    0x4B => Some(KEY_LEFT),
+                    0x4D => Some(KEY_RIGHT),
+                    0x4F => Some(KEY_END),
+                    0x50 => Some(KEY_DOWN),
+                    0x51 => Some(KEY_PGDOWN),
+                    0x53 => Some(KEY_DELETE),
+                    _ => None,
+                };
+                if let Some(k) = special {
+                    buffer_push(k);
+                }
+            }
+            return;
+        }
+    }
+    
+    // Handle extended scancode prefix
+    if scancode == 0xE0 {
+        EXTENDED_KEY.store(true, Ordering::SeqCst);
+        return;
+    }
+    
+    let is_extended = EXTENDED_KEY.load(Ordering::SeqCst);
+    EXTENDED_KEY.store(false, Ordering::SeqCst);
+    
+    // Check for key release (high bit set)
+    let is_release = scancode & 0x80 != 0;
+    let key = scancode & 0x7F;
+    
+    // Update key state tracking for Alt+Tab and hotkeys
+    update_key_state(key, !is_release);
+    
+    // Handle extended keys (arrows, navigation, and right-side modifiers)
+    if is_extended {
+        // Extended modifier keys: Right Ctrl (E0 1D) and Right Alt (E0 38)
+        if key == 0x1D {
+            CONTROLLER_PRESSED.store(!is_release, Ordering::SeqCst);
+            if !is_release {
+                crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Controller);
+            }
+            return;
+        }
+        if key == 0x38 {
+            ALT_PRESSED.store(!is_release, Ordering::SeqCst);
+            if !is_release {
+                crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Alt);
+            }
+            return;
+        }
+        
+        // Extended navigation keys (press only)
+        if !is_release {
+            let alt = ALT_PRESSED.load(Ordering::SeqCst);
+            let controller = CONTROLLER_PRESSED.load(Ordering::SeqCst);
+            
+            let special = // Correspondance de motifs — branchement exhaustif de Rust.
+match key {
+                0x48 if alt  => Some(KEY_ALT_UP),
+                0x50 if alt  => Some(KEY_ALT_DOWN),
+                0x4B if controller => Some(KEY_CONTROLLER_LEFT),
+                0x4D if controller => Some(KEY_CONTROLLER_RIGHT),
+                0x48 => Some(KEY_UP),
+                0x50 => Some(KEY_DOWN),
+                0x4B => Some(KEY_LEFT),
+                0x4D => Some(KEY_RIGHT),
+                0x47 => Some(KEY_HOME),
+                0x4F => Some(KEY_END),
+                0x53 => Some(KEY_DELETE),
+                0x71 => Some(KEY_DELETE), // Set 2 Delete
+                0x75 => Some(KEY_UP),      // Set 2 Up
+                0x72 => Some(KEY_DOWN),    // Set 2 Down
+                0x6B => Some(KEY_LEFT),    // Set 2 Left
+                0x74 => Some(KEY_RIGHT),   // Set 2 Right
+                0x6C => Some(KEY_HOME),    // Set 2 Home
+                0x69 => Some(KEY_END),     // Set 2 End
+                0x49 => Some(KEY_PGUP),
+                0x51 => Some(KEY_PGDOWN),
+                _ => None,
+            };
+            if let Some(k) = special {
+                buffer_push(k);
+            }
+        }
+        return;
+    }
+
+    // Fallback for space on set 2 keyboards
+    if !is_extended && !is_release && key == 0x29 {
+        buffer_push(b' ');
+        return;
+    }
+    
+    // Handle Ctrl key
+    if key == 0x1D {
+        CONTROLLER_PRESSED.store(!is_release, Ordering::SeqCst);
+        // Sticky keys: track modifier press/release
+        if !is_release {
+            crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Controller);
+        }
+        return;
+    }
+    
+    // Handle shift keys
+    if key == 0x2A || key == 0x36 {
+        // Left or Right Shift
+        SHIFT_PRESSED.store(!is_release, Ordering::SeqCst);
+        if !is_release {
+            crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Shift);
+        }
+        return;
+    }
+    
+    // Handle Caps Lock toggle
+    if key == 0x3A && !is_release {
+        let current = CAPS_LOCK.load(Ordering::SeqCst);
+        CAPS_LOCK.store(!current, Ordering::SeqCst);
+        return;
+    }
+    
+    // Handle Num Lock toggle (scancode 0x45)
+    if key == 0x45 && !is_release {
+        let current = NUMBER_LOCK.load(Ordering::SeqCst);
+        NUMBER_LOCK.store(!current, Ordering::SeqCst);
+        return;
+    }
+    
+    // Only process key presses, not releases
+    if is_release {
+        return;
+    }
+    
+    // Handle Ctrl+A (select all)
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x1E {
+        buffer_push(1); // ASCII SOH
+        return;
+    }
+
+    // Handle Ctrl+C
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x2E {
+        buffer_push(3); // ASCII ETX
+        return;
+    }
+
+    // Handle Ctrl+V (paste)
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x2F {
+        buffer_push(0x16); // ASCII SYN
+        return;
+    }
+
+    // Handle Ctrl+X (cut)
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x2D {
+        buffer_push(0x18); // ASCII CAN (cut)
+        return;
+    }
+
+    // Handle Ctrl+L (clear)
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x26 {
+        buffer_push(12); // ASCII FF (form feed)
+        return;
+    }
+
+    // Handle Ctrl+S (save)
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x1F {
+        buffer_push(0x13); // ASCII DC3 (save)
+        return;
+    }
+
+    // Handle Ctrl+G (goto line)
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x22 {
+        buffer_push(0x07); // ASCII BEL (goto)
+        return;
+    }
+
+    // Handle Ctrl+F (find)
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x21 {
+        buffer_push(0x06); // ASCII ACK (find)
+        return;
+    }
+
+    // Handle Ctrl+H (replace)
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x23 {
+        buffer_push(0x12); // ASCII DC2 (replace)
+        return;
+    }
+
+    // Handle Ctrl+Z (undo)
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x2C {
+        buffer_push(0x1A); // ASCII SUB (undo)
+        return;
+    }
+
+    // Handle Ctrl+Y (redo)
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x15 {
+        buffer_push(0x19); // ASCII EM (redo)
+        return;
+    }
+
+    // Handle Ctrl+/ (toggle comment) — scancode 0x35 = '/'
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && key == 0x35 {
+        buffer_push(KEY_CONTROLLER_SLASH);
+        return;
+    }
+
+    // Handle Ctrl+Shift+K (delete line) — scancode 0x25 = 'K'
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && SHIFT_PRESSED.load(Ordering::SeqCst) && key == 0x25 {
+        buffer_push(KEY_CONTROLLER_SHIFT_K);
+        return;
+    }
+
+    // Handle Ctrl+Shift+D (duplicate line) — scancode 0x20 = 'D'
+    if CONTROLLER_PRESSED.load(Ordering::SeqCst) && SHIFT_PRESSED.load(Ordering::SeqCst) && key == 0x20 {
+        buffer_push(KEY_CONTROLLER_SHIFT_D);
+        return;
+    }
+
+    // Convert scancode to ASCII
+    let shift = SHIFT_PRESSED.load(Ordering::SeqCst)
+        || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Shift);
+    let caps = CAPS_LOCK.load(Ordering::SeqCst);
+    
+    let ascii = if key < 128 {
+        let base = if shift {
+            SCANCODE_TO_ASCII_SHIFT[key as usize]
+        } else {
+            SCANCODE_TO_ASCII[key as usize]
+        };
+        
+        // Apply caps lock only to letters
+        if caps && base >= b'a' && base <= b'z' {
+            base - 32 // To uppercase
+        } else if caps && base >= b'A' && base <= b'Z' {
+            base + 32 // To lowercase (caps inverts shift)
+        } else {
+            base
+        }
+    } else {
+        0
+    };
+    
+    // If valid ASCII, add to buffer
+    if ascii != 0 {
+        // crate::serial_println!("[KB-BUF] push ascii={} (0x{:02X}) char='{}'", ascii, ascii, ascii as char);
+        buffer_push(ascii);
+        // Sticky keys: consume latched modifiers after a non-modifier key
+        crate::accessibility::sticky_consume_latched();
+    }
+}
+
+/// Read a character from the keyboard buffer (non-blocking)
+pub fn read_char() -> Option<u8> {
+    // Disable interrupts while holding the buffer lock to prevent deadlock
+    // with keyboard IRQ handler which also locks KEYBOARD_BUFFER
+    let result = crate::arch::without_interrupts(|| {
+        KEYBOARD_BUFFER.lock().pop()
+    });
+    if let Some(b) = result {
+        return Some(b);
+    }
+    serial::read_byte()
+}
+
+/// Push a key from USB HID keyboard (or any external source)
+pub fn push_key(ascii: u8) {
+    if ascii != 0 {
+        crate::arch::without_interrupts(|| {
+            KEYBOARD_BUFFER.lock().push(ascii);
+        });
+    }
+}
+
+/// Check if there's input available
+pub fn has_input() -> bool {
+    crate::arch::without_interrupts(|| {
+        !KEYBOARD_BUFFER.lock().is_empty()
+    })
+}
+
+/// Check if a specific key (by scancode) is currently pressed
+/// Used for checking modifier keys like Alt during Alt+Tab
+pub fn is_key_pressed(scancode: u8) -> bool {
+    // Disable interrupts to prevent deadlock with keyboard IRQ handler
+    // which locks KEY_STATE and STICKY_* mutexes
+    crate::arch::without_interrupts(|| {
+                // Correspondance de motifs — branchement exhaustif de Rust.
+match scancode {
+            0x38 => ALT_PRESSED.load(Ordering::Relaxed)
+                || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Alt),
+            0x1D => CONTROLLER_PRESSED.load(Ordering::Relaxed)
+                || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Controller),
+            0x2A | 0x36 => SHIFT_PRESSED.load(Ordering::Relaxed)
+                || crate::accessibility::is_sticky_active(crate::accessibility::StickyModifier::Shift),
+            _ => {
+                let state = KEY_STATE.lock();
+                let byte_index = (scancode / 8) as usize;
+                let bit_index = scancode % 8;
+                if byte_index < 32 {
+                    (state[byte_index] & (1 << bit_index)) != 0
+                } else {
+                    false
+                }
+            }
+        }
+    })
+}
+
+/// Update key state when a key is pressed or released
+fn update_key_state(scancode: u8, pressed: bool) {
+    // Update modifier key atomics
+    match scancode {
+        0x38 => {
+            ALT_PRESSED.store(pressed, Ordering::Relaxed);
+            // Sticky keys: track Alt press
+            if pressed {
+                crate::accessibility::sticky_modifier_press(crate::accessibility::StickyModifier::Alt);
+            }
+        }
+        0x1D => CONTROLLER_PRESSED.store(pressed, Ordering::Relaxed),
+        0x2A | 0x36 => SHIFT_PRESSED.store(pressed, Ordering::Relaxed),
+        _ => {}
+    }
+    
+    // Update key state bitmap
+    let mut state = KEY_STATE.lock();
+    let byte_index = (scancode / 8) as usize;
+    let bit_index = scancode % 8;
+    if byte_index < 32 {
+        if pressed {
+            state[byte_index] |= 1 << bit_index;
+        } else {
+            state[byte_index] &= !(1 << bit_index);
+        }
+    }
+}
+
+/// Add command to history
+pub fn add_to_history(cmd: &str) {
+    COMMAND_HISTORY.lock().add(cmd);
+}
+
+/// Get previous command from history
+pub fn history_previous() -> Option<String> {
+    COMMAND_HISTORY.lock().get_previous().map(String::from)
+}
+
+/// Get next command from history
+pub fn history_next() -> Option<String> {
+    COMMAND_HISTORY.lock().get_next().map(String::from)
+}
+
+/// Reset history browsing position
+pub fn history_reset() {
+    COMMAND_HISTORY.lock().reset_browse();
+}
+
+/// Get all history entries
+pub fn history_list() -> Vec<(usize, String)> {
+    COMMAND_HISTORY.lock().iter().map(|(i, s)| (i, String::from(s))).collect()
+}
+
+// Fonction publique — appelable depuis d'autres modules.
+pub fn clipboard_set(text: &str) {
+    *CLIPBOARD.lock() = Some(String::from(text));
+}
+
+// Fonction publique — appelable depuis d'autres modules.
+pub fn clipboard_get() -> Option<String> {
+    CLIPBOARD.lock().as_ref().map(|s| s.clone())
+}
+
+/// Read a line from keyboard with history support
+pub fn read_line_with_history(buffer: &mut [u8]) -> usize {
+    let mut position = 0;
+    let mut cursor = 0; // Cursor position (can differ from pos when editing mid-line)
+    let mut current_input = String::new(); // Save current input when browsing history
+    let mut select_all = false;
+    
+    // Reset history browsing
+    history_reset();
+    
+        // Boucle infinie — tourne jusqu'à un `break` explicite.
+loop {
+        if let Some(c) = read_char() {
+                        // Correspondance de motifs — branchement exhaustif de Rust.
+match c {
+                b'\n' | b'\r' => {
+                    crate::println!();
+                    // Add to history if non-empty
+                    let cmd = core::str::from_utf8(&buffer[..position]).unwrap_or("");
+                    if !cmd.trim().is_empty() {
+                        add_to_history(cmd);
+                    }
+                    break;
+                }
+                0x01 => {
+                    // Ctrl+A - select all
+                    select_all = true;
+                }
+                0x08 => {
+                    // Backspace - delete character before cursor
+                    if select_all {
+                        // Clear whole line
+                        while cursor > 0 {
+                            crate::print!("\x08");
+                            cursor -= 1;
+                        }
+                        for _ in 0..position {
+                            crate::print!(" ");
+                        }
+                        for _ in 0..position {
+                            crate::print!("\x08");
+                        }
+                        position = 0;
+                        cursor = 0;
+                        select_all = false;
+                    } else if cursor > 0 {
+                        // Shift everything after cursor left
+                        for i in cursor..position {
+                            buffer[i - 1] = buffer[i];
+                        }
+                        position = position.saturating_sub(1);
+                        cursor = cursor.saturating_sub(1);
+                        
+                        // Redraw: move cursor back, print rest of line, space, move back again
+                        crate::print!("\x08");
+                        for i in cursor..position {
+                            crate::print!("{}", buffer[i] as char);
+                        }
+                        crate::print!(" ");
+                        for _ in cursor..=position {
+                            crate::print!("\x08");
+                        }
+                    }
+                }
+                KEY_UP => {
+                    // Previous command in history
+                    if let Some(previous) = history_previous() {
+                        select_all = false;
+                        // Clear current line
+                        while cursor > 0 {
+                            crate::print!("\x08");
+                            cursor -= 1;
+                        }
+                        for _ in 0..position {
+                            crate::print!(" ");
+                        }
+                        for _ in 0..position {
+                            crate::print!("\x08");
+                        }
+                        // Display history entry
+                        let bytes = previous.as_bytes();
+                        let len = bytes.len().minimum(buffer.len() - 1);
+                        buffer[..len].copy_from_slice(&bytes[..len]);
+                        position = len;
+                        cursor = len;
+                        crate::print!("{}", &previous[..len]);
+                    }
+                }
+                KEY_DOWN => {
+                    // Next command in history
+                    let next = history_next();
+                    select_all = false;
+                    // Clear current line
+                    while cursor > 0 {
+                        crate::print!("\x08");
+                        cursor -= 1;
+                    }
+                    for _ in 0..position {
+                        crate::print!(" ");
+                    }
+                    for _ in 0..position {
+                        crate::print!("\x08");
+                    }
+                    
+                    if let Some(next_command) = next {
+                        let bytes = next_command.as_bytes();
+                        let len = bytes.len().minimum(buffer.len() - 1);
+                        buffer[..len].copy_from_slice(&bytes[..len]);
+                        position = len;
+                        cursor = len;
+                        crate::print!("{}", &next_command[..len]);
+                    } else {
+                        position = 0;
+                        cursor = 0;
+                    }
+                }
+                KEY_LEFT => {
+                    select_all = false;
+                    if cursor > 0 {
+                        cursor -= 1;
+                        crate::print!("\x08");
+                    }
+                }
+                KEY_RIGHT => {
+                    select_all = false;
+                    if cursor < position {
+                        crate::print!("{}", buffer[cursor] as char);
+                        cursor += 1;
+                    }
+                }
+                KEY_HOME => {
+                    select_all = false;
+                    while cursor > 0 {
+                        crate::print!("\x08");
+                        cursor -= 1;
+                    }
+                }
+                KEY_END => {
+                    select_all = false;
+                    while cursor < position {
+                        crate::print!("{}", buffer[cursor] as char);
+                        cursor += 1;
+                    }
+                }
+                KEY_DELETE => {
+                    // Delete - remove character at cursor position
+                    if select_all {
+                        // Clear whole line
+                        while cursor > 0 {
+                            crate::print!("\x08");
+                            cursor -= 1;
+                        }
+                        for _ in 0..position {
+                            crate::print!(" ");
+                        }
+                        for _ in 0..position {
+                            crate::print!("\x08");
+                        }
+                        position = 0;
+                        cursor = 0;
+                        select_all = false;
+                    } else if cursor < position {
+                        // Shift everything after cursor left
+                        for i in cursor..position.saturating_sub(1) {
+                            buffer[i] = buffer[i + 1];
+                        }
+                        position = position.saturating_sub(1);
+                        
+                        // Redraw from cursor to end
+                        for i in cursor..position {
+                            crate::print!("{}", buffer[i] as char);
+                        }
+                        crate::print!(" ");
+                        // Move cursor back to original position
+                        for _ in cursor..=position {
+                            crate::print!("\x08");
+                        }
+                    }
+                }
+                12 => {
+                    // Ctrl+L - clear screen
+                    crate::framebuffer::clear();
+                    // Redraw prompt and current input
+                    crate::print_color!(crate::framebuffer::COLOR_BRIGHT_GREEN, "trustos");
+                    crate::print_color!(crate::framebuffer::COLOR_GREEN, "> ");
+                    for i in 0..position {
+                        crate::print!("{}", buffer[i] as char);
+                    }
+                    // Move cursor to correct position
+                    for _ in cursor..position {
+                        crate::print!("\x08");
+                    }
+                    select_all = false;
+                }
+                3 => {
+                    // Ctrl+C - copy current line to clipboard
+                    if let Ok(text) = core::str::from_utf8(&buffer[..position]) {
+                        clipboard_set(text);
+                    }
+                    select_all = false;
+                }
+                0x16 => {
+                    // Ctrl+V - paste clipboard
+                    if let Some(text) = clipboard_get() {
+                        if select_all {
+                            // Clear whole line before paste
+                            while cursor > 0 {
+                                crate::print!("\x08");
+                                cursor -= 1;
+                            }
+                            for _ in 0..position {
+                                crate::print!(" ");
+                            }
+                            for _ in 0..position {
+                                crate::print!("\x08");
+                            }
+                            position = 0;
+                            cursor = 0;
+                            select_all = false;
+                        }
+                        for b in text.bytes() {
+                            if b < 0x20 || b >= 0x7F || position >= buffer.len() - 1 {
+                                continue;
+                            }
+                            if cursor < position {
+                                for i in (cursor..position).rev() {
+                                    buffer[i + 1] = buffer[i];
+                                }
+                            }
+                            buffer[cursor] = b;
+                            position += 1;
+                            cursor += 1;
+
+                            for i in cursor - 1..position {
+                                crate::print!("{}", buffer[i] as char);
+                            }
+                            for _ in cursor..position {
+                                crate::print!("\x08");
+                            }
+                        }
+                    }
+                }
+                _ if c >= 0x20 && c < 0x7F && position < buffer.len() - 1 => {
+                    // Printable character
+                    if select_all {
+                        // Clear whole line before inserting
+                        while cursor > 0 {
+                            crate::print!("\x08");
+                            cursor -= 1;
+                        }
+                        for _ in 0..position {
+                            crate::print!(" ");
+                        }
+                        for _ in 0..position {
+                            crate::print!("\x08");
+                        }
+                        position = 0;
+                        cursor = 0;
+                        select_all = false;
+                    }
+                    if cursor < position {
+                        // Insert at cursor position
+                        for i in (cursor..position).rev() {
+                            buffer[i + 1] = buffer[i];
+                        }
+                    }
+                    buffer[cursor] = c;
+                    position += 1;
+                    cursor += 1;
+                    
+                    // Redraw from cursor
+                    for i in cursor - 1..position {
+                        crate::print!("{}", buffer[i] as char);
+                    }
+                    // Move cursor back if we inserted
+                    for _ in cursor..position {
+                        crate::print!("\x08");
+                    }
+                }
+                _ => {}
+            }
+        } else {
+            // Yield CPU while waiting
+            crate::arch::halt();
+        }
+    }
+    
+    buffer[position] = 0; // Null terminate
+    position
+}
+
+/// Read a line from keyboard (blocking, with echo) - legacy version
+pub fn read_line(buffer: &mut [u8]) -> usize {
+    read_line_with_history(buffer)
+}
+
+/// Read a line from keyboard with hidden input (for passwords)
+pub fn read_line_hidden(buffer: &mut [u8]) -> usize {
+    let mut position = 0;
+    
+        // Boucle infinie — tourne jusqu'à un `break` explicite.
+loop {
+        if let Some(c) = read_char() {
+                        // Correspondance de motifs — branchement exhaustif de Rust.
+match c {
+                b'\n' | b'\r' => {
+                    // Don't print newline here - caller will do it
+                    break;
+                }
+                0x08 => {
+                    // Backspace
+                    if position > 0 {
+                        position -= 1;
+                        buffer[position] = 0;
+                        // Print asterisk backspace (optional visual feedback)
+                        crate::print!("\x08 \x08");
+                    }
+                }
+                0x03 => {
+                    // Ctrl+C - cancel
+                    position = 0;
+                    break;
+                }
+                0x15 => {
+                    // Ctrl+U - clear line
+                    for _ in 0..position {
+                        crate::print!("\x08 \x08");
+                    }
+                    position = 0;
+                }
+                c if c >= 0x20 && c < 0x7F => {
+                    // Printable character
+                    if position < buffer.len() - 1 {
+                        buffer[position] = c;
+                        position += 1;
+                        // Show asterisk instead of actual character
+                        crate::print!("*");
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    
+    position
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// BLOCKING KEY INPUT for GUI
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Try to read a key without blocking (returns scancode as ASCII equivalent)
+/// Returns None if no key available
+pub fn try_read_key() -> Option<u8> {
+    read_char()
+}
+
+/// Wait for any key press (blocking)
+pub fn wait_for_key() -> u8 {
+        // Boucle infinie — tourne jusqu'à un `break` explicite.
+loop {
+        if let Some(key) = read_char() {
+            return key;
+        }
+        // Small delay to avoid burning CPU
+        for _ in 0..1000 {
+            core::hint::spin_loop();
+        }
+    }
+}

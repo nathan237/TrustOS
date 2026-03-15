@@ -1,0 +1,805 @@
+//! VMCS (Virtual Machine Control Structure)
+//!
+//! La VMCS contient l'état complet d'une VM:
+//! - État du guest (registres, segments, etc.)
+//! - État de l'host
+//! - Contrôles d'exécution
+//! - Informations sur les VM exits
+//!
+//! Physical address translation and MSR-adjusted control fields.
+
+use super::{HypervisorError, Result};
+use super::vmx::{self, vmclear, vmptrld, vmread, vmwrite};
+use alloc::boxed::Box;
+
+/// VMCS Field Encodings (Intel SDM Vol. 3, Appendix B)
+pub mod fields {
+    // 16-bit control fields
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VPID: u64 = 0x0000;
+    
+    // 16-bit guest state
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_ES_SELECTOR: u64 = 0x0800;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_CS_SELECTOR: u64 = 0x0802;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_SS_SELECTOR: u64 = 0x0804;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_DS_SELECTOR: u64 = 0x0806;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_FILESYSTEM_SELECTOR: u64 = 0x0808;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_GS_SELECTOR: u64 = 0x080A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_LDTR_SELECTOR: u64 = 0x080C;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_TR_SELECTOR: u64 = 0x080E;
+    
+    // 16-bit host state
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_ES_SELECTOR: u64 = 0x0C00;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_CS_SELECTOR: u64 = 0x0C02;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_SS_SELECTOR: u64 = 0x0C04;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_DS_SELECTOR: u64 = 0x0C06;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_FILESYSTEM_SELECTOR: u64 = 0x0C08;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_GS_SELECTOR: u64 = 0x0C0A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_TR_SELECTOR: u64 = 0x0C0C;
+    
+    // 64-bit control fields
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const IO_BITMAP_A: u64 = 0x2000;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const IO_BITMAP_B: u64 = 0x2002;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const MSR_BITMAP: u64 = 0x2004;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const EPT_POINTER: u64 = 0x201A;
+    
+    // 64-bit guest state
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMCS_LINK_POINTER: u64 = 0x2800;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_IA32_DEBUGCTL: u64 = 0x2802;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_IA32_PAT: u64 = 0x2804;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_IA32_EFER: u64 = 0x2806;
+    
+    // 64-bit host state
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_IA32_PAT: u64 = 0x2C00;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_IA32_EFER: u64 = 0x2C02;
+    
+    // 32-bit control fields
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const PIN_BASED_VM_EXECUTE_CONTROLS: u64 = 0x4000;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const CPU_BASED_VM_EXECUTE_CONTROLS: u64 = 0x4002;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const EXCEPTION_BITMAP: u64 = 0x4004;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const PAGE_FAULT_ERROR_CODE_MASK: u64 = 0x4006;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const PAGE_FAULT_ERROR_CODE_MATCH: u64 = 0x4008;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const CR3_TARGET_COUNT: u64 = 0x400A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_EXIT_CONTROLS: u64 = 0x400C;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_EXIT_MSR_STORE_COUNT: u64 = 0x400E;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_EXIT_MSR_LOAD_COUNT: u64 = 0x4010;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_ENTRY_CONTROLS: u64 = 0x4012;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_ENTRY_MSR_LOAD_COUNT: u64 = 0x4014;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_ENTRY_INTERRUPTION_INFORMATION: u64 = 0x4016;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_ENTRY_EXCEPTION_ERROR_CODE: u64 = 0x4018;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_ENTRY_INSTRUCTION_LENGTH: u64 = 0x401A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const SECONDARY_VM_EXECUTE_CONTROLS: u64 = 0x401E;
+    
+    // 32-bit guest state
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_ES_LIMIT: u64 = 0x4800;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_CS_LIMIT: u64 = 0x4802;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_SS_LIMIT: u64 = 0x4804;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_DS_LIMIT: u64 = 0x4806;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_FILESYSTEM_LIMIT: u64 = 0x4808;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_GS_LIMIT: u64 = 0x480A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_LDTR_LIMIT: u64 = 0x480C;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_TR_LIMIT: u64 = 0x480E;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_GDTR_LIMIT: u64 = 0x4810;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_IDTR_LIMIT: u64 = 0x4812;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_ES_ACCESS_RIGHTS: u64 = 0x4814;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_CS_ACCESS_RIGHTS: u64 = 0x4816;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_SS_ACCESS_RIGHTS: u64 = 0x4818;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_DS_ACCESS_RIGHTS: u64 = 0x481A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_FILESYSTEM_ACCESS_RIGHTS: u64 = 0x481C;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_GS_ACCESS_RIGHTS: u64 = 0x481E;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_LDTR_ACCESS_RIGHTS: u64 = 0x4820;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_TR_ACCESS_RIGHTS: u64 = 0x4822;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_INTERRUPTIBILITY_STATE: u64 = 0x4824;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_ACTIVITY_STATE: u64 = 0x4826;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_SYSENTER_CS: u64 = 0x482A;
+    
+    // 32-bit host state
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_SYSENTER_CS: u64 = 0x4C00;
+    
+    // Natural-width control fields
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const CR0_GUEST_HOST_MASK: u64 = 0x6000;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const CR4_GUEST_HOST_MASK: u64 = 0x6002;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const CR0_READ_SHADOW: u64 = 0x6004;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const CR4_READ_SHADOW: u64 = 0x6006;
+    
+    // Natural-width guest state
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_CR0: u64 = 0x6800;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_CR3: u64 = 0x6802;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_CR4: u64 = 0x6804;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_ES_BASE: u64 = 0x6806;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_CS_BASE: u64 = 0x6808;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_SS_BASE: u64 = 0x680A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_DS_BASE: u64 = 0x680C;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_FILESYSTEM_BASE: u64 = 0x680E;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_GS_BASE: u64 = 0x6810;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_LDTR_BASE: u64 = 0x6812;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_TR_BASE: u64 = 0x6814;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_GDTR_BASE: u64 = 0x6816;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_IDTR_BASE: u64 = 0x6818;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_DR7: u64 = 0x681A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_RSP: u64 = 0x681C;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_RIP: u64 = 0x681E;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_RFLAGS: u64 = 0x6820;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_PENDING_DEBUG_EXCEPTIONS: u64 = 0x6822;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_SYSENTER_ESP: u64 = 0x6824;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_SYSENTER_EIP: u64 = 0x6826;
+    
+    // Natural-width host state
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_CR0: u64 = 0x6C00;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_CR3: u64 = 0x6C02;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_CR4: u64 = 0x6C04;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_FILESYSTEM_BASE: u64 = 0x6C06;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_GS_BASE: u64 = 0x6C08;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_TR_BASE: u64 = 0x6C0A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_GDTR_BASE: u64 = 0x6C0C;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_IDTR_BASE: u64 = 0x6C0E;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_SYSENTER_ESP: u64 = 0x6C10;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_SYSENTER_EIP: u64 = 0x6C12;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_RSP: u64 = 0x6C14;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HOST_RIP: u64 = 0x6C16;
+    
+    // Read-only fields
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_INSTRUCTION_ERROR: u64 = 0x4400;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_EXIT_REASON: u64 = 0x4402;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_EXIT_INTERRUPTION_INFORMATION: u64 = 0x4404;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_EXIT_INTERRUPTION_ERROR_CODE: u64 = 0x4406;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const IDT_VECTORING_INFORMATION: u64 = 0x4408;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const IDT_VECTORING_ERROR_CODE: u64 = 0x440A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_EXIT_INSTRUCTION_LENGTH: u64 = 0x440C;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VM_EXIT_INSTRUCTION_INFORMATION: u64 = 0x440E;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const EXIT_QUALIFICATION: u64 = 0x6400;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_LINEAR_ADDRESS: u64 = 0x640A;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GUEST_PHYSICAL_ADDRESS: u64 = 0x2400;
+}
+
+/// VM Exit reasons
+pub mod exit_reason {
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const EXCEPTION_NMI: u32 = 0;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const EXTERNAL_INTERRUPT: u32 = 1;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const TRIPLE_FAULT: u32 = 2;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const INITIALIZE_SIGNAL: u32 = 3;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const SIPI: u32 = 4;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const IO_SMI: u32 = 5;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const OTHER_SMI: u32 = 6;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const INTERRUPT_WINDOW: u32 = 7;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const NMI_WINDOW: u32 = 8;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const TASK_SWITCH: u32 = 9;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const CPUID: u32 = 10;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GETSEC: u32 = 11;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const HLT: u32 = 12;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const INVD: u32 = 13;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const INVLPG: u32 = 14;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const RDPMC: u32 = 15;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const RDTSC: u32 = 16;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const RSM: u32 = 17;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMCALL: u32 = 18;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMCLEAR: u32 = 19;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMLAUNCH: u32 = 20;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMPTRLD: u32 = 21;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMPTRST: u32 = 22;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMREAD: u32 = 23;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMRESUME: u32 = 24;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMWRITE: u32 = 25;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMXOFF: u32 = 26;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMXON: u32 = 27;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const CR_ACCESS: u32 = 28;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const DR_ACCESS: u32 = 29;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const IO_INSTRUCTION: u32 = 30;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const RDMSR: u32 = 31;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const WRMSR: u32 = 32;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const INVALID_GUEST_STATE: u32 = 33;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const MSR_LOADING: u32 = 34;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const MWAIT: u32 = 36;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const MONITOR_TRAP_FLAG: u32 = 37;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const MONITOR: u32 = 39;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const PAUSE: u32 = 40;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const MCE_DURING_ENTRY: u32 = 41;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const TPR_BELOW_THRESHOLD: u32 = 43;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const APIC_ACCESS: u32 = 44;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VIRTUALIZED_EOI: u32 = 45;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const GDTR_IDTR_ACCESS: u32 = 46;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const LDTR_TR_ACCESS: u32 = 47;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const EPT_VIOLATION: u32 = 48;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const EPT_MISCONFIGURATION: u32 = 49;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const INVEPT: u32 = 50;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const RDTSCP: u32 = 51;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const PREEMPTION_TIMER: u32 = 52;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const INVVPID: u32 = 53;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const WBINVD: u32 = 54;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const XSETBV: u32 = 55;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const APIC_WRITE: u32 = 56;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const RDRAND: u32 = 57;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const INVPCID: u32 = 58;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const VMFUNC: u32 = 59;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const ENCLS: u32 = 60;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const RDSEED: u32 = 61;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const PML_FULL: u32 = 62;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const XSAVES: u32 = 63;
+    pub     // Compile-time constant — evaluated at compilation, zero runtime cost.
+const XRSTORS: u32 = 64;
+}
+
+/// Région VMCS (4KB alignée)
+#[repr(C, align(4096))]
+// Public structure — visible outside this module.
+pub struct VmcsRegion {
+    pub revision_id: u32,
+    pub abort_indicator: u32,
+    pub data: [u8; 4088],
+}
+
+// Implementation block — defines methods for the type above.
+impl VmcsRegion {
+        // Public function — callable from other modules.
+pub fn new(revision_id: u32) -> Self {
+        VmcsRegion {
+            revision_id,
+            abort_indicator: 0,
+            data: [0; 4088],
+        }
+    }
+}
+
+/// Structure VMCS avec méthodes d'accès
+pub struct Vmcs {
+    region: Box<VmcsRegion>,
+    physical_address: u64,
+    is_current: bool,
+}
+
+// Implementation block — defines methods for the type above.
+impl Vmcs {
+    /// Créer une nouvelle VMCS
+    pub fn new(revision_id: u32) -> Result<Self> {
+        let region = Box::new(VmcsRegion::new(revision_id));
+        let virt_address = region.as_ref() as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const VmcsRegion as u64;
+        let physical_address = vmx::virt_to_physical_vmx(virt_address);
+        
+        crate::serial_println!("[VMCS] Allocated virt=0x{:016X} phys=0x{:016X} rev=0x{:08X}",
+                              virt_address, physical_address, revision_id);
+        
+        // VMCLEAR pour initialiser
+        vmclear(physical_address)?;
+        
+        Ok(Vmcs {
+            region,
+            physical_address,
+            is_current: false,
+        })
+    }
+    
+    /// Charger cette VMCS comme courante
+    pub fn load(&mut self) -> Result<()> {
+        vmptrld(self.physical_address)?;
+        self.is_current = true;
+        Ok(())
+    }
+    
+    /// Écrire un champ
+    pub fn write(&self, field: u64, value: u64) -> Result<()> {
+        if !self.is_current {
+            return Err(HypervisorError::InvalidConfiguration);
+        }
+        vmwrite(field, value)
+    }
+    
+    /// Lire un champ
+    pub fn read(&self, field: u64) -> Result<u64> {
+        if !self.is_current {
+            return Err(HypervisorError::InvalidConfiguration);
+        }
+        vmread(field)
+    }
+    
+    /// Configurer les contrôles d'exécution de base (MSR-adjusted)
+    pub fn setup_execution_controls(&self) -> Result<()> {
+        use fields::*;
+        
+        // Pin-based controls — MSR-adjusted
+        let pin_desired = 0u32; // No extra pin-based features
+        let pin_based = vmx::adjust_vmx_control(vmx::pinbased_ctls_msr(), pin_desired);
+        self.write(PIN_BASED_VM_EXECUTE_CONTROLS, pin_based as u64)?;
+        crate::serial_println!("[VMCS] Pin-based controls: 0x{:08X}", pin_based);
+        
+        // CPU-based primary controls — MSR-adjusted
+        let cpu_desired = (1u32 << 7)   // HLT exiting
+                        | (1u32 << 24)  // I/O exiting (for port I/O interception)
+                        | (1u32 << 31); // Activate secondary controls
+        let cpu_based = vmx::adjust_vmx_control(vmx::procbased_ctls_msr(), cpu_desired);
+        self.write(CPU_BASED_VM_EXECUTE_CONTROLS, cpu_based as u64)?;
+        crate::serial_println!("[VMCS] Primary proc-based controls: 0x{:08X}", cpu_based);
+        
+        // Secondary controls — only if activated
+        if cpu_based & (1 << 31) != 0 {
+            let mut sector_desired = 0u32;
+            
+            // Enable EPT (bit 1) - if supported
+            sector_desired |= 1 << 1;
+            
+            // Enable VPID (bit 5)
+            sector_desired |= super::vpid::get_secondary_controls_vpid() as u32;
+            
+            // Unrestricted guest (bit 7) — allows real mode in guest
+            // sec_desired |= 1 << 7;
+            
+            let secondary = vmx::adjust_vmx_control(vmx::IA32_VMX_PROCBASED_CTLS2, sector_desired);
+            self.write(SECONDARY_VM_EXECUTE_CONTROLS, secondary as u64)?;
+            crate::serial_println!("[VMCS] Secondary controls: 0x{:08X}", secondary);
+        }
+        
+        // Exception bitmap — intercept no exceptions by default
+        self.write(EXCEPTION_BITMAP, 0)?;
+        
+        // CR0/CR4 guest/host masks and read shadows
+        self.write(CR0_GUEST_HOST_MASK, 0)?;
+        self.write(CR4_GUEST_HOST_MASK, 0)?;
+        self.write(CR0_READ_SHADOW, 0)?;
+        self.write(CR4_READ_SHADOW, 0)?;
+        
+        // CR3 target count
+        self.write(CR3_TARGET_COUNT, 0)?;
+        
+        // MSR bitmap, I/O bitmaps — set to 0 address (all cause exits)
+        // In the future, allocate proper bitmap pages
+        // self.write(MSR_BITMAP, 0)?;
+        // self.write(IO_BITMAP_A, 0)?;
+        // self.write(IO_BITMAP_B, 0)?;
+        
+        Ok(())
+    }
+    
+    /// Configure VPID for this VMCS
+    pub fn setup_vpid(&self, vpid: Option<u16>) -> Result<()> {
+        use fields::*;
+        
+        let vpid_value = super::vpid::get_vmcs_vpid(vpid);
+        self.write(VPID, vpid_value)?;
+        
+        if vpid.is_some() {
+            crate::serial_println!("[VMCS] VPID set to {}", vpid_value);
+        }
+        
+        Ok(())
+    }
+    
+    /// Configurer les contrôles de sortie VM (MSR-adjusted)
+    pub fn setup_exit_controls(&self) -> Result<()> {
+        use fields::*;
+        
+        let exit_desired = (1u32 << 9)   // Host address-space size (64-bit host)
+                         | (1u32 << 15)  // Acknowledge interrupt on exit
+                         | (1u32 << 20)  // Save IA32_PAT on exit
+                         | (1u32 << 21); // Load IA32_PAT on exit
+        let exit_controls = vmx::adjust_vmx_control(vmx::exit_ctls_msr(), exit_desired);
+        self.write(VM_EXIT_CONTROLS, exit_controls as u64)?;
+        crate::serial_println!("[VMCS] Exit controls: 0x{:08X}", exit_controls);
+        
+        // No MSR store/load on exit
+        self.write(VM_EXIT_MSR_STORE_COUNT, 0)?;
+        self.write(VM_EXIT_MSR_LOAD_COUNT, 0)?;
+        
+        Ok(())
+    }
+    
+    /// Configurer les contrôles d'entrée VM (MSR-adjusted)
+    pub fn setup_entry_controls(&self) -> Result<()> {
+        use fields::*;
+        
+        let entry_desired = (1u32 << 9)   // IA-32e mode guest (64-bit)
+                          | (1u32 << 14)  // Load IA32_PAT on entry
+                          ;
+        let entry_controls = vmx::adjust_vmx_control(vmx::entry_ctls_msr(), entry_desired);
+        self.write(VM_ENTRY_CONTROLS, entry_controls as u64)?;
+        crate::serial_println!("[VMCS] Entry controls: 0x{:08X}", entry_controls);
+        
+        // No MSR load on entry
+        self.write(VM_ENTRY_MSR_LOAD_COUNT, 0)?;
+        
+        // No event injection on entry
+        self.write(VM_ENTRY_INTERRUPTION_INFORMATION, 0)?;
+        
+        Ok(())
+    }
+    
+    /// Configurer l'état du guest (64-bit long mode)
+    pub fn setup_guest_state(&self, entry_point: u64, stack_pointer: u64) -> Result<()> {
+        use fields::*;
+        
+        // Segments (mode 64-bit)
+        // CS — 64-bit code segment
+        self.write(GUEST_CS_SELECTOR, 0x08)?;
+        self.write(GUEST_CS_BASE, 0)?;
+        self.write(GUEST_CS_LIMIT, 0xFFFFFFFF)?;
+        self.write(GUEST_CS_ACCESS_RIGHTS, 0xA09B)?; // L=1, D=0, P=1, S=1, Type=11(exec/read)
+        
+        // DS, ES, SS — 64-bit data segments
+        for (sel, base, limit, ar) in [
+            (GUEST_DS_SELECTOR, GUEST_DS_BASE, GUEST_DS_LIMIT, GUEST_DS_ACCESS_RIGHTS),
+            (GUEST_ES_SELECTOR, GUEST_ES_BASE, GUEST_ES_LIMIT, GUEST_ES_ACCESS_RIGHTS),
+            (GUEST_SS_SELECTOR, GUEST_SS_BASE, GUEST_SS_LIMIT, GUEST_SS_ACCESS_RIGHTS),
+        ] {
+            self.write(sel, 0x10)?;
+            self.write(base, 0)?;
+            self.write(limit, 0xFFFFFFFF)?;
+            self.write(ar, 0xC093)?; // G=1, DB=1, P=1, S=1, Type=3(read/write)
+        }
+        
+        // FS, GS — unusable in basic guest
+        self.write(GUEST_FILESYSTEM_SELECTOR, 0)?;
+        self.write(GUEST_FILESYSTEM_BASE, 0)?;
+        self.write(GUEST_FILESYSTEM_LIMIT, 0xFFFF)?;
+        self.write(GUEST_FILESYSTEM_ACCESS_RIGHTS, 0x10000)?; // Unusable bit
+        
+        self.write(GUEST_GS_SELECTOR, 0)?;
+        self.write(GUEST_GS_BASE, 0)?;
+        self.write(GUEST_GS_LIMIT, 0xFFFF)?;
+        self.write(GUEST_GS_ACCESS_RIGHTS, 0x10000)?;
+        
+        // LDTR (unusable)
+        self.write(GUEST_LDTR_SELECTOR, 0)?;
+        self.write(GUEST_LDTR_BASE, 0)?;
+        self.write(GUEST_LDTR_LIMIT, 0)?;
+        self.write(GUEST_LDTR_ACCESS_RIGHTS, 0x10000)?;
+        
+        // TR (Task Register - required even if unused)
+        self.write(GUEST_TR_SELECTOR, 0)?;
+        self.write(GUEST_TR_BASE, 0)?;
+        self.write(GUEST_TR_LIMIT, 0x67)?;
+        self.write(GUEST_TR_ACCESS_RIGHTS, 0x8B)?; // Type=11(64-bit TSS busy), P=1
+        
+        // Control registers — 64-bit long mode guest
+        let guest_cr0 = 0x80050033u64; // PE, MP, ET, NE, WP, AM, PG
+        let guest_cr4 = 0x2620u64;     // PAE, MCE, PGE, OSFXSR, OSXMMEXCPT
+        self.write(GUEST_CR0, guest_cr0)?;
+        self.write(GUEST_CR3, 0)?; // Guest page tables — set by caller if needed
+        self.write(GUEST_CR4, guest_cr4)?;
+        
+        // EFER — IA32e mode enabled
+        let guest_efer = 0x500u64; // LME (bit 8) + LMA (bit 10)
+        self.write(GUEST_IA32_EFER, guest_efer)?;
+        
+        // PAT — default value
+        self.write(GUEST_IA32_PAT, 0x0007040600070406u64)?;
+        
+        // RIP, RSP, RFLAGS
+        self.write(GUEST_RIP, entry_point)?;
+        self.write(GUEST_RSP, stack_pointer)?;
+        self.write(GUEST_RFLAGS, 0x2)?; // Reserved bit 1 must be 1
+        
+        // VMCS link pointer (required, -1 for no shadow VMCS)
+        self.write(VMCS_LINK_POINTER, 0xFFFFFFFF_FFFFFFFF)?;
+        
+        // Activity state (active) and interruptibility
+        self.write(GUEST_ACTIVITY_STATE, 0)?;
+        self.write(GUEST_INTERRUPTIBILITY_STATE, 0)?;
+        
+        // SYSENTER MSRs (set to 0)
+        self.write(GUEST_SYSENTER_CS, 0)?;
+        self.write(GUEST_SYSENTER_ESP, 0)?;
+        self.write(GUEST_SYSENTER_EIP, 0)?;
+        
+        // DR7
+        self.write(GUEST_DR7, 0x400)?;
+        
+        // Debug control
+        self.write(GUEST_IA32_DEBUGCTL, 0)?;
+        
+        // Pending debug exceptions
+        self.write(GUEST_PENDING_DEBUG_EXCEPTIONS, 0)?;
+        
+        // GDTR/IDTR for guest (minimal)
+        self.write(GUEST_GDTR_BASE, 0)?;
+        self.write(GUEST_GDTR_LIMIT, 0)?;
+        self.write(GUEST_IDTR_BASE, 0)?;
+        self.write(GUEST_IDTR_LIMIT, 0)?;
+        
+        crate::serial_println!("[VMCS] Guest state: RIP=0x{:X} RSP=0x{:X} CR0=0x{:X} CR4=0x{:X} EFER=0x{:X}",
+                              entry_point, stack_pointer, guest_cr0, guest_cr4, guest_efer);
+        
+        Ok(())
+    }
+    
+    /// Configurer l'état de l'host (pour le retour après VM exit)
+    pub fn setup_host_state(&self, exit_handler: u64, stack: u64) -> Result<()> {
+        use fields::*;
+        use core::arch::asm;
+        
+        // Read current host CRs
+        let cr0: u64;
+        let cr3: u64;
+        let cr4: u64;
+        
+                // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+            asm!("mov {}, cr0", out(reg) cr0);
+            asm!("mov {}, cr3", out(reg) cr3);
+            asm!("mov {}, cr4", out(reg) cr4);
+        }
+        
+        self.write(HOST_CR0, cr0)?;
+        self.write(HOST_CR3, cr3)?;
+        self.write(HOST_CR4, cr4)?;
+        
+        // Segment selectors — read current values and clear RPL bits [1:0]
+        // VMX requires host selectors to have RPL=0
+        let cs: u16;
+        let ss: u16;
+        let ds: u16;
+        let es: u16;
+        let fs: u16;
+        let gs: u16;
+        let tr: u16;
+        
+                // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+            asm!("mov {:x}, cs", out(reg) cs);
+            asm!("mov {:x}, ss", out(reg) ss);
+            asm!("mov {:x}, ds", out(reg) ds);
+            asm!("mov {:x}, es", out(reg) es);
+            asm!("mov {:x}, fs", out(reg) fs);
+            asm!("mov {:x}, gs", out(reg) gs);
+            asm!("str {:x}", out(reg) tr);
+        }
+        
+        self.write(HOST_CS_SELECTOR, (cs & !3) as u64)?;
+        self.write(HOST_SS_SELECTOR, (ss & !3) as u64)?;
+        self.write(HOST_DS_SELECTOR, (ds & !3) as u64)?;
+        self.write(HOST_ES_SELECTOR, (es & !3) as u64)?;
+        self.write(HOST_FILESYSTEM_SELECTOR, (fs & !3) as u64)?;
+        self.write(HOST_GS_SELECTOR, (gs & !3) as u64)?;
+        self.write(HOST_TR_SELECTOR, (tr & !3) as u64)?;
+        
+        // FS/GS bases
+        let filesystem_base = vmx::read_msr(0xC000_0100); // IA32_FS_BASE
+        let gs_base = vmx::read_msr(0xC000_0101); // IA32_GS_BASE
+        self.write(HOST_FILESYSTEM_BASE, filesystem_base)?;
+        self.write(HOST_GS_BASE, gs_base)?;
+        
+        // GDTR and IDTR bases — stored as [u16 limit][u64 base] = 10 bytes
+        #[repr(C, packed)]
+        struct DescriptorTablePointer {
+            limit: u16,
+            base: u64,
+        }
+        
+        let mut gdtr = DescriptorTablePointer { limit: 0, base: 0 };
+        let mut idtr = DescriptorTablePointer { limit: 0, base: 0 };
+        
+                // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+            asm!("sgdt [{}]", in(reg) &mut gdtr as *mut DescriptorTablePointer, options(nostack));
+            asm!("sidt [{}]", in(reg) &mut idtr as *mut DescriptorTablePointer, options(nostack));
+        }
+        
+        self.write(HOST_GDTR_BASE, gdtr.base)?;
+        self.write(HOST_IDTR_BASE, idtr.base)?;
+        
+        // TR base — read from GDT
+        let tr_index = (tr >> 3) as usize;
+        let gdt_pointer = gdtr.base as *// Compile-time constant — evaluated at compilation, zero runtime cost.
+const u64;
+        let tr_base = if tr != 0 && tr_index > 0 {
+                        // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe {
+                let low = *gdt_pointer.add(tr_index);
+                let high = *gdt_pointer.add(tr_index + 1);
+                // TSS descriptor is 16 bytes in long mode
+                let base_low = ((low >> 16) & 0xFFFF)
+                             | (((low >> 32) & 0xFF) << 16)
+                             | (((low >> 56) & 0xFF) << 24);
+                let base_high = high & 0xFFFFFFFF;
+                base_low | (base_high << 32)
+            }
+        } else {
+            0u64
+        };
+        self.write(HOST_TR_BASE, tr_base)?;
+        
+        // SYSENTER MSRs
+        self.write(HOST_SYSENTER_CS, vmx::read_msr(0x174) as u64)?;  // IA32_SYSENTER_CS
+        self.write(HOST_SYSENTER_ESP, vmx::read_msr(0x175))?; // IA32_SYSENTER_ESP
+        self.write(HOST_SYSENTER_EIP, vmx::read_msr(0x176))?; // IA32_SYSENTER_EIP
+        
+        // Host EFER and PAT
+        let host_efer = vmx::read_msr(0xC000_0080); // IA32_EFER
+        let host_pat = vmx::read_msr(0x277);        // IA32_PAT
+        self.write(HOST_IA32_EFER, host_efer)?;
+        self.write(HOST_IA32_PAT, host_pat)?;
+        
+        // RIP et RSP pour le handler de sortie
+        self.write(HOST_RIP, exit_handler)?;
+        self.write(HOST_RSP, stack)?;
+        
+        crate::serial_println!("[VMCS] Host state: CR0=0x{:X} CR3=0x{:X} CR4=0x{:X}", cr0, cr3, cr4);
+        crate::serial_println!("[VMCS] Host state: CS=0x{:X} SS=0x{:X} TR=0x{:X} TR_BASE=0x{:X}",
+                              cs & !3, ss & !3, tr & !3, tr_base);
+        let gdt_base = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::address_of!(gdtr.base).read_unaligned() };
+        let idt_base = // SAFETY: Unsafe block — bypasses Rust memory-safety guarantees. Ensure invariants manually.
+unsafe { core::ptr::address_of!(idtr.base).read_unaligned() };
+        crate::serial_println!("[VMCS] Host state: GDT_BASE=0x{:X} IDT_BASE=0x{:X}", gdt_base, idt_base);
+        crate::serial_println!("[VMCS] Host state: RIP=0x{:X} RSP=0x{:X} EFER=0x{:X}",
+                              exit_handler, stack, host_efer);
+        
+        Ok(())
+    }
+}
+
+// Trait implementation — fulfills a behavioral contract.
+impl Drop for Vmcs {
+    fn drop(&mut self) {
+        // VMCLEAR avant de libérer la mémoire
+        let _ = vmclear(self.physical_address);
+    }
+}

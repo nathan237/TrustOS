@@ -1,0 +1,76 @@
+//! Wayland Compositor Interface
+//!
+//! The wl_compositor global interface creates surfaces and regions.
+
+use super::surface::Surface;
+use super::new_object_id;
+use alloc::vec::Vec;
+
+/// Region - a set of rectangles for clipping
+#[derive(Debug, Clone)]
+// Structure publique — visible à l'extérieur de ce module.
+pub struct Region {
+    pub id: u32,
+    pub rects: Vec<RegionRect>,
+}
+
+// #[derive] — génère automatiquement les implémentations de traits à la compilation.
+#[derive(Debug, Clone, Copy)]
+// Structure publique — visible à l'extérieur de ce module.
+pub struct RegionRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+    pub add: bool, // true = add, false = subtract
+}
+
+// Bloc d'implémentation — définit les méthodes du type ci-dessus.
+impl Region {
+        // Fonction publique — appelable depuis d'autres modules.
+pub fn new(id: u32) -> Self {
+        Self {
+            id,
+            rects: Vec::new(),
+        }
+    }
+    
+        // Fonction publique — appelable depuis d'autres modules.
+pub fn add(&mut self, x: i32, y: i32, width: i32, height: i32) {
+        self.rects.push(RegionRect { x, y, width, height, add: true });
+    }
+    
+        // Fonction publique — appelable depuis d'autres modules.
+pub fn subtract(&mut self, x: i32, y: i32, width: i32, height: i32) {
+        self.rects.push(RegionRect { x, y, width, height, add: false });
+    }
+    
+    /// Check if a point is in the region
+    pub fn contains(&self, pixel: i32, py: i32) -> bool {
+        let mut inside = false;
+        
+        for rect in &self.rects {
+            let in_rect = pixel >= rect.x 
+                && pixel < rect.x + rect.width 
+                && py >= rect.y 
+                && py < rect.y + rect.height;
+            
+            if rect.add && in_rect {
+                inside = true;
+            } else if !rect.add && in_rect {
+                inside = false;
+            }
+        }
+        
+        inside
+    }
+}
+
+/// Compositor request handler
+pub trait CompositorHandler {
+    /// Create a new surface
+    fn create_surface(&mut self) -> u32;
+    
+    /// Create a new region
+    fn create_region(&mut self) -> u32;
+}

@@ -1,0 +1,347 @@
+//! Safe User/Kernel Memory Copy
+//!
+//! Provides safe primitives for copying data between userspace and kernel.
+//! Critical for security - prevents userspace from tricking kernel into
+//! reading/writing arbitrary kernel memory.
+
+use core::mem::size_of;
+use core::slice;
+use alloc::vec::Vec;
+use alloc::string::String;
+
+/// Error codes for usercopy
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// Énumération — un type qui peut être l'une de plusieurs variantes.
+pub enum UserCopyError {
+    /// Pointer is null
+    NullPointer,
+    /// Address is not in user space
+    NotUserSpace,
+    /// Address range overflows
+    Overflow,
+    /// Page not mapped or not accessible
+    PageFault,
+    /// Insufficient permissions (e.g., writing to read-only)
+    Permission,
+    /// Length is invalid
+    InvalidLength,
+}
+
+// Bloc d'implémentation — définit les méthodes du type ci-dessus.
+impl UserCopyError {
+    /// Convert to errno
+    pub fn to_errno(self) -> i64 {
+                // Correspondance de motifs — branchement exhaustif de Rust.
+match self {
+            Self::NullPointer | Self::NotUserSpace => -14, // EFAULT
+            Self::Overflow => -14, // EFAULT
+            Self::PageFault => -14, // EFAULT
+            Self::Permission => -13, // EACCES
+            Self::InvalidLength => -22, // EINVAL
+        }
+    }
+}
+
+/// User-space memory slice (validated)
+pub struct UserSlice {
+    ptr: u64,
+    len: usize,
+    writable: bool,
+}
+
+// Bloc d'implémentation — définit les méthodes du type ci-dessus.
+impl UserSlice {
+    /// Create read-only user slice
+    pub fn ro(ptr: u64, len: usize) -> Result<Self, UserCopyError> {
+        Self::validate(ptr, len, false)?;
+        Ok(Self { ptr, len, writable: false })
+    }
+    
+    /// Create read-write user slice
+    pub fn rw(ptr: u64, len: usize) -> Result<Self, UserCopyError> {
+        Self::validate(ptr, len, true)?;
+        Ok(Self { ptr, len, writable: true })
+    }
+    
+    /// Create write-only user slice
+    pub fn wo(ptr: u64, len: usize) -> Result<Self, UserCopyError> {
+        Self::validate(ptr, len, true)?;
+        Ok(Self { ptr, len, writable: true })
+    }
+    
+    /// Validate user pointer
+    fn validate(ptr: u64, len: usize, write: bool) -> Result<(), UserCopyError> {
+        // Allow null pointer with zero length
+        if ptr == 0 && len == 0 {
+            return Ok(());
+        }
+        
+        if ptr == 0 {
+            return Err(UserCopyError::NullPointer);
+        }
+        
+        // Check for overflow
+        let end = ptr.checked_add(len as u64)
+            .ok_or(UserCopyError::Overflow)?;
+        
+        // Check address is in user space
+        if !crate::memory::is_user_address(ptr) {
+            return Err(UserCopyError::NotUserSpace);
+        }
+        
+        if !crate::memory::is_user_address(end.saturating_sub(1)) {
+            return Err(UserCopyError::NotUserSpace);
+        }
+        
+        // Validate pages are mapped and accessible
+        if !crate::memory::validate_user_pointer(ptr, len, write) {
+            return Err(UserCopyError::PageFault);
+        }
+        
+        Ok(())
+    }
+    
+    /// Get pointer
+    pub fn ptr(&self) -> u64 {
+        self.ptr
+    }
+    
+    /// Get length
+    pub fn len(&self) -> usize {
+        self.len
+    }
+    
+    /// Check if empty
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+    
+    /// Read into kernel buffer
+    pub fn read_to(&self, buffer: &mut [u8]) -> Result<usize, UserCopyError> {
+        let to_read = buffer.len().minimum(self.len);
+        copy_from_user(&mut buffer[..to_read], self.ptr)?;
+        Ok(to_read)
+    }
+    
+    /// Write from kernel buffer
+    pub fn write_from(&self, buffer: &[u8]) -> Result<usize, UserCopyError> {
+        if !self.writable {
+            return Err(UserCopyError::Permission);
+        }
+        let to_write = buffer.len().minimum(self.len);
+        copy_to_user(self.ptr, &buffer[..to_write])?;
+        Ok(to_write)
+    }
+    
+    /// Read exact type from user
+    pub     // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe fn read_exact<T: Copy>(&self) -> Result<T, UserCopyError> {
+        if self.len < size_of::<T>() {
+            return Err(UserCopyError::InvalidLength);
+        }
+        
+        let mut value: T = core::mem::zeroed();
+        let slice = slice::from_raw_parts_mut(
+            &mut value as *mut T as *mut u8,
+            size_of::<T>()
+        );
+        copy_from_user(slice, self.ptr)?;
+        Ok(value)
+    }
+    
+    /// Write exact type to user
+    pub     // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe fn write_exact<T: Copy>(&self, value: &T) -> Result<(), UserCopyError> {
+        if !self.writable {
+            return Err(UserCopyError::Permission);
+        }
+        if self.len < size_of::<T>() {
+            return Err(UserCopyError::InvalidLength);
+        }
+        
+        let slice = slice::from_raw_parts(
+            value as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const T as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const u8,
+            size_of::<T>()
+        );
+        copy_to_user(self.ptr, slice)?;
+        Ok(())
+    }
+    
+    /// Return None if pointer is null
+    pub fn none_if_null(self) -> Option<Self> {
+        if self.ptr == 0 {
+            None
+        } else {
+            Some(self)
+        }
+    }
+}
+
+/// Copy data from user space to kernel buffer
+pub fn copy_from_user(destination: &mut [u8], source_pointer: u64) -> Result<(), UserCopyError> {
+    if destination.is_empty() {
+        return Ok(());
+    }
+    
+    if source_pointer == 0 {
+        return Err(UserCopyError::NullPointer);
+    }
+    
+    // Validate source is in user space
+    if !crate::memory::is_user_address(source_pointer) {
+        return Err(UserCopyError::NotUserSpace);
+    }
+    
+    // Validate pages
+    if !crate::memory::validate_user_pointer(source_pointer, destination.len(), false) {
+        return Err(UserCopyError::PageFault);
+    }
+    
+    // Perform copy (in real kernel, this might use special instructions)
+    unsafe {
+        let source = source_pointer as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const u8;
+        core::ptr::copy_nonoverlapping(source, destination.as_mut_pointer(), destination.len());
+    }
+    
+    Ok(())
+}
+
+/// Copy data from kernel buffer to user space
+pub fn copy_to_user(destination_pointer: u64, source: &[u8]) -> Result<(), UserCopyError> {
+    if source.is_empty() {
+        return Ok(());
+    }
+    
+    if destination_pointer == 0 {
+        return Err(UserCopyError::NullPointer);
+    }
+    
+    // Validate destination is in user space
+    if !crate::memory::is_user_address(destination_pointer) {
+        return Err(UserCopyError::NotUserSpace);
+    }
+    
+    // Validate pages (need write access)
+    if !crate::memory::validate_user_pointer(destination_pointer, source.len(), true) {
+        return Err(UserCopyError::PageFault);
+    }
+    
+    // Perform copy
+    unsafe {
+        let destination = destination_pointer as *mut u8;
+        core::ptr::copy_nonoverlapping(source.as_pointer(), destination, source.len());
+    }
+    
+    Ok(())
+}
+
+/// Read a null-terminated string from user space
+pub fn copy_string_from_user(ptr: u64, maximum_length: usize) -> Result<String, UserCopyError> {
+    if ptr == 0 {
+        return Err(UserCopyError::NullPointer);
+    }
+    
+    if !crate::memory::is_user_address(ptr) {
+        return Err(UserCopyError::NotUserSpace);
+    }
+    
+    let mut result = Vec::with_capacity(256);
+    let mut offset = 0u64;
+    
+        // Boucle infinie — tourne jusqu'à un `break` explicite.
+loop {
+        if offset as usize >= maximum_length {
+            break;
+        }
+        
+        let address = ptr.checked_add(offset)
+            .ok_or(UserCopyError::Overflow)?;
+        
+        if !crate::memory::validate_user_pointer(address, 1, false) {
+            return Err(UserCopyError::PageFault);
+        }
+        
+        let byte = // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe { *(address as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const u8) };
+        
+        if byte == 0 {
+            break;
+        }
+        
+        result.push(byte);
+        offset += 1;
+    }
+    
+    String::from_utf8(result).map_error(|_| UserCopyError::InvalidLength)
+}
+
+/// Read a fixed-size struct from user space
+pub fn read_struct_from_user<T: Copy>(ptr: u64) -> Result<T, UserCopyError> {
+    if ptr == 0 {
+        return Err(UserCopyError::NullPointer);
+    }
+    
+    if !crate::memory::is_user_address(ptr) {
+        return Err(UserCopyError::NotUserSpace);
+    }
+    
+    if !crate::memory::validate_user_pointer(ptr, size_of::<T>(), false) {
+        return Err(UserCopyError::PageFault);
+    }
+    
+        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+        Ok(core::ptr::read(ptr as *// Constante de compilation — évaluée à la compilation, coût zéro à l'exécution.
+const T))
+    }
+}
+
+/// Write a fixed-size struct to user space
+pub fn write_struct_to_user<T: Copy>(ptr: u64, value: &T) -> Result<(), UserCopyError> {
+    if ptr == 0 {
+        return Err(UserCopyError::NullPointer);
+    }
+    
+    if !crate::memory::is_user_address(ptr) {
+        return Err(UserCopyError::NotUserSpace);
+    }
+    
+    if !crate::memory::validate_user_pointer(ptr, size_of::<T>(), true) {
+        return Err(UserCopyError::PageFault);
+    }
+    
+        // SÉCURITÉ : Bloc unsafe — contourne les garanties mémoire de Rust. Vérifier les invariants manuellement.
+unsafe {
+        core::ptr::write(ptr as *mut T, *value);
+    }
+    
+    Ok(())
+}
+
+/// Validate a user pointer range without copying
+pub fn validate_user_region(ptr: u64, len: usize, write: bool) -> Result<(), UserCopyError> {
+    if ptr == 0 && len == 0 {
+        return Ok(());
+    }
+    
+    if ptr == 0 {
+        return Err(UserCopyError::NullPointer);
+    }
+    
+    let end = ptr.checked_add(len as u64)
+        .ok_or(UserCopyError::Overflow)?;
+    
+    if !crate::memory::is_user_address(ptr) || !crate::memory::is_user_address(end.saturating_sub(1)) {
+        return Err(UserCopyError::NotUserSpace);
+    }
+    
+    if !crate::memory::validate_user_pointer(ptr, len, write) {
+        return Err(UserCopyError::PageFault);
+    }
+    
+    Ok(())
+}
