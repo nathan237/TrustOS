@@ -4,18 +4,19 @@
 
 # TrustOS
 
-### The OS you can actually read.
+### The OS you can actually read — in your language.
 
-**A bare-metal operating system written entirely in Rust — 263,000+ lines, zero C, zero binary blobs, zero secrets.**
+**A bare-metal operating system written entirely in Rust — 264,000+ lines, zero C, zero binary blobs, zero secrets.**
 
-*Built by one developer. Auditable by anyone.*
+*Built by one developer. Auditable by anyone. Learnable in English & French.*
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-263%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-264%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.10.2-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.10.3-orange?style=for-the-badge)]()
 [![Tests](https://img.shields.io/badge/tests-96%2F96%20(100%25)-brightgreen?style=for-the-badge)]()
+[![Translated](https://img.shields.io/badge/source-4%20versions-9cf?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
@@ -23,23 +24,56 @@
 
 <img src="media/screenshots/screenshot_desktop.png" alt="TrustOS Desktop" width="720"/>
 
-[What's New](#-whats-new-in-v0102) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [JARVIS AI](#-jarvis----on-device-ai) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
+[**Source Code for Developers**](#-source-code-translation-for-developers) | [What's New](#-whats-new-in-v0103) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
 
 ---
 
 </div>
 
-## 🆕 What's New in v0.10.2
+## 🌍 Source Code Translation for Developers
 
-> **March 14, 2026** — ThinkPad Hardware Control & HDA Audio Fixes
+> **New in v0.10.3** — TrustOS ships its entire source code in **4 developer-friendly versions**, auto-generated from one canonical codebase.
 
+Every `.rs` file in `kernel/src/` (453 files, 264K+ lines) is automatically translated into 4 presets — each one compiles, each one is a valid representation of TrustOS:
+
+| Version | What it does | Who it's for |
+|---------|-------------|-------------|
+| **`translated/original/`** | Exact copy of the real source | Reference / diff baseline |
+| **`translated/minimal/`** | All comments stripped, identifiers shortened to minimal names (`buf` → `b`) | Study pure code structure without noise |
+| **`translated/educational-en/`** | Abbreviations expanded (`buf` → `buffer`, `ctx` → `context`, `irq` → `interrupt_request`) + inline English annotations on every `unsafe`, `static`, `impl`, `trait`, `enum`, `#![no_std]`… | **Learn Rust & OS dev in English** |
+| **`translated/educational-fr/`** | Same expansions + **French annotations** on every Rust pattern | **Apprendre Rust & l'OS dev en français** |
+
+### How it works
+
+A custom **tokenizer-based Rust source translator** ([`tools/source_translator.py`](tools/source_translator.py), 1,500+ lines) parses every token, detects renameable identifiers vs. protected positions (keywords, `.field` access, `asm!()` blocks, FFI, external crate paths…), and applies preset-specific transformations while guaranteeing the output compiles.
+
+```powershell
+# Generate all 4 versions in one command:
+.\trustos.ps1 translate
+
+# Or generate a single version:
+.\trustos.ps1 translate -Only educational-en
+
+# Direct Python usage:
+python tools/source_translator.py --preset educational --lang fr -i kernel/src/ -o translated/educational-fr/
+```
+
+Every `translated/*/` folder includes a `mapping.json` with thousands of identifier mappings — fully deterministic, reloadable, and diffable.
+
+> **Why this matters:** TrustOS is 264K+ lines of bare-metal Rust. The educational versions turn it into the largest annotated Rust OS learning resource that exists — in two languages.
+
+## 🆕 What's New in v0.10.3
+
+> **March 15, 2026** — Source Code Translation System & ThinkPad Hardware Control
+
+- 🌍 **Source code translation system** — Every `.rs` file (453 files, 264K+ lines) auto-translated into **4 developer versions**: original, minimal (stripped identifiers), educational-en (expanded names + English annotations), educational-fr (French annotations). Custom tokenizer-based Rust translator ([`tools/source_translator.py`](tools/source_translator.py), 1,500+ lines). All versions compile. Unified build: `.\trustos.ps1 translate`.
 - 🌡️ **ThinkPad EC driver** — Full Embedded Controller support via ports 0x62/0x66. Read 8 temperature sensors (CPU, GPU, HDD, battery...), control fan speed (manual 0-7, auto, full), read fan RPM. New commands: `fan`, `temp`, `sensors`.
 - ⚡ **CPU frequency/voltage control** — Intel SpeedStep (EIST) via MSR 0x198/0x199. Read/set P-states, frequency multiplier, VID voltage. Predefined T61 Core 2 Duo profiles (800 MHz–2.0 GHz). New command: `cpufreq`.
 - 🔊 **HDA speaker path fix** — Critical bug: only the headphone path had connection selects configured. Speaker path (NID 18→10→4) never received audio — what sounded like "hard drive knocking" was DMA start/stop pops with no actual signal. Now all output paths (HP, Speaker, SPDIF) are fully wired.
 - 🔊 **HDA GPIO1 polarity fix** — T61 amp uses direct polarity (HIGH=on), not inverted like HP laptops. GPIO1=LOW was silencing the amplifier.
 - 🔊 **HDA Amp Param Override** — Per HDA spec 7.3.4.7: when override bit is clear, always use AFG amp caps. AD1984 widgets returned non-zero caps with numsteps=0, causing silent output.
 - 🔧 **Shell scrollback fix** — Backspace tracking in scrollback buffer, raw pixel rendering for suggestions/tab-complete to prevent buffer corruption, auto-snap on live view restore.
-- 📊 **263,000+ lines** across 476+ source files, 3 architectures.
+- 📊 **264,000+ lines** across 480+ source files, 3 architectures.
 
 ---
 
@@ -49,8 +83,9 @@
 
 | Edition | ISO | Size | What's Inside | Download |
 |---------|-----|------|---------------|----------|
-| **TrustOS** | `trustos.iso` | ~12 MB | Full OS: desktop, networking, emulators, TrustLang, TrustLab, 200+ commands. JARVIS engine included (untrained). | [**⬇ Download**](https://github.com/nathan237/TrustOS/releases/latest/download/trustos.iso) |
-| **TrustOS + JarvisPack** | `trustos-jarvispack.iso` | ~29 MB | Everything above + **pretrained JARVIS brain** (4.4M-param transformer). AI ready out of the box. | [**⬇ Download**](https://github.com/nathan237/TrustOS/releases/latest/download/trustos-jarvispack.iso) |
+| **TrustOS** | `trustos.iso` | ~12 MB | Full OS: desktop, networking, emulators, TrustLang, TrustLab, 200+ commands. | [**⬇ Download**](https://github.com/nathan237/TrustOS/releases/latest/download/trustos.iso) |
+
+> **For developers:** The full source code is also available in [**4 translated versions**](#-source-code-translation-for-developers) (original, minimal, educational-en, educational-fr) — clone the repo and explore `translated/`.
 
 ```bash
 # Boot it right now in QEMU:
@@ -66,7 +101,7 @@ TrustOS runs bare-metal on x86_64 PCs (UEFI or Legacy BIOS), ARM64 phones/tablet
 
 1. Download & open [**Rufus**](https://rufus.ie/) (no install needed)
 2. **Device** → select your USB drive
-3. **Boot selection** → click **SELECT** → pick `trustos.iso` or `trustos-jarvispack.iso`
+3. **Boot selection** → click **SELECT** → pick `trustos.iso`
 4. Rufus will ask: **ISO mode** or **DD Image mode** → pick **DD Image mode**
 5. **Click START** — the partition scheme / target system fields stay greyed out in DD mode, that's normal
 6. Wait for the write to finish (~30 seconds)
@@ -83,7 +118,7 @@ TrustOS runs bare-metal on x86_64 PCs (UEFI or Legacy BIOS), ARM64 phones/tablet
 
 1. Download & open [**Rufus**](https://rufus.ie/) (no install needed)
 2. **Device** → select your USB drive
-3. **Boot selection** → click **SELECT** → pick `trustos.iso` or `trustos-jarvispack.iso`
+3. **Boot selection** → click **SELECT** → pick `trustos.iso`
 4. Rufus will ask: **ISO mode** or **DD Image mode** → pick **DD Image mode**
 5. **Click START** — the partition scheme / target system fields stay greyed out in DD mode, that's normal
 6. Wait for the write to finish (~30 seconds)
@@ -113,30 +148,30 @@ All releases: [**github.com/nathan237/TrustOS/releases**](https://github.com/nat
 
 ## 🔑 Why TrustOS?
 
-TrustOS does things that **no other operating system on Earth** does. Here's why you should install it:
+TrustOS does things that **no other operating system on Earth** does. Here's why you should care:
 
-### 🧠 An AI that lives inside the kernel
-JARVIS is a **4.4-million-parameter transformer** running in Ring 0 — bare-metal, zero cloud, zero API calls. It trains on-device, generates text, federates its weights across a mesh network, and **replicates itself to new machines over PXE boot**. No other OS has a real neural network baked into the kernel.
+### ⚡ A native x86_64 compiler running *inside* the OS
+TrustLang compiles your programs to **raw Intel machine code** and executes them — all from within the kernel. No LLVM. No GCC. No external toolchain. Write code → native binary → execute. The entire compiler is 3,600 lines of Rust.
 
-### ⚡ A compiler that generates native machine code — inside the OS
-TrustLang compiles your programs to **raw x86_64 Intel instructions** and executes them, all from within the kernel. No LLVM. No GCC. No external toolchain. Write code → native binary → execute. The entire compiler is 3,555 lines of Rust.
+### 🔍 264,000 lines — and you can read every single one
+No binary blobs. No proprietary drivers. No hidden telemetry. **Every driver, every protocol, every pixel, every encryption algorithm** is open Rust. One developer built it. Anyone can audit it.
 
-### 🔍 261,000 lines — and you can read every single one
-No binary blobs. No proprietary drivers. No hidden telemetry. **Every driver, every protocol, every pixel, every encryption algorithm, every line of AI** is open Rust. One developer built it. Anyone can audit it.
-
-### 🌐 Self-replicating distributed AI
-PXE boot a blank machine → TrustOS installs itself → JARVIS wakes up → joins the mesh network → starts federated learning with other nodes. Fully autonomous AI propagation over a LAN.
+### 🌍 Source code that teaches itself — in your language
+Every file ships in **4 auto-generated versions**: original, minimal (stripped), educational-en (annotated English), educational-fr (annotated French). A custom tokenizer-based translator expands abbreviations, adds inline explanations of every `unsafe`, `trait`, `impl`, and Rust pattern — turning 264K lines of kernel code into the **largest annotated Rust OS learning resource in existence**.
 
 ### 🖥 A real desktop OS, not a toy
 144 FPS SIMD-accelerated desktop with 14+ apps, a browser with HTML/CSS/JS, Game Boy and NES emulators, 3D chess, a code editor, network security toolkit, and the most complete kernel introspection lab ever built into a bare-metal OS.
 
 ### 🏗 Everything from scratch — zero dependencies
-TLS 1.3, TCP/IP, DNS, DHCP, HTTP/HTTPS, FAT32, EXT4, NVMe, AHCI, VirtIO, VT-x/AMD-V hypervisor, Ed25519 signatures, audio synthesizer — all written in pure Rust. Not a single line of C.
+TLS 1.3, TCP/IP, DNS, DHCP, HTTP/HTTPS, FAT32, EXT4, NVMe, AHCI, VirtIO, VT-x/AMD-V hypervisor, Ed25519 signatures, audio synthesizer — all written in pure Rust. Not a single line of C. Not a single external crate.
 
 ### 📱 Runs on 3 architectures from one codebase
 x86_64 PCs, ARM64 (Android phones, Raspberry Pi), RISC-V — same source, same OS.
 
-> *"The only OS where you can trace every packet, every pixel, every AI inference, and every keystroke back to its source code."*
+### 🌐 Self-replicating over the network
+PXE boot a blank machine → TrustOS installs itself, pushes the kernel over TFTP, and brings up identical instances on bare hardware — automatically.
+
+> *"The only OS where you can trace every packet, every pixel, and every keystroke back to its source code — in your language."*
 
 ---
 
@@ -157,111 +192,25 @@ trustlang test                → 55+ automated test suite
 
 3,612 lines. Lexer → Parser → AST → Bytecode OR native x86_64. Dual execution backends.
 
-### 2. Kernel-Resident AI Transformer (JARVIS)
+### 2. Self-Replicating Over the Network
 
-A **4.4-million-parameter transformer** running in Ring 0 kernel space. Not an API wrapper. Not a cloud call. A real neural network with attention heads, backpropagation, and Adam optimizer — executing bare-metal on the CPU, trained and inferenced entirely on-device.
+TrustOS can PXE boot new machines, push the kernel binary over TFTP, and bring up identical TrustOS instances on bare hardware — automatically. Plug in a blank PC, turn it on, and TrustOS deploys itself.
 
-It can learn, generate text, federate its weights across a mesh network, and replicate itself to new machines via PXE boot.
-
-14,443 lines of Rust. 24 modules. Zero ML framework dependencies.
-
-### 3. Self-Replicating Over the Network
-
-TrustOS can PXE boot new machines, push the kernel binary over TFTP, and bring up identical TrustOS instances on bare hardware — automatically. Combined with JARVIS mesh networking, this creates a distributed AI that spreads across a LAN.
-
-### 4. Real-Time Kernel Introspection (TrustLab)
+### 3. Real-Time Kernel Introspection (TrustLab)
 
 A 7-panel interactive lab that lets you watch the kernel at work in real-time: hardware status, kernel trace bus, file system tree, hex editor, TrustLang editor with syntax highlighting, execution pipeline. No other bare-metal OS ships this.
 
-### 5. Everything From Scratch
+### 4. Everything From Scratch
 
 TLS 1.3, TCP/IP, DNS, DHCP, HTTP, HTML/CSS parser, JavaScript engine, FAT32, EXT4, NVMe, AHCI, VirtIO, Game Boy emulator, NES emulator, 3D renderer, audio synthesizer, Ed25519 signatures, chess AI — all written in Rust, from zero, with no external libraries.
 
----
+### 5. Source Code Translation for Developers
 
-## 📦 Editions
-
-TrustOS ships in **two official editions**:
-
-| | **TrustOS** | **TrustOS + JarvisPack** |
-|---|---|---|
-| **ISO** | [`trustos.iso`](https://github.com/nathan237/TrustOS/releases/latest/download/trustos.iso) | [`trustos-jarvispack.iso`](https://github.com/nathan237/TrustOS/releases/latest/download/trustos-jarvispack.iso) |
-| **Size** | ~12 MB | ~29 MB |
-| **What's inside** | Full OS, desktop, network, emulators, TrustLang, TrustLab, 200+ commands. JARVIS engine (untrained). | Everything above + **pretrained JARVIS transformer** (4.4M params). AI inference out of the box. |
-| **AI Status** | Engine present, no weights | Fully trained, ready to chat |
-| **Use Case** | General-purpose OS, development, learning | AI workloads, mesh networking, federated learning |
-| **Build** | `.\build-trustos.ps1` | `.\build-trustos-jarvispack.ps1` |
+Every `.rs` file auto-translated into 4 versions (original, minimal, educational-en, educational-fr) by a custom tokenizer-based translator. 453 files × 4 presets = 1,812 compilable Rust files. Abbreviations expanded, inline annotations in English or French on every Rust pattern. The entire codebase becomes a learning tool. [**→ Learn more**](#-source-code-translation-for-developers)
 
 ---
 
-## 🤖 JARVIS — On-Device AI
-
-> **The first bare-metal OS with a kernel-resident AI that learns, reasons, and communicates — without any external service.**
-
-| Feature | Details |
-|---------|---------|
-| **Architecture** | Custom transformer: 8 attention heads, 6 layers, 512-dim embeddings, byte-level tokenizer (256 vocab) |
-| **Parameters** | 4.4 million trainable weights, all in kernel memory |
-| **Training** | On-device backpropagation with Adam optimizer — runs bare-metal, no ML framework |
-| **Inference** | Real-time text generation from Ring 0, ~80 tokens in milliseconds |
-| **Federated Learning** | Nodes sync model weights across the network — distributed training |
-| **Mesh Networking** | Raft-consensus mesh: leader election, peer discovery, weight synchronization |
-| **PXE Replication** | Self-propagating: JARVIS replicates to new nodes via PXE boot over TFTP |
-| **Hardware Awareness** | `jarvis_hw` probes CPU, memory, PCI, network — JARVIS knows its own hardware |
-| **Guardian System** | The Pact: AI cannot modify OS code without authorization from its guardians |
-| **SIMD Optimized** | SSE2/AVX matrix operations for accelerated inference |
-
-### JARVIS Commands
-
-```
-jarvis status          # Model info: parameters, layers, training state
-jarvis chat <prompt>   # Generate text from the transformer
-jarvis train <text>    # On-device backpropagation training
-jarvis eval            # Evaluate model loss
-mesh start             # Start Raft mesh networking
-mesh status            # Show peers and roles
-federated enable       # Enable federated learning
-pxe start              # Start PXE replication server
-propagate              # Auto-propagate to discovered nodes
-```
-
-### The Pact
-
-JARVIS has a hard-coded guardian system ([`kernel/src/jarvis/guardian.rs`](kernel/src/jarvis/guardian.rs)). Protected operations (training, weight push, model replace, PXE replicate) require explicit authorization from its two guardians. This is enforced at the kernel level and cannot be bypassed.
-
-### JARVIS Codebase
-
-```
-kernel/src/jarvis/            # 14,443 lines across 24 modules
-  model.rs                    # Transformer architecture (4.4M params)
-  training.rs                 # On-device backpropagation
-  backprop.rs                 # Gradient computation
-  inference.rs                # Text generation
-  optimizer.rs                # Adam optimizer
-  tokenizer.rs                # Byte-level tokenizer
-  mesh.rs                     # Raft-consensus mesh networking
-  federated.rs                # Federated learning (weight sync)
-  rpc.rs                      # Remote procedure calls
-  pxe_replicator.rs           # PXE boot self-replication
-  guardian.rs                 # The Pact (authorization)
-  simd.rs                     # SSE2/AVX matrix acceleration
-  compression.rs              # Model weight compression
-  consensus.rs                # Raft leader election
-  compute.rs                  # Distributed compute scheduler
-  corpus.rs                   # Training corpus management
-  mentor.rs                   # Serial-port mentor protocol
-  agent.rs                    # Autonomous agent capabilities
-  task.rs                     # Task execution engine
-  ...
-
-kernel/src/jarvis_hw/         # 3,111 lines — hardware intelligence
-  probe/                      # CPU, memory, PCI, network probing
-  hw_corpus.rs                # Hardware-aware training data
-```
-
----
-
-## 🖥 Features
+##  Features
 
 ### COSMIC2 Desktop Environment
 - Multi-layer GPU compositor: 8 rendering layers, SSE2 SIMD blitting, 144 FPS
@@ -300,7 +249,6 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 - Ed25519 signatures (RFC 8032) — full public-key cryptography
 - TLS 1.3 — handshake, AEAD, X.509, all from scratch
 - Capability-based security model
-- JARVIS Guardian — hardware-locked AI authorization
 
 ### Storage
 - **TrustFS** — native bare-metal filesystem with WAL journal, indirect blocks
@@ -325,12 +273,13 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 
 | | |
 |---|---|
-| **263,000+ lines** of pure Rust | **96/96** self-tests passing (100%) |
-| **476** source files | **144 FPS** SIMD desktop |
+| **264,000+ lines** of pure Rust | **96/96** self-tests passing (100%) |
+| **480+** source files | **144 FPS** SIMD desktop |
 | **3** architectures (x86_64, ARM64, RISC-V) | **< 1 sec** boot time |
-| **4.4M** AI parameters in kernel space | **0** lines of C |
-| **14,443** lines of AI code (24 modules) | **0** binary blobs |
-| **3,612** lines of TrustLang (dual backend) | **0** external ML frameworks |
+| **3,612** lines of TrustLang (dual backend) | **0** lines of C |
+| **200+** shell commands | **0** binary blobs |
+| **4** translated source versions (EN/FR) | **1,812** auto-generated compilable files |
+| **14+** desktop applications | **0** external dependencies |
 
 ---
 
@@ -342,11 +291,7 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 2. Boot it:
 
 ```bash
-# TrustOS (base)
 qemu-system-x86_64 -cdrom trustos.iso -m 512M -cpu max -smp 4 -display gtk -vga std -serial stdio
-
-# TrustOS + JarvisPack (with pretrained AI)
-qemu-system-x86_64 -cdrom trustos-jarvispack.iso -m 512M -cpu max -smp 4 -display gtk -vga std -serial stdio
 ```
 
 > Or flash to USB with **Rufus (DD Image mode)** / `dd` and boot on real hardware.
@@ -358,11 +303,14 @@ qemu-system-x86_64 -cdrom trustos-jarvispack.iso -m 512M -cpu max -smp 4 -displa
 git clone https://github.com/nathan237/TrustOS.git
 cd TrustOS
 
-# Base edition
-.\build-trustos.ps1
+# Build the OS
+.\trustos.ps1 build
 
-# AI edition (with pretrained JARVIS weights)
-.\build-trustos-jarvispack.ps1
+# Generate all 4 translated source versions
+.\trustos.ps1 translate
+
+# Full release (build + translate + tag + push)
+.\trustos.ps1 release -Tag v0.10.3
 ```
 
 ### First commands
@@ -370,8 +318,6 @@ cd TrustOS
 | Command | What it does |
 |---------|-------------|
 | `desktop` | Launch COSMIC2 desktop environment |
-| `jarvis status` | Check JARVIS AI status |
-| `jarvis chat hello` | Chat with on-device AI |
 | `trustlang demo` | Run TrustLang demo program |
 | `trustlang test` | Run 55+ native backend tests |
 | `trustlab` | Open kernel introspection lab |
@@ -382,16 +328,26 @@ cd TrustOS
 | `selftest` | Run 96 automated self-tests |
 | `help` | All 200+ commands |
 
+### Explore the translated source
+
+```
+translated/
+  original/          → Exact source copy (reference)
+  minimal/           → Stripped identifiers, no comments
+  educational-en/    → Expanded names + English annotations
+  educational-fr/    → Expanded names + French annotations
+```
+
+Each folder contains the full 453-file kernel — compilable, diffable, and annotated for learning.
+
 ---
 
 ## 📁 Project Structure
 
 ```
 TrustOS/
-  kernel/                     # Core bare-metal kernel (258K+ lines)
-    src/
-      jarvis/                 # JARVIS AI (14,443 lines, 24 modules)
-      jarvis_hw/              # Hardware intelligence (3,111 lines)
+  kernel/                     # Core bare-metal kernel (264K+ lines)
+    src/                      # 453 .rs files
       trustlang/              # TrustLang compiler + native x86_64 (3,612 lines)
       shell/                  # 200+ commands
       desktop.rs              # COSMIC2 desktop manager
@@ -404,16 +360,23 @@ TrustOS/
       tls13/                  # TLS 1.3, crypto, X.509
       netscan/                # Network security toolkit
       drivers/                # AHCI, USB, VirtIO, NVMe, Apple
+  translated/                 # Auto-generated source versions
+    original/                 # Exact copy (reference)
+    minimal/                  # Stripped identifiers, no comments
+    educational-en/           # Expanded + English annotations
+    educational-fr/           # Expanded + French annotations
+  tools/
+    source_translator.py      # Tokenizer-based Rust translator (1,500+ lines)
+    translate-all.ps1         # Translation orchestrator
+  trustos.ps1                 # Unified build shell (build/release/translate/clean/status)
   userland/                   # Userspace programs
   scripts/
     build/                    # Build scripts (limine, multiarch)
     launch/                   # VM launch scripts (QEMU, VBox)
     test/                     # Test automation
-  tools/                      # Python utilities, training
   docs/                       # Documentation, roadmaps, guides
   builds/
-    trustos/                  # Base edition ISO output
-    trustos-jarvispack/       # JarvisPack edition ISO output
+    trustos/                  # ISO output
   firmware/                   # UEFI firmware (OVMF)
   limine/                     # Bootloader binaries
   apple/                      # iOS security research
@@ -424,8 +387,9 @@ TrustOS/
 
 ## 📋 Changelog
 
-### v0.10.2 — ThinkPad Hardware Control (March 14, 2026)
+### v0.10.3 — Source Code Translation & ThinkPad Hardware (March 15, 2026)
 
+- **Source Code Translation System** — Custom tokenizer-based Rust translator (`tools/source_translator.py`, 1,500+ lines). Auto-generates 4 versions of the entire kernel source (453 files): original, minimal, educational-en, educational-fr. Educational versions expand 120+ abbreviations and add inline annotations on every Rust pattern (`unsafe`, `trait`, `impl`, `enum`, `#![no_std]`…). All versions compile. Unified via `.\trustos.ps1 translate`.
 - **ThinkPad EC driver** — Embedded Controller communication (ports 0x62/0x66) with IBF/OBF handshake and timeout. 8 temperature sensors, fan level get/set (0-7, auto, full speed, off), fan RPM readout.
 - **CPU frequency/voltage** — Intel Enhanced SpeedStep via MSR 0x198/0x199. Read current freq/voltage, set P-states by FID/VID, predefined T61 Core 2 Duo profiles. CPU DTS thermal readout via MSR 0x19C.
 - **HDA speaker path** — Fixed critical bug where only the headphone route had `conn_sel` set. Speaker path NID 18→10→4 never received audio. All output paths now fully configured.
@@ -508,11 +472,10 @@ TrustOS/
 - **Shell commands**: `trustlang compile`, `trustlang test`, `trustlang bench`.
 - **Selftest integration** — native compiler smoke test added to the 96-test diagnostic suite.
 
-### v0.7.0 — checkm8 & JARVIS (March 2026)
+### v0.7.0 — checkm8 & Multi-Edition (March 2026)
 
-- **Two official editions**: TrustOS (base, ~12 MB) and TrustOS-JarvisPack (AI, ~29 MB).
 - **Project reorganization**: root cleaned from 400+ files to 11.
-- **JARVIS AI**: 4.4M-parameter transformer with on-device training, federated learning, mesh networking, PXE replication, Guardian system.
+- **On-device AI engine** — 4.4M-parameter transformer architecture (work in progress).
 - **checkm8 SecureROM exploit** — bare-metal xHCI USB exploit for Apple A12 DFU mode.
 - **Apple hardware drivers** — AIC + UART for native Apple silicon.
 - **ARM64 GICv2** — full interrupt controller + exception vectors.
@@ -561,8 +524,10 @@ TrustOS/
 | Contributing | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
 | Roadmap | [`docs/ROADMAP_V2.md`](docs/ROADMAP_V2.md) |
 | Release Notes | [`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md) |
-| JARVIS Guardian Pact | [`kernel/src/jarvis/guardian.rs`](kernel/src/jarvis/guardian.rs) |
 | Command Reference | [`docs/TRUSTOS_COMPLETE_COMMAND_REFERENCE.md`](docs/TRUSTOS_COMPLETE_COMMAND_REFERENCE.md) |
+| Source Translator | [`tools/source_translator.py`](tools/source_translator.py) |
+| Translated Source (EN) | [`translated/educational-en/`](translated/educational-en/) |
+| Translated Source (FR) | [`translated/educational-fr/`](translated/educational-fr/) |
 
 ---
 
@@ -602,7 +567,7 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 
 Created by [Nated0ge](https://github.com/nathan237) — March 2026
 
-263,000+ lines | Native x86_64 compiler | JARVIS AI (4.4M params) | x86_64 + ARM64 + RISC-V | Zero C
+264,000+ lines | Native x86_64 compiler | 3 architectures | 4 translated source versions | Everything from scratch | Zero C
 
 [Report Bug](https://github.com/nathan237/TrustOS/issues) | [Request Feature](https://github.com/nathan237/TrustOS/issues) | [Watch Demo](https://youtu.be/RBJJi8jW1_g)
 
