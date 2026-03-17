@@ -130,13 +130,19 @@ jarvis-bench/jarvis_pretrained.bin
 # Server packages (can be re-downloaded)
 server/packages/*.tar.gz
 
-# Screenshots
+# Screenshots - ignore loose PNGs but keep evolution screenshots
 *.png
 *.ppm
 qemu_screenshot*.png
 
 # Keep showcase screenshots in docs/
 !docs/screenshot_desktop.png
+
+# Track screenshot evolution folders
+!media/screenshots/
+!media/screenshots/**
+!media/trustos_screenshots/
+!media/trustos_screenshots/**
 
 # Linux kernel binaries
 linux/bzImage
@@ -210,9 +216,8 @@ rustc-ice-*.txt
 logs/
 firmware/
 
-# Media - ignore generated but keep logo
+# Media - ignore generated but keep logo and screenshots
 media/ppm/
-media/screenshots/
 !media/logo.png
 !media/trustos_logo.png
 
