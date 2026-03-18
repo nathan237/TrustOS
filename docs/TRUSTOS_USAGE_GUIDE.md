@@ -417,6 +417,45 @@ checkm8              # USB exploit research tool
 a11y                 # Accessibility settings (also: accessibility)
 ```
 
+### HwDbg — Universal Hardware Debugger
+
+PXE-boot TrustOS on any machine and run comprehensive hardware diagnostics.
+All output is dual-mirrored to screen AND serial (115200 8N1) for remote capture.
+
+```
+hwdbg auto                    # Run ALL diagnostics (full machine profile)
+hwdbg cpu                     # Deep CPU analysis (CPUID, topology, µcode)
+hwdbg mem [size_mb]           # Memory test (walking 1s, patterns)
+hwdbg pci [B:D.F]             # Full PCI tree with BARs & capabilities
+hwdbg acpi                    # Dump all ACPI tables
+hwdbg storage                 # Disk/NVMe detection & identify
+hwdbg thermal                 # Thermal sensors, power state, fans
+hwdbg net                     # Network interface inventory
+hwdbg stress [seconds]        # CPU + memory stress test
+hwdbg remote                  # Structured serial debug protocol
+```
+
+#### Advanced Register Tools
+
+```
+hwdbg pciraw <B:D.F>          # Raw hex dump of PCI config space (256B/4KB)
+hwdbg regdiff snap [name]     # Snapshot all registers (PCI+MSR+IO)
+hwdbg regdiff diff            # Compare current state vs snapshot
+hwdbg ioscan legacy           # Scan all known legacy I/O port ranges
+hwdbg ioscan com              # Scan COM1-COM8 serial ports, detect UART type
+hwdbg ioscan 3f0 400          # Scan custom I/O port range (hex)
+hwdbg regwatch pci 0:2.0 40   # Watch PCI register for changes (polls 50x)
+hwdbg regwatch msr 1a0        # Watch MSR for changes
+hwdbg regwatch io 3f8         # Watch I/O port for changes
+hwdbg aer                     # Scan all devices for PCIe AER errors
+hwdbg aer 0:1c.0              # Detailed AER for specific device
+hwdbg aer clear 0:1c.0        # Clear AER error registers
+hwdbg timing                  # Boot timing profiler (checkpoint deltas)
+hwdbg timing slow             # Show only phases > 10ms
+```
+
+**Tip**: Connect a serial cable (115200 8N1), PXE-boot TrustOS, run `hwdbg auto`.
+
 ---
 
 ## 10. Disk & Storage

@@ -4,7 +4,7 @@
 **Version**: 0.2.0  
 **Language**: 100% Pure Rust (zero C, zero libc, zero std)  
 **Architectures**: x86_64, ARM64/aarch64, RISC-V (rv64gc)  
-**Codebase**: ~240,000 lines of Rust  
+**Codebase**: ~273,000 lines of Rust  
 **Shell**: `tsh` (TrustOS Shell)  
 **Test Coverage**: 95/96 tests passing (99%)
 
@@ -176,6 +176,32 @@
 | `dmidecode` | | BIOS/SMBIOS firmware tables |
 | `hdparm <dev>` | | Disk drive parameters |
 | `checkm8` | | Apple SecureROM exploit (Apple Silicon) |
+
+### HwDbg — Universal Hardware Debugger
+
+PXE-boot TrustOS on any machine and run comprehensive hardware diagnostics.
+All output dual-mirrored to screen + serial (115200 8N1).
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `hwdbg auto` | `hwdbg all`, `hwdbg full` | Run ALL diagnostics (full machine profile) |
+| `hwdbg cpu` | | Deep CPU analysis (CPUID, topology, µcode) |
+| `hwdbg mem [size_mb]` | `hwdbg memory` | Memory test (walking 1s, patterns, stress) |
+| `hwdbg pci [B:D.F]` | | Full PCI tree with BARs & capabilities |
+| `hwdbg acpi` | | Dump all ACPI tables (RSDP→XSDT→*) |
+| `hwdbg storage` | `hwdbg disk`, `hwdbg nvme` | Disk/NVMe detection & identify |
+| `hwdbg thermal` | `hwdbg temp`, `hwdbg power` | Thermal sensors, power state, fans |
+| `hwdbg net` | `hwdbg network`, `hwdbg nic` | Network interface inventory |
+| `hwdbg stress [secs]` | `hwdbg burn` | CPU + memory stress test |
+| `hwdbg remote` | `hwdbg serial` | Start structured serial debug protocol |
+| `hwdbg pciraw <B:D.F>` | `hwdbg rawpci` | Raw hex dump of PCI config space (256B/4KB) |
+| `hwdbg regdiff snap [name]` | `hwdbg rdiff` | Snapshot registers (PCI+MSR+IO), then `regdiff diff` to compare |
+| `hwdbg ioscan [mode]` | `hwdbg io` | Scan I/O port ranges (`legacy`, `com`, `ide`, or hex range) |
+| `hwdbg regwatch <type>` | `hwdbg watch` | Live register monitor: `pci`, `msr`, or `io` |
+| `hwdbg aer [B:D.F]` | | PCIe Advanced Error Reporting (scan, decode, clear) |
+| `hwdbg timing [slow]` | `hwdbg boottiming` | Boot timing profiler (checkpoint deltas) |
+| `hwdbg export` | `hwdbg dump` | Full report in machine-parseable format |
+| `hwdbg help` | | Show all hwdbg subcommands |
 
 ### Hardware Detection
 - **CPU**: Vendor (Intel/AMD/ARM), model, cores, features (AES-NI, AVX, SSE, etc.)
@@ -948,6 +974,7 @@ Translates binaries between architectures:
 | System & Process | 35 |
 | User Management | 6 |
 | Hardware & Devices | 15 |
+| Hardware Diagnostics (hwdbg) | 17 subcommands |
 | Disk & Storage | 11 |
 | Networking | 13 |
 | Security Toolkit | 7 |
@@ -971,7 +998,7 @@ Translates binaries between architectures:
 | Terminal Config | 5 |
 | Easter Eggs | 9 |
 | System Control | 4 |
-| **TOTAL** | **~200+ unique commands, 350+ with subcommands** |
+| **TOTAL** | **~215+ unique commands, 370+ with subcommands** |
 
 ---
 

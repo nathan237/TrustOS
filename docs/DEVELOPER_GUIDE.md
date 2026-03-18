@@ -43,7 +43,7 @@
 | **Target** | `x86_64-unknown-none`, `aarch64-unknown-none`, `riscv64gc-unknown-none-elf` (bare-metal) |
 | **Toolchain** | Nightly Rust (`rust-toolchain.toml`) |
 | **Bootloader** | Limine (UEFI) |
-| **Lignes de code** | ~266,000 lignes de Rust |
+| **Lignes de code** | ~273,000 lignes de Rust |
 | **Fichiers .rs** | 441 |
 | **ISO** | ~12 MB (base), ~29 MB (JarvisPack) |
 | **Dépôt** | github.com/nathan237/TrustOS |
@@ -360,7 +360,31 @@ Serveur d'affichage Wayland natif (wl_display, wl_compositor, wl_surface, wl_shm
 | `sandbox/` | 1,980 | Sandbox web + containers |
 | `model_editor.rs` | 1,203 | Éditeur de modèles 3D |
 
-### 4.10 Drivers (`drivers/`) — 4,505 lignes
+### 4.10 Hardware Diagnostics (`hwdiag/`) — ~2,500 lignes
+
+Toolkit de diagnostic matériel universel, conçu pour PXE boot + serial capture.
+Toute sortie mirrored sur écran ET serial (115200 8N1).
+
+| Fichier | Rôle |
+|---------|------|
+| `mod.rs` | Dispatcher principal (`hwdbg` command), macro `dbg_out!`, helpers |
+| `cpu_deep.rs` | Analyse CPU profonde (CPUID, topologie, µcode) |
+| `mem_test.rs` | Tests mémoire (walking 1s, patterns) |
+| `pci_deep.rs` | Arbre PCI complet avec BARs & capabilities |
+| `acpi_dump.rs` | Dump tables ACPI (RSDP→XSDT→*) |
+| `storage.rs` | Détection disques NVMe/AHCI/ATA |
+| `thermal.rs` | Capteurs thermiques, état alimentation |
+| `net_hw.rs` | Inventaire interfaces réseau |
+| `stress.rs` | Stress test CPU + mémoire |
+| `remote.rs` | Protocole debug série structuré |
+| `pci_raw.rs` | Hex dump brut espace config PCI (256B/4KB) |
+| `regdiff.rs` | Snapshot registres + diff bit-level (PCI+MSR+IO) |
+| `ioscan.rs` | Scanner ports I/O (legacy, COM/UART, IDE, range) |
+| `regwatch.rs` | Moniteur live de registres (polling changements) |
+| `pci_aer.rs` | PCIe Advanced Error Reporting (scan, decode, clear) |
+| `boot_timing.rs` | Profilage boot via checkpoints TSC |
+
+### 4.11 Drivers (`drivers/`) — 4,505 lignes
 
 | Fichier | Rôle |
 |---------|------|
@@ -372,7 +396,7 @@ Serveur d'affichage Wayland natif (wl_display, wl_compositor, wl_surface, wl_shm
 | `partition.rs` | GPT/MBR parser |
 | `pci_ids.rs` | Base de données PCI vendor/device |
 
-### 4.11 Synchronisation (`sync/`) — 941 lignes
+### 4.12 Synchronisation (`sync/`) — 941 lignes
 
 | Primitif | Fichier | Description |
 |----------|---------|-------------|
