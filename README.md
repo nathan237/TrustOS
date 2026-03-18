@@ -564,6 +564,12 @@ cargo build --release -p trustos_kernel
 
 ---
 
+## 🤖 AI Disclosure
+
+This project is built using **GitHub Copilot (Claude)** in VS Code agent mode. The AI generates the majority of the code from my prompts and architectural decisions. I design, direct, debug on real hardware, and review the output. This is a solo learning/experimental project, not production software.
+
+---
+
 ## 📄 License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
