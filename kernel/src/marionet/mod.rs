@@ -11,7 +11,7 @@
 //!   marionet export       — Dump full report to serial
 
 pub mod autodump;
-mod probe;
+pub mod probe;
 mod render;
 
 use alloc::string::String;

@@ -18,6 +18,11 @@ pub struct SystemData {
     pub storage: StorageInfo,
     pub network: NetworkInfo,
     pub thermal: ThermalInfo,
+    pub smbios: Option<crate::hwdiag::smbios::SmbiosInfo>,
+    pub smart_disks: Vec<crate::hwdiag::smart::SmartData>,
+    pub efi: crate::hwdiag::efi_vars::EfiInfo,
+    pub battery: Option<crate::hwdiag::acpi_battery::BatteryInfo>,
+    pub thermal_zones: Vec<crate::hwdiag::acpi_battery::ThermalZone>,
 }
 
 pub struct CpuInfo {
@@ -79,6 +84,7 @@ pub struct ThermalInfo {
 // ─── Collectors ────────────────────────────────────────────────────────────
 
 pub fn collect_all() -> SystemData {
+    let power_info = crate::hwdiag::acpi_battery::collect_all();
     SystemData {
         cpu: collect_cpu(),
         memory: collect_memory(),
@@ -87,6 +93,11 @@ pub fn collect_all() -> SystemData {
         storage: collect_storage(),
         network: collect_network(),
         thermal: collect_thermal(),
+        smbios: crate::hwdiag::smbios::get_info().cloned(),
+        smart_disks: crate::hwdiag::smart::collect_all(),
+        efi: crate::hwdiag::efi_vars::collect_efi_info(),
+        battery: power_info.battery,
+        thermal_zones: power_info.thermal_zones,
     }
 }
 

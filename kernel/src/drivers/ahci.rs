@@ -1166,3 +1166,132 @@ pub fn get_port_info(port_num: u8) -> Option<AhciPort> {
     let controller = ctrl.as_ref()?;
     controller.ports.iter().find(|p| p.port_num == port_num).cloned()
 }
+
+// ============================================================================
+// SMART Support (ATA command 0xB0)
+// ============================================================================
+
+/// Send a non-data SMART command (ENABLE, RETURN STATUS, etc.)
+pub fn send_smart_command(port_num: u8, feature: u8, _has_data: bool) -> Result<(), &'static str> {
+    let mut ctrl = CONTROLLER.lock();
+    let controller = ctrl.as_mut().ok_or("AHCI not initialized")?;
+    if !controller.initialized { return Err("AHCI not initialized"); }
+
+    let port_memory = controller.port_memory[port_num as usize].as_mut()
+        .ok_or("Port memory not allocated")?;
+    let hba = unsafe { &mut *(controller.virt_addr as *mut HbaMemory) };
+    let port = unsafe { &mut *(hba.ports.as_mut_ptr().add(port_num as usize)) };
+
+    port.is = 0xFFFFFFFF;
+    let slot = find_cmdslot(port).ok_or("No free command slot")?;
+
+    let cmd_header = &mut port_memory.cmd_list.headers[slot as usize];
+    cmd_header.flags = 5; // CFL = 5 DWORDs
+    cmd_header.prdtl = 0; // No data transfer
+    cmd_header.prdbc = 0;
+
+    let cmd_table = &mut *port_memory.cmd_tables[slot as usize];
+    let cmd_table_phys = virt_to_phys(cmd_table as *const _ as u64);
+    cmd_header.ctba = cmd_table_phys;
+
+    unsafe { ptr::write_bytes(cmd_table as *mut HbaCmdTable, 0, 1); }
+
+    let cfis = unsafe { &mut *(cmd_table.cfis.as_mut_ptr() as *mut FisRegH2D) };
+    cfis.fis_type = FisType::RegH2D as u8;
+    cfis.pmport_c = 0x80;
+    cfis.command = 0xB0; // ATA SMART
+    cfis.featurel = feature;
+    cfis.lba1 = 0x4F; // SMART signature LBA Mid
+    cfis.lba2 = 0xC2; // SMART signature LBA Hi
+    cfis.device = 0;
+
+    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+
+    // Wait for port ready
+    let mut spin = 0u32;
+    while (port.tfd & ((ATA_DEV_BUSY | ATA_DEV_DRQ) as u32)) != 0 && spin < 1_000_000 {
+        spin += 1;
+        core::hint::spin_loop();
+    }
+    if spin >= 1_000_000 { return Err("Port busy timeout"); }
+
+    port.ci = 1 << slot;
+
+    let mut timeout = 0u32;
+    loop {
+        if (port.ci & (1 << slot)) == 0 { break; }
+        if (port.is & (1 << 30)) != 0 { return Err("SMART command error"); }
+        timeout += 1;
+        if timeout > 10_000_000 { return Err("SMART command timeout"); }
+        core::hint::spin_loop();
+    }
+
+    Ok(())
+}
+
+/// Read 512 bytes of SMART data (READ DATA or READ THRESHOLDS)
+pub fn smart_read_data(port_num: u8, feature: u8) -> Result<[u8; 512], &'static str> {
+    let mut ctrl = CONTROLLER.lock();
+    let controller = ctrl.as_mut().ok_or("AHCI not initialized")?;
+    if !controller.initialized { return Err("AHCI not initialized"); }
+
+    let port_memory = controller.port_memory[port_num as usize].as_mut()
+        .ok_or("Port memory not allocated")?;
+    let hba = unsafe { &mut *(controller.virt_addr as *mut HbaMemory) };
+    let port = unsafe { &mut *(hba.ports.as_mut_ptr().add(port_num as usize)) };
+
+    port.is = 0xFFFFFFFF;
+    let slot = find_cmdslot(port).ok_or("No free command slot")?;
+
+    let cmd_header = &mut port_memory.cmd_list.headers[slot as usize];
+    cmd_header.flags = 5;
+    cmd_header.prdtl = 1;
+    cmd_header.prdbc = 0;
+
+    let cmd_table = &mut *port_memory.cmd_tables[slot as usize];
+    let cmd_table_phys = virt_to_phys(cmd_table as *const _ as u64);
+    cmd_header.ctba = cmd_table_phys;
+
+    unsafe { ptr::write_bytes(cmd_table as *mut HbaCmdTable, 0, 1); }
+
+    // Buffer for SMART data
+    let mut buffer = vec![0u8; 512];
+    let buffer_phys = virt_to_phys(buffer.as_ptr() as u64);
+
+    cmd_table.prdt[0].dba = buffer_phys;
+    cmd_table.prdt[0].dbc_i = (512 - 1) | (1 << 31);
+
+    let cfis = unsafe { &mut *(cmd_table.cfis.as_mut_ptr() as *mut FisRegH2D) };
+    cfis.fis_type = FisType::RegH2D as u8;
+    cfis.pmport_c = 0x80;
+    cfis.command = 0xB0; // ATA SMART
+    cfis.featurel = feature;
+    cfis.countl = 1;
+    cfis.lba1 = 0x4F;
+    cfis.lba2 = 0xC2;
+    cfis.device = 0;
+
+    core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+
+    let mut spin = 0u32;
+    while (port.tfd & ((ATA_DEV_BUSY | ATA_DEV_DRQ) as u32)) != 0 && spin < 1_000_000 {
+        spin += 1;
+        core::hint::spin_loop();
+    }
+    if spin >= 1_000_000 { return Err("Port busy timeout"); }
+
+    port.ci = 1 << slot;
+
+    let mut timeout = 0u32;
+    loop {
+        if (port.ci & (1 << slot)) == 0 { break; }
+        if (port.is & (1 << 30)) != 0 { return Err("SMART read error"); }
+        timeout += 1;
+        if timeout > 10_000_000 { return Err("SMART read timeout"); }
+        core::hint::spin_loop();
+    }
+
+    let mut result = [0u8; 512];
+    result.copy_from_slice(&buffer);
+    Ok(result)
+}

@@ -44,7 +44,7 @@ translated/          — AUTO-GENERATED, never edit
 ### Key Technical Constraints
 - **`#![no_std]`** everywhere — no standard library
 - **`panic = "abort"`** — no unwinding
-- **Target**: `x86_64-unknown-none` (primary), `aarch64-unknown-none` (secondary)
+- **Target**: `x86_64-unknown-none` (primary), `aarch64-unknown-none` (experimental), `riscv64gc-unknown-none-elf` (WIP stubs only)
 - **Toolchain**: Rust nightly (see `rust-toolchain.toml`)
 - **Allocator**: `linked_list_allocator` — heap available after init
 - **No `unwrap()` in kernel code** — use `if let`, `match`, or `.unwrap_or()`

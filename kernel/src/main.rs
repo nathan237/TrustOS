@@ -75,8 +75,11 @@ mod apps;
 mod graphics;
 mod icons;
 mod browser;
+#[cfg(feature = "extras")]
 mod game3d; // 3D raycasting FPS game engine
+#[cfg(feature = "extras")]
 mod chess;   // Chess game engine with AI
+#[cfg(feature = "extras")]
 mod chess3d; // 3D Matrix-style chess renderer
 #[cfg(feature = "emulators")]
 mod nes;     // NES emulator (MOS 6502 + 2C02 PPU, iNES ROMs)
@@ -88,9 +91,13 @@ mod game_lab; // GameLab — real-time Game Boy emulator analysis dashboard
 mod embedded_roms; // ROM data embedded at compile time from kernel/roms/
 mod cosmic; // COSMIC-style UI framework (libcosmic-inspired)
 mod compositor; // Multi-layer compositor for flicker-free rendering
+#[cfg(feature = "extras")]
 mod holovolume; // Volumetric ASCII raymarcher - 3D holographic desktop
+#[cfg(feature = "extras")]
 mod matrix_fast; // Ultra-optimized Matrix rain with Braille sub-pixels
+#[cfg(feature = "extras")]
 mod formula3d;   // Tsoding-inspired wireframe 3D renderer (perspective projection)
+#[cfg(feature = "extras")]
 mod gpu_emu;      // Virtual GPU - CPU cores emulating GPU parallelism
 // TLS 1.3 pure Rust implementation (no C dependencies)
 mod tls13;
@@ -196,6 +203,7 @@ mod logo_bitmap;
 mod trustlang;
 
 // TrustVideo — custom video codec & player (delta+RLE, no external APIs)
+#[cfg(feature = "extras")]
 mod video;
 
 // Android boot support (boot.img, DTB, PSCI) — aarch64 only
@@ -222,6 +230,7 @@ mod hypervisor;
 #[path = "stubs/hypervisor.rs"]
 mod hypervisor;
 mod rasterizer;
+#[cfg(feature = "extras")]
 mod model_editor;
 
 // Shared math utilities (sin, cos, sqrt, atan2) — centralized
