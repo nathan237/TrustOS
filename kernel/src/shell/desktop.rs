@@ -157,7 +157,13 @@ pub(super) fn cmd_cosmic(args: &[&str]) {
             crate::println!();
             
             crate::println_color!(COLOR_GREEN, "Creating COSMIC renderer...");
-            let mut renderer = CosmicRenderer::new(width, height);
+            let mut renderer = match CosmicRenderer::new(width, height) {
+                Some(r) => r,
+                None => {
+                    crate::println_color!(COLOR_RED, "  ERROR: Failed to create COSMIC renderer (OOM?)");
+                    return;
+                }
+            };
             
             // Clear with COSMIC background
             renderer.clear(dark::BG_BASE);

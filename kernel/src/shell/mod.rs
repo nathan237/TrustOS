@@ -53,9 +53,7 @@ pub fn is_capturing() -> bool {
 /// Used by the desktop terminal to retrieve command output.
 pub fn take_captured() -> String {
     let mut buf = CAPTURE_BUF.lock();
-    let s = buf.clone();
-    buf.clear();
-    s
+    core::mem::take(&mut *buf)
 }
 
 /// Draw a solid block cursor at the current console position (no cursor movement).
@@ -199,7 +197,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "hwtest", "keytest", "hexdump", "xxd", "panic",
     // Hardware debug toolkit
     "hwdiag", "cpudump", "stacktrace", "backtrace", "bootlog", "postcode",
-    "ioport", "rdmsr", "wrmsr", "cpuid", "memmap", "watchdog",
+    "ioport", "rdmsr", "wrmsr", "cpuid", "memmap", "watchdog", "drv",
     // Desktop GUI (multi-layer compositor)
     "desktop", "gui", "mobile", "cosmic", "open", "trustedit",
     // Kernel signature
@@ -221,7 +219,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // ThinkPad EC / Power
     "fan", "temp", "sensors", "cpufreq", "speedstep",
     // Network
-    "ifconfig", "ip", "ipconfig", "ping", "curl", "wget", "download",
+    "ifconfig", "ip", "ipconfig", "wifi", "ping", "curl", "wget", "download",
     "nslookup", "dig", "arp", "route", "netstat",
     // Unix utilities  
     "which", "file", "chmod", "ln", "sort", "uniq", "cut",
@@ -237,6 +235,10 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "lab", "trustlab",
     // TrustProbe
     "hwscan", "trustprobe", "probe",
+    // HWDiag
+    "hwdbg", "hwdebug",
+    // Marionet
+    "marionet", "mario",
     // Fun
     "neofetch", "matrix", "cowsay", "rain",
     // Showcase
@@ -256,6 +258,8 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "cut", "tr", "tee", "xargs", "chmod", "chown", "ln", "readlink",
     "watch", "timeout", "tar", "gzip", "zip", "unzip",
     "service", "systemctl", "crontab", "at", "read",
+    // Debug / network console
+    "netconsole", "nc", "strace",
 ];
 
 /// Run the kernel shell
@@ -663,10 +667,12 @@ fn read_line_with_autocomplete(buffer: &mut [u8]) -> usize {
                 }
             }
             // Poll network stack while idle (DHCP, packet RX, etc.)
+            // Delay net polling for first ~5s after shell start to avoid crashes
+            // when NIC is fresh from PXE boot (gives user time to type netconsole cmd)
             {
                 static POLL_DIVISOR: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(0);
                 let count = POLL_DIVISOR.fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-                if count % 5000 == 0 {
+                if count > 500_000 && count % 5000 == 0 {
                     crate::netstack::poll();
                 }
                 // Poll mesh network more frequently for RPC responsiveness
@@ -886,8 +892,8 @@ fn capture_command(cmd: &str, piped_input: Option<String>) -> String {
     
     // Disable capture mode and return captured output
     CAPTURE_MODE.store(false, core::sync::atomic::Ordering::SeqCst);
-    let buf = CAPTURE_BUF.lock();
-    buf.clone()
+    let mut buf = CAPTURE_BUF.lock();
+    core::mem::take(&mut *buf)
 }
 
 /// Execute a single command, possibly with piped stdin
@@ -1134,6 +1140,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "daw" | "trustdaw" => vm::cmd_daw(args),
         "ifconfig" | "ip" => vm::cmd_ifconfig(),
         "ipconfig" => vm::cmd_ipconfig(args),
+        "wifi" => commands::cmd_wifi(args),
         "ping" => vm::cmd_ping(args),
         "tcpsyn" => vm::cmd_tcpsyn(args),
         "httpget" => vm::cmd_httpget(args),
@@ -1301,6 +1308,8 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "cpuid" => unix::cmd_cpuid(args),
         "memmap" => unix::cmd_memmap(),
         "watchdog" | "wdt" => unix::cmd_watchdog(args),
+        "drv" | "driver" => unix::cmd_drv(args),
+        "netconsole" | "nc" => unix::cmd_netconsole(args),
 
         // -- ThinkPad EC: Fan, Thermal, CPU Frequency --
         "fan" => crate::drivers::thinkpad_ec::cmd_fan(args),
@@ -1316,6 +1325,8 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "trustview" | "tv" => apps::cmd_trustview(args),
         "lab" | "trustlab" => apps::cmd_lab(args),
         "hwscan" | "trustprobe" | "probe" => apps::cmd_hwscan(args),
+        "hwdbg" | "hwdebug" => crate::hwdiag::handle_hwdbg_command(args),
+        "marionet" | "mario" => crate::marionet::handle_command(args),
         "trustlang" | "tl" => apps::cmd_trustlang(args),
         "trustlang_showcase" | "tl_showcase" => apps::cmd_trustlang_showcase(),
         "film" | "trustos_film" => apps::cmd_trustos_film(),

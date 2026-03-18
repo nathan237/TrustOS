@@ -382,7 +382,11 @@ fn find_mount(path: &str) -> Option<(usize, String)> {
     let vfs = VFS.read();
     
     for (idx, mp) in vfs.mounts.iter().enumerate() {
-        if path == mp.path || path.starts_with(&format!("{}/", mp.path)) || mp.path == "/" {
+        if path == mp.path
+            || (path.starts_with(&mp.path)
+                && path.as_bytes().get(mp.path.len()) == Some(&b'/'))
+            || mp.path == "/"
+        {
             let relative = if mp.path == "/" {
                 path.to_string()
             } else {
@@ -408,9 +412,8 @@ fn resolve_path(path: &str) -> VfsResult<(usize, Ino)> {
     
     // Walk the path components
     let mut current_ino = fs.root_inode();
-    let components: Vec<&str> = relative.split('/').filter(|s| !s.is_empty()).collect();
     
-    for component in components {
+    for component in relative.split('/').filter(|s| !s.is_empty()) {
         let dir = fs.get_dir(current_ino)?;
         current_ino = dir.lookup(component)?;
     }

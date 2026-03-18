@@ -29,6 +29,183 @@ fn hc(normal: u32, hc_replacement: u32) -> u32 {
 static EXIT_DESKTOP_FLAG: AtomicBool = AtomicBool::new(false);
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// BACKGROUND RENDER THREAD — Fully isolated rain animation
+// The BG thread renders the animated background into a dedicated buffer.
+// The UI thread copies it in ~0.3ms (memcpy), then draws windows on top.
+// Result: windows have ZERO impact on background fluidity.
+// ═══════════════════════════════════════════════════════════════════════════════
+use core::sync::atomic::{AtomicPtr, AtomicU64};
+
+/// Raw pointer to Desktop — set by UI thread after init, read by BG thread.
+/// Safety: The BG thread only accesses BG-specific fields (matrix_*, global_*,
+/// visualizer, drone_swarm, frame_count). The UI thread only accesses window
+/// fields during rendering. No data races on disjoint fields.
+static BG_DESKTOP_PTR: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
+
+/// Double buffer for background rendering (2 full-screen buffers).
+/// BG thread writes to BACK, then swaps. UI thread reads from FRONT.
+static BG_BUF_A: Mutex<Option<Vec<u32>>> = Mutex::new(None);
+static BG_BUF_B: Mutex<Option<Vec<u32>>> = Mutex::new(None);
+/// 0 = A is front (UI reads A, BG writes B)
+/// 1 = B is front (UI reads B, BG writes A)
+static BG_FRONT_IDX: AtomicU64 = AtomicU64::new(0);
+/// Frame counter in the front buffer (so UI knows it's a new frame)
+static BG_FRAME_READY: AtomicU64 = AtomicU64::new(0);
+/// Last frame consumed by UI thread
+static BG_FRAME_CONSUMED: AtomicU64 = AtomicU64::new(0);
+/// Signal BG thread to stop
+static BG_THREAD_STOP: AtomicBool = AtomicBool::new(false);
+/// BG thread is running
+static BG_THREAD_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Background render thread entry point
+fn bg_render_worker(_arg: u64) -> i32 {
+    crate::serial_println!("[BG-THREAD] Started on CPU {}", crate::cpu::smp::current_cpu_id());
+    BG_THREAD_RUNNING.store(true, Ordering::SeqCst);
+    
+    let width = framebuffer::width();
+    let height = framebuffer::height();
+    let stride = width as usize;
+    let buf_size = stride * height as usize;
+    
+    if buf_size == 0 {
+        crate::serial_println!("[BG-THREAD] ERROR: zero framebuffer size");
+        BG_THREAD_RUNNING.store(false, Ordering::SeqCst);
+        return 1;
+    }
+    
+    let mut frame_num: u64 = 0;
+    
+    while !BG_THREAD_STOP.load(Ordering::Relaxed) {
+        // Wait until UI has consumed the last frame (backpressure)
+        let ready = BG_FRAME_READY.load(Ordering::Relaxed);
+        let consumed = BG_FRAME_CONSUMED.load(Ordering::Relaxed);
+        if ready > consumed + 1 {
+            // UI is behind — yield to avoid wasting CPU
+            crate::thread::yield_thread();
+            continue;
+        }
+        
+        // Determine which buffer to write to (opposite of front)
+        let front = BG_FRONT_IDX.load(Ordering::Acquire);
+        let write_to_a = front == 1; // front=B, so write to A
+        
+        // Get raw pointer to back buffer
+        let buf_ptr = if write_to_a {
+            let guard = BG_BUF_A.lock();
+            match &*guard {
+                Some(buf) => buf.as_ptr() as *mut u32,
+                None => { crate::thread::yield_thread(); continue; }
+            }
+        } else {
+            let guard = BG_BUF_B.lock();
+            match &*guard {
+                Some(buf) => buf.as_ptr() as *mut u32,
+                None => { crate::thread::yield_thread(); continue; }
+            }
+        };
+        
+        // Get Desktop pointer (set by UI thread)
+        let desktop_ptr = BG_DESKTOP_PTR.load(Ordering::Acquire);
+        if desktop_ptr.is_null() {
+            crate::thread::yield_thread();
+            continue;
+        }
+        
+        // SAFETY: Desktop pointer is valid for the lifetime of the desktop.
+        // BG thread only accesses disjoint BG fields (matrix_*, global_*, etc.)
+        // UI thread only accesses window/taskbar fields during rendering.
+        let desktop = unsafe { &mut *(desktop_ptr as *mut Desktop) };
+        
+        // Redirect rendering to our private buffer
+        framebuffer::redirect_rendering(buf_ptr);
+        
+        // Force Full tier — BG thread is isolated, immune to UI FPS drops
+        let saved_tier = desktop.desktop_tier;
+        desktop.desktop_tier = DesktopTier::Full;
+        
+        // Advance frame count and render
+        desktop.frame_count += 1;
+        desktop.draw_background();
+        
+        // Restore tier (UI thread may have changed it for its own use)
+        desktop.desktop_tier = saved_tier;
+        
+        // Reset rendering redirect
+        framebuffer::reset_rendering();
+        
+        // Swap: make newly rendered buffer the front
+        let new_front = if write_to_a { 0u64 } else { 1u64 };
+        BG_FRONT_IDX.store(new_front, Ordering::Release);
+        frame_num += 1;
+        BG_FRAME_READY.store(frame_num, Ordering::Release);
+    }
+    
+    crate::serial_println!("[BG-THREAD] Stopped");
+    BG_THREAD_RUNNING.store(false, Ordering::SeqCst);
+    0
+}
+
+/// Initialize BG double buffers and spawn the background render thread.
+/// Called once from Desktop::init_desktop() after framebuffer is ready.
+fn init_bg_thread(desktop: &mut Desktop) {
+    let width = framebuffer::width() as usize;
+    let height = framebuffer::height() as usize;
+    let size = width * height;
+    if size == 0 { return; }
+    
+    // Allocate double buffers
+    let mut buf_a = alloc::vec::Vec::new();
+    let mut buf_b = alloc::vec::Vec::new();
+    if buf_a.try_reserve_exact(size).is_err() || buf_b.try_reserve_exact(size).is_err() {
+        crate::serial_println!("[BG-THREAD] Failed to allocate double buffers ({} KB each)", size * 4 / 1024);
+        return;
+    }
+    buf_a.resize(size, 0xFF010200u32); // dark bg
+    buf_b.resize(size, 0xFF010200u32);
+    *BG_BUF_A.lock() = Some(buf_a);
+    *BG_BUF_B.lock() = Some(buf_b);
+    crate::serial_println!("[BG-THREAD] Double buffers allocated: 2 × {} KB", size * 4 / 1024);
+    
+    // Publish Desktop pointer for the BG thread
+    let ptr = desktop as *mut Desktop as *mut u8;
+    BG_DESKTOP_PTR.store(ptr, Ordering::Release);
+    
+    // Spawn background render thread
+    BG_THREAD_STOP.store(false, Ordering::SeqCst);
+    let _tid = crate::thread::spawn_kernel("bg-render", bg_render_worker, 0);
+    crate::serial_println!("[BG-THREAD] Spawned render thread (tid={})", _tid);
+}
+
+/// Copy the BG front buffer into the current backbuffer (called by UI thread).
+/// Uses FRAME_BB_PTR if available (fast), otherwise falls back to mutex.
+/// Returns true if a new frame was consumed.
+fn blit_bg_front_to_backbuffer() -> bool {
+    let ready = BG_FRAME_READY.load(Ordering::Acquire);
+    let consumed = BG_FRAME_CONSUMED.load(Ordering::Relaxed);
+    if ready <= consumed {
+        return false; // No new frame
+    }
+    
+    let front = BG_FRONT_IDX.load(Ordering::Acquire);
+    let src_guard = if front == 0 { BG_BUF_A.lock() } else { BG_BUF_B.lock() };
+    
+    if let Some(ref src_buf) = *src_guard {
+        let ptr = framebuffer::frame_bb_ptr();
+        if !ptr.is_null() {
+            let len = src_buf.len();
+            unsafe {
+                core::ptr::copy_nonoverlapping(src_buf.as_ptr(), ptr, len);
+            }
+        }
+    }
+    drop(src_guard);
+    
+    BG_FRAME_CONSUMED.store(ready, Ordering::Release);
+    true
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // JARVIS async inference — run on background thread, poll result in render loop
 // ═══════════════════════════════════════════════════════════════════════════════
 /// Pending JARVIS query (set by terminal, consumed by background thread)
@@ -196,13 +373,34 @@ const CONTEXT_MENU_BORDER: u32 = MENU_BORDER;
 const DESKTOP_BG_TOP: u32 = BG_DEEPEST;
 const DESKTOP_BG_BOTTOM: u32 = 0xFF020303;
 
-// Layout constants (official spec — v2 visual overhaul)
-const TASKBAR_HEIGHT: u32 = 48;
-const TITLE_BAR_HEIGHT: u32 = 28;             // Classic title bar height
-const WINDOW_BORDER_RADIUS: u32 = 8;          // Moderate rounded corners
-const WINDOW_SHADOW_BLUR: u32 = 16;
-const DOCK_ICON_SIZE: u32 = 32;               // Larger dock icons
-const DOCK_WIDTH: u32 = 72;                   // Widened to fit label text (e.g. Settings)
+// Layout constants — resolution-adaptive via scaling module
+// Base values (for 1x / ~1024×768). Scaled proportionally at runtime.
+const BASE_TASKBAR_HEIGHT: u32 = 48;
+const BASE_TITLE_BAR_HEIGHT: u32 = 24;
+const BASE_WINDOW_BORDER_RADIUS: u32 = 6;
+const BASE_WINDOW_SHADOW_BLUR: u32 = 10;
+const BASE_DOCK_ICON_SIZE: u32 = 28;
+const BASE_DOCK_WIDTH: u32 = 64;
+
+// Scaled accessors — drop-in replacement for the old const names
+#[inline(always)]
+#[allow(non_snake_case)]
+fn TASKBAR_HEIGHT() -> u32 { crate::graphics::scaling::scale_ui(BASE_TASKBAR_HEIGHT) }
+#[inline(always)]
+#[allow(non_snake_case)]
+fn TITLE_BAR_HEIGHT() -> u32 { crate::graphics::scaling::scale_ui(BASE_TITLE_BAR_HEIGHT) }
+#[inline(always)]
+#[allow(non_snake_case)]
+fn WINDOW_BORDER_RADIUS() -> u32 { crate::graphics::scaling::scale_ui(BASE_WINDOW_BORDER_RADIUS) }
+#[inline(always)]
+#[allow(non_snake_case)]
+fn WINDOW_SHADOW_BLUR() -> u32 { crate::graphics::scaling::scale_ui(BASE_WINDOW_SHADOW_BLUR) }
+#[inline(always)]
+#[allow(non_snake_case)]
+fn DOCK_ICON_SIZE() -> u32 { crate::graphics::scaling::scale_ui(BASE_DOCK_ICON_SIZE) }
+#[inline(always)]
+#[allow(non_snake_case)]
+fn DOCK_WIDTH() -> u32 { crate::graphics::scaling::scale_ui(BASE_DOCK_WIDTH) }
 
 // Animation state (minimal - no flashy effects)
 const FADE_STEPS: u8 = 8;
@@ -323,7 +521,7 @@ impl WindowAnimation {
         self.target_x = 0;
         self.target_y = 0;
         self.target_width = max_w;
-        self.target_height = max_h - TASKBAR_HEIGHT;
+        self.target_height = max_h - TASKBAR_HEIGHT();
         self.alpha = 1.0;
     }
     
@@ -790,6 +988,7 @@ pub enum WindowType {
     MusicPlayer,  // Music player widget with pulse wave
     WifiNetworks, // WiFi network list
     WifiPassword, // WiFi password dialog
+    WifiAnalyzer, // TrustWave WiFi wave visualizer
 }
 
 /// Window structure
@@ -824,6 +1023,8 @@ pub struct Window {
     // Animation state
     pub animation: WindowAnimation,
     pub pending_close: bool,  // Window should close after animation
+    /// Dirty flag: window needs re-rendering (content/state changed)
+    pub dirty: bool,
 }
 
 /// Resize edge being dragged
@@ -1028,6 +1229,7 @@ impl Window {
             scroll_offset: 0,
             animation: WindowAnimation::new(),
             pending_close: false,
+            dirty: true,
         }
     }
     
@@ -1108,13 +1310,13 @@ impl Window {
     /// Check if point is in title bar
     pub fn in_title_bar(&self, px: i32, py: i32) -> bool {
         px >= self.x && px < self.x + self.width as i32 - 90 &&
-        py >= self.y && py < self.y + TITLE_BAR_HEIGHT as i32
+        py >= self.y && py < self.y + TITLE_BAR_HEIGHT() as i32
     }
     
     /// Check if point is on close button (Windows-style: rightmost, top-right)
     pub fn on_close_button(&self, px: i32, py: i32) -> bool {
         let btn_w = 28i32;
-        let btn_h = TITLE_BAR_HEIGHT as i32;
+        let btn_h = TITLE_BAR_HEIGHT() as i32;
         let bx = self.x + self.width as i32 - btn_w - 1;
         let by = self.y + 1;
         px >= bx && px < bx + btn_w && py >= by && py < by + btn_h
@@ -1123,7 +1325,7 @@ impl Window {
     /// Check if point is on maximize button (Windows-style: second from right)
     pub fn on_maximize_button(&self, px: i32, py: i32) -> bool {
         let btn_w = 28i32;
-        let btn_h = TITLE_BAR_HEIGHT as i32;
+        let btn_h = TITLE_BAR_HEIGHT() as i32;
         let bx = self.x + self.width as i32 - btn_w * 2 - 1;
         let by = self.y + 1;
         px >= bx && px < bx + btn_w && py >= by && py < by + btn_h
@@ -1132,7 +1334,7 @@ impl Window {
     /// Check if point is on minimize button (Windows-style: third from right)
     pub fn on_minimize_button(&self, px: i32, py: i32) -> bool {
         let btn_w = 28i32;
-        let btn_h = TITLE_BAR_HEIGHT as i32;
+        let btn_h = TITLE_BAR_HEIGHT() as i32;
         let bx = self.x + self.width as i32 - btn_w * 3 - 1;
         let by = self.y + 1;
         px >= bx && px < bx + btn_w && py >= by && py < by + btn_h
@@ -1180,10 +1382,10 @@ impl Window {
             self.saved_width = self.width;
             self.saved_height = self.height;
             // Maximize to usable area (right of dock, above taskbar)
-            self.x = DOCK_WIDTH as i32;
+            self.x = DOCK_WIDTH() as i32;
             self.y = 0;
-            self.width = screen_width.saturating_sub(DOCK_WIDTH);
-            self.height = screen_height.saturating_sub(TASKBAR_HEIGHT);
+            self.width = screen_width.saturating_sub(DOCK_WIDTH());
+            self.height = screen_height.saturating_sub(TASKBAR_HEIGHT());
             self.maximized = true;
         }
     }
@@ -1850,7 +2052,7 @@ pub enum RenderMode {
 }
 
 /// Adaptive desktop complexity tier — chosen based on host capabilities.
-/// Higher tiers unlock more visual effects; if FPS drops below 30 for
+/// Higher tiers unlock more visual effects; if FPS drops below 18 for
 /// 3 consecutive seconds the tier auto-downgrades.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum DesktopTier {
@@ -1935,9 +2137,12 @@ pub struct Desktop {
     // GameBoy Input window links (input_window_id -> gb_window_id)
     #[cfg(feature = "emulators")]
     pub gb_input_links: BTreeMap<u32, u32>,
+    // TrustWave WiFi analyzer states (window_id -> WifiAnalyzerState)
+    pub wifi_analyzer_states: BTreeMap<u32, crate::wifi_analyzer::WifiAnalyzerState>,
     // UI scale factor (1 = native, 2 = HiDPI, 3 = ultra)
     pub scale_factor: u32,
     // Matrix rain state (depth-parallax advancing effect)
+    matrix_cols: usize,
     matrix_chars: Vec<u8>,
     matrix_heads: Vec<i32>,
     matrix_speeds: Vec<u32>,
@@ -2056,12 +2261,18 @@ pub struct Desktop {
     fps_high_count: u32,
     /// The initial tier detected at boot (ceiling for auto-upgrade)
     initial_tier: DesktopTier,
+    /// Cooldown frames after tier change (prevents oscillation)
+    tier_cooldown: u32,
     /// Manual override: when true, auto_adjust_tier() is disabled
     pub tier_manual_override: bool,
     /// Snap preview zone (shown while dragging a window near screen edges)
     snap_preview: Option<SnapDir>,
     /// Shortcut help overlay visible (F1 toggle)
     show_shortcuts: bool,
+    /// Window overlay caching: true when any window needs re-rendering
+    windows_dirty: bool,
+    /// Previous cursor position for hover-change detection
+    prev_hover_window_id: Option<u32>,
     // ══════ SHUTDOWN ANIMATION ══════
     /// Shutdown sequence active
     shutdown_active: bool,
@@ -2622,7 +2833,9 @@ impl Desktop {
             gamelab_states: BTreeMap::new(),
             #[cfg(feature = "emulators")]
             gb_input_links: BTreeMap::new(),
+            wifi_analyzer_states: BTreeMap::new(),
             scale_factor: 1,
+            matrix_cols: 256,
             matrix_chars: Vec::new(),
             matrix_heads: Vec::new(),
             matrix_speeds: Vec::new(),
@@ -2694,9 +2907,12 @@ impl Desktop {
             fps_low_count: 0,
             fps_high_count: 0,
             initial_tier: DesktopTier::Full,
+            tier_cooldown: 0,
             tier_manual_override: false,
             snap_preview: None,
             show_shortcuts: false,
+            windows_dirty: true,
+            prev_hover_window_id: None,
             // Shutdown animation
             shutdown_active: false,
             shutdown_start_tick: 0,
@@ -2769,8 +2985,10 @@ impl Desktop {
         
         // Initialize UI scaling based on resolution
         crate::graphics::scaling::init(width, height);
+        crate::graphics::scaling::init_ui_scale(width, height);
         self.scale_factor = crate::graphics::scaling::get_scale_factor();
-        crate::serial_println!("[Desktop] UI scale factor: {}x", self.scale_factor);
+        crate::serial_println!("[Desktop] Text scale: {}x, UI chrome: TASKBAR={}px DOCK={}px TITLE={}px",
+            self.scale_factor, TASKBAR_HEIGHT(), DOCK_WIDTH(), TITLE_BAR_HEIGHT());
         
         // Initialize touch input subsystem
         crate::touch::init();
@@ -2794,6 +3012,16 @@ impl Desktop {
         // Initialize background cache for fast redraws
         crate::serial_println!("[Desktop] init_background_cache...");
         framebuffer::init_background_cache();
+        
+        // Initialize window overlay cache (skip window redraw when unchanged)
+        framebuffer::init_window_overlay();
+        
+        // Initialize background ring buffer (pre-render future frames)
+        framebuffer::init_bg_ring();
+        
+        // Spawn dedicated background render thread (multithread isolation)
+        init_bg_thread(self);
+
         
         // Initialize OpenGL compositor
         crate::serial_println!("[Desktop] init_compositor...");
@@ -2821,21 +3049,27 @@ impl Desktop {
     
     /// Initialize matrix rain background data (depth-parallax advancing effect)
     fn init_matrix_rain(&mut self) {
-        // 256 columns × 4 layers: depth-layered rain with far=dense/slow, near=sparse/fast
-        const MATRIX_COLS: usize = 256;
+        // Dynamic columns: scale proportionally to resolution
+        // Calibrated on T61 (1280px = 256 cols, ~5px per column)
+        // Higher resolution = more columns = same visual density
+        const BASE_COLS: usize = 256;
+        const BASE_WIDTH: usize = 1280;
+        let matrix_cols = ((self.width as usize * BASE_COLS) / BASE_WIDTH).max(BASE_COLS);
+        self.matrix_cols = matrix_cols;
         const NUM_LAYERS: usize = 4;
         const MAX_TRAIL: usize = 40;   // must match draw_background
         const CHARS: &[u8] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ@#$%&*+=<>[]{}|";
         
-        let total = MATRIX_COLS * NUM_LAYERS;
+        crate::serial_println!("[Rain] {}px wide -> {} cols (base=256@1280)", self.width, matrix_cols);
+        let total = matrix_cols * NUM_LAYERS;
         self.matrix_chars = vec![0u8; total * MAX_TRAIL];
         self.matrix_heads = vec![0i32; total];
         self.matrix_speeds = vec![2u32; total];
         self.matrix_seeds = vec![0u32; total];
         
-        let height = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let height = self.height.saturating_sub(TASKBAR_HEIGHT());
         
-        for col in 0..MATRIX_COLS {
+        for col in 0..matrix_cols {
             for layer in 0..NUM_LAYERS {
                 let idx = col * NUM_LAYERS + layer;
                 let seed = (col as u32).wrapping_mul(2654435761)
@@ -2865,7 +3099,7 @@ impl Desktop {
         let proj_w: u32 = 256;
         let proj_h: u32 = 256;
         let screen_w = self.width;
-        let screen_h = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let screen_h = self.height.saturating_sub(TASKBAR_HEIGHT());
         let proj_x = (screen_w / 2).saturating_sub(proj_w / 2);
         let proj_y = (screen_h / 2).saturating_sub(proj_h / 2);
         let pixels = MatrixProjection::generate_test_image(proj_w, proj_h);
@@ -2889,7 +3123,7 @@ impl Desktop {
     // ═══════════════════════════════════════════════════════════════════
     
     /// Matrix layout constants (must match draw_background)
-    const MATRIX_COLS: usize = 256;
+    /// MATRIX_COLS is now dynamic: self.matrix_cols (resolution-scaled)
     const MATRIX_LAYERS: usize = 4;
     const MATRIX_MAX_TRAIL: usize = 40;
 
@@ -2911,7 +3145,8 @@ impl Desktop {
     pub fn matrix_override_cell(&mut self, col: usize, layer: usize, trail_i: usize, cell: CellPixels) -> &mut CellPixels {
         let key = Self::matrix_cell_key(col, layer, trail_i);
         self.matrix_overrides.insert(key, cell);
-        self.matrix_overrides.get_mut(&key).unwrap()
+        // SAFETY: just inserted above
+        self.matrix_overrides.get_mut(&key).unwrap_or_else(|| unreachable!())
     }
 
     /// Override a cell, initializing it from the current glyph character at that position.
@@ -2966,7 +3201,7 @@ impl Desktop {
             for cx in 0..cells_w {
                 let col = start_col + cx;
                 let trail_i = start_trail + cy;
-                if col >= Self::MATRIX_COLS || trail_i >= Self::MATRIX_MAX_TRAIL { continue; }
+                if col >= self.matrix_cols || trail_i >= Self::MATRIX_MAX_TRAIL { continue; }
                 
                 let mut cell = CellPixels::blank();
                 for py in 0..16u8 {
@@ -3107,26 +3342,39 @@ struct AppConfig {
         );
     }
     
-    /// Auto-adjust tier: downgrade if FPS stays below 40 for ~3 seconds,
-    /// upgrade back if FPS stays above 50 for ~5 seconds.
+    /// Auto-adjust tier: downgrade if FPS stays below 18 for ~3 seconds,
+    /// upgrade back if FPS stays above 35 for ~5 seconds.
     /// Called once per frame from draw().
     fn auto_adjust_tier(&mut self) {
         // Skip auto-adjust when user has manually overridden the tier
         if self.tier_manual_override { return; }
+        // BG thread renders independently — tier downgrade is no longer needed
+        // to protect FPS. Background is the only heavy component and it runs
+        // on its own thread at full speed regardless of window count.
+        if BG_THREAD_RUNNING.load(Ordering::Relaxed) { return; }
+        // Skip until FPS has actually been measured at least once
+        if self.fps_current == 0 { return; }
         // Skip auto-adjust during the first 120 frames (FPS not yet stable,
         // especially on slower hardware like T61 where boot takes longer)
         if self.frame_count < 120 { return; }
+        // Cooldown after tier change: wait ~3s before re-evaluating
+        if self.tier_cooldown > 0 {
+            self.tier_cooldown -= 1;
+            self.fps_low_count = 0;
+            self.fps_high_count = 0;
+            return;
+        }
         
         // ── Downgrade: sustained low FPS ──
-        // Threshold raised from 18→40: 20-30fps on T61 should trigger downgrade
-        // to maintain smooth experience rather than allowing sustained low FPS
-        if self.fps_current < 40 {
+        // Threshold set to 18fps: 30fps is perfectly usable and should NOT
+        // trigger a downgrade. Only truly low FPS (choppy experience) warrants it.
+        if self.fps_current < 18 {
             // Critical: if FPS is 0-2, count faster (each frame ≈ seconds of wall time)
-            let increment = if self.fps_current <= 2 { 60 } else if self.fps_current < 18 { 4 } else { 1 };
+            let increment = if self.fps_current <= 2 { 60 } else if self.fps_current < 10 { 4 } else { 1 };
             self.fps_low_count += increment;
             self.fps_high_count = 0;
-        } else if self.fps_current >= 50 {
-            // ── Upgrade candidate: sustained >= 50 FPS ──
+        } else if self.fps_current >= 35 {
+            // ── Upgrade candidate: sustained >= 35 FPS ──
             self.fps_high_count += 1;
             if self.fps_low_count > 0 {
                 self.fps_low_count = self.fps_low_count.saturating_sub(4);
@@ -3139,7 +3387,7 @@ struct AppConfig {
             self.fps_high_count = 0;
         }
         
-        // ~3 seconds of sustained < 40 FPS → downgrade
+        // ~3 seconds of sustained < 18 FPS → downgrade
         if self.fps_low_count >= 120 {
             let old = self.desktop_tier;
             // Emergency: if FPS <= 2, skip directly to Minimal
@@ -3157,19 +3405,24 @@ struct AppConfig {
             };
             if new_tier != old {
                 self.desktop_tier = new_tier;
+                // Lower the ceiling so we never auto-upgrade back to a tier
+                // that proved too heavy (e.g. Full on VBox virtual GPU).
+                self.initial_tier = new_tier;
                 self.fps_low_count = 0;
                 self.fps_high_count = 0;
+                self.tier_cooldown = 180;
                 self.needs_full_redraw = true;
                 self.background_cached = false;
+                framebuffer::invalidate_background_cache();
                 crate::serial_println!(
-                    "[Desktop] Auto-downgrade: {:?} -> {:?} (FPS was {})",
-                    old, new_tier, self.fps_current
+                    "[Desktop] Auto-downgrade: {:?} -> {:?} (FPS was {}, ceiling now {:?})",
+                    old, new_tier, self.fps_current, self.initial_tier
                 );
             }
         }
         
         // ~5 seconds of sustained >= 35 FPS → upgrade (up to initial tier)
-        if self.fps_high_count >= 300 {
+        if self.fps_high_count >= 200 {
             let old = self.desktop_tier;
             let new_tier = match old {
                 DesktopTier::Minimal => DesktopTier::Standard,
@@ -3181,8 +3434,10 @@ struct AppConfig {
                 self.desktop_tier = new_tier;
                 self.fps_high_count = 0;
                 self.fps_low_count = 0;
+                self.tier_cooldown = 180; // ~3s cooldown before next change
                 self.needs_full_redraw = true;
                 self.background_cached = false;
+                framebuffer::invalidate_background_cache();
                 crate::serial_println!(
                     "[Desktop] Auto-upgrade: {:?} -> {:?} (FPS was {})",
                     old, new_tier, self.fps_current
@@ -3263,9 +3518,9 @@ struct AppConfig {
     /// Check if click is on a dock icon
     fn check_icon_click(&self, x: i32, y: i32) -> Option<IconAction> {
         // Dock hit area: full dock strip width
-        if x < 0 || x >= (DOCK_WIDTH + 10) as i32 { return None; }
+        if x < 0 || x >= (DOCK_WIDTH() + 10) as i32 { return None; }
         
-        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT());
         let n_icons = self.icons.len().max(1) as u32;
         let padding = 12u32;
         let available = dock_h.saturating_sub(padding * 2);
@@ -3284,14 +3539,14 @@ struct AppConfig {
     /// Create a new window with type
     pub fn create_window(&mut self, title: &str, x: i32, y: i32, width: u32, height: u32, wtype: WindowType) -> u32 {
         // Clamp window size to fit available screen area (minus dock and taskbar)
-        let usable_w = self.width.saturating_sub(DOCK_WIDTH + 4);
-        let usable_h = self.height.saturating_sub(TASKBAR_HEIGHT + TITLE_BAR_HEIGHT);
+        let usable_w = self.width.saturating_sub(DOCK_WIDTH() + 4);
+        let usable_h = self.height.saturating_sub(TASKBAR_HEIGHT() + TITLE_BAR_HEIGHT());
         let w = width.min(usable_w).max(120);
         let h = height.min(usable_h).max(80);
         // Clamp position so the window stays on-screen
-        let min_x = DOCK_WIDTH as i32 + 2;
+        let min_x = DOCK_WIDTH() as i32 + 2;
         let max_x = (self.width as i32 - w as i32).max(min_x);
-        let max_y = (self.height as i32 - TASKBAR_HEIGHT as i32 - h as i32).max(0);
+        let max_y = (self.height as i32 - TASKBAR_HEIGHT() as i32 - h as i32).max(0);
         let cx = x.max(min_x).min(max_x);
         let cy = y.max(0).min(max_y);
 
@@ -3509,6 +3764,9 @@ struct AppConfig {
                 self.wifi_show_password = false;
                 self.wifi_error_msg = None;
             },
+            WindowType::WifiAnalyzer => {
+                self.wifi_analyzer_states.insert(window.id, crate::wifi_analyzer::WifiAnalyzerState::new());
+            },
             _ => {}
         }
         
@@ -3517,12 +3775,16 @@ struct AppConfig {
         
         let id = window.id;
         self.windows.push(window);
+        self.windows_dirty = true;
+        framebuffer::invalidate_window_overlay();
         id
     }
     
     /// Close a window (with animation if enabled)
     pub fn close_window(&mut self, id: u32) {
         crate::serial_println!("[GUI] close_window({}) start", id);
+        self.windows_dirty = true;
+        framebuffer::invalidate_window_overlay();
         if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
             if w.animate_close() {
                 crate::serial_println!("[GUI] close_window({}) animate path", id);
@@ -3537,6 +3799,7 @@ struct AppConfig {
                 #[cfg(feature = "emulators")]
                 self.gamelab_states.remove(&id);
                 self.lab_states.remove(&id);
+                self.wifi_analyzer_states.remove(&id);
                 // Stop music playback on close
                 if let Some(mp) = self.music_player_states.get_mut(&id) {
                     crate::serial_println!("[GUI] close_window({}) stopping music...", id);
@@ -3566,6 +3829,7 @@ struct AppConfig {
         self.gameboy_states.remove(&id);
         self.binary_viewer_states.remove(&id);
         self.lab_states.remove(&id);
+        self.wifi_analyzer_states.remove(&id);
         if let Some(mp) = self.music_player_states.get_mut(&id) {
             crate::serial_println!("[GUI] close_window({}) stopping music (imm)...", id);
             mp.stop();
@@ -3582,7 +3846,7 @@ struct AppConfig {
     
     /// Minimize/restore a window (with animation)
     pub fn minimize_window(&mut self, id: u32) {
-        let taskbar_y = (self.height - TASKBAR_HEIGHT) as i32;
+        let taskbar_y = (self.height - TASKBAR_HEIGHT()) as i32;
         if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
             if !w.minimized {
                 w.animate_minimize(taskbar_y);
@@ -3594,12 +3858,22 @@ struct AppConfig {
     /// Update all window animations (call each frame)
     pub fn update_animations(&mut self) {
         let mut to_remove = Vec::new();
+        let mut any_active = false;
         
         for w in &mut self.windows {
+            if w.animation.state != AnimationState::None {
+                any_active = true;
+                w.dirty = true;
+            }
             if w.update_animation() {
                 // Animation completed and window should close
                 to_remove.push(w.id);
             }
+        }
+        
+        if any_active || !to_remove.is_empty() {
+            self.windows_dirty = true;
+            framebuffer::invalidate_window_overlay();
         }
         
         // Remove windows that finished closing animation
@@ -3622,12 +3896,15 @@ struct AppConfig {
     pub fn focus_window(&mut self, id: u32) {
         for w in &mut self.windows {
             w.focused = false;
+            w.dirty = true;
         }
         if let Some(idx) = self.windows.iter().position(|w| w.id == id) {
             let mut window = self.windows.remove(idx);
             window.focused = true;
             window.minimized = false;
+            window.dirty = true;
             self.windows.push(window);
+            self.windows_dirty = true;
         }
     }
     
@@ -3666,9 +3943,9 @@ struct AppConfig {
     /// Snap focused window to left/right/quadrant (Win+Arrow or drag-to-edge)
     pub fn snap_focused_window(&mut self, dir: SnapDir) {
         if let Some(w) = self.windows.iter_mut().rev().find(|w| w.focused) {
-            let work_height = self.height.saturating_sub(TASKBAR_HEIGHT);
-            let work_x = DOCK_WIDTH as i32;
-            let work_w = self.width.saturating_sub(DOCK_WIDTH);
+            let work_height = self.height.saturating_sub(TASKBAR_HEIGHT());
+            let work_x = DOCK_WIDTH() as i32;
+            let work_w = self.width.saturating_sub(DOCK_WIDTH());
             let half_w = work_w / 2;
             let half_h = work_height / 2;
             
@@ -3764,6 +4041,8 @@ struct AppConfig {
 
     /// Handle mouse click
     pub fn handle_click(&mut self, x: i32, y: i32, pressed: bool) {
+        // Any mouse click dirties windows
+        self.windows_dirty = true;
         // ════════ MOBILE MODE: route clicks to mobile gesture system ════════
         if self.mobile_state.active {
             let vx = self.mobile_state.vp_x;
@@ -3819,7 +4098,7 @@ struct AppConfig {
                     return;
                 }
                 // Click outside menu (but not on taskbar TrustOS button) → close menu
-                if y < (self.height - TASKBAR_HEIGHT) as i32 || x >= 108 {
+                if y < (self.height - TASKBAR_HEIGHT()) as i32 || x >= 108 {
                     self.start_menu_open = false;
                     self.start_menu_search.clear();
                     return;
@@ -3827,7 +4106,7 @@ struct AppConfig {
             }
             
             // Check taskbar first
-            if y >= (self.height - TASKBAR_HEIGHT) as i32 {
+            if y >= (self.height - TASKBAR_HEIGHT()) as i32 {
                 self.handle_taskbar_click(x, y);
                 return;
             }
@@ -3905,9 +4184,9 @@ struct AppConfig {
                     if self.windows[i].window_type == WindowType::ModelEditor {
                         let win = &self.windows[i];
                         let vx = x - win.x;
-                        let vy = y - win.y - TITLE_BAR_HEIGHT as i32;
+                        let vy = y - win.y - TITLE_BAR_HEIGHT() as i32;
                         let vw = win.width as usize;
-                        let vh = win.height.saturating_sub(TITLE_BAR_HEIGHT) as usize;
+                        let vh = win.height.saturating_sub(TITLE_BAR_HEIGHT()) as usize;
                         let win_id = win.id;
                         if vy >= 0 {
                             if let Some(state) = self.model_editor_states.get_mut(&win_id) {
@@ -3920,7 +4199,7 @@ struct AppConfig {
                     if self.windows[i].window_type == WindowType::Chess {
                         let win = &self.windows[i];
                         let game_x = win.x as i32 + 8;
-                        let game_y = win.y as i32 + TITLE_BAR_HEIGHT as i32 + 4;
+                        let game_y = win.y as i32 + TITLE_BAR_HEIGHT() as i32 + 4;
                         let game_w = win.width.saturating_sub(16) as i32;
                         let cell_size: i32 = 48;
                         let board_size = cell_size * 8;
@@ -3943,9 +4222,9 @@ struct AppConfig {
                     if self.windows[i].window_type == WindowType::Chess3D {
                         let win = &self.windows[i];
                         let content_x = win.x as i32;
-                        let content_y = win.y as i32 + TITLE_BAR_HEIGHT as i32;
+                        let content_y = win.y as i32 + TITLE_BAR_HEIGHT() as i32;
                         let content_w = win.width as i32;
-                        let content_h = win.height.saturating_sub(TITLE_BAR_HEIGHT) as i32;
+                        let content_h = win.height.saturating_sub(TITLE_BAR_HEIGHT()) as i32;
                         let rel_x = x - content_x;
                         let rel_y = y - content_y;
                         if rel_x >= 0 && rel_y >= 0 && rel_x < content_w && rel_y < content_h {
@@ -3969,6 +4248,19 @@ struct AppConfig {
                         }
                     }
 
+                    // Handle TrustWave WiFi analyzer clicks
+                    if self.windows[i].window_type == WindowType::WifiAnalyzer {
+                        let win = &self.windows[i];
+                        let rel_x = x - win.x;
+                        let rel_y = y - win.y;
+                        let win_id = win.id;
+                        let ww = win.width;
+                        let wh = win.height;
+                        if let Some(wa) = self.wifi_analyzer_states.get_mut(&win_id) {
+                            wa.handle_click(rel_x, rel_y, ww, wh);
+                        }
+                    }
+
                     // Handle WiFi networks window clicks
                     if self.windows[i].window_type == WindowType::WifiNetworks {
                         let win = &self.windows[i];
@@ -3988,7 +4280,7 @@ struct AppConfig {
                     if self.windows[i].window_type == WindowType::GameBoyEmu {
                         let win = &self.windows[i];
                         let content_x = win.x as u32;
-                        let content_y = (win.y + TITLE_BAR_HEIGHT as i32) as u32;
+                        let content_y = (win.y + TITLE_BAR_HEIGHT() as i32) as u32;
                         let content_w = win.width;
                         let menu_h: u32 = 22;
                         let win_id = win.id;
@@ -4021,7 +4313,7 @@ struct AppConfig {
                                 let sh = self.height;
                                 let lab_x = win_x + win_w as i32 + 4;
                                 let lab_w = (sw as i32 - lab_x).max(400) as u32;
-                                let lab_h = sh - TASKBAR_HEIGHT;
+                                let lab_h = sh - TASKBAR_HEIGHT();
                                 let lab_id = self.create_window("Game Lab", lab_x, 0, lab_w, lab_h, WindowType::GameLab);
                                 if let Some(lab) = self.gamelab_states.get_mut(&lab_id) {
                                     lab.linked_gb_id = Some(win_id);
@@ -4036,9 +4328,9 @@ struct AppConfig {
                     if self.windows[i].window_type == WindowType::GameBoyInput {
                         let win = &self.windows[i];
                         let cx = win.x as u32;
-                        let cy = (win.y + TITLE_BAR_HEIGHT as i32) as u32;
+                        let cy = (win.y + TITLE_BAR_HEIGHT() as i32) as u32;
                         let cw = win.width;
-                        let ch = win.height.saturating_sub(TITLE_BAR_HEIGHT);
+                        let ch = win.height.saturating_sub(TITLE_BAR_HEIGHT());
                         let win_id = win.id;
                         let mx = x as u32;
                         let my = y as u32;
@@ -4071,7 +4363,7 @@ struct AppConfig {
                         if let Some(lab) = self.gamelab_states.get_mut(&win_id) {
                             // Check Save/Load header button clicks
                             let save_rx = ww as i32 - 120;
-                            if rel_y >= TITLE_BAR_HEIGHT as i32 + 2 && rel_y < TITLE_BAR_HEIGHT as i32 + 18 {
+                            if rel_y >= TITLE_BAR_HEIGHT() as i32 + 2 && rel_y < TITLE_BAR_HEIGHT() as i32 + 18 {
                                 if rel_x >= save_rx && rel_x < save_rx + 48 {
                                     // SAVE click
                                     let emu_id = lab.linked_gb_id
@@ -4112,7 +4404,7 @@ struct AppConfig {
                         let win = &self.windows[i];
                         let wx = win.x;
                         let wy = win.y;
-                        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+                        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
                         let sidebar_w = 140i32;
                         let item_h = 32i32;
                         
@@ -4179,9 +4471,9 @@ struct AppConfig {
                     if self.windows[i].window_type == WindowType::Calculator {
                         let win = &self.windows[i];
                         let cx_start = win.x as u32 + 4;
-                        let cy_start = win.y as u32 + TITLE_BAR_HEIGHT + 4;
+                        let cy_start = win.y as u32 + TITLE_BAR_HEIGHT() + 4;
                         let cw = win.width.saturating_sub(8);
-                        let ch = win.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
+                        let ch = win.height.saturating_sub(TITLE_BAR_HEIGHT() + 8);
                         let display_h = 56u32;
                         let btn_area_y = cy_start + display_h + 12;
                         let btn_cols = 4u32;
@@ -4235,7 +4527,7 @@ struct AppConfig {
                     if self.windows[i].window_type == WindowType::MusicPlayer {
                         let win = &self.windows[i];
                         let wx = win.x as u32;
-                        let wy = win.y as u32 + TITLE_BAR_HEIGHT;
+                        let wy = win.y as u32 + TITLE_BAR_HEIGHT();
                         let ww = win.width;
                         let pad = 10u32;
                         let inner_x = wx + pad;
@@ -4458,9 +4750,9 @@ struct AppConfig {
                 if w.dragging {
                     if let Some(dir) = snap_dir {
                         // Apply snap: resize window to preview zone (accounting for dock)
-                        let work_h = self.height.saturating_sub(TASKBAR_HEIGHT);
-                        let work_x = DOCK_WIDTH as i32;
-                        let work_w = self.width.saturating_sub(DOCK_WIDTH);
+                        let work_h = self.height.saturating_sub(TASKBAR_HEIGHT());
+                        let work_x = DOCK_WIDTH() as i32;
+                        let work_w = self.width.saturating_sub(DOCK_WIDTH());
                         let half_w = work_w / 2;
                         let half_h = work_h / 2;
                         match dir {
@@ -4506,7 +4798,7 @@ struct AppConfig {
                         // Find the window to compute board coordinates
                         if let Some(win) = self.windows.iter().find(|w| w.id == id) {
                             let game_x = win.x as i32 + 8;
-                            let game_y = win.y as i32 + TITLE_BAR_HEIGHT as i32 + 4;
+                            let game_y = win.y as i32 + TITLE_BAR_HEIGHT() as i32 + 4;
                             let game_w = win.width.saturating_sub(16) as i32;
                             let cell_size: i32 = 48;
                             let board_size = cell_size * 8;
@@ -4573,7 +4865,7 @@ struct AppConfig {
         if let Some(fm_info) = self.windows.iter().find(|w| {
             w.window_type == WindowType::FileManager
             && x >= w.x && x < w.x + w.width as i32
-            && y >= w.y + TITLE_BAR_HEIGHT as i32 + 36 + 1 + 24 // below column headers
+            && y >= w.y + TITLE_BAR_HEIGHT() as i32 + 36 + 1 + 24 // below column headers
             && y < w.y + w.height as i32
         }).map(|w| (w.id, w.x, w.y, w.width, w.height, w.file_path.clone(), w.selected_index, w.content.len())) {
             let (wid, wx, wy, ww, _wh, file_path_opt, sel_idx, content_len) = fm_info;
@@ -4582,7 +4874,7 @@ struct AppConfig {
             // Only show context menu if click is in the file list area (right of sidebar)
             if x >= wx + sidebar_w {
                 // Determine which file is under the cursor
-                let content_y = wy + TITLE_BAR_HEIGHT as i32;
+                let content_y = wy + TITLE_BAR_HEIGHT() as i32;
                 let body_y = content_y + 36 + 1;
                 let list_start_y = body_y + 24 + 1;
                 let row_h = 26i32;
@@ -4671,7 +4963,7 @@ struct AppConfig {
         }
         
         // Check if right-click on desktop (empty area)
-        if y < (self.height - TASKBAR_HEIGHT) as i32 {
+        if y < (self.height - TASKBAR_HEIGHT()) as i32 {
             self.show_desktop_context_menu(x, y);
         }
     }
@@ -4987,10 +5279,10 @@ struct AppConfig {
     /// Get icon index at position — uses same dynamic layout as draw_desktop_icons
     fn check_icon_index(&self, x: i32, y: i32) -> Option<usize> {
         // Must be within dock strip
-        if x < 0 || x >= (DOCK_WIDTH + 10) as i32 {
+        if x < 0 || x >= (DOCK_WIDTH() + 10) as i32 {
             return None;
         }
-        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT());
         let n_icons = self.icons.len().max(1) as u32;
         let padding = 12u32;
         let available = dock_h.saturating_sub(padding * 2);
@@ -5030,13 +5322,13 @@ struct AppConfig {
             },
             IconAction::OpenMusicPlayer => {
                 let mp_x = self.width.saturating_sub(340) as i32;
-                let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 600) as i32;
+                let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT() + 600) as i32;
                 self.create_window("Music Player", mp_x, mp_y.max(20), 320, 580, WindowType::MusicPlayer)
             },
             IconAction::OpenGame => {
                 let sw = self.width;
                 let sh = self.height;
-                let id = self.create_window("TrustChess 3D", 0, 0, sw, sh - TASKBAR_HEIGHT, WindowType::Chess3D);
+                let id = self.create_window("TrustChess 3D", 0, 0, sw, sh - TASKBAR_HEIGHT(), WindowType::Chess3D);
                 if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
                     w.maximized = true;
                 }
@@ -5072,7 +5364,7 @@ struct AppConfig {
                 // Open on the right side, leaving room for Game Boy (480px)
                 let lab_x = 490i32;
                 let lab_w = (sw as i32 - lab_x).max(400) as u32;
-                let lab_h = sh - TASKBAR_HEIGHT;
+                let lab_h = sh - TASKBAR_HEIGHT();
                 let lab_id = self.create_window("Game Lab", lab_x, 0, lab_w, lab_h, WindowType::GameLab);
                 lab_id
             },
@@ -5098,11 +5390,22 @@ struct AppConfig {
             return;
         }
         
-        // Settings button in system tray (gear icon)
+        // Settings gear icon in system tray → cycles desktop display mode
         let tray_x = self.width - 120;
         let settings_x = tray_x - 44;
         if x >= settings_x as i32 && x < (settings_x + 40) as i32 {
-            self.open_settings_panel();
+            let new_tier = match self.desktop_tier {
+                DesktopTier::Full => DesktopTier::Standard,
+                DesktopTier::Standard => DesktopTier::Minimal,
+                DesktopTier::Minimal | DesktopTier::CliOnly => DesktopTier::Full,
+            };
+            self.desktop_tier = new_tier;
+            self.tier_manual_override = true;
+            self.fps_low_count = 0;
+            self.fps_high_count = 0;
+            self.needs_full_redraw = true;
+            self.background_cached = false;
+            crate::serial_println!("[Desktop] Tier toggle from gear icon: {:?}", new_tier);
             return;
         }
 
@@ -5165,7 +5468,7 @@ struct AppConfig {
         let menu_w = 480u32;
         let menu_h = 680u32;
         let menu_x = 4i32;
-        let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
+        let menu_y = (self.height - TASKBAR_HEIGHT() - menu_h - 8) as i32;
         
         // Check if click is inside the start menu at all
         if x < menu_x || x >= menu_x + menu_w as i32 || y < menu_y || y >= menu_y + menu_h as i32 {
@@ -5175,17 +5478,17 @@ struct AppConfig {
         // Search bar: menu_y + 34, height 36 → items start at menu_y + 78
         let items_start_y = menu_y + 78;
         
-        // App labels (indices 0-14, non-special)
-        let app_labels: [&str; 15] = [
+        // App labels (indices 0-15, non-special)
+        let app_labels: [&str; 16] = [
             "Terminal", "Files", "Calculator", "Network", "Text Editor",
             "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
-            "NES Emulator", "Game Boy", "TrustLab", "Music Player", "Settings",
+            "NES Emulator", "Game Boy", "TrustLab", "Music Player", "TrustWave", "Settings",
         ];
-        let app_indices: [u8; 15] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14];
+        let app_indices: [u8; 16] = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
         
-        // Power labels (indices 15-17, bottom-anchored)
+        // Power labels (indices 16-18, bottom-anchored)
         let power_labels: [&str; 3] = ["Exit Desktop", "Shutdown", "Reboot"];
-        let power_indices: [u8; 3] = [15, 16, 17];
+        let power_indices: [u8; 3] = [16, 17, 18];
         
         let search = self.start_menu_search.trim();
         let search_lower: String = search.chars().map(|c| if c.is_ascii_uppercase() { (c as u8 + 32) as char } else { c }).collect();
@@ -5242,7 +5545,7 @@ struct AppConfig {
     fn handle_menu_action(&mut self, action: u8) {
         // Matches draw_start_menu items array order:
         // 0=Terminal, 1=Files, 2=Calculator, 3=Network, 4=TextEditor,
-        // 5=TrustEdit3D, 6=Browser, 7=Chess3D, 8=Chess2D, 9=Snake, 10=NES, 11=GameBoy, 12=TrustLab, 13=MusicPlayer, 14=Settings, 15=Exit Desktop, 16=Shutdown, 17=Reboot
+        // 5=TrustEdit3D, 6=Browser, 7=Chess3D, 8=Chess2D, 9=Snake, 10=NES, 11=GameBoy, 12=TrustLab, 13=MusicPlayer, 14=TrustWave, 15=Settings, 16=Exit Desktop, 17=Shutdown, 18=Reboot
         match action {
             0 => { // Terminal
                 let x = 100 + (self.windows.len() as i32 * 30);
@@ -5270,7 +5573,7 @@ struct AppConfig {
             7 => { // Chess 3D — open fullscreen
                 let sw = self.width;
                 let sh = self.height;
-                let id = self.create_window("TrustChess 3D", 0, 0, sw, sh - TASKBAR_HEIGHT, WindowType::Chess3D);
+                let id = self.create_window("TrustChess 3D", 0, 0, sw, sh - TASKBAR_HEIGHT(), WindowType::Chess3D);
                 // Mark as maximized
                 if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
                     w.maximized = true;
@@ -5296,19 +5599,22 @@ struct AppConfig {
             13 => { // Music Player
                 crate::serial_println!("[GUI] Opening Music Player...");
                 let mp_x = self.width.saturating_sub(320) as i32;
-                let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 600) as i32;
+                let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT() + 600) as i32;
                 crate::serial_println!("[GUI] Music Player pos: {}x{}", mp_x, mp_y.max(20));
                 self.create_window("Music Player", mp_x, mp_y.max(20), 320, 580, WindowType::MusicPlayer);
                 crate::serial_println!("[GUI] Music Player window created OK");
             },
-            14 => { // Settings
+            14 => { // TrustWave WiFi Analyzer
+                self.open_wifi_analyzer();
+            },
+            15 => { // Settings
                 self.open_settings_panel();
             },
-            15 => { // Exit Desktop
+            16 => { // Exit Desktop
                 crate::serial_println!("[GUI] Exit Desktop from start menu");
                 EXIT_DESKTOP_FLAG.store(true, Ordering::SeqCst);
             },
-            16 => { // Shutdown
+            17 => { // Shutdown
                 crate::serial_println!("[SYSTEM] Shutdown sequence initiated");
                 self.shutdown_active = true;
                 self.shutdown_start_tick = crate::logger::get_ticks();
@@ -5317,7 +5623,7 @@ struct AppConfig {
                 self.start_menu_open = false;
                 self.start_menu_search.clear();
             },
-            17 => { // Reboot
+            18 => { // Reboot
                 crate::serial_println!("[SYSTEM] Reboot requested");
                 // Triple fault reboot
                 unsafe {
@@ -5333,6 +5639,8 @@ struct AppConfig {
     /// Handle keyboard input for the focused window
     pub fn handle_keyboard_input(&mut self, key: u8) {
         use crate::keyboard::{KEY_UP, KEY_DOWN};
+        // Any keyboard input dirties windows (content/focus may change)
+        self.windows_dirty = true;
         crate::serial_println!("[KBD-DBG] handle_keyboard_input key={} (0x{:02X}) lock={} start_menu={}",
             key, key, self.lock_screen_active, self.start_menu_open);
         
@@ -5370,7 +5678,7 @@ struct AppConfig {
                     }
                 },
                 0x0D | 0x0A => { // Enter — launch selected or first match
-                    if self.start_menu_selected >= 0 && self.start_menu_selected <= 16 {
+                    if self.start_menu_selected >= 0 && self.start_menu_selected <= 18 {
                         // Launch the selected item
                         let action = self.start_menu_selected as u8;
                         self.start_menu_open = false;
@@ -5380,11 +5688,11 @@ struct AppConfig {
                         return;
                     }
                     // Fallback: launch first matching item by search
-                    let all_labels: [&str; 17] = [
+                    let all_labels: [&str; 19] = [
                         "Terminal", "Files", "Calculator", "Network", "Text Editor",
                         "TrustEdit 3D", "Browser", "Snake", "Chess", "Chess 3D",
-                        "NES Emulator", "Game Boy", "TrustLab",
-                        "Settings", "Exit Desktop", "Shutdown", "Reboot",
+                        "NES Emulator", "Game Boy", "TrustLab", "Music Player",
+                        "TrustWave", "Settings", "Exit Desktop", "Shutdown", "Reboot",
                     ];
                     let search = self.start_menu_search.trim();
                     if !search.is_empty() {
@@ -5557,6 +5865,11 @@ struct AppConfig {
                         } else {
                             lab.handle_key(key);
                         }
+                    }
+                },
+                WindowType::WifiAnalyzer => {
+                    if let Some(wa) = self.wifi_analyzer_states.get_mut(&win_id) {
+                        wa.handle_key(key);
                     }
                 },
                 #[cfg(feature = "emulators")]
@@ -5768,7 +6081,7 @@ struct AppConfig {
                 WindowType::HexViewer => {
                     use crate::keyboard::{KEY_UP, KEY_DOWN, KEY_PGUP, KEY_PGDOWN, KEY_HOME, KEY_END};
                     if let Some(window) = self.windows.iter_mut().find(|w| w.id == win_id) {
-                        let visible_lines = ((window.height.saturating_sub(TITLE_BAR_HEIGHT + 20)) / 16) as usize;
+                        let visible_lines = ((window.height.saturating_sub(TITLE_BAR_HEIGHT() + 20)) / 16) as usize;
                         let max_scroll = window.content.len().saturating_sub(visible_lines);
                         match key {
                             KEY_UP => window.scroll_offset = window.scroll_offset.saturating_sub(1),
@@ -6373,8 +6686,8 @@ struct AppConfig {
         
         if ww < 200 || wh < 160 { return; }
         
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
-        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
+        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
         let safe_x = wx.max(0) as u32;
         
         let is_hc = crate::accessibility::is_high_contrast();
@@ -6858,8 +7171,8 @@ struct AppConfig {
         
         if ww < 200 || wh < 120 { return; }
         
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
-        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
+        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
         let safe_x = wx.max(0) as u32;
         
         let bg = 0xFF0A140Cu32;
@@ -7237,7 +7550,7 @@ struct AppConfig {
         if key == KEY_PGUP || key == KEY_PGDOWN {
             if let Some(window) = self.windows.iter_mut().find(|w| w.focused && w.window_type == WindowType::Terminal) {
                 let line_height = 16usize;
-                let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT as usize + 16);
+                let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT() as usize + 16);
                 let visible_lines = if line_height > 0 { content_area_h / line_height } else { 1 };
                 let max_scroll = window.content.len().saturating_sub(visible_lines);
                 if key == KEY_PGUP {
@@ -7378,7 +7691,7 @@ struct AppConfig {
                     "u2" | "untitled2" | "lofi" | "untitled" => {
                         // Create music player widget and start playback
                         let mp_x = self.width.saturating_sub(320) as i32;
-                        let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT + 600) as i32;
+                        let mp_y = self.height.saturating_sub(TASKBAR_HEIGHT() + 600) as i32;
                         let wid = self.create_window("Music Player", mp_x, mp_y.max(20), 320, 580, WindowType::MusicPlayer);
                         if let Some(mp_state) = self.music_player_states.get_mut(&wid) {
                             mp_state.play_track(0);
@@ -7411,7 +7724,7 @@ struct AppConfig {
                     
                     // Auto-scroll to bottom
                     let line_height = 16usize;
-                    let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT as usize + 16);
+                    let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT() as usize + 16);
                     let visible_lines = if line_height > 0 { content_area_h / line_height } else { 1 };
                     if window.content.len() > visible_lines {
                         window.scroll_offset = window.content.len() - visible_lines;
@@ -7899,12 +8212,12 @@ struct AppConfig {
             // Handle window dragging
             if w.dragging && !w.maximized {
                 w.x = (x - w.drag_offset_x).max(0).min(self.width as i32 - 50);
-                w.y = (y - w.drag_offset_y).max(0).min(self.height as i32 - TASKBAR_HEIGHT as i32 - TITLE_BAR_HEIGHT as i32);
+                w.y = (y - w.drag_offset_y).max(0).min(self.height as i32 - TASKBAR_HEIGHT() as i32 - TITLE_BAR_HEIGHT() as i32);
                 
                 // Detect snap zone while dragging
                 let edge_margin = 16i32;
                 let sw = self.width as i32;
-                let sh = (self.height - TASKBAR_HEIGHT) as i32;
+                let sh = (self.height - TASKBAR_HEIGHT()) as i32;
                 let half_h = sh / 2;
                 
                 if x <= edge_margin && y <= edge_margin + half_h / 4 {
@@ -7956,7 +8269,7 @@ struct AppConfig {
                 match w.resizing {
                     ResizeEdge::Bottom | ResizeEdge::BottomRight | ResizeEdge::BottomLeft => {
                         let new_height = (w.height as i32 + dy).max(w.min_height as i32) as u32;
-                        w.height = new_height.min(self.height - TASKBAR_HEIGHT - w.y as u32);
+                        w.height = new_height.min(self.height - TASKBAR_HEIGHT() - w.y as u32);
                         w.drag_offset_y = y;
                     }
                     _ => {}
@@ -7983,9 +8296,9 @@ struct AppConfig {
             .map(|w| (w.id, w.x, w.y, w.width, w.height));
         if let Some((win_id, wx, wy, ww, wh)) = model_info {
             let vx = x - wx;
-            let vy = y - wy - TITLE_BAR_HEIGHT as i32;
+            let vy = y - wy - TITLE_BAR_HEIGHT() as i32;
             let vw = ww as usize;
-            let vh = wh.saturating_sub(TITLE_BAR_HEIGHT) as usize;
+            let vh = wh.saturating_sub(TITLE_BAR_HEIGHT()) as usize;
             if let Some(state) = self.model_editor_states.get_mut(&win_id) {
                 state.handle_mouse_move(vx, vy, vw, vh);
             }
@@ -8010,7 +8323,7 @@ struct AppConfig {
         if let Some((win_id, wx, wy)) = chess3d_info {
             if let Some(state) = self.chess3d_states.get_mut(&win_id) {
                 let rel_x = x - wx;
-                let rel_y = y - wy - TITLE_BAR_HEIGHT as i32;
+                let rel_y = y - wy - TITLE_BAR_HEIGHT() as i32;
                 state.handle_mouse_move(rel_x, rel_y);
             }
         }
@@ -8018,6 +8331,7 @@ struct AppConfig {
     
     /// Handle scroll wheel
     pub fn handle_scroll(&mut self, delta: i8) {
+        self.windows_dirty = true;
         // Handle model editor scroll (zoom) separately
         let model_info = self.windows.iter().rev().find(|w| w.focused && !w.minimized && w.window_type == WindowType::ModelEditor).map(|w| w.id);
         if let Some(win_id) = model_info {
@@ -8293,8 +8607,8 @@ struct AppConfig {
         self.sys_wifi_connected = crate::drivers::net::wifi::is_connected();
         
         // Tick snake games — only when window is focused and visible
-        let snake_ids: Vec<u32> = self.snake_states.keys().copied().collect();
-        for id in snake_ids {
+        let (snake_ids, snake_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.snake_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &snake_ids[..snake_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
             if is_active {
                 if let Some(snake) = self.snake_states.get_mut(&id) {
@@ -8304,16 +8618,16 @@ struct AppConfig {
         }
         
         // Tick music players — always tick if playing (even minimized, for DMA refill)
-        let mp_ids: Vec<u32> = self.music_player_states.keys().copied().collect();
-        for id in mp_ids {
+        let (mp_ids, mp_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.music_player_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &mp_ids[..mp_n] {
             if let Some(mp) = self.music_player_states.get_mut(&id) {
                 mp.tick();
             }
         }
         
         // Tick 3D game — only when window is focused and visible
-        let game3d_ids: Vec<u32> = self.game3d_states.keys().copied().collect();
-        for id in game3d_ids {
+        let (game3d_ids, game3d_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.game3d_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &game3d_ids[..game3d_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
             if is_active {
                 if let Some(game) = self.game3d_states.get_mut(&id) {
@@ -8325,8 +8639,8 @@ struct AppConfig {
         // Tick NES emulator — only when window is focused and visible
         #[cfg(feature = "emulators")]
         {
-        let nes_ids: Vec<u32> = self.nes_states.keys().copied().collect();
-        for id in nes_ids {
+        let (nes_ids, nes_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.nes_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &nes_ids[..nes_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.focused && w.visible && !w.minimized);
             if is_active {
                 if let Some(emu) = self.nes_states.get_mut(&id) {
@@ -8340,8 +8654,8 @@ struct AppConfig {
         // Integrates GameLab speed control, pausing, breakpoints, trace
         #[cfg(feature = "emulators")]
         {
-        let gb_ids: Vec<u32> = self.gameboy_states.keys().copied().collect();
-        for id in gb_ids {
+        let (gb_ids, gb_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.gameboy_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &gb_ids[..gb_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized && !w.pending_close);
             if is_active {
                 // Find linked GameLab (if any)
@@ -8462,8 +8776,8 @@ struct AppConfig {
         }
         
         // Tick chess timers (~60fps → ~16ms per frame)
-        let chess_ids: Vec<u32> = self.chess_states.keys().copied().collect();
-        for id in chess_ids {
+        let (chess_ids, chess_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.chess_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &chess_ids[..chess_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
             if is_active {
                 if let Some(chess) = self.chess_states.get_mut(&id) {
@@ -8473,8 +8787,8 @@ struct AppConfig {
         }
         
         // Tick TrustLab states — live data refresh
-        let lab_ids: Vec<u32> = self.lab_states.keys().copied().collect();
-        for id in lab_ids {
+        let (lab_ids, lab_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.lab_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &lab_ids[..lab_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
             if is_active {
                 if let Some(lab) = self.lab_states.get_mut(&id) {
@@ -8483,11 +8797,22 @@ struct AppConfig {
             }
         }
         
+        // Tick TrustWave WiFi Analyzer states — live data refresh
+        let (wa_ids, wa_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.wifi_analyzer_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &wa_ids[..wa_n] {
+            let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
+            if is_active {
+                if let Some(wa) = self.wifi_analyzer_states.get_mut(&id) {
+                    wa.tick();
+                }
+            }
+        }
+        
         // Tick GameLab states
         #[cfg(feature = "emulators")]
         {
-        let gamelab_ids: Vec<u32> = self.gamelab_states.keys().copied().collect();
-        for id in gamelab_ids {
+        let (gamelab_ids, gamelab_n) = { let mut b = [0u32; 32]; let mut n = 0; for &k in self.gamelab_states.keys() { if n < 32 { b[n] = k; n += 1; } } (b, n) };
+        for &id in &gamelab_ids[..gamelab_n] {
             let is_active = self.windows.iter().any(|w| w.id == id && w.visible && !w.minimized);
             if is_active {
                 if let Some(lab) = self.gamelab_states.get_mut(&id) {
@@ -8500,6 +8825,15 @@ struct AppConfig {
         // Toggle cursor blink every ~9 frames (~500ms at 18fps)
         if self.frame_count % 9 == 0 {
             self.cursor_blink = !self.cursor_blink;
+            // Only mark focused editor/terminal dirty — not ALL windows
+            for w in self.windows.iter_mut() {
+                if w.focused && w.visible && !w.minimized {
+                    match w.window_type {
+                        WindowType::Terminal | WindowType::TextEditor => { w.dirty = true; }
+                        _ => {}
+                    }
+                }
+            }
         }
         
         // Get mouse state
@@ -8527,6 +8861,53 @@ struct AppConfig {
         // If windows changed, invalidate taskbar in background cache
         if windows_changed {
             self.needs_full_redraw = true;
+            self.windows_dirty = true;
+            framebuffer::invalidate_window_overlay();
+        }
+        
+        // ── Auto-detect window dirty state ──
+        // Any window being dragged or resized → dirty (position/size changing)
+        if self.windows.iter().any(|w| w.dragging || w.resizing != ResizeEdge::None) {
+            self.windows_dirty = true;
+        }
+        // Detect cursor hover changes on window title bar buttons
+        {
+            let hover_id = self.windows.iter().rev()
+                .find(|w| w.visible && !w.minimized && {
+                    let mx = self.cursor_x;
+                    let my = self.cursor_y;
+                    mx >= w.x && mx < w.x + w.width as i32
+                        && my >= w.y && my < w.y + TITLE_BAR_HEIGHT() as i32
+                })
+                .map(|w| w.id);
+            if hover_id != self.prev_hover_window_id {
+                // Only mark the two affected windows dirty (old + new hover)
+                for w in self.windows.iter_mut() {
+                    if Some(w.id) == hover_id || Some(w.id) == self.prev_hover_window_id {
+                        w.dirty = true;
+                    }
+                }
+                self.prev_hover_window_id = hover_id;
+            }
+        }
+        // Mark dynamic-content windows dirty (games, emulators, music players)
+        for w in self.windows.iter_mut() {
+            if !w.visible || w.minimized { continue; }
+            match w.window_type {
+                WindowType::Game | WindowType::Game3D | WindowType::Chess
+                | WindowType::Chess3D | WindowType::Demo3D => { w.dirty = true; }
+                // MusicPlayer: only redraw every 10 frames (~6 Hz) — enough for
+                // progress bar updates without destroying the window overlay cache
+                WindowType::MusicPlayer => {
+                    if self.frame_count % 10 == 0 { w.dirty = true; }
+                }
+                _ => {}
+            }
+            #[cfg(feature = "emulators")]
+            match w.window_type {
+                WindowType::NesEmu | WindowType::GameBoyEmu | WindowType::GameLab => { w.dirty = true; }
+                _ => {}
+            }
         }
         
         // ════════ MOBILE MODE: render portrait UI instead of desktop ════════
@@ -8536,44 +8917,78 @@ struct AppConfig {
             return;
         }
         
-        // Background rendering — tier-adaptive
-        // Full: animated matrix rain every frame (4 layers + visualizer + drones)
-        // Standard: 2-layer rain, no visualizer/drones
-        // Minimal: 1-layer simplified rain (lightweight, any CPU can handle it)
-        // Note: draw_background() fills its own area, no need for redundant clear
-        framebuffer::begin_frame(); // Cache BB pointer — all put_pixel_fast calls are zero-lock
-        self.draw_background();
+        // ════════════════════════════════════════════════════════════════
+        // BACKGROUND: Copy from dedicated BG render thread's front buffer.
+        // The BG thread renders independently at full speed.
+        // If no frame is ready yet (first frame), fall back to live render.
+        // ════════════════════════════════════════════════════════════════
+        framebuffer::begin_frame();
+        if BG_THREAD_RUNNING.load(Ordering::Relaxed) {
+            if !blit_bg_front_to_backbuffer() {
+                // First frame not ready yet — render live as fallback
+                self.draw_background();
+            }
+        } else {
+            self.draw_background();
+        }
+        self.needs_full_redraw = false;
         self.draw_desktop_icons();
         
-        // Draw windows (these change, so always redraw)
+        // ────────────────────────────────────────────────────────────────
+        // WINDOW RENDERING — with overlay cache
+        // Dirty windows: full re-render + cache. Clean: blit cached overlay
+        // over the FRESH background (only opaque window pixels matter;
+        // background is already correct from BG thread or live render).
+        // ────────────────────────────────────────────────────────────────
         let has_visible_windows = self.windows.iter().any(|w| w.visible && !w.minimized);
-        for window in &self.windows {
-            if window.visible && !window.minimized {
-                self.draw_window(window);
+        
+        let any_window_dirty = self.windows_dirty
+            || windows_changed
+            || menu_changed
+            || !framebuffer::is_window_overlay_valid()
+            || self.windows.iter().any(|w| w.visible && !w.minimized && w.dirty);
+        
+        if any_window_dirty || !has_visible_windows {
+            for window in &self.windows {
+                if window.visible && !window.minimized {
+                    self.draw_window(window);
+                }
+            }
+            self.draw_editor_windows();
+            self.draw_model_editor_windows();
+            self.draw_game3d_windows();
+            self.draw_chess3d_windows();
+            #[cfg(feature = "emulators")]
+            self.draw_nes_windows();
+            #[cfg(feature = "emulators")]
+            self.draw_gameboy_windows();
+            
+            if has_visible_windows {
+                framebuffer::cache_window_overlay();
+            }
+            
+            for w in self.windows.iter_mut() {
+                w.dirty = false;
+            }
+            self.windows_dirty = false;
+        } else {
+            // Fast path: stamp cached window rects over fresh background
+            // Use 0 shadow margin — shadow pixels contain stale background blend
+            // and would overwrite the fresh rain. Opaque window body is fine.
+            for window in &self.windows {
+                if window.visible && !window.minimized {
+                    framebuffer::blit_window_overlay_rect(
+                        window.x, window.y,
+                        window.width, window.height,
+                        0, // no shadow margin — keeps background clean
+                    );
+                }
             }
         }
         
-        // Second pass: render editor content (needs &mut for blink counter)
-        self.draw_editor_windows();
-        
-        // Third pass: render model editor windows (needs &mut for state)
-        self.draw_model_editor_windows();
-        
-        // Fourth pass: render 3D game windows (needs &mut for state)
-        self.draw_game3d_windows();
-        
-        // Fifth pass: render 3D chess windows (needs &mut for state)
-        self.draw_chess3d_windows();
-        
-        // Sixth pass: render emulator windows
-        #[cfg(feature = "emulators")]
-        self.draw_nes_windows();
-        #[cfg(feature = "emulators")]
-        self.draw_gameboy_windows();
-        
         // Draw snap preview overlay (translucent green zone while dragging to edge)
         if let Some(snap_dir) = self.snap_preview {
-            let work_h = self.height - TASKBAR_HEIGHT;
+            let work_h = self.height - TASKBAR_HEIGHT();
             let half_w = self.width / 2;
             let half_h = work_h / 2;
             let (sx, sy, sw, sh) = match snap_dir {
@@ -8705,6 +9120,7 @@ struct AppConfig {
         
         // Reset dirty rects for this frame
         self.dirty_rect_count = 0;
+        let force_bg_redraw = self.needs_full_redraw || windows_changed;
         
         // Track what's dirty this frame
         if windows_changed || menu_changed || self.needs_full_redraw {
@@ -8742,8 +9158,18 @@ struct AppConfig {
         if self.mobile_state.active {
             self.draw_mobile_mode();
         } else {
-            framebuffer::clear_backbuffer(0xFF000000);
-            self.draw_background();
+            framebuffer::begin_frame();
+            let gpu_has_windows = self.windows.iter().any(|w| w.visible && !w.minimized);
+            // Use BG thread's pre-rendered frame, fallback to live render
+            if BG_THREAD_RUNNING.load(Ordering::Relaxed) {
+                if !blit_bg_front_to_backbuffer() {
+                    framebuffer::clear_backbuffer(0xFF000000);
+                    self.draw_background();
+                }
+            } else {
+                framebuffer::clear_backbuffer(0xFF000000);
+                self.draw_background();
+            }
             self.draw_desktop_icons();
             
             for window in &self.windows {
@@ -8765,6 +9191,7 @@ struct AppConfig {
             self.draw_drag_ghost();
             if self.lock_screen_active { self.draw_lock_screen(); }
             self.draw_cursor();
+            framebuffer::end_frame();
         }
         
         // Update tracking
@@ -9074,8 +9501,14 @@ struct AppConfig {
         // Clear entire screen to deep black
         framebuffer::clear_backbuffer(0xFF000000);
 
-        // Draw matrix rain background (same as desktop, full screen)
-        self.draw_background();
+        // Draw matrix rain background from BG thread or live fallback
+        if BG_THREAD_RUNNING.load(Ordering::Relaxed) {
+            if !blit_bg_front_to_backbuffer() {
+                self.draw_background();
+            }
+        } else {
+            self.draw_background();
+        }
 
         // Darken area outside viewport for phone-frame effect
         if vx > 0 {
@@ -9474,7 +9907,13 @@ struct AppConfig {
         // 1) Matrix rain — draw dimmed until fully faded
         if matrix_alpha < 255 {
             // Draw the normal background (matrix rain + visualizer + logo)
-            self.draw_background();
+            if BG_THREAD_RUNNING.load(Ordering::Relaxed) {
+                if !blit_bg_front_to_backbuffer() {
+                    self.draw_background();
+                }
+            } else {
+                self.draw_background();
+            }
             
             // Now overlay a black rect with matrix_alpha opacity to fade it
             if matrix_alpha > 0 {
@@ -9516,21 +9955,21 @@ struct AppConfig {
         // 4) Taskbar + Sidebar — draw with slide-out animation
         if ui_alpha < 255 {
             // Draw sidebar (slides left) and taskbar (slides down)
-            let sidebar_offset = (ui_alpha as i32 * DOCK_WIDTH as i32) / 255;
-            let taskbar_offset = (ui_alpha as i32 * TASKBAR_HEIGHT as i32) / 255;
+            let sidebar_offset = (ui_alpha as i32 * DOCK_WIDTH() as i32) / 255;
+            let taskbar_offset = (ui_alpha as i32 * TASKBAR_HEIGHT() as i32) / 255;
             
             // Draw sidebar shifted left (clipped by offset)
-            if sidebar_offset < DOCK_WIDTH as i32 {
+            if sidebar_offset < DOCK_WIDTH() as i32 {
                 // Render sidebar with darkening overlay for fade effect
                 self.draw_desktop_icons();
                 // Darken the sidebar area proportionally
-                framebuffer::fill_rect_alpha(0, 0, DOCK_WIDTH as u32 + 10, height, 0x000000, ui_alpha as u32);
+                framebuffer::fill_rect_alpha(0, 0, DOCK_WIDTH() as u32 + 10, height, 0x000000, ui_alpha as u32);
             }
             
             // Draw taskbar shifted down (with darkening)
-            if taskbar_offset < TASKBAR_HEIGHT as i32 {
+            if taskbar_offset < TASKBAR_HEIGHT() as i32 {
                 self.draw_taskbar();
-                framebuffer::fill_rect_alpha(0, height.saturating_sub(TASKBAR_HEIGHT as u32), width, TASKBAR_HEIGHT as u32, 0x000000, ui_alpha as u32);
+                framebuffer::fill_rect_alpha(0, height.saturating_sub(TASKBAR_HEIGHT() as u32), width, TASKBAR_HEIGHT() as u32, 0x000000, ui_alpha as u32);
             }
         }
         
@@ -9583,7 +10022,7 @@ struct AppConfig {
         // Logo: faithful chrome/silver rendering from bitmap
         // Tier-adaptive: Standard=2 layers, Full=4 layers
         // ═══════════════════════════════════════════════════════════════
-        const MATRIX_COLS: usize = 256;
+        let matrix_cols = self.matrix_cols;
         const MAX_TRAIL: usize = 40;
         let num_layers: usize = if self.desktop_tier >= DesktopTier::Full {
             4
@@ -9620,7 +10059,7 @@ struct AppConfig {
         const MOBILE_COL_SKIP: [usize; 4] = [2, 3, 6, 8];
         let is_mobile = self.mobile_state.active;
         
-        let height = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let height = self.height.saturating_sub(TASKBAR_HEIGHT());
         let width = self.width;
         
         // ── Analyze ALL audio from HDA DMA buffer (source-agnostic) ──
@@ -9649,6 +10088,8 @@ struct AppConfig {
         if refl_start < height {
             framebuffer::fill_rect(0, refl_start, width, height - refl_start, 0xFF020300);
         }
+        // Cached framebuffer + clip context — zero atomic loads for starfield/projection/override
+        let rain_ctx = framebuffer::FrameCtx::snapshot();
         
         // ── Star field: sparse single white pixels ──
         // Deterministic grid with hash-based selection — ~0.15% of pixels twinkle
@@ -9678,7 +10119,7 @@ struct AppConfig {
                             let tri = ((phase & 255) as i32 - 128).unsigned_abs(); // 0..128
                             let lum = 40 + (tri * 60 / 128) as u32; // 40..100 brightness
                             let c = 0xFF000000 | (lum << 16) | (lum << 8) | lum;
-                            framebuffer::put_pixel_fast(px, py, c);
+                            rain_ctx.put_pixel(px, py, c);
                         }
                     }
                     sx += step;
@@ -9697,11 +10138,12 @@ struct AppConfig {
         
         // ── Visualizer: update multi-mode 3D shape projection ──
         // Full tier only — wireframe deformation costs per-column trig
+        // Pass full screen height (self.height) for true center, not taskbar-clipped height
         if self.desktop_tier >= DesktopTier::Full {
             crate::visualizer::update(
                 &mut self.visualizer,
-                width, height,
-                MATRIX_COLS,
+                width, self.height,
+                matrix_cols,
                 m_beat, m_energy,
                 m_sub_bass, m_bass, m_mid, m_treble,
                 m_playing,
@@ -9723,8 +10165,10 @@ struct AppConfig {
         let flow_fade = 250.0f32; // fade zone beyond radius
         
         // ── Render matrix rain with color variety ──
-        let col_width = width / MATRIX_COLS as u32;
-        let half_cols = MATRIX_COLS as f32 / 2.0;
+        // Use full-width spacing: avoid integer truncation gap at right edge
+        // col_width is still used for glyph centering; col X is computed per-column
+        let col_width = (width + matrix_cols as u32 - 1) / matrix_cols as u32;
+        let half_cols = matrix_cols as f32 / 2.0;
         // Flow field phase: slow scrolling offset so the field evolves
         let flow_time = self.frame_count as f32 * 0.008;
         
@@ -9755,7 +10199,7 @@ struct AppConfig {
         let glyph_w = if is_mobile { MOBILE_GLYPH_W[layer] } else { LAYER_GLYPH_W[layer] };
         let glyph_h = if is_mobile { MOBILE_GLYPH_H[layer] } else { LAYER_GLYPH_H[layer] };
         
-        for col in 0..MATRIX_COLS.min(self.matrix_heads.len() / num_layers.max(1)) {
+        for col in 0..matrix_cols.min(self.matrix_heads.len() / num_layers.max(1)) {
             // Column density: skip columns based on layer
             if col_skip > 1 && (col % col_skip) != 0 { continue; }
             
@@ -9763,7 +10207,8 @@ struct AppConfig {
             let speed = self.matrix_speeds[idx];
             let seed = self.matrix_seeds[idx];
             // Apply horizontal parallax sway to x position
-            let base_x = (col as u32 * col_width) + col_width / 2;
+            // Even distribution across full width (no truncation gap at right edge)
+            let base_x = (col as u32 * width) / matrix_cols as u32 + col_width / 2;
             let x = (base_x as i32 + sway_offset).max(0).min(width as i32 - 1) as u32;
             
             // ── Per-layer depth parameters ──
@@ -9808,11 +10253,11 @@ struct AppConfig {
             
             // ── Music-reactive speed boost ──
             let beat_boost = if m_playing {
-                let t = (col as u32 * 2) % (MATRIX_COLS as u32);
-                let col_phase = if t < MATRIX_COLS as u32 {
-                    t as f32 / MATRIX_COLS as f32
+                let t = (col as u32 * 2) % (matrix_cols as u32);
+                let col_phase = if t < matrix_cols as u32 {
+                    t as f32 / matrix_cols as f32
                 } else {
-                    2.0 - t as f32 / MATRIX_COLS as f32
+                    2.0 - t as f32 / matrix_cols as f32
                 };
                 let local_beat = m_beat * (0.5 + col_phase * 0.5);
                 (local_beat * 6.0 + band_amp * 4.0) as i32
@@ -10103,7 +10548,7 @@ struct AppConfig {
                                 fg = (fg as u16 + 10).min(255) as u8;
                             }
                             let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
-                            framebuffer::put_pixel_fast(px, py, fc);
+                            rain_ctx.put_pixel(px, py, fc);
                         }
                     }
                 } else if has_override {
@@ -10139,7 +10584,7 @@ struct AppConfig {
                                 fg = (fg as u16 + 10).min(255) as u8;
                             }
                             let fc = 0xFF000000 | ((fr as u32) << 16) | ((fg as u32) << 8) | (fb as u32);
-                            framebuffer::put_pixel_fast(px, py, fc);
+                            rain_ctx.put_pixel(px, py, fc);
                         }
                     }
                 } else {
@@ -10213,13 +10658,12 @@ struct AppConfig {
             const FILL_TRAIL: usize = 16;
             const FILL_CH: u32 = 16;  // Fill layers use standard 8×16 glyphs
             
-            for col in 0..MATRIX_COLS.min(self.visualizer.column_bounds.len()) {
+            for col in 0..matrix_cols.min(self.visualizer.column_bounds.len()) {
                 // Skip columns with no shape at all (free)
                 let (bmin, bmax) = self.visualizer.column_bounds[col];
                 if bmin < 0 || bmax <= bmin { continue; }
                 
-                let x = (col as u32 * col_width) + col_width / 2;
-                
+                let x = (col as u32 * width) / matrix_cols as u32 + col_width / 2;
                 for fill in 0..NUM_FILL {
                     let fill_seed = (col as u32).wrapping_mul(2654435761)
                         ^ ((fill as u32 + 17).wrapping_mul(0x9E3779B9));
@@ -10389,6 +10833,7 @@ struct AppConfig {
     fn draw_wallpaper_image(&self, wp_data: &crate::theme::WallpaperData, screen_height: u32) {
         use crate::theme::WallpaperMode;
         let mode = crate::theme::THEME.read().wallpaper.mode;
+        let wp_ctx = framebuffer::FrameCtx::snapshot();
         
         match mode {
             WallpaperMode::Stretch => {
@@ -10438,7 +10883,7 @@ struct AppConfig {
                                     + (c01 & 0xFF) * ifx * fy
                                     + (c11 & 0xFF) * fx * fy ) >> 16;
                             
-                            framebuffer::put_pixel_fast(sx, sy, 0xFF000000 | (r << 16) | (g << 8) | b);
+                            wp_ctx.put_pixel(sx, sy, 0xFF000000 | (r << 16) | (g << 8) | b);
                         }
                     }
                 }
@@ -10455,7 +10900,7 @@ struct AppConfig {
                     for x in 0..wp_data.width.min(self.width) {
                         let idx = (y * wp_data.width + x) as usize;
                         if idx < wp_data.pixels.len() {
-                            framebuffer::put_pixel_fast(offset_x + x, offset_y + y, wp_data.pixels[idx]);
+                            wp_ctx.put_pixel(offset_x + x, offset_y + y, wp_data.pixels[idx]);
                         }
                     }
                 }
@@ -10472,7 +10917,7 @@ struct AppConfig {
                                 if dx + x >= self.width { break; }
                                 let idx = (y * wp_data.width + x) as usize;
                                 if idx < wp_data.pixels.len() {
-                                    framebuffer::put_pixel_fast(dx + x, dy + y, wp_data.pixels[idx]);
+                                    wp_ctx.put_pixel(dx + x, dy + y, wp_data.pixels[idx]);
                                 }
                             }
                         }
@@ -10494,7 +10939,7 @@ struct AppConfig {
     /// circuit-board key extending downward with branch nodes, "TrustOS" text
     fn draw_logo_watermark(&self) {
         let center_x = self.width / 2;
-        let center_y = (self.height - TASKBAR_HEIGHT) / 2 - 30;
+        let center_y = (self.height - TASKBAR_HEIGHT()) / 2 - 30;
         
         // Colors matching the logo image
         let green_bright = 0xFF50E050u32;  // Bright green
@@ -10596,7 +11041,7 @@ struct AppConfig {
         ];
         
         for &(by, bx_off, node_r) in branches {
-            if by >= self.height.saturating_sub(TASKBAR_HEIGHT) { continue; }
+            if by >= self.height.saturating_sub(TASKBAR_HEIGHT()) { continue; }
             // Draw branch line
             let sign: i32 = if bx_off < 0 { -1 } else { 1 };
             let abs_off = if bx_off < 0 { -bx_off } else { bx_off };
@@ -10616,7 +11061,7 @@ struct AppConfig {
                     if ddx * ddx + ddy * ddy <= (node_r as i32 / 2) * (node_r as i32 / 2) {
                         let px = node_x + ndx;
                         let py = by + ndy;
-                        if px < self.width && py < self.height.saturating_sub(TASKBAR_HEIGHT) {
+                        if px < self.width && py < self.height.saturating_sub(TASKBAR_HEIGHT()) {
                             framebuffer::put_pixel_fast(px, py, node_color);
                         }
                     }
@@ -10625,7 +11070,7 @@ struct AppConfig {
         }
         
         // Bottom terminator node (larger)
-        if key_end_y + 4 < self.height.saturating_sub(TASKBAR_HEIGHT) {
+        if key_end_y + 4 < self.height.saturating_sub(TASKBAR_HEIGHT()) {
             for dy in 0..8u32 {
                 for dx in 0..8u32 {
                     let ddx = dx as i32 - 4;
@@ -10644,13 +11089,14 @@ struct AppConfig {
         // LEFT DOCK SIDEBAR — Dark translucent panel with glow effects
         // Icons dynamically fill the full sidebar height
         // ═══════════════════════════════════════════════════════════════
-        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT);
+        let dock_h = self.height.saturating_sub(TASKBAR_HEIGHT());
+        let dock_ctx = framebuffer::FrameCtx::snapshot();
         
         // Frosted dark dock background — very dark with slight green tint
         // Draw column by column with opacity blending over matrix rain
         for dy in 0..dock_h {
-            for dx in 0..(DOCK_WIDTH + 10) {
-                let existing = framebuffer::get_pixel_fast(dx, dy);
+            for dx in 0..(DOCK_WIDTH() + 10) {
+                let existing = dock_ctx.get_pixel(dx, dy);
                 let er = ((existing >> 16) & 0xFF) as u32;
                 let eg = ((existing >> 8) & 0xFF) as u32;
                 let eb = (existing & 0xFF) as u32;
@@ -10658,11 +11104,11 @@ struct AppConfig {
                 let nr = (er * 25 / 100 + 4 * 75 / 100).min(255);
                 let ng = (eg * 25 / 100 + 8 * 75 / 100).min(255);
                 let nb = (eb * 25 / 100 + 4 * 75 / 100).min(255);
-                framebuffer::put_pixel_fast(dx, dy, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
+                dock_ctx.put_pixel(dx, dy, 0xFF000000 | (nr << 16) | (ng << 8) | nb);
             }
         }
         // Right edge: chrome separator
-        framebuffer::fill_rect(DOCK_WIDTH + 9, 0, 1, dock_h, CHROME_GHOST);
+        framebuffer::fill_rect(DOCK_WIDTH() + 9, 0, 1, dock_h, CHROME_GHOST);
         
         let icon_size = 36u32;
         let n_icons = self.icons.len().max(1) as u32;
@@ -10677,7 +11123,7 @@ struct AppConfig {
             if iy + icon_size > dock_h { break; }
             
             // Hit test
-            let is_hovered = self.cursor_x >= 0 && self.cursor_x < (DOCK_WIDTH + 10) as i32
+            let is_hovered = self.cursor_x >= 0 && self.cursor_x < (DOCK_WIDTH() + 10) as i32
                 && self.cursor_y >= iy as i32 && self.cursor_y < (iy + icon_total) as i32;
             
             // Darker muted colors normally, vivid glow on hover
@@ -10696,7 +11142,7 @@ struct AppConfig {
                     for gdx in 0..gw {
                         let px = gx + gdx;
                         let py = gy + gdy;
-                        if px >= DOCK_WIDTH + 10 || py >= dock_h { continue; }
+                        if px >= DOCK_WIDTH() + 10 || py >= dock_h { continue; }
                         // Distance from edge of icon area for falloff
                         let inner_x = if gdx < glow_pad { glow_pad - gdx } 
                             else if gdx > gw - glow_pad { gdx - (gw - glow_pad) } 
@@ -11059,7 +11505,7 @@ struct AppConfig {
     }
     
     fn draw_taskbar(&mut self) {
-        let y = self.height - TASKBAR_HEIGHT;
+        let y = self.height - TASKBAR_HEIGHT();
         
         // ═══════════════════════════════════════════════════════════════
         // MODERN TASKBAR — v2: taller, glass morphism, larger icons
@@ -11083,9 +11529,9 @@ struct AppConfig {
                 }
             }
             // Main body (uniform alpha with rounded top) — slightly transparent
-            framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT - radius, 0x040A06, 165);
+            framebuffer::fill_rect_alpha(0, y + radius, w, TASKBAR_HEIGHT() - radius, 0x040A06, 165);
             // Green tint overlay
-            framebuffer::fill_rect_alpha(0, y, w, TASKBAR_HEIGHT, 0x00AA44, 10);
+            framebuffer::fill_rect_alpha(0, y, w, TASKBAR_HEIGHT(), 0x00AA44, 10);
             // Glass top highlight
             if w > radius * 2 {
                 for px in radius..(w - radius) {
@@ -11178,11 +11624,11 @@ struct AppConfig {
             if w.focused {
                 let indicator_w = 60u32.min(btn_w - 14);
                 let indicator_x = btn_x + (btn_w - indicator_w) / 2;
-                draw_rounded_rect((indicator_x) as i32, (y + TASKBAR_HEIGHT - 5) as i32, indicator_w, 3, 1, GREEN_PRIMARY);
-                framebuffer::fill_rect_alpha(indicator_x.saturating_sub(2), y + TASKBAR_HEIGHT - 7, indicator_w + 4, 2, GREEN_PRIMARY, 50);
+                draw_rounded_rect((indicator_x) as i32, (y + TASKBAR_HEIGHT() - 5) as i32, indicator_w, 3, 1, GREEN_PRIMARY);
+                framebuffer::fill_rect_alpha(indicator_x.saturating_sub(2), y + TASKBAR_HEIGHT() - 7, indicator_w + 4, 2, GREEN_PRIMARY, 50);
             } else if !w.minimized {
                 let dot_x = btn_x + btn_w / 2 - 2;
-                framebuffer::fill_rect(dot_x, y + TASKBAR_HEIGHT - 4, 4, 2, GREEN_SUBTLE);
+                framebuffer::fill_rect(dot_x, y + TASKBAR_HEIGHT() - 4, 4, 2, GREEN_SUBTLE);
             }
         }
         
@@ -11289,8 +11735,8 @@ struct AppConfig {
         let sd_w = 8u32;
         let sd_hover = self.cursor_x >= sd_x as i32 && self.cursor_y >= y as i32;
         let sd_color = if sd_hover { GREEN_MUTED } else { GREEN_GHOST };
-        framebuffer::fill_rect(sd_x, y, sd_w, TASKBAR_HEIGHT, sd_color);
-        framebuffer::fill_rect(sd_x, y + 6, 1, TASKBAR_HEIGHT - 12, GREEN_SUBTLE);
+        framebuffer::fill_rect(sd_x, y, sd_w, TASKBAR_HEIGHT(), sd_color);
+        framebuffer::fill_rect(sd_x, y + 6, 1, TASKBAR_HEIGHT() - 12, GREEN_SUBTLE);
     }
     
     fn get_time_string(&mut self) -> String {
@@ -11313,7 +11759,7 @@ struct AppConfig {
         let menu_w = 480u32;
         let menu_h = 680u32;
         let menu_x = 4i32;
-        let menu_y = (self.height - TASKBAR_HEIGHT - menu_h - 8) as i32;
+        let menu_y = (self.height - TASKBAR_HEIGHT() - menu_h - 8) as i32;
         
         let is_hc = crate::accessibility::is_high_contrast();
         
@@ -11387,7 +11833,7 @@ struct AppConfig {
         let items_start_y = search_y + search_h as i32 + 8;
         
         // ── App items — 2-column ICON GRID ──
-        let items: [(&str, &str, bool); 18] = [
+        let items: [(&str, &str, bool); 19] = [
             (">_", "Terminal", false),
             ("[]", "Files", false),
             ("##", "Calculator", false),
@@ -11402,6 +11848,7 @@ struct AppConfig {
             ("GB", "Game Boy", false),
             ("Lb", "TrustLab", false),
             ("Mu", "Music Player", false),
+            ("Wv", "TrustWave", false),
             ("@)", "Settings", false),
             ("<-", "Exit Desktop", true),
             ("!!", "Shutdown", true),
@@ -11551,7 +11998,7 @@ struct AppConfig {
         // CLASSIC WINDOW — Thick borders, transparency, right-side buttons
         // ═══════════════════════════════════════════════════════════════
         
-        let corner_radius = if window.maximized { 0u32 } else { WINDOW_BORDER_RADIUS };
+        let corner_radius = if window.maximized { 0u32 } else { WINDOW_BORDER_RADIUS() };
         
         // Drop shadow — tier-adaptive layers (5 on Full, 2 on Standard, 1 on Minimal)
         // Each fill_rect_alpha is expensive on old CPUs (read-modify-write per pixel)
@@ -11659,7 +12106,7 @@ struct AppConfig {
         // ═══════════════════════════════════════════════════════════════
         // TITLE BAR — Glass gradient with transparency
         // ═══════════════════════════════════════════════════════════════
-        let titlebar_h = TITLE_BAR_HEIGHT;
+        let titlebar_h = TITLE_BAR_HEIGHT();
         let tb_x = (x + 3) as u32;
         let tb_w = w.saturating_sub(6);
         if self.desktop_tier >= DesktopTier::Full {
@@ -11847,7 +12294,7 @@ struct AppConfig {
     
     fn draw_window_content(&self, window: &Window) {
         let content_x = window.x + 8;
-        let content_y = window.y + TITLE_BAR_HEIGHT as i32 + 8;
+        let content_y = window.y + TITLE_BAR_HEIGHT() as i32 + 8;
         
         // TextEditor rendering is handled separately in draw_editor_windows
         if window.window_type == WindowType::TextEditor {
@@ -11955,6 +12402,14 @@ struct AppConfig {
             }
             return;
         }
+
+        // TrustWave WiFi Analyzer
+        if window.window_type == WindowType::WifiAnalyzer {
+            if let Some(state) = self.wifi_analyzer_states.get(&window.id) {
+                crate::wifi_analyzer::draw(state, window.x, window.y, window.width, window.height);
+            }
+            return;
+        }
         
         // GameLab — Game Boy emulator analysis dashboard
         #[cfg(feature = "emulators")]
@@ -11999,7 +12454,7 @@ struct AppConfig {
         // ═══════════════════════════════════════════════════════════════
         if window.window_type == WindowType::Terminal {
             let line_height = 16i32;
-            let content_area_h = (window.height as i32 - TITLE_BAR_HEIGHT as i32 - 16).max(0) as usize;
+            let content_area_h = (window.height as i32 - TITLE_BAR_HEIGHT() as i32 - 16).max(0) as usize;
             let visible_lines = if line_height as usize > 0 { content_area_h / line_height as usize } else { 0 };
             let total_lines = window.content.len();
             
@@ -12113,8 +12568,8 @@ struct AppConfig {
             // ── Modern Scrollbar (rounded thumb) ──
             let scrollbar_w = 6u32;
             let scrollbar_x = (window.x + window.width as i32 - scrollbar_w as i32 - 3) as u32;
-            let track_y = (window.y + TITLE_BAR_HEIGHT as i32 + 2) as u32;
-            let track_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 4);
+            let track_y = (window.y + TITLE_BAR_HEIGHT() as i32 + 2) as u32;
+            let track_h = window.height.saturating_sub(TITLE_BAR_HEIGHT() + 4);
             
             if total_lines > visible_lines {
                 // Track (very subtle)
@@ -12195,9 +12650,9 @@ struct AppConfig {
         for (win_id, wx, wy, ww, wh) in editor_windows {
             if let Some(editor) = self.editor_states.get_mut(&win_id) {
                 let content_x = wx;
-                let content_y = wy + TITLE_BAR_HEIGHT as i32;
+                let content_y = wy + TITLE_BAR_HEIGHT() as i32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 // Clip to window content area
                 framebuffer::set_clip_rect(
@@ -12239,9 +12694,9 @@ struct AppConfig {
         for (win_id, wx, wy, ww, wh) in editor_windows {
             if let Some(state) = self.model_editor_states.get_mut(&win_id) {
                 let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 if content_w < 80 || content_h < 80 { continue; }
                 
@@ -12275,9 +12730,9 @@ struct AppConfig {
         for (win_id, wx, wy, ww, wh) in game_windows {
             if let Some(state) = self.game3d_states.get_mut(&win_id) {
                 let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 if content_w < 80 || content_h < 60 { continue; }
                 
@@ -12310,9 +12765,9 @@ struct AppConfig {
         for (win_id, wx, wy, ww, wh) in chess3d_windows {
             if let Some(state) = self.chess3d_states.get_mut(&win_id) {
                 let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 if content_w < 100 || content_h < 100 { continue; }
                 
@@ -12348,9 +12803,9 @@ struct AppConfig {
         for (win_id, wx, wy, ww, wh) in nes_windows {
             if let Some(emu) = self.nes_states.get_mut(&win_id) {
                 let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 if content_w < 80 || content_h < 60 { continue; }
                 
@@ -12385,9 +12840,9 @@ struct AppConfig {
         for (win_id, wx, wy, ww, wh, _focused) in gb_windows {
             if let Some(emu) = self.gameboy_states.get_mut(&win_id) {
                 let content_x = wx as u32;
-                let content_y = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+                let content_y = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
                 let content_w = ww;
-                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT);
+                let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT());
                 
                 if content_w < 80 || content_h < 60 { continue; }
                 
@@ -12481,9 +12936,9 @@ struct AppConfig {
         
         for (_win_id, wx, wy, ww, wh, linked_id) in input_windows {
             let cx = wx as u32;
-            let cy = (wy + TITLE_BAR_HEIGHT as i32) as u32;
+            let cy = (wy + TITLE_BAR_HEIGHT() as i32) as u32;
             let cw = ww;
-            let ch = wh.saturating_sub(TITLE_BAR_HEIGHT);
+            let ch = wh.saturating_sub(TITLE_BAR_HEIGHT());
             
             if cw < 60 || ch < 40 { continue; }
             
@@ -12504,9 +12959,9 @@ struct AppConfig {
         use crate::graphics::texture;
         
         let demo_x = window.x as u32 + 10;
-        let demo_y = window.y as u32 + TITLE_BAR_HEIGHT + 10;
+        let demo_y = window.y as u32 + TITLE_BAR_HEIGHT() + 10;
         let demo_w = window.width.saturating_sub(20);
-        let demo_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 20);
+        let demo_h = window.height.saturating_sub(TITLE_BAR_HEIGHT() + 20);
         
         if demo_w < 80 || demo_h < 80 {
             return;
@@ -12674,9 +13129,9 @@ struct AppConfig {
     /// Draw Snake game window content
     fn draw_snake_game(&self, window: &Window) {
         let game_x = window.x as u32 + 10;
-        let game_y = window.y as u32 + TITLE_BAR_HEIGHT + 10;
+        let game_y = window.y as u32 + TITLE_BAR_HEIGHT() + 10;
         let game_w = window.width.saturating_sub(20);
-        let game_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 20);
+        let game_h = window.height.saturating_sub(TITLE_BAR_HEIGHT() + 20);
         
         if game_w < 80 || game_h < 80 {
             return;
@@ -12885,9 +13340,9 @@ struct AppConfig {
     /// Draw chess game board
     fn draw_chess_game(&self, window: &Window) {
         let game_x = window.x as u32 + 8;
-        let game_y = window.y as u32 + TITLE_BAR_HEIGHT + 4;
+        let game_y = window.y as u32 + TITLE_BAR_HEIGHT() + 4;
         let game_w = window.width.saturating_sub(16);
-        let game_h = window.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
+        let game_h = window.height.saturating_sub(TITLE_BAR_HEIGHT() + 8);
         
         if game_w < 200 || game_h < 200 {
             return;
@@ -13131,7 +13586,28 @@ struct AppConfig {
             w.x = 0;
             w.y = 0;
             w.width = sw;
-            w.height = sh - TASKBAR_HEIGHT;
+            w.height = sh - TASKBAR_HEIGHT();
+            w.maximized = true;
+        }
+        self.focus_window(id);
+        id
+    }
+
+    /// Open TrustWave WiFi Analyzer (fullscreen)
+    pub fn open_wifi_analyzer(&mut self) -> u32 {
+        let id = self.create_window("TrustWave \u{2014} WiFi Analyzer", 30, 30, 1200, 700, WindowType::WifiAnalyzer);
+        // Force fullscreen (maximized)
+        let sw = crate::framebuffer::width() as u32;
+        let sh = crate::framebuffer::height() as u32;
+        if let Some(w) = self.windows.iter_mut().find(|w| w.id == id) {
+            w.saved_x = w.x;
+            w.saved_y = w.y;
+            w.saved_width = w.width;
+            w.saved_height = w.height;
+            w.x = 0;
+            w.y = 0;
+            w.width = sw;
+            w.height = sh - TASKBAR_HEIGHT();
             w.maximized = true;
         }
         self.focus_window(id);
@@ -13149,8 +13625,8 @@ struct AppConfig {
         let wh = window.height;
         if ww < 60 || wh < 80 { return; }
         
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
-        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT + 28); // 28px for status bar
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
+        let content_h = wh.saturating_sub(TITLE_BAR_HEIGHT() + 28); // 28px for status bar
         let safe_x = if wx < 0 { 0u32 } else { wx as u32 };
         let safe_y = content_y as u32;
         
@@ -13245,7 +13721,7 @@ struct AppConfig {
         let wh = window.height;
         if ww < 80 || wh < 100 { return; }
         
-        let content_y_start = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y_start = wy + TITLE_BAR_HEIGHT() as i32;
         let safe_x = if wx < 0 { 0u32 } else { wx as u32 };
         
         // Sidebar offset
@@ -13298,7 +13774,7 @@ struct AppConfig {
         
         // ── Sidebar (same as list view) ──
         let body_y = content_y_start + toolbar_h as i32 + 1;
-        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h + 1 + 26);
+        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT() + toolbar_h + 1 + 26);
         
         if sidebar_w > 0 && body_h > 20 {
             framebuffer::fill_rect(safe_x, body_y as u32, sidebar_w, body_h, bg_sidebar);
@@ -13483,7 +13959,7 @@ struct AppConfig {
             } else { return; }
         };
         
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
         let toolbar_h = 36i32;
         let sidebar_w = self.fm_states.get(&window_id).map(|f| if f.sidebar_collapsed { 0i32 } else { f.sidebar_width as i32 }).unwrap_or(180);
         
@@ -13561,7 +14037,7 @@ struct AppConfig {
         }
         
         // ── Status bar view mode buttons (bottom-right) ──
-        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h as u32 + 1 + 26);
+        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT() + toolbar_h as u32 + 1 + 26);
         let status_y = content_y + toolbar_h + 1 + body_h as i32;
         if y >= status_y && y < status_y + 24 && ww > 300 {
             let vb_x = wx + ww as i32 - 120;
@@ -13791,7 +14267,7 @@ struct AppConfig {
                 
                 // Refresh target file manager
                 self.refresh_file_manager_by_id(target.id, &target_path);
-            } else if y >= (self.height - TASKBAR_HEIGHT) as i32 {
+            } else if y >= (self.height - TASKBAR_HEIGHT()) as i32 {
                 // Dropped on taskbar — ignore
                 crate::serial_println!("[DnD] Dropped on taskbar, ignoring");
             } else {
@@ -14126,7 +14602,7 @@ struct AppConfig {
         
         if ww < 120 || wh < 140 { return; }
         
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
         let safe_x = wx.max(0) as u32;
         
         // ════════════════ COLORS (Windows 11-inspired + TrustOS green) ════════════════
@@ -14247,7 +14723,7 @@ struct AppConfig {
         
         // ════════════════ SIDEBAR (Windows 11 Navigation Pane) ════════════════
         let body_y = content_y + toolbar_h as i32 + 1;
-        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT + toolbar_h + 1 + 26); // 26 = status bar
+        let body_h = wh.saturating_sub(TITLE_BAR_HEIGHT() + toolbar_h + 1 + 26); // 26 = status bar
         
         if sidebar_w > 0 && body_h > 20 {
             framebuffer::fill_rect(safe_x, body_y as u32, sidebar_w, body_h, bg_sidebar);
@@ -14647,9 +15123,9 @@ struct AppConfig {
     // ═══════════════════════════════════════════════════════════════════════════
     fn draw_music_player(&self, window: &Window) {
         let wx = window.x as u32;
-        let wy = window.y as u32 + TITLE_BAR_HEIGHT;
+        let wy = window.y as u32 + TITLE_BAR_HEIGHT();
         let ww = window.width;
-        let wh = window.height.saturating_sub(TITLE_BAR_HEIGHT);
+        let wh = window.height.saturating_sub(TITLE_BAR_HEIGHT());
 
         if ww < 80 || wh < 80 { return; }
 
@@ -15037,9 +15513,9 @@ struct AppConfig {
     /// Draw interactive Calculator
     fn draw_calculator(&self, window: &Window) {
         let cx = window.x as u32 + 4;
-        let cy = window.y as u32 + TITLE_BAR_HEIGHT + 4;
+        let cy = window.y as u32 + TITLE_BAR_HEIGHT() + 4;
         let cw = window.width.saturating_sub(8);
-        let ch = window.height.saturating_sub(TITLE_BAR_HEIGHT + 8);
+        let ch = window.height.saturating_sub(TITLE_BAR_HEIGHT() + 8);
         
         if cw < 100 || ch < 120 {
             return;
@@ -15194,9 +15670,9 @@ struct AppConfig {
         -> (u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32, u32)
     {
         let bx = window.x as u32 + Self::BROWSER_PAD;
-        let by = window.y as u32 + TITLE_BAR_HEIGHT;
+        let by = window.y as u32 + TITLE_BAR_HEIGHT();
         let bw = window.width.saturating_sub(Self::BROWSER_PAD * 2);
-        let bh = window.height.saturating_sub(TITLE_BAR_HEIGHT + Self::BROWSER_PAD);
+        let bh = window.height.saturating_sub(TITLE_BAR_HEIGHT() + Self::BROWSER_PAD);
 
         let tab_y = by;                                 // tab bar top
         let nav_y = tab_y + Self::BROWSER_TAB_BAR_H;    // navigation bar top
@@ -15226,7 +15702,7 @@ struct AppConfig {
         let wh = window.height;
         if ww < 200 || wh < 200 { return; }
 
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
         let safe_x = wx.max(0) as u32;
 
         let bg_main      = 0xFF0A120Cu32;
@@ -15244,7 +15720,7 @@ struct AppConfig {
         let signal_weak   = 0xFFCC4444u32;
 
         // Background
-        framebuffer::fill_rect(safe_x, content_y as u32, ww, wh - TITLE_BAR_HEIGHT, bg_main);
+        framebuffer::fill_rect(safe_x, content_y as u32, ww, wh - TITLE_BAR_HEIGHT(), bg_main);
 
         // Header bar
         let header_h = 36u32;
@@ -15408,7 +15884,7 @@ struct AppConfig {
         let wh = window.height;
         if ww < 200 || wh < 150 { return; }
 
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
         let safe_x = wx.max(0) as u32;
 
         let bg_main     = 0xFF0A120Cu32;
@@ -15420,7 +15896,7 @@ struct AppConfig {
         let button_cancel  = 0xFF1A0A0Au32;
 
         // Background
-        framebuffer::fill_rect(safe_x, content_y as u32, ww, wh - TITLE_BAR_HEIGHT, bg_main);
+        framebuffer::fill_rect(safe_x, content_y as u32, ww, wh - TITLE_BAR_HEIGHT(), bg_main);
 
         // WiFi icon (arcs)
         let icon_cx = wx as u32 + ww / 2;
@@ -15846,7 +16322,7 @@ struct AppConfig {
             window_type: WindowType::Browser,
             content: Vec::new(), file_path: None,
             selected_index: 0, scroll_offset: 0,
-            animation: WindowAnimation::new(), pending_close: false,
+            animation: WindowAnimation::new(), pending_close: false, dirty: true,
         };
         let (_bx, _by, bw, _bh, _tab_y, nav_y,
              url_bar_x, url_bar_y, url_bar_w, url_bar_h,
@@ -16313,7 +16789,7 @@ struct AppConfig {
         let wy = window.y;
         let ww = window.width;
         let wh = window.height;
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
         let header_h = 36i32;
 
         // Check if connected — banner area
@@ -16371,7 +16847,7 @@ struct AppConfig {
         let wy = window.y;
         let ww = window.width;
         let wh = window.height;
-        let content_y = wy + TITLE_BAR_HEIGHT as i32;
+        let content_y = wy + TITLE_BAR_HEIGHT() as i32;
 
         let input_y = content_y + 108;
         let input_h = 32;
@@ -16938,7 +17414,7 @@ pub fn run() {
                     window.content.push(Desktop::make_prompt("_"));
                     // Auto-scroll to bottom
                     let line_height = 16usize;
-                    let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT as usize + 16);
+                    let content_area_h = (window.height as usize).saturating_sub(TITLE_BAR_HEIGHT() as usize + 16);
                     let visible_lines = if line_height > 0 { content_area_h / line_height } else { 1 };
                     if window.content.len() > visible_lines {
                         window.scroll_offset = window.content.len() - visible_lines;
@@ -17384,7 +17860,7 @@ fn render_start_menu() {
     let menu_w: u32 = 280;
     let menu_h: u32 = 350;
     let x: i32 = 10;
-    let y: i32 = screen_h as i32 - TASKBAR_HEIGHT as i32 - menu_h as i32 - 5;
+    let y: i32 = screen_h as i32 - TASKBAR_HEIGHT() as i32 - menu_h as i32 - 5;
     
     // Background with blur effect simulation
     draw_rounded_rect(x, y, menu_w, menu_h, 12, 0xF0101520);

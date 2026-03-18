@@ -1,6 +1,7 @@
 //! UDP Protocol
 
 use alloc::collections::BTreeMap;
+use alloc::collections::VecDeque;
 use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU16, Ordering};
 use spin::Mutex;
@@ -12,7 +13,7 @@ struct UdpDatagram {
     data: Vec<u8>,
 }
 
-static RX_UDP: Mutex<BTreeMap<u16, Vec<UdpDatagram>>> = Mutex::new(BTreeMap::new());
+static RX_UDP: Mutex<BTreeMap<u16, VecDeque<UdpDatagram>>> = Mutex::new(BTreeMap::new());
 static NEXT_UDP_PORT: AtomicU16 = AtomicU16::new(49152);
 
 pub fn handle_packet(data: &[u8], src_ip: [u8; 4]) {
@@ -49,9 +50,9 @@ pub fn handle_packet(data: &[u8], src_ip: [u8; 4]) {
     }
 
     let mut rx = RX_UDP.lock();
-    let queue = rx.entry(dst_port).or_insert_with(Vec::new);
+    let queue = rx.entry(dst_port).or_insert_with(VecDeque::new);
     if queue.len() < 32 {
-        queue.push(UdpDatagram {
+        queue.push_back(UdpDatagram {
             src_ip,
             src_port,
             data: payload.to_vec(),
@@ -78,21 +79,14 @@ pub fn send_to(dest_ip: [u8; 4], dest_port: u16, src_port: u16, payload: &[u8]) 
 pub fn recv_on(port: u16) -> Option<Vec<u8>> {
     let mut rx = RX_UDP.lock();
     let queue = rx.get_mut(&port)?;
-    if queue.is_empty() {
-        None
-    } else {
-        Some(queue.remove(0).data)
-    }
+    let dgram = queue.pop_front()?;
+    Some(dgram.data)
 }
 
 /// Receive a UDP datagram with source address info (for recvfrom)
 pub fn recv_from(port: u16) -> Option<(Vec<u8>, [u8; 4], u16)> {
     let mut rx = RX_UDP.lock();
     let queue = rx.get_mut(&port)?;
-    if queue.is_empty() {
-        None
-    } else {
-        let dgram = queue.remove(0);
-        Some((dgram.data, dgram.src_ip, dgram.src_port))
-    }
+    let dgram = queue.pop_front()?;
+    Some((dgram.data, dgram.src_ip, dgram.src_port))
 }

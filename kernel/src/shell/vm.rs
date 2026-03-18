@@ -3424,6 +3424,17 @@ pub(super) fn cmd_play(args: &[&str]) {
         return;
     }
 
+    // TrustAnthem
+    if path == "anthem" || path == "trustanthem" || path == "TrustAnthem" {
+        crate::println_color!(COLOR_GREEN, "Playing 'TrustAnthem' — The TrustOS Anthem...");
+        crate::println!("  [Esc] Exit");
+        match crate::trustdaw::audio_viz::play_anthem() {
+            Ok(()) => crate::println!("Playback complete"),
+            Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+        }
+        return;
+    }
+
     crate::println_color!(COLOR_GREEN, "Starting Audio Visualizer...");
     crate::println!("  File: {}", path);
     crate::println!("  [Esc] Exit");

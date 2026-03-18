@@ -103,6 +103,26 @@ pub fn end_frame() {
     FRAME_BB_PTR.store(core::ptr::null_mut(), Ordering::Release);
 }
 
+/// Redirect all rendering functions to write to a custom buffer.
+/// Used by the BG render thread to render into its private buffer.
+/// Caller MUST call `reset_rendering()` when done.
+pub fn redirect_rendering(ptr: *mut u32) {
+    FRAME_BB_PTR.store(ptr, Ordering::Release);
+    FRAME_BB_STRIDE.store(FB_WIDTH.load(Ordering::Relaxed), Ordering::Release);
+    FRAME_BB_HEIGHT.store(FB_HEIGHT.load(Ordering::Relaxed), Ordering::Release);
+}
+
+/// Reset rendering redirect (clear FRAME_BB_PTR).
+pub fn reset_rendering() {
+    FRAME_BB_PTR.store(core::ptr::null_mut(), Ordering::Release);
+}
+
+/// Get the current frame-cached backbuffer pointer (for zero-copy BG blit).
+/// Returns null if not in a frame (begin_frame not called).
+pub fn frame_bb_ptr() -> *mut u32 {
+    FRAME_BB_PTR.load(Ordering::Relaxed)
+}
+
 /// Get raw frame context for batch pixel writes.
 /// Returns (ptr, stride_pixels, height) — caller must ensure begin_frame() was called.
 /// Eliminates per-pixel atomic loads when writing many pixels in a loop.
@@ -112,6 +132,54 @@ pub fn frame_context() -> (*mut u32, u32, u32) {
     let stride = FRAME_BB_STRIDE.load(Ordering::Relaxed) as u32;
     let height = FRAME_BB_HEIGHT.load(Ordering::Relaxed) as u32;
     (ptr, stride, height)
+}
+
+/// Cached frame context including clip rectangle — snapshot all atomics once.
+pub struct FrameCtx {
+    pub ptr: *mut u32,
+    pub stride: u32,
+    pub height: u32,
+    pub clip_active: bool,
+    pub clip_x1: u32,
+    pub clip_y1: u32,
+    pub clip_x2: u32,
+    pub clip_y2: u32,
+}
+
+impl FrameCtx {
+    /// Snapshot current framebuffer + clip state (call once per batch).
+    #[inline(always)]
+    pub fn snapshot() -> Self {
+        Self {
+            ptr: FRAME_BB_PTR.load(Ordering::Relaxed),
+            stride: FRAME_BB_STRIDE.load(Ordering::Relaxed) as u32,
+            height: FRAME_BB_HEIGHT.load(Ordering::Relaxed) as u32,
+            clip_active: CLIP_ACTIVE.load(Ordering::Relaxed),
+            clip_x1: CLIP_X1.load(Ordering::Relaxed),
+            clip_y1: CLIP_Y1.load(Ordering::Relaxed),
+            clip_x2: CLIP_X2.load(Ordering::Relaxed),
+            clip_y2: CLIP_Y2.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Write a pixel using cached context (zero atomic loads per pixel).
+    #[inline(always)]
+    pub fn put_pixel(&self, x: u32, y: u32, color: u32) {
+        if self.ptr.is_null() { put_pixel(x, y, color); return; }
+        if x >= self.stride || y >= self.height { return; }
+        if self.clip_active && !(x >= self.clip_x1 && x < self.clip_x2 && y >= self.clip_y1 && y < self.clip_y2) {
+            return;
+        }
+        unsafe { *self.ptr.add(y as usize * self.stride as usize + x as usize) = color; }
+    }
+
+    /// Read a pixel using cached context.
+    #[inline(always)]
+    pub fn get_pixel(&self, x: u32, y: u32) -> u32 {
+        if self.ptr.is_null() { return get_pixel(x, y); }
+        if x >= self.stride || y >= self.height { return 0; }
+        unsafe { *self.ptr.add(y as usize * self.stride as usize + x as usize) }
+    }
 }
 
 /// Ultra-fast pixel write — uses cached backbuffer pointer, no mutex per call.
@@ -224,6 +292,151 @@ static SCROLLBACK_ENABLED: AtomicBool = AtomicBool::new(false);
 static BACKGROUND_CACHE: Mutex<Option<Box<[u32]>>> = Mutex::new(None);
 static BACKGROUND_VALID: AtomicBool = AtomicBool::new(false);
 
+// ==================== WINDOW OVERLAY CACHE ====================
+// Stores a full-screen snapshot after windows are composited onto the background.
+// On frames where windows haven't changed, we draw a fresh background and then
+// blit only the window rectangles from this cache — avoiding expensive per-window
+// re-rendering (shadows, alpha blending, text, content widgets).
+static WINDOW_OVERLAY: Mutex<Option<Box<[u32]>>> = Mutex::new(None);
+static WINDOW_OVERLAY_VALID: AtomicBool = AtomicBool::new(false);
+
+// ==================== BACKGROUND RING BUFFER ====================
+// Pre-render future background frames when FPS is high (no windows).
+// When windows are visible, consume pre-rendered frames (~0.3ms memcpy)
+// instead of rendering live (~5-10ms). This keeps rain fluid regardless
+// of window rendering cost.
+const BG_RING_CAPACITY: usize = 8;
+
+struct BgRingBuffer {
+    frames: alloc::vec::Vec<Box<[u32]>>,
+    write_idx: usize,
+    read_idx: usize,
+    count: usize,
+    frame_size: usize, // width * height
+}
+
+static BG_RING: Mutex<Option<BgRingBuffer>> = Mutex::new(None);
+
+/// Allocate the background ring buffer (call once during desktop init)
+pub fn init_bg_ring() {
+    let width = FB_WIDTH.load(Ordering::SeqCst) as usize;
+    let height = FB_HEIGHT.load(Ordering::SeqCst) as usize;
+    if width == 0 || height == 0 { return; }
+    let frame_size = width * height;
+    let mut frames = alloc::vec::Vec::new();
+    for i in 0..BG_RING_CAPACITY {
+        let mut buf = alloc::vec::Vec::new();
+        if buf.try_reserve_exact(frame_size).is_err() {
+            crate::serial_println!("[FB] BG ring: OOM at slot {} — allocated {}/{}", i, i, BG_RING_CAPACITY);
+            break;
+        }
+        buf.resize(frame_size, 0u32);
+        frames.push(buf.into_boxed_slice());
+    }
+    let allocated = frames.len();
+    if allocated == 0 {
+        crate::serial_println!("[FB] BG ring: no slots allocated — disabled");
+        return;
+    }
+    *BG_RING.lock() = Some(BgRingBuffer {
+        frames,
+        write_idx: 0,
+        read_idx: 0,
+        count: 0,
+        frame_size,
+    });
+    crate::serial_println!("[FB] BG ring: {} slots × {} KB = {} KB total",
+        allocated, frame_size * 4 / 1024, allocated * frame_size * 4 / 1024);
+}
+
+/// How many pre-rendered background frames are available to consume
+pub fn bg_ring_available() -> usize {
+    if let Some(ref ring) = *BG_RING.lock() {
+        ring.count
+    } else {
+        0
+    }
+}
+
+/// Is the ring buffer full? (no room for more pre-renders)
+pub fn bg_ring_full() -> bool {
+    if let Some(ref ring) = *BG_RING.lock() {
+        ring.count >= ring.frames.len()
+    } else {
+        true
+    }
+}
+
+/// Redirect FRAME_BB_PTR to the next available ring slot for pre-rendering.
+/// Returns true if successful. Caller must call commit_bg_prerender() after drawing.
+/// The caller MUST NOT call begin_frame() before this — this replaces it.
+pub fn begin_bg_prerender() -> bool {
+    let mut guard = BG_RING.lock();
+    let ring = match guard.as_mut() {
+        Some(r) => r,
+        None => return false,
+    };
+    if ring.count >= ring.frames.len() { return false; }
+    let slot = &mut ring.frames[ring.write_idx];
+    FRAME_BB_PTR.store(slot.as_mut_ptr(), Ordering::Release);
+    let width = FB_WIDTH.load(Ordering::Relaxed);
+    let height = FB_HEIGHT.load(Ordering::Relaxed);
+    FRAME_BB_STRIDE.store(width, Ordering::Release);
+    FRAME_BB_HEIGHT.store(height, Ordering::Release);
+    true
+}
+
+/// Commit the pre-rendered frame and advance write pointer.
+/// Resets FRAME_BB_PTR to null (caller should call begin_frame() for normal rendering).
+pub fn commit_bg_prerender() {
+    FRAME_BB_PTR.store(core::ptr::null_mut(), Ordering::Release);
+    let mut guard = BG_RING.lock();
+    if let Some(ref mut ring) = *guard {
+        ring.write_idx = (ring.write_idx + 1) % ring.frames.len();
+        ring.count += 1;
+    }
+}
+
+/// Consume the next pre-rendered background frame by copying it to the backbuffer.
+/// Returns true if a frame was consumed.
+pub fn consume_bg_frame() -> bool {
+    let mut guard = BG_RING.lock();
+    let ring = match guard.as_mut() {
+        Some(r) if r.count > 0 => r,
+        _ => return false,
+    };
+    let slot = &ring.frames[ring.read_idx];
+    // Copy ring slot → backbuffer using frame-cached pointer for speed
+    let ptr = FRAME_BB_PTR.load(Ordering::Relaxed);
+    if !ptr.is_null() {
+        let len = ring.frame_size;
+        unsafe {
+            core::ptr::copy_nonoverlapping(slot.as_ptr(), ptr, len);
+        }
+    } else {
+        // Fallback: mutex-locked backbuffer
+        if let Some(ref mut back_buf) = *BACKBUFFER.lock() {
+            let len = ring.frame_size.min(back_buf.len());
+            unsafe {
+                core::ptr::copy_nonoverlapping(slot.as_ptr(), back_buf.as_mut_ptr(), len);
+            }
+        }
+    }
+    ring.read_idx = (ring.read_idx + 1) % ring.frames.len();
+    ring.count -= 1;
+    true
+}
+
+/// Flush all pre-rendered frames (call when background state changes externally,
+/// e.g. theme change, resolution change)
+pub fn flush_bg_ring() {
+    if let Some(ref mut ring) = *BG_RING.lock() {
+        ring.read_idx = 0;
+        ring.write_idx = 0;
+        ring.count = 0;
+    }
+}
+
 // ==================== DIRTY RECTANGLES ====================
 // Only redraw regions that have changed
 pub const MAX_DIRTY_RECTS: usize = 32;
@@ -326,8 +539,8 @@ static CONSOLE: Mutex<Console> = Mutex::new(Console {
 const CHAR_WIDTH: usize = 8;
 const CHAR_HEIGHT: usize = 16;
 
-/// Maximum framebuffer size for backbuffer allocation (16 MB = ~2560×1600×4)
-const MAX_BACKBUFFER_BYTES: usize = 16 * 1024 * 1024;
+/// Maximum framebuffer size for backbuffer allocation (32 MB = supports up to 4K)
+const MAX_BACKBUFFER_BYTES: usize = 32 * 1024 * 1024;
 
 /// Initialize framebuffer with Limine info
 /// NOTE: This does NOT allocate memory. Call init_scrollback() after heap is ready.
@@ -1870,6 +2083,112 @@ pub fn cache_current_background() {
     drop(bg_guard);
     
     BACKGROUND_VALID.store(true, Ordering::SeqCst);
+}
+
+// ==================== WINDOW OVERLAY FUNCTIONS ====================
+
+/// Initialize window overlay buffer (call once during desktop init)
+pub fn init_window_overlay() {
+    let width = FB_WIDTH.load(Ordering::SeqCst) as usize;
+    let height = FB_HEIGHT.load(Ordering::SeqCst) as usize;
+    if width == 0 || height == 0 { return; }
+    let size = width * height;
+    let mut buffer = alloc::vec::Vec::new();
+    if buffer.try_reserve_exact(size).is_err() {
+        crate::serial_println!("[FB] WARNING: Failed to allocate window overlay {} KB — OOM",
+            size * 4 / 1024);
+        return;
+    }
+    buffer.resize(size, 0u32);
+    *WINDOW_OVERLAY.lock() = Some(buffer.into_boxed_slice());
+    WINDOW_OVERLAY_VALID.store(false, Ordering::SeqCst);
+    crate::serial_println!("[FB] Window overlay cache allocated: {} KB", size * 4 / 1024);
+}
+
+/// Snapshot current backbuffer into window overlay cache (call after drawing all windows)
+pub fn cache_window_overlay() {
+    let width = FB_WIDTH.load(Ordering::SeqCst) as usize;
+    if width == 0 { return; }
+    let mut ov_guard = WINDOW_OVERLAY.lock();
+    let back_guard = BACKBUFFER.lock();
+    if let (Some(ref mut ov_buf), Some(ref back_buf)) = (&mut *ov_guard, &*back_guard) {
+        let len = back_buf.len().min(ov_buf.len());
+        unsafe {
+            core::ptr::copy_nonoverlapping(back_buf.as_ptr(), ov_buf.as_mut_ptr(), len);
+        }
+    }
+    drop(back_guard);
+    drop(ov_guard);
+    WINDOW_OVERLAY_VALID.store(true, Ordering::SeqCst);
+}
+
+/// Check if window overlay cache is valid
+pub fn is_window_overlay_valid() -> bool {
+    WINDOW_OVERLAY_VALID.load(Ordering::SeqCst)
+}
+
+/// Invalidate window overlay cache (force re-render of all windows)
+pub fn invalidate_window_overlay() {
+    WINDOW_OVERLAY_VALID.store(false, Ordering::SeqCst);
+}
+
+/// Blit a rectangular region from the window overlay cache onto the current backbuffer.
+/// Used to stamp cached window pixels over a freshly-drawn background.
+/// Includes shadow margin (extra pixels around the window rect).
+pub fn blit_window_overlay_rect(x: i32, y: i32, w: u32, h: u32, shadow_margin: u32) {
+    let scr_w = FB_WIDTH.load(Ordering::SeqCst) as u32;
+    let scr_h = FB_HEIGHT.load(Ordering::SeqCst) as u32;
+    if scr_w == 0 || scr_h == 0 { return; }
+
+    // Expand rect by shadow margin
+    let rx = (x - shadow_margin as i32).max(0) as u32;
+    let ry = (y - shadow_margin as i32).max(0) as u32;
+    let rx2 = ((x + w as i32 + shadow_margin as i32) as u32).min(scr_w);
+    let ry2 = ((y + h as i32 + shadow_margin as i32) as u32).min(scr_h);
+    if rx2 <= rx || ry2 <= ry { return; }
+
+    // Use frame-cached pointer for fast writes
+    let ptr = FRAME_BB_PTR.load(Ordering::Relaxed);
+    if !ptr.is_null() {
+        let stride = FRAME_BB_STRIDE.load(Ordering::Relaxed) as usize;
+        let ov_guard = WINDOW_OVERLAY.lock();
+        if let Some(ref ov_buf) = *ov_guard {
+            let row_len = (rx2 - rx) as usize;
+            for py in ry..ry2 {
+                let off = py as usize * stride + rx as usize;
+                if off + row_len <= ov_buf.len() {
+                    unsafe {
+                        core::ptr::copy_nonoverlapping(
+                            ov_buf.as_ptr().add(off),
+                            ptr.add(off),
+                            row_len,
+                        );
+                    }
+                }
+            }
+        }
+        return;
+    }
+
+    // Fallback: mutex-locked backbuffer
+    let ov_guard = WINDOW_OVERLAY.lock();
+    let mut back_guard = BACKBUFFER.lock();
+    if let (Some(ref ov_buf), Some(ref mut back_buf)) = (&*ov_guard, &mut *back_guard) {
+        let stride = scr_w as usize;
+        let row_len = (rx2 - rx) as usize;
+        for py in ry..ry2 {
+            let off = py as usize * stride + rx as usize;
+            if off + row_len <= ov_buf.len() && off + row_len <= back_buf.len() {
+                unsafe {
+                    core::ptr::copy_nonoverlapping(
+                        ov_buf.as_ptr().add(off),
+                        back_buf.as_mut_ptr().add(off),
+                        row_len,
+                    );
+                }
+            }
+        }
+    }
 }
 
 // ==================== DIRTY RECTANGLE FUNCTIONS ====================
