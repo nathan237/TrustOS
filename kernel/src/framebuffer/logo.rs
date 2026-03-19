@@ -506,6 +506,7 @@ pub fn update_boot_splash(phase: u32, message: &str) {
             buf[3] = b'%';
             buf[4] = 0;
         }
+        // Safety: buf only contains ASCII digits, ' ', '%' — always valid UTF-8
         unsafe { core::str::from_utf8_unchecked(&buf[..4]) }
     };
     let pct_x = bar_x + bar_w + 8;

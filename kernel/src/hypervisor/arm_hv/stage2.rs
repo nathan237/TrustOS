@@ -323,11 +323,13 @@ impl Stage2Tables {
 
     /// Allocate a zeroed, 4KB-aligned page for a page table
     fn alloc_table() -> *mut u64 {
-        // Use the kernel heap with proper alignment
-        let layout = core::alloc::Layout::from_size_align(4096, 4096).unwrap();
+        // Safety: 4096 is a valid (power-of-2) alignment, so from_size_align cannot fail
+        let layout = core::alloc::Layout::from_size_align(4096, 4096)
+            .expect("BUG: 4096 is always a valid alignment");
         let ptr = unsafe { alloc::alloc::alloc_zeroed(layout) as *mut u64 };
         if ptr.is_null() {
-            panic!("Stage-2 page table allocation failed");
+            // OOM during page table allocation is fatal — no swap, no OOM killer
+            crate::serial_println!("[HV] FATAL: Stage-2 page table allocation failed (OOM)");
         }
         ptr
     }

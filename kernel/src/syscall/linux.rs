@@ -361,6 +361,10 @@ pub fn sys_mmap(addr: u64, length: u64, prot: u64, flags: u64, fd: i64, _offset:
     }
     
     let page_size = 4096u64;
+    // Guard against integer overflow (Maestro #41 pattern)
+    if length > u64::MAX - (page_size - 1) {
+        return errno::EINVAL;
+    }
     let aligned_length = (length + page_size - 1) & !(page_size - 1);
     
     // Determine the mapping address
@@ -410,6 +414,10 @@ pub fn sys_munmap(addr: u64, length: u64) -> i64 {
     }
     
     let page_size = 4096u64;
+    // Guard against integer overflow (Maestro #41 pattern)
+    if length > u64::MAX - (page_size - 1) {
+        return errno::EINVAL;
+    }
     let aligned_length = (length + page_size - 1) & !(page_size - 1);
     let num_pages = (aligned_length / page_size) as usize;
     let start = addr & !(page_size - 1);
@@ -448,6 +456,10 @@ pub fn sys_mprotect(addr: u64, length: u64, prot: u64) -> i64 {
     }
     
     let page_size = 4096u64;
+    // Guard against integer overflow (Maestro #41 pattern)
+    if length == 0 || length > u64::MAX - (page_size - 1) {
+        return errno::EINVAL;
+    }
     let aligned_length = (length + page_size - 1) & !(page_size - 1);
     let num_pages = (aligned_length / page_size) as usize;
     

@@ -412,6 +412,12 @@ pub fn umount(path: &str) -> VfsResult<()> {
         return Err(VfsError::PermissionDenied);
     }
     
+    // Check if any open files reference this mount (Maestro #27 pattern)
+    let has_open_files = vfs.open_files.values().any(|f| f.mount_idx == idx);
+    if has_open_files {
+        return Err(VfsError::Busy);
+    }
+    
     vfs.mounts.remove(idx);
     Ok(())
 }

@@ -7807,7 +7807,7 @@ pub(super) fn cmd_cosmic_desktop() {
                 let char_seed = seed.wrapping_add((i as u32 * 7919) ^ (frame_count as u32 / 8));
                 let char_idx = (char_seed as usize) % MATRIX_CHARS.len();
                 let char_str: [u8; 2] = [MATRIX_CHARS[char_idx], 0];
-                let char_s = unsafe { core::str::from_utf8_unchecked(&char_str[..1]) };
+                let char_s = core::str::from_utf8(&char_str[..1]).unwrap_or("?");
                 draw_text(char_s, x, char_y as u32, color);
             }
         }
@@ -8082,7 +8082,7 @@ pub(super) fn cmd_cosmic_desktop() {
         if search_len == 0 {
             draw_text("Search...", search_x + 8, bar_y + 10, 0xFF336633u32);
         } else {
-            let search_display = unsafe { core::str::from_utf8_unchecked(&search_text[..search_len]) };
+            let search_display = core::str::from_utf8(&search_text[..search_len]).unwrap_or("<invalid>");
             draw_text(search_display, search_x + 8, bar_y + 10, green_main);
         }
         // Search icon (magnifying glass)
