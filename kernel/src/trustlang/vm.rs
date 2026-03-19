@@ -267,12 +267,14 @@ pub fn execute(bytecode: &Bytecode) -> Result<String, String> {
         match op {
             Op::PushI64 => {
                 let bytes = read_bytes(&func.code, &mut frame.ip, 8);
-                let v = i64::from_le_bytes(bytes.try_into().unwrap());
+                let arr: [u8; 8] = match bytes.try_into() { Ok(a) => a, Err(_) => return Err("bad i64 bytes".into()) };
+                let v = i64::from_le_bytes(arr);
                 stack.push(Value::I64(v));
             }
             Op::PushF64 => {
                 let bytes = read_bytes(&func.code, &mut frame.ip, 8);
-                let v = f64::from_le_bytes(bytes.try_into().unwrap());
+                let arr: [u8; 8] = match bytes.try_into() { Ok(a) => a, Err(_) => return Err("bad f64 bytes".into()) };
+                let v = f64::from_le_bytes(arr);
                 stack.push(Value::F64(v));
             }
             Op::PushBool => {

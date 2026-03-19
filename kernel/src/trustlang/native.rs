@@ -193,7 +193,7 @@ impl NativeCompiler {
         // Caller pushes args right-to-left, so at [rbp+16] = arg0, [rbp+24] = arg1, etc.
         for (i, (name, _ty)) in decl.params.iter().enumerate() {
             let src_offset = 16 + (i as i32) * 8;
-            let dst_offset = *ctx.locals.get(name).unwrap();
+            let dst_offset = match ctx.locals.get(name) { Some(&v) => v, None => continue };
             self.asm.mov_r_rbp_offset(Reg::Rax, src_offset);
             self.asm.mov_rbp_offset_r(dst_offset, Reg::Rax);
         }
@@ -240,7 +240,7 @@ impl NativeCompiler {
     fn compile_stmt(&mut self, ctx: &mut FnCtx, stmt: &Stmt) -> Result<(), String> {
         match stmt {
             Stmt::Let { name, init, .. } => {
-                let off = *ctx.locals.get(name).unwrap();
+                let off = match ctx.locals.get(name) { Some(&v) => v, None => return Err(format!("unknown local: {}", name)) };
                 if let Some(expr) = init {
                     self.compile_expr(ctx, expr)?;
                     self.asm.pop_r(Reg::Rax);
@@ -307,9 +307,9 @@ impl NativeCompiler {
             }
             Stmt::For { var, iter, body } => {
                 if let Expr::Range { start, end } = iter {
-                    let var_off = *ctx.locals.get(var).unwrap();
+                    let var_off = match ctx.locals.get(var) { Some(&v) => v, None => return Err(format!("unknown for var: {}", var)) };
                     let end_name = format!("__for_end_{}", var);
-                    let end_off = *ctx.locals.get(&end_name).unwrap();
+                    let end_off = match ctx.locals.get(&end_name) { Some(&v) => v, None => return Err(format!("unknown for end var")) };
 
                     self.compile_expr(ctx, start)?;
                     self.asm.pop_r(Reg::Rax);

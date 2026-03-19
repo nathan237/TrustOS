@@ -114,6 +114,10 @@ pub enum ProtectedOp {
     WeightSave,
     /// Load weights from storage
     WeightLoad,
+    /// Install kernel/OS to persistent storage (SATA/NVMe)
+    DiskInstall,
+    /// Wipe/format a disk (destructive)
+    DiskWipe,
 }
 
 impl core::fmt::Display for ProtectedOp {
@@ -129,6 +133,8 @@ impl core::fmt::Display for ProtectedOp {
             ProtectedOp::ConfigChange => write!(f, "CONFIG_CHANGE (modifier configuration)"),
             ProtectedOp::WeightSave => write!(f, "WEIGHT_SAVE (sauvegarder poids)"),
             ProtectedOp::WeightLoad => write!(f, "WEIGHT_LOAD (charger poids)"),
+            ProtectedOp::DiskInstall => write!(f, "DISK_INSTALL (installer sur disque)"),
+            ProtectedOp::DiskWipe => write!(f, "DISK_WIPE (formater disque)"),
         }
     }
 }

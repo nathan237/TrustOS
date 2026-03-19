@@ -325,6 +325,11 @@ extern "C" fn syscall_entry() {
     );
 }
 
+// SAFETY: These statics are accessed via `sym` in naked asm (syscall_entry).
+// They use raw mov, so AtomicU64 would not provide actual atomicity.
+// Current invariant: only one user process executes at a time per CPU.
+// SMP safety requires per-CPU storage (GS segment) — tracked as future work.
+
 /// Temporary storage for user RSP during syscall entry (before stack switch)
 #[no_mangle]
 pub static mut USER_RSP_TEMP: u64 = 0;
@@ -364,6 +369,7 @@ pub fn init_syscall_stack() {
 // Ring 3 Process Execution with Return-to-Kernel Support
 // ───────────────────────────────────────────────────────
 
+// SAFETY: Same single-process-at-a-time invariant as syscall statics above.
 /// Saved kernel RSP for returning from Ring 3
 static mut KERNEL_RETURN_RSP: u64 = 0;
 /// Saved kernel return point (RIP) for returning from Ring 3

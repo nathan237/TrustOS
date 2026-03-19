@@ -72,8 +72,13 @@ Write-Host "`n[1/3] Cleaning disk..." -ForegroundColor Yellow
 
 # Clear the disk
 Clear-Disk -Number $DiskNumber -RemoveData -RemoveOEM -Confirm:$false -ErrorAction SilentlyContinue
+
+# Cycle offline/online to reset disk state after Clear-Disk
+Set-Disk -Number $DiskNumber -IsOffline $true -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
 Set-Disk -Number $DiskNumber -IsOffline $false -ErrorAction SilentlyContinue
 Set-Disk -Number $DiskNumber -IsReadOnly $false -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
 
 Write-Host "[2/3] Writing ISO to USB (raw dd-style)..." -ForegroundColor Yellow
 

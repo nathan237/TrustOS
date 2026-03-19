@@ -2,7 +2,9 @@
 resolver = "2"
 members = [
     "kernel",
+    "userland/trustos-syscall",
     "userland/init",
+    "userland/hello-rust",
     "userland/shell",
     "userland/fs",
     "userland/network",

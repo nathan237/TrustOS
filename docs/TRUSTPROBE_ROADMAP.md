@@ -144,7 +144,7 @@ SMMU was [enabled/disabled] and discovered [N] undocumented MMIO regions"
 - [x] Timing side-channel analyzer (cycle-accurate)
 - [x] Firmware residue scanner (30+ signatures)
 - [x] Auto-scan + report generator
-- [x] Compiles on x86_64, aarch64, riscv64
+- [x] Compiles on x86_64 (primary); aarch64, riscv64 compile with stubs (experimental)
 
 ### Short-term enhancements (Week 1-2)
 - [ ] Add JSON/structured output format for data export

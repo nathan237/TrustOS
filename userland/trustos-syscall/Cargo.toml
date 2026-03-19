@@ -1,0 +1,8 @@
+[package]
+name = "trustos-syscall"
+version = "0.1.0"
+edition = "2021"
+authors = ["Nated0ge <nathan@trustos.dev>"]
+description = "Linux-compatible syscall wrappers for TrustOS userland"
+
+[dependencies]

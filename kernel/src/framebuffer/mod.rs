@@ -1694,7 +1694,7 @@ pub fn _print(args: fmt::Arguments) {
         return;
     }
     if !SERIAL_ONLY_MODE.load(core::sync::atomic::Ordering::Relaxed) {
-        Writer.write_fmt(args).unwrap();
+        let _ = Writer.write_fmt(args);
     }
     crate::serial::_print(args);
 }
@@ -1704,7 +1704,7 @@ pub fn _print(args: fmt::Arguments) {
 #[doc(hidden)]
 pub fn _print_fb_only(args: fmt::Arguments) {
     use core::fmt::Write;
-    Writer.write_fmt(args).unwrap();
+    let _ = Writer.write_fmt(args);
 }
 
 /// Print to framebuffer console

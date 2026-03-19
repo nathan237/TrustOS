@@ -194,7 +194,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // User management
     "login", "su", "passwd", "adduser", "useradd", "deluser", "userdel", "users", "logout",
     // Test and debug
-    "hwtest", "keytest", "hexdump", "xxd", "panic",
+    "hwtest", "keytest", "hexdump", "xxd", "panic", "usertest", "userland-audit",
     // Hardware debug toolkit
     "hwdiag", "cpudump", "stacktrace", "backtrace", "bootlog", "postcode",
     "ioport", "rdmsr", "wrmsr", "cpuid", "memmap", "watchdog", "drv",
@@ -209,7 +209,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     // Tasks
     "tasks", "jobs", "threads",
     // Disk
-    "disk", "dd", "ahci", "fdisk", "partitions",
+    "disk", "dd", "ahci", "fdisk", "partitions", "diskscan",
     // Hardware
     "lspci", "lshw", "hwinfo", "gpu", "gpuexec", "sdma", "neural", "gpufw", "a11y",
     // USB / checkm8
@@ -259,7 +259,7 @@ pub const SHELL_COMMANDS: &[&str] = &[
     "watch", "timeout", "tar", "gzip", "zip", "unzip",
     "service", "systemctl", "crontab", "at", "read",
     // Debug / network console
-    "netconsole", "nc", "strace",
+    "netconsole", "nc", "remoteshell", "rsh", "strace",
 ];
 
 /// Run the kernel shell
@@ -1002,6 +1002,8 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "users" => commands::cmd_users(),
         "hwtest" => commands::cmd_test(),
         "memtest" => commands::cmd_memtest(),
+        "usertest" => commands::cmd_usertest(),
+        "userland-audit" => crate::userland_audit::run_audit(),
         "restest" => commands::cmd_restest(),
         "inttest" => commands::cmd_inttest(),
         "debugnew" => commands::cmd_debugnew(),
@@ -1124,6 +1126,8 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "dd" => vm::cmd_dd(args),
         "ahci" => vm::cmd_ahci(args),
         "fdisk" | "partitions" => vm::cmd_fdisk(args),
+        "install" => crate::installer::cmd_install(args),
+        "diskscan" => vm::cmd_diskscan(args),
         "lspci" => vm::cmd_lspci(args),
         "lshw" | "hwinfo" => vm::cmd_lshw(),
         "gpu" => vm::cmd_gpu(args),
@@ -1310,6 +1314,7 @@ fn execute_single(cmd: &str, piped_input: Option<String>) {
         "watchdog" | "wdt" => unix::cmd_watchdog(args),
         "drv" | "driver" => unix::cmd_drv(args),
         "netconsole" | "nc" => unix::cmd_netconsole(args),
+        "remoteshell" | "rsh" => unix::cmd_remoteshell(args),
 
         // -- ThinkPad EC: Fan, Thermal, CPU Frequency --
         "fan" => crate::drivers::thinkpad_ec::cmd_fan(args),

@@ -615,6 +615,8 @@ impl Vmcs {
 impl Drop for Vmcs {
     fn drop(&mut self) {
         // VMCLEAR avant de libérer la mémoire
-        let _ = vmclear(self.phys_addr);
+        if let Err(e) = vmclear(self.phys_addr) {
+            crate::serial_println!("[VMCS] vmclear failed during drop: {:?}", e);
+        }
     }
 }

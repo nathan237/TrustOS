@@ -68,7 +68,7 @@ This is not a proof of concept on paper. It boots, runs, and passes 12/12 automa
 | **Security** | Guardian Pact: 10 protected operations, 2 authorized guardians |
 | **Test suite** | 12/12 propagation + 80+ single-node tests (automated) |
 | **Boot time** | ~3 seconds to shell prompt |
-| **Architectures** | x86_64, aarch64, riscv64 (multi-arch) |
+| **Architectures** | x86_64 (primary), aarch64 (experimental), riscv64 (WIP) |
 
 ---
 

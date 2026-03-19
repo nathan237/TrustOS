@@ -13,6 +13,7 @@
 //! - E9 debug port (Bochs/QEMU debug console)
 
 pub mod netconsole;
+pub mod remoteshell;
 
 use alloc::string::String;
 use alloc::vec::Vec;

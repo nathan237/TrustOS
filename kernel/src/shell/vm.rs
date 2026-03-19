@@ -1416,12 +1416,132 @@ pub(super) fn cmd_disk() {
 
 pub(super) fn cmd_dd(args: &[&str]) {
     if args.is_empty() {
-        crate::println!("Usage: dd <sector> [count]");
-        crate::println!("       dd write <sector> <text>");
-        crate::println!("       dd dump <sector>");
+        crate::println!("Usage: dd <sector>                    - Read sector from RAM disk");
+        crate::println!("       dd ahci:<port> <sector> [count]- Read from AHCI/SATA disk");
+        crate::println!("       dd nvme <sector> [count]       - Read from NVMe disk");
+        crate::println!("       dd write <sector> <text>       - Write to RAM disk");
+        crate::println!("       dd dump <sector>               - Dump RAM disk sector");
+        crate::println!();
+        crate::println!("Examples:");
+        crate::println!("  dd ahci:0 0           - Read MBR from AHCI port 0");
+        crate::println!("  dd ahci:1 2048 4      - Read 4 sectors from port 1 at LBA 2048");
+        crate::println!("  dd nvme 0             - Read sector 0 from NVMe");
         return;
     }
     
+    // AHCI device read: dd ahci:<port> <sector> [count]
+    if args[0].starts_with("ahci:") || args[0].starts_with("sata:") {
+        let port_str = &args[0][5..];
+        let port: u8 = match port_str.parse() {
+            Ok(n) => n,
+            Err(_) => {
+                crate::println_color!(COLOR_RED, "Invalid port number: {}", port_str);
+                return;
+            }
+        };
+        if args.len() < 2 {
+            crate::println!("Usage: dd ahci:{} <sector> [count]", port);
+            return;
+        }
+        let sector: u64 = match args[1].parse() {
+            Ok(n) => n,
+            Err(_) => { crate::println_color!(COLOR_RED, "Invalid sector number"); return; }
+        };
+        let count: usize = if args.len() > 2 { args[2].parse().unwrap_or(1).min(16) } else { 1 };
+        
+        for i in 0..count {
+            let lba = sector + i as u64;
+            let mut buffer = alloc::vec![0u8; 512];
+            match crate::drivers::ahci::read_sectors(port, lba, 1, &mut buffer) {
+                Ok(_) => {
+                    crate::println_color!(COLOR_CYAN, "AHCI port {} — Sector {} (512 bytes):", port, lba);
+                    hexdump_sector(&buffer);
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "AHCI read error at sector {}: {}", lba, e);
+                    return;
+                }
+            }
+            crate::println!();
+        }
+        return;
+    }
+    
+    // NVMe device read: dd nvme <sector> [count]
+    if args[0] == "nvme" {
+        if args.len() < 2 {
+            crate::println!("Usage: dd nvme <sector> [count]");
+            return;
+        }
+        let sector: u64 = match args[1].parse() {
+            Ok(n) => n,
+            Err(_) => { crate::println_color!(COLOR_RED, "Invalid sector number"); return; }
+        };
+        let count: usize = if args.len() > 2 { args[2].parse().unwrap_or(1).min(16) } else { 1 };
+        
+        if !crate::nvme::is_initialized() {
+            crate::println_color!(COLOR_RED, "NVMe not initialized");
+            return;
+        }
+        
+        let buf_size = count * 512;
+        let mut buffer = alloc::vec![0u8; buf_size];
+        match crate::nvme::read_sectors(sector, count, &mut buffer) {
+            Ok(_) => {
+                for i in 0..count {
+                    let offset = i * 512;
+                    crate::println_color!(COLOR_CYAN, "NVMe — Sector {} (512 bytes):", sector + i as u64);
+                    hexdump_sector(&buffer[offset..offset + 512]);
+                    crate::println!();
+                }
+            }
+            Err(e) => crate::println_color!(COLOR_RED, "NVMe read error: {}", e),
+        }
+        return;
+    }
+    
+    // IDE device read: dd ide:<channel> <sector> [count]
+    if args[0].starts_with("ide:") {
+        let ch_str = &args[0][4..];
+        let (channel, slave) = match ch_str {
+            "pm" | "0" => (crate::drivers::ata::IdeChannel::Primary, false),
+            "ps" | "1" => (crate::drivers::ata::IdeChannel::Primary, true),
+            "sm" | "2" => (crate::drivers::ata::IdeChannel::Secondary, false),
+            "ss" | "3" => (crate::drivers::ata::IdeChannel::Secondary, true),
+            _ => {
+                crate::println_color!(COLOR_RED, "Invalid IDE channel. Use: pm, ps, sm, ss (or 0-3)");
+                return;
+            }
+        };
+        if args.len() < 2 {
+            crate::println!("Usage: dd ide:{} <sector> [count]", ch_str);
+            return;
+        }
+        let sector: u64 = match args[1].parse() {
+            Ok(n) => n,
+            Err(_) => { crate::println_color!(COLOR_RED, "Invalid sector number"); return; }
+        };
+        let count: usize = if args.len() > 2 { args[2].parse().unwrap_or(1).min(16) } else { 1 };
+        
+        let mut buffer = alloc::vec![0u8; count * 512];
+        match crate::drivers::ata::read_sectors(channel, slave, sector, count as u8, &mut buffer) {
+            Ok(()) => {
+                for i in 0..count {
+                    let lba = sector + i as u64;
+                    let offset = i * 512;
+                    crate::println_color!(COLOR_CYAN, "IDE {} — Sector {} (512 bytes):", ch_str, lba);
+                    hexdump_sector(&buffer[offset..offset + 512]);
+                    crate::println!();
+                }
+            }
+            Err(e) => {
+                crate::println_color!(COLOR_RED, "IDE read error: {}", e);
+            }
+        }
+        return;
+    }
+    
+    // Legacy RAM disk operations
     if args[0] == "dump" && args.len() > 1 {
         let sector: u64 = match args[1].parse() {
             Ok(n) => n,
@@ -1460,11 +1580,11 @@ pub(super) fn cmd_dd(args: &[&str]) {
         return;
     }
     
-    // Read sector
+    // Read sector from RAM disk
     let sector: u64 = match args[0].parse() {
         Ok(n) => n,
         Err(_) => {
-            crate::println_color!(COLOR_RED, "Invalid sector number");
+            crate::println_color!(COLOR_RED, "Invalid sector number or device. Use 'dd' for help.");
             return;
         }
     };
@@ -1472,30 +1592,282 @@ pub(super) fn cmd_dd(args: &[&str]) {
     let mut buffer = [0u8; 512];
     match crate::disk::read_sectors(sector, 1, &mut buffer) {
         Ok(_) => {
-            crate::println_color!(COLOR_CYAN, "Sector {} (512 bytes):", sector);
-            
-            // Hexdump first 256 bytes
-            for row in 0..16 {
-                crate::print_color!(COLOR_DARK_GREEN, "{:04X}: ", row * 16);
-                for col in 0..16 {
-                    crate::print!("{:02X} ", buffer[row * 16 + col]);
-                }
-                crate::print!(" |");
-                for col in 0..16 {
-                    let b = buffer[row * 16 + col];
-                    if b >= 0x20 && b < 0x7F {
-                        crate::print!("{}", b as char);
-                    } else {
-                        crate::print!(".");
-                    }
-                }
-                crate::println!("|");
-            }
+            crate::println_color!(COLOR_CYAN, "RAM disk — Sector {} (512 bytes):", sector);
+            hexdump_sector(&buffer);
         }
         Err(e) => {
             crate::println_color!(COLOR_RED, "Read error: {}", e);
         }
     }
+}
+
+/// Full 512-byte hexdump with ASCII sidebar
+fn hexdump_sector(buffer: &[u8]) {
+    let rows = buffer.len().min(512) / 16;
+    for row in 0..rows {
+        crate::print_color!(COLOR_DARK_GREEN, "{:04X}: ", row * 16);
+        for col in 0..16 {
+            crate::print!("{:02X} ", buffer[row * 16 + col]);
+        }
+        crate::print!(" |");
+        for col in 0..16 {
+            let b = buffer[row * 16 + col];
+            if b >= 0x20 && b < 0x7F {
+                crate::print!("{}", b as char);
+            } else {
+                crate::print!(".");
+            }
+        }
+        crate::println!("|");
+    }
+}
+
+// ==================== DISKSCAN — Full disk/partition/FS probe ====================
+
+/// Comprehensive disk scanner: enumerates all drives, partitions, and detected filesystems.
+/// Suggests mount commands for discovered partitions.
+pub(super) fn cmd_diskscan(_args: &[&str]) {
+    use crate::drivers::partition;
+    use crate::drivers::ahci;
+    use alloc::sync::Arc;
+    use crate::vfs::fat32::AhciBlockReader;
+    
+    crate::println_color!(COLOR_CYAN, "============================================================");
+    crate::println_color!(COLOR_CYAN, "  DISKSCAN — Storage Device & Filesystem Probe");
+    crate::println_color!(COLOR_CYAN, "============================================================");
+    crate::println!();
+    
+    let mut disk_idx = 0u32;
+    let mut mount_suggestions: Vec<String> = Vec::new();
+    
+    // ── AHCI/SATA ──
+    if ahci::is_initialized() {
+        for dev in ahci::list_devices() {
+            let size_mb = (dev.sector_count * 512) / (1024 * 1024);
+            let size_gb = size_mb / 1024;
+            crate::println_color!(COLOR_GREEN, "Disk {} — AHCI Port {} [{:?}]", disk_idx, dev.port_num, dev.device_type);
+            crate::println!("  Model:    {}", dev.model);
+            crate::println!("  Serial:   {}", dev.serial);
+            if size_gb > 0 {
+                crate::println!("  Capacity: {} GB ({} sectors)", size_gb, dev.sector_count);
+            } else {
+                crate::println!("  Capacity: {} MB ({} sectors)", size_mb, dev.sector_count);
+            }
+            
+            // Read partition table
+            let read_fn = |sector: u64, buf: &mut [u8]| -> Result<(), &'static str> {
+                ahci::read_sectors(dev.port_num, sector, 1, buf).map(|_| ())
+            };
+            
+            match partition::parse_partition_table(read_fn, dev.sector_count) {
+                Ok(table) => {
+                    let table_type = match table.table_type {
+                        partition::PartitionTableType::Gpt => "GPT",
+                        partition::PartitionTableType::Mbr => "MBR",
+                        partition::PartitionTableType::None => "None",
+                    };
+                    crate::println!("  Table:    {} ({} partition(s))", 
+                        table_type, table.partitions.len());
+                    
+                    for part in &table.partitions {
+                        crate::println!();
+                        crate::print!("    Partition {} ", part.number);
+                        crate::println!("[{:?}]", part.partition_type);
+                        crate::println!("      LBA:  {} — {} ({})", 
+                            part.start_lba, part.end_lba(), part.size_human());
+                        if !part.name.is_empty() {
+                            crate::println!("      Name: {}", part.name);
+                        }
+                        
+                        // Probe filesystem on this partition
+                        let reader = AhciBlockReader::new(dev.port_num as usize, part.start_lba);
+                        let fs_type = probe_filesystem(&reader);
+                        
+                        match fs_type {
+                            FsProbeResult::Fat32 => {
+                                crate::println_color!(COLOR_BRIGHT_GREEN, "      FS:   FAT32 detected");
+                                let mp = format!("/mnt/ahci{}p{}", dev.port_num, part.number);
+                                mount_suggestions.push(format!(
+                                    "mount ahci:{}:{} {} fat32", dev.port_num, part.start_lba, mp));
+                            }
+                            FsProbeResult::Ext4 => {
+                                crate::println_color!(COLOR_BRIGHT_GREEN, "      FS:   ext4 detected");
+                                let mp = format!("/mnt/ahci{}p{}", dev.port_num, part.number);
+                                mount_suggestions.push(format!(
+                                    "mount ahci:{}:{} {} ext4", dev.port_num, part.start_lba, mp));
+                            }
+                            FsProbeResult::Ntfs => {
+                                crate::println_color!(COLOR_BRIGHT_GREEN, "      FS:   NTFS detected");
+                                let mp = format!("/mnt/ahci{}p{}", dev.port_num, part.number);
+                                mount_suggestions.push(format!(
+                                    "mount ahci:{}:{} {} ntfs", dev.port_num, part.start_lba, mp));
+                            }
+                            FsProbeResult::Unknown => {
+                                crate::println_color!(COLOR_YELLOW, "      FS:   unknown");
+                            }
+                        }
+                    }
+                }
+                Err(_) => {
+                    // No partition table — try whole disk as superfloppy
+                    let reader = AhciBlockReader::new(dev.port_num as usize, 0);
+                    let fs_type = probe_filesystem(&reader);
+                    match fs_type {
+                        FsProbeResult::Fat32 => {
+                            crate::println!("  Table:    none (superfloppy)");
+                            crate::println_color!(COLOR_BRIGHT_GREEN, "  FS:       FAT32 detected");
+                            let mp = format!("/mnt/ahci{}", dev.port_num);
+                            mount_suggestions.push(format!("mount ahci:{}:0 {} fat32", dev.port_num, mp));
+                        }
+                        FsProbeResult::Ext4 => {
+                            crate::println!("  Table:    none (superfloppy)");
+                            crate::println_color!(COLOR_BRIGHT_GREEN, "  FS:       ext4 detected");
+                            let mp = format!("/mnt/ahci{}", dev.port_num);
+                            mount_suggestions.push(format!("mount ahci:{}:0 {} ext4", dev.port_num, mp));
+                        }
+                        FsProbeResult::Ntfs => {
+                            crate::println!("  Table:    none (superfloppy)");
+                            crate::println_color!(COLOR_BRIGHT_GREEN, "  FS:       NTFS detected");
+                            let mp = format!("/mnt/ahci{}", dev.port_num);
+                            mount_suggestions.push(format!("mount ahci:{}:0 {} ntfs", dev.port_num, mp));
+                        }
+                        FsProbeResult::Unknown => {
+                            crate::println!("  Table:    unreadable / no partitions");
+                        }
+                    }
+                }
+            }
+            
+            crate::println!();
+            disk_idx += 1;
+        }
+    }
+    
+    // ── NVMe ──
+    if crate::nvme::is_initialized() {
+        if let Some((model, serial, ns_size, lba_size)) = crate::nvme::get_info() {
+            let size_mb = (ns_size * lba_size as u64) / (1024 * 1024);
+            let size_gb = size_mb / 1024;
+            crate::println_color!(COLOR_GREEN, "Disk {} — NVMe", disk_idx);
+            crate::println!("  Model:    {}", model);
+            crate::println!("  Serial:   {}", serial);
+            if size_gb > 0 {
+                crate::println!("  Capacity: {} GB ({} sectors)", size_gb, ns_size);
+            } else {
+                crate::println!("  Capacity: {} MB ({} sectors)", size_mb, ns_size);
+            }
+            crate::println_color!(COLOR_YELLOW, "  (use 'dd nvme <sector>' to read raw sectors)");
+            crate::println!();
+            disk_idx += 1;
+        }
+    }
+    
+    // ── IDE/ATA ──
+    for drv in crate::drivers::ata::list_drives() {
+        if drv.present && !drv.atapi {
+            let size_mb = (drv.sector_count * 512) / (1024 * 1024);
+            let ch_name = match drv.channel {
+                crate::drivers::ata::IdeChannel::Primary => "Primary",
+                crate::drivers::ata::IdeChannel::Secondary => "Secondary",
+            };
+            let pos_name = match drv.position {
+                crate::drivers::ata::DrivePosition::Master => "Master",
+                crate::drivers::ata::DrivePosition::Slave => "Slave",
+            };
+            crate::println_color!(COLOR_GREEN, "Disk {} — IDE {} {}", disk_idx, ch_name, pos_name);
+            crate::println!("  Model:    {}", drv.model);
+            crate::println!("  Capacity: {} MB ({} sectors, LBA{})", 
+                size_mb, drv.sector_count, if drv.lba48 { "48" } else { "28" });
+            crate::println_color!(COLOR_YELLOW, "  (use 'dd ide:pm <sector>' to read raw sectors)");
+            crate::println!();
+            disk_idx += 1;
+        }
+    }
+    
+    // ── USB Storage ──
+    for (i, (name, blocks, bsize)) in crate::drivers::usb_storage::list_devices().iter().enumerate() {
+        let size_mb = (*blocks * *bsize as u64) / (1024 * 1024);
+        crate::println_color!(COLOR_GREEN, "Disk {} — USB Storage #{}", disk_idx + i as u32, i);
+        crate::println!("  Model:    {}", name);
+        crate::println!("  Capacity: {} MB", size_mb);
+        crate::println!();
+    }
+    
+    // ── Already mounted ──
+    let mounts = crate::vfs::list_mounts();
+    if !mounts.is_empty() {
+        crate::println_color!(COLOR_CYAN, "Currently mounted:");
+        for (path, fstype) in &mounts {
+            crate::println!("  {} ({})", path, fstype);
+        }
+        crate::println!();
+    }
+    
+    // ── Suggestions ──
+    if !mount_suggestions.is_empty() {
+        crate::println_color!(COLOR_CYAN, "Suggested mount commands:");
+        for cmd in &mount_suggestions {
+            crate::println_color!(COLOR_BRIGHT_GREEN, "  {}", cmd);
+        }
+        crate::println!();
+        crate::println!("After mounting, use 'ls /mnt/...' and 'cat /mnt/.../file' to browse.");
+    } else if disk_idx == 0 {
+        crate::println_color!(COLOR_YELLOW, "No storage devices detected.");
+    } else {
+        crate::println_color!(COLOR_YELLOW, "No mountable filesystems detected on found disks.");
+        crate::println!("Use 'dd ahci:<port> <sector>' to inspect raw sectors.");
+    }
+}
+
+/// Filesystem probe result
+enum FsProbeResult {
+    Fat32,
+    Ext4,
+    Ntfs,
+    Unknown,
+}
+
+/// Probe a block device to detect filesystem type
+fn probe_filesystem(device: &crate::vfs::fat32::AhciBlockReader) -> FsProbeResult {
+    use crate::vfs::fat32::BlockDevice;
+    // Try NTFS (magic at offset 3: "NTFS    ")
+    let mut sector0 = [0u8; 512];
+    if device.read_sector(0, &mut sector0).is_ok() {
+        // NTFS: OEM ID "NTFS    " at offset 3
+        if sector0.len() >= 11 && &sector0[3..7] == b"NTFS" {
+            return FsProbeResult::Ntfs;
+        }
+        // FAT32: check boot signature + FAT32 markers
+        if sector0[510] == 0x55 && sector0[511] == 0xAA {
+            // Check for FAT32 string at offset 82
+            if sector0.len() >= 90 && &sector0[82..87] == b"FAT32" {
+                return FsProbeResult::Fat32;
+            }
+            // Also check sectors_per_fat_16 == 0 (FAT32 indicator)
+            let spf16 = u16::from_le_bytes([sector0[22], sector0[23]]);
+            let spf32 = u32::from_le_bytes([sector0[36], sector0[37], sector0[38], sector0[39]]);
+            if spf16 == 0 && spf32 > 0 {
+                return FsProbeResult::Fat32;
+            }
+        }
+    }
+    
+    // Try ext4 (superblock at offset 1024, magic 0xEF53 at offset 0x38)
+    // Read sector 2 and 3 (offset 1024)
+    let mut sector2 = [0u8; 512];
+    let mut sector3 = [0u8; 512];
+    if device.read_sector(2, &mut sector2).is_ok() && device.read_sector(3, &mut sector3).is_ok() {
+        // Magic at offset 0x38 in the superblock = offset 1024+0x38 = byte 1080
+        // sector2 starts at byte 1024, so magic is at sector2[0x38..0x3A]
+        if sector2.len() >= 0x3A {
+            let magic = u16::from_le_bytes([sector2[0x38], sector2[0x39]]);
+            if magic == 0xEF53 {
+                return FsProbeResult::Ext4;
+            }
+        }
+    }
+    
+    FsProbeResult::Unknown
 }
 
 pub(super) fn cmd_ahci(args: &[&str]) {

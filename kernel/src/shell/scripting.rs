@@ -375,7 +375,7 @@ pub fn execute_if_block(lines: &[&str], idx: &mut usize) -> bool {
     for &line in &block_lines {
         if inner_depth == 0 {
             if line.starts_with("if ") && segments.is_empty() {
-                let cond = line.strip_prefix("if ").unwrap().trim();
+                let cond = match line.strip_prefix("if ") { Some(c) => c.trim(), None => continue };
                 let cond = cond.strip_suffix("; then").or_else(|| cond.strip_suffix(" then")).unwrap_or(cond);
                 current_cond = Some(cond);
                 inner_depth = 0;
@@ -384,7 +384,7 @@ pub fn execute_if_block(lines: &[&str], idx: &mut usize) -> bool {
             if line == "then" { continue; }
             if line.starts_with("elif ") {
                 segments.push((current_cond, core::mem::take(&mut current_body)));
-                let cond = line.strip_prefix("elif ").unwrap().trim();
+                let cond = match line.strip_prefix("elif ") { Some(c) => c.trim(), None => continue };
                 let cond = cond.strip_suffix("; then").or_else(|| cond.strip_suffix(" then")).unwrap_or(cond);
                 current_cond = Some(cond);
                 continue;
@@ -443,7 +443,7 @@ pub fn execute_for_block(lines: &[&str], idx: &mut usize) -> bool {
 
     // Parse: for VAR in item1 item2 ...; do
     let header = block_lines[0];
-    let after_for = header.strip_prefix("for ").unwrap().trim();
+    let after_for = match header.strip_prefix("for ") { Some(s) => s.trim(), None => return true };
 
     // Split on " in "
     let (var_name, list_str) = if let Some(pos) = after_for.find(" in ") {
@@ -514,7 +514,7 @@ pub fn execute_while_block(lines: &[&str], idx: &mut usize) -> bool {
 
     // Parse condition
     let header = block_lines[0];
-    let cond = header.strip_prefix("while ").unwrap().trim();
+    let cond = match header.strip_prefix("while ") { Some(c) => c.trim(), None => return true };
     let cond = cond.strip_suffix("; do")
         .or_else(|| cond.strip_suffix(" do"))
         .unwrap_or(cond);

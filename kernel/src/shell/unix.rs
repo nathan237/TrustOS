@@ -1687,11 +1687,152 @@ pub(super) fn cmd_mount(args: &[&str]) {
     }
     
     if args.len() < 2 {
-        crate::println!("Usage: mount <device> <mountpoint>");
+        crate::println!("Usage: mount <device> <mountpoint> [fstype]");
+        crate::println!();
+        crate::println!("Devices:");
+        crate::println!("  ahci:<port>:<start_lba>  - AHCI/SATA partition");
+        crate::println!("  ahci:<port>              - Whole AHCI disk (superfloppy)");
+        crate::println!();
+        crate::println!("FS types: fat32, ext4, ntfs (auto-detected if omitted)");
+        crate::println!();
+        crate::println!("Examples:");
+        crate::println!("  mount ahci:0:2048 /mnt/disk0   - Mount partition at LBA 2048");
+        crate::println!("  mount ahci:1:0 /mnt/disk1 ntfs - Mount whole disk as NTFS");
+        crate::println!();
+        crate::println!("Tip: run 'diskscan' to detect disks and get mount commands.");
         return;
     }
     
-    crate::println_color!(COLOR_YELLOW, "mount: dynamic mounting not implemented");
+    let device = args[0];
+    let mountpoint = args[1];
+    let fstype = if args.len() > 2 { Some(args[2]) } else { None };
+    
+    // Parse device specification
+    if device.starts_with("ahci:") || device.starts_with("sata:") {
+        let spec = &device[5..];
+        let parts: Vec<&str> = spec.split(':').collect();
+        
+        let port: u8 = match parts[0].parse() {
+            Ok(n) => n,
+            Err(_) => {
+                crate::println_color!(COLOR_RED, "Invalid port number: {}", parts[0]);
+                return;
+            }
+        };
+        
+        let start_lba: u64 = if parts.len() > 1 {
+            match parts[1].parse() {
+                Ok(n) => n,
+                Err(_) => {
+                    crate::println_color!(COLOR_RED, "Invalid LBA: {}", parts[1]);
+                    return;
+                }
+            }
+        } else {
+            0
+        };
+        
+        use alloc::sync::Arc;
+        use crate::vfs::fat32::{AhciBlockReader, BlockDevice};
+        
+        let reader = Arc::new(AhciBlockReader::new(port as usize, start_lba));
+        
+        // Determine filesystem type
+        let detected = fstype.unwrap_or_else(|| {
+            // Auto-detect by probing magic bytes
+            let mut sector0 = [0u8; 512];
+            if reader.read_sector(0, &mut sector0).is_ok() {
+                if sector0.len() >= 11 && &sector0[3..7] == b"NTFS" {
+                    return "ntfs";
+                }
+                if sector0[510] == 0x55 && sector0[511] == 0xAA {
+                    if sector0.len() >= 90 && &sector0[82..87] == b"FAT32" {
+                        return "fat32";
+                    }
+                    let spf16 = u16::from_le_bytes([sector0[22], sector0[23]]);
+                    let spf32 = u32::from_le_bytes([sector0[36], sector0[37], sector0[38], sector0[39]]);
+                    if spf16 == 0 && spf32 > 0 {
+                        return "fat32";
+                    }
+                }
+            }
+            // Try ext4
+            let mut s2 = [0u8; 512];
+            if reader.read_sector(2, &mut s2).is_ok() && s2.len() >= 0x3A {
+                let magic = u16::from_le_bytes([s2[0x38], s2[0x39]]);
+                if magic == 0xEF53 {
+                    return "ext4";
+                }
+            }
+            "auto"
+        });
+        
+        crate::println!("Mounting ahci:{}:{} at {} (fs: {})...", port, start_lba, mountpoint, detected);
+        
+        match detected {
+            "fat32" | "vfat" => {
+                match crate::vfs::fat32::Fat32Fs::mount(reader) {
+                    Ok(fs) => {
+                        match crate::vfs::mount(mountpoint, Arc::new(fs)) {
+                            Ok(()) => crate::println_color!(COLOR_GREEN, "Mounted FAT32 at {}", mountpoint),
+                            Err(e) => crate::println_color!(COLOR_RED, "VFS mount error: {:?}", e),
+                        }
+                    }
+                    Err(e) => crate::println_color!(COLOR_RED, "FAT32 mount failed: {:?}", e),
+                }
+            }
+            "ext4" | "ext3" | "ext2" => {
+                match crate::vfs::ext4::mount(reader) {
+                    Ok(fs) => {
+                        match crate::vfs::mount(mountpoint, fs) {
+                            Ok(()) => crate::println_color!(COLOR_GREEN, "Mounted ext4 at {}", mountpoint),
+                            Err(e) => crate::println_color!(COLOR_RED, "VFS mount error: {:?}", e),
+                        }
+                    }
+                    Err(e) => crate::println_color!(COLOR_RED, "ext4 mount failed: {}", e),
+                }
+            }
+            "ntfs" => {
+                match crate::vfs::ntfs::mount(reader) {
+                    Ok(fs) => {
+                        match crate::vfs::mount(mountpoint, fs) {
+                            Ok(()) => crate::println_color!(COLOR_GREEN, "Mounted NTFS at {}", mountpoint),
+                            Err(e) => crate::println_color!(COLOR_RED, "VFS mount error: {:?}", e),
+                        }
+                    }
+                    Err(e) => crate::println_color!(COLOR_RED, "NTFS mount failed: {}", e),
+                }
+            }
+            _ => {
+                // Try all in order: FAT32, ext4, NTFS
+                let reader2 = Arc::new(AhciBlockReader::new(port as usize, start_lba));
+                let reader3 = Arc::new(AhciBlockReader::new(port as usize, start_lba));
+                
+                if let Ok(fs) = crate::vfs::fat32::Fat32Fs::mount(reader) {
+                    match crate::vfs::mount(mountpoint, Arc::new(fs)) {
+                        Ok(()) => { crate::println_color!(COLOR_GREEN, "Mounted FAT32 at {}", mountpoint); return; }
+                        Err(e) => crate::println_color!(COLOR_RED, "VFS mount error: {:?}", e),
+                    }
+                } else if let Ok(fs) = crate::vfs::ext4::mount(reader2) {
+                    match crate::vfs::mount(mountpoint, fs) {
+                        Ok(()) => { crate::println_color!(COLOR_GREEN, "Mounted ext4 at {}", mountpoint); return; }
+                        Err(e) => crate::println_color!(COLOR_RED, "VFS mount error: {:?}", e),
+                    }
+                } else if let Ok(fs) = crate::vfs::ntfs::mount(reader3) {
+                    match crate::vfs::mount(mountpoint, fs) {
+                        Ok(()) => { crate::println_color!(COLOR_GREEN, "Mounted NTFS at {}", mountpoint); return; }
+                        Err(e) => crate::println_color!(COLOR_RED, "VFS mount error: {:?}", e),
+                    }
+                } else {
+                    crate::println_color!(COLOR_RED, "mount: no supported filesystem found on device");
+                }
+            }
+        }
+    } else {
+        crate::println_color!(COLOR_RED, "mount: unsupported device: {}", device);
+        crate::println!("Supported: ahci:<port>[:<start_lba>]");
+        crate::println!("Run 'diskscan' to find devices.");
+    }
 }
 
 pub(super) fn cmd_sync() {
@@ -4251,6 +4392,80 @@ pub(super) fn cmd_netconsole(args: &[&str]) {
             crate::println!("  ncat -u -l -p 6666");
             crate::println!("  socat UDP-LISTEN:6666 STDOUT");
             crate::println!("  python -c \"import socket; s=socket.socket(socket.AF_INET,socket.SOCK_DGRAM); s.bind(('',6666)); [print(s.recvfrom(4096)[0].decode(),end='') for _ in iter(int,1)]\"");
+        }
+    }
+}
+
+// ==================== REMOTESHELL ====================
+pub(super) fn cmd_remoteshell(args: &[&str]) {
+    let subcmd = args.first().copied().unwrap_or("help");
+
+    match subcmd {
+        "start" | "on" => {
+            // Ensure we have an IP — same logic as netconsole
+            if crate::network::get_ipv4_config().is_none() {
+                crate::println!("[remoteshell] No IP configured, requesting DHCP...");
+                crate::netstack::dhcp::start();
+                let start_tick = crate::logger::get_ticks();
+                loop {
+                    for _ in 0..20 { crate::netstack::poll(); }
+                    if crate::network::get_ipv4_config().is_some() { break; }
+                    if crate::logger::get_ticks().saturating_sub(start_tick) > 8000 { break; }
+                    for _ in 0..10 { crate::arch::halt(); }
+                }
+            }
+            if crate::network::get_ipv4_config().is_none() {
+                crate::println_color!(COLOR_YELLOW, "[remoteshell] DHCP failed, applying static IP 10.0.0.100/24");
+                crate::network::set_ipv4_config(
+                    crate::network::Ipv4Address::new(10, 0, 0, 100),
+                    crate::network::Ipv4Address::new(255, 255, 255, 0),
+                    Some(crate::network::Ipv4Address::new(10, 0, 0, 1)),
+                );
+            }
+            if let Some((src_ip, _, _)) = crate::network::get_ipv4_config() {
+                let b = src_ip.as_bytes();
+                crate::println_color!(COLOR_CYAN, "[remoteshell] Source IP: {}.{}.{}.{}", b[0], b[1], b[2], b[3]);
+            }
+
+            crate::debug::remoteshell::start();
+            crate::println_color!(COLOR_BRIGHT_GREEN,
+                "Remote shell listening on UDP port {}",
+                crate::debug::remoteshell::LISTEN_PORT
+            );
+            crate::println!("  Connect: python scripts/remote_console.py --ip <this-ip>");
+
+            // Also auto-start netconsole if not already running to stream log output
+            if !crate::debug::netconsole::is_enabled() {
+                crate::println!("[remoteshell] Auto-starting netconsole (broadcast, port 6666)");
+                if let Some((src_ip, mask, _)) = crate::network::get_ipv4_config() {
+                    let s = src_ip.as_bytes();
+                    let m = mask.as_bytes();
+                    let bcast = [s[0] | !m[0], s[1] | !m[1], s[2] | !m[2], s[3] | !m[3]];
+                    crate::debug::netconsole::start(bcast, crate::debug::netconsole::DEFAULT_PORT);
+                }
+            }
+        }
+        "stop" | "off" => {
+            crate::debug::remoteshell::stop();
+            crate::println!("Remote shell stopped.");
+        }
+        "status" => {
+            if crate::debug::remoteshell::is_enabled() {
+                crate::println_color!(COLOR_BRIGHT_GREEN, "Remote shell: ACTIVE (UDP port {})", crate::debug::remoteshell::LISTEN_PORT);
+            } else {
+                crate::println_color!(COLOR_YELLOW, "Remote shell: OFF");
+            }
+        }
+        _ => {
+            crate::println_color!(COLOR_CYAN, "remoteshell — Bidirectional shell over UDP");
+            crate::println!();
+            crate::println!("Usage:");
+            crate::println!("  remoteshell start   — Start listening on port {}", crate::debug::remoteshell::LISTEN_PORT);
+            crate::println!("  remoteshell stop    — Stop");
+            crate::println!("  remoteshell status  — Show state");
+            crate::println!();
+            crate::println!("Connect from PC:");
+            crate::println!("  python scripts/remote_console.py --ip <board-ip>");
         }
     }
 }

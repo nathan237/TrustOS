@@ -108,6 +108,9 @@ pub fn poll() {
 
     // Check TCP retransmissions
     tcp::check_retransmits();
+
+    // Poll remote shell for incoming commands
+    crate::debug::remoteshell::poll();
 }
 
 /// Send raw ethernet frame

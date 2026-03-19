@@ -1,0 +1,8 @@
+[package]
+name = "trustos-hello"
+version = "0.1.0"
+edition = "2021"
+authors = ["Nated0ge <nathan@trustos.dev>"]
+
+[dependencies]
+trustos-syscall = { path = "../trustos-syscall" }

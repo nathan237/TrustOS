@@ -32,7 +32,7 @@ name = "trustos_kernel"
 path = "src/main.rs"
 
 [features]
-default = ["emulators", "hires-logo", "jarvis"]
+default = ["emulators", "hires-logo", "jarvis", "extras"]
 ## NES + Game Boy emulators and GameLab analysis dashboard
 emulators = []
 ## TrustDAW embedded audio (includes ~29 MB WAV). Disable for slim builds.
@@ -42,3 +42,5 @@ hires-logo = []
 ## JARVIS AI — 4.4M-parameter byte-level transformer for on-device inference,
 ## federated learning, mesh networking, and autonomous agent capabilities.
 jarvis = []
+## Games, 3D renderers, video codec. Disable for slim builds.
+extras = []

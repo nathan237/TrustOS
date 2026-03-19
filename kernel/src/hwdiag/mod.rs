@@ -33,6 +33,10 @@ pub mod ioscan;
 pub mod regwatch;
 pub mod pci_aer;
 pub mod boot_timing;
+pub mod smbios;
+pub mod smart;
+pub mod efi_vars;
+pub mod acpi_battery;
 
 use alloc::string::String;
 use alloc::format;

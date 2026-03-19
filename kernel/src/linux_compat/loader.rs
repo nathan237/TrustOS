@@ -60,8 +60,8 @@ pub fn load_linux_binary(path: &str) -> Result<LoadedBinary, &'static str> {
     // Parse header fields
     let e_type = u16::from_le_bytes([data[16], data[17]]);
     let e_machine = u16::from_le_bytes([data[18], data[19]]);
-    let e_entry = u64::from_le_bytes(data[24..32].try_into().unwrap());
-    let e_phoff = u64::from_le_bytes(data[32..40].try_into().unwrap());
+    let e_entry = u64::from_le_bytes([data[24],data[25],data[26],data[27],data[28],data[29],data[30],data[31]]);
+    let e_phoff = u64::from_le_bytes([data[32],data[33],data[34],data[35],data[36],data[37],data[38],data[39]]);
     let e_phentsize = u16::from_le_bytes([data[54], data[55]]);
     let e_phnum = u16::from_le_bytes([data[56], data[57]]);
     
@@ -90,12 +90,13 @@ pub fn load_linux_binary(path: &str) -> Result<LoadedBinary, &'static str> {
             continue;
         }
         
-        let p_type = u32::from_le_bytes(data[ph_offset..ph_offset+4].try_into().unwrap());
-        let p_flags = u32::from_le_bytes(data[ph_offset+4..ph_offset+8].try_into().unwrap());
-        let p_offset = u64::from_le_bytes(data[ph_offset+8..ph_offset+16].try_into().unwrap());
-        let p_vaddr = u64::from_le_bytes(data[ph_offset+16..ph_offset+24].try_into().unwrap());
-        let p_filesz = u64::from_le_bytes(data[ph_offset+32..ph_offset+40].try_into().unwrap());
-        let p_memsz = u64::from_le_bytes(data[ph_offset+40..ph_offset+48].try_into().unwrap());
+        let d = &data[ph_offset..];
+        let p_type = u32::from_le_bytes([d[0],d[1],d[2],d[3]]);
+        let p_flags = u32::from_le_bytes([d[4],d[5],d[6],d[7]]);
+        let p_offset = u64::from_le_bytes([d[8],d[9],d[10],d[11],d[12],d[13],d[14],d[15]]);
+        let p_vaddr = u64::from_le_bytes([d[16],d[17],d[18],d[19],d[20],d[21],d[22],d[23]]);
+        let p_filesz = u64::from_le_bytes([d[32],d[33],d[34],d[35],d[36],d[37],d[38],d[39]]);
+        let p_memsz = u64::from_le_bytes([d[40],d[41],d[42],d[43],d[44],d[45],d[46],d[47]]);
         
         match p_type {
             1 => {

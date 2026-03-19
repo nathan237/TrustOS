@@ -71,7 +71,8 @@ pub struct MemoryLayout {
     pub stack_end: u64,
 }
 
-/// CPU context for context switching
+/// CPU context for context switching (architecture-specific)
+#[cfg(target_arch = "x86_64")]
 #[derive(Clone, Debug, Default)]
 #[repr(C)]
 pub struct CpuContext {
@@ -99,6 +100,34 @@ pub struct CpuContext {
     // Segment selectors
     pub cs: u64,
     pub ss: u64,
+}
+
+/// CPU context for context switching (AArch64)
+#[cfg(target_arch = "aarch64")]
+#[derive(Clone, Debug, Default)]
+#[repr(C)]
+pub struct CpuContext {
+    /// General-purpose registers x0-x30
+    pub x: [u64; 31],
+    /// Stack pointer (SP_EL0 for user, SP_EL1 for kernel)
+    pub sp: u64,
+    /// Program counter (ELR_EL1 on exception entry)
+    pub pc: u64,
+    /// Saved Program Status Register (SPSR_EL1)
+    pub spsr: u64,
+}
+
+/// CPU context for context switching (RISC-V 64)
+#[cfg(target_arch = "riscv64")]
+#[derive(Clone, Debug, Default)]
+#[repr(C)]
+pub struct CpuContext {
+    /// General-purpose registers x0-x31 (x0 is hardwired zero)
+    pub x: [u64; 32],
+    /// Program counter (SEPC on trap entry)
+    pub pc: u64,
+    /// Supervisor status register (SSTATUS)
+    pub sstatus: u64,
 }
 
 /// Process Control Block (PCB)

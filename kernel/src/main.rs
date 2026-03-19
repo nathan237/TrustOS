@@ -140,6 +140,7 @@ mod userland;
 #[cfg(not(target_arch = "x86_64"))]
 #[path = "stubs/userland.rs"]
 mod userland;
+mod userland_audit;
 mod thread;
 mod auth;
 
@@ -278,6 +279,9 @@ mod jarvis;
 // Jarvis Hardware Intelligence — AI-driven hardware awareness and self-optimization
 mod jarvis_hw;
 
+// TrustOS Installer — self-install to SATA/NVMe from live boot
+mod installer;
+
 use core::panic::PanicInfo;
 use core::alloc::Layout;
 use limine::request::{
@@ -287,6 +291,51 @@ use limine::request::{
     StackSizeRequest,
 };
 use limine::BaseRevision;
+
+// ============================================================================
+// Boot Mode (parsed from Limine cmdline)
+// ============================================================================
+
+/// Boot mode determined by Limine cmdline
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BootMode {
+    /// Normal live boot with all features
+    Live,
+    /// Live boot without JARVIS AI
+    LiveNoJarvis,
+    /// Installation mode — install to disk
+    Install,
+}
+
+static BOOT_MODE: spin::Mutex<BootMode> = spin::Mutex::new(BootMode::Live);
+
+/// Get the current boot mode
+pub fn boot_mode() -> BootMode {
+    *BOOT_MODE.lock()
+}
+
+/// Parse boot mode from Limine kernel cmdline
+fn parse_boot_cmdline(cmdline: &str) {
+    let mut mode = BootMode::Live;
+    let mut jarvis = true;
+    for param in cmdline.split_whitespace() {
+        if let Some(val) = param.strip_prefix("mode=") {
+            match val {
+                "install" => mode = BootMode::Install,
+                _ => mode = BootMode::Live,
+            }
+        }
+        if let Some(val) = param.strip_prefix("jarvis=") {
+            if val == "no" || val == "false" || val == "0" {
+                jarvis = false;
+            }
+        }
+    }
+    if mode == BootMode::Live && !jarvis {
+        mode = BootMode::LiveNoJarvis;
+    }
+    *BOOT_MODE.lock() = mode;
+}
 
 // ============================================================================
 // Limine Protocol Requests
@@ -396,13 +445,20 @@ pub unsafe extern "C" fn kmain() -> ! {
         // UART_BASE stays at 0x09000000 (identity-mapped with Device attributes)
     }
 
-    // Phase 0.9: Register kernel file for PXE self-replication
+    // Phase 0.9: Register kernel file for PXE self-replication + parse boot cmdline
     if let Some(kf_resp) = KERNEL_FILE_REQUEST.get_response() {
         let file = kf_resp.file();
         let ptr = file.addr();
         let size = file.size() as usize;
         if size > 0 {
             unsafe { jarvis::pxe_replicator::register_kernel_file(ptr, size); }
+            // Also register for installer (self-copy to disk)
+            unsafe { installer::register_kernel_binary(ptr, size); }
+        }
+        // Parse boot cmdline (mode=live|install, jarvis=yes|no)
+        let cmdline_bytes = file.cmdline();
+        if let Ok(cmdline_str) = core::str::from_utf8(cmdline_bytes) {
+            parse_boot_cmdline(cmdline_str);
         }
     }
 
@@ -411,6 +467,20 @@ pub unsafe extern "C" fn kmain() -> ! {
     debug::checkpoint(debug::POST_SERIAL_INIT, "Serial port initialized");
     serial_println!("T-RustOs Kernel v0.2.0");
     serial_println!("Limine protocol supported");
+    serial_println!("[BOOT] Mode: {:?}", boot_mode());
+    // Debug: re-read cmdline after serial is up
+    if let Some(kf_resp) = KERNEL_FILE_REQUEST.get_response() {
+        let file = kf_resp.file();
+        let cmdline_bytes = file.cmdline();
+        if let Ok(s) = core::str::from_utf8(cmdline_bytes) {
+            serial_println!("[BOOT] Kernel cmdline raw: '{}'", s);
+        } else {
+            serial_println!("[BOOT] Kernel cmdline: {} bytes (not UTF-8)", cmdline_bytes.len());
+        }
+        if let Ok(p) = file.path().to_str() {
+            serial_println!("[BOOT] Kernel path: '{}'", p);
+        }
+    }
 
     // Phase 1.1: Detect exception level on aarch64
     #[cfg(target_arch = "aarch64")]
@@ -1048,6 +1118,50 @@ pub unsafe extern "C" fn kmain() -> ! {
             netstack::dhcp::start();
             netstack::ipv6::init();
             netstack::tcp::init_isn_secret();
+
+            // Auto-start remote shell: wait for DHCP, then enable remoteshell + netconsole
+            // This allows headless operation (no screen/keyboard needed)
+            if drivers::net::has_driver() {
+                serial_println!("[NET] Waiting for DHCP (up to 10s)...");
+                let dhcp_start = logger::get_ticks();
+                loop {
+                    for _ in 0..30 { netstack::poll(); }
+                    if network::get_ipv4_config().is_some() { break; }
+                    if logger::get_ticks().saturating_sub(dhcp_start) > 10_000 { break; }
+                    crate::arch::halt();
+                }
+                // Fallback static IP if DHCP failed
+                if network::get_ipv4_config().is_none() {
+                    serial_println!("[NET] DHCP timeout — applying static 10.0.0.100/24");
+                    network::set_ipv4_config(
+                        network::Ipv4Address::new(10, 0, 0, 100),
+                        network::Ipv4Address::new(255, 255, 255, 0),
+                        Some(network::Ipv4Address::new(10, 0, 0, 1)),
+                    );
+                }
+                if let Some((ip, _, _)) = network::get_ipv4_config() {
+                    let b = ip.as_bytes();
+                    serial_println!("[NET] IP: {}.{}.{}.{}", b[0], b[1], b[2], b[3]);
+                    framebuffer::print_boot_status(
+                        &alloc::format!("IP: {}.{}.{}.{}", b[0], b[1], b[2], b[3]),
+                        BootStatus::Ok,
+                    );
+                }
+                // Start remote shell + netconsole (headless access)
+                debug::remoteshell::start();
+                framebuffer::print_boot_status(
+                    &alloc::format!("Remote shell: UDP port {}", debug::remoteshell::LISTEN_PORT),
+                    BootStatus::Ok,
+                );
+                // Auto-start netconsole on broadcast
+                if let Some((src_ip, mask, _)) = network::get_ipv4_config() {
+                    let s = src_ip.as_bytes();
+                    let m = mask.as_bytes();
+                    let bcast = [s[0] | !m[0], s[1] | !m[1], s[2] | !m[2], s[3] | !m[3]];
+                    debug::netconsole::start(bcast, debug::netconsole::DEFAULT_PORT);
+                    framebuffer::print_boot_status("Netconsole: broadcast", BootStatus::Ok);
+                }
+            }
         }
     } else {
         framebuffer::print_boot_status("Network disabled", BootStatus::Skip);
@@ -1258,6 +1372,15 @@ pub unsafe extern "C" fn kmain() -> ! {
     // Start shell (runs forever)
     debug::checkpoint(debug::POST_SHELL_READY, "Shell ready — boot complete");
     serial_println!("Starting shell...");
+
+    // If booted in install mode, run the installer wizard
+    if boot_mode() == BootMode::Install {
+        // Enable keyboard interrupts before wizard (normally done in shell::run)
+        crate::interrupts::set_bootstrap_ready(true);
+        serial_println!("[BOOT] Install mode — launching installer wizard");
+        installer::run_wizard();
+    }
+
     shell::run();
 }
 

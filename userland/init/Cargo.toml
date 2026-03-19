@@ -5,4 +5,4 @@ edition = "2021"
 authors = ["Nated0ge <nathan@trustos.dev>"]
 
 [dependencies]
-# No std for now - will add syscall wrapper
+trustos-syscall = { path = "../trustos-syscall" }

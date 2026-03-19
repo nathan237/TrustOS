@@ -14,6 +14,8 @@ Write-Output "=== Starting VBox Launch $(Get-Date) ==="
 Write-Output "Step 1: Cleanup..."
 & $VBM controlvm $VMName poweroff 2>&1
 Start-Sleep -Seconds 3
+# Detach install test disk before unregister to prevent deletion
+& $VBM storageattach $VMName --storagectl "SATA" --port 1 --device 0 --type hdd --medium none 2>&1
 & $VBM unregistervm $VMName --delete 2>&1
 Start-Sleep -Seconds 2
 
@@ -73,6 +75,17 @@ if (Test-Path $DataDisk) {
     Write-Output "Audio data disk attached on SATA port 3"
 } else {
     Write-Output "WARNING: No audio data disk found at $DataDisk"
+}
+
+# Install test disk on AHCI port 1 (1GB, for installer testing)
+$InstallTestDisk = "C:\Users\nathan\Documents\Scripts\OSrust\builds\trustos_install_test.vdi"
+if (-not (Test-Path $InstallTestDisk)) {
+    & $VBM createmedium disk --filename $InstallTestDisk --size 1024 --format VDI 2>&1
+    Write-Output "Created 1GB install test disk"
+}
+if (Test-Path $InstallTestDisk) {
+    & $VBM storageattach $VMName --storagectl "SATA" --port 1 --device 0 --type hdd --medium $InstallTestDisk 2>&1
+    Write-Output "Install test disk attached on SATA port 1"
 }
 
 # Serial

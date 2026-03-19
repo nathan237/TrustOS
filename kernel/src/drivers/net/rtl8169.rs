@@ -403,6 +403,10 @@ impl Driver for Rtl8169Driver {
 
         crate::log!("[RTL8169] Probing {:04X}:{:04X}", pci_device.vendor_id, pci_device.device_id);
 
+        // Enable PCI bus mastering (DMA) and memory space access
+        crate::pci::enable_bus_master(pci_device);
+        crate::pci::enable_memory_space(pci_device);
+
         // Get BAR0 (MMIO)
         let bar0 = pci_device.bar_address(0).ok_or("No BAR0")?;
         if bar0 == 0 { return Err("BAR0 is zero"); }

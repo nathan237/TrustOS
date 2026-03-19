@@ -77,6 +77,11 @@ pub struct VirtualMachine {
 }
 
 impl VirtualMachine {
+    /// Access the initialized VMCS (panics if not initialized — caller must ensure init)
+    fn vmcs(&self) -> &Vmcs {
+        self.vmcs.as_ref().expect("VMCS must be initialized before use")
+    }
+
     pub fn new(id: u64, name: &str, memory_mb: usize) -> Result<Self> {
         let memory_size = memory_mb * 1024 * 1024;
         
@@ -91,8 +96,8 @@ impl VirtualMachine {
         
         // Allocate VPID for TLB isolation
         let vpid = super::vpid::allocate();
-        if vpid.is_some() {
-            crate::serial_println!("[VM {}] Allocated VPID {} for TLB isolation", id, vpid.unwrap());
+        if let Some(v) = vpid {
+            crate::serial_println!("[VM {}] Allocated VPID {} for TLB isolation", id, v);
         }
         
         // Emit VM created event
@@ -179,7 +184,7 @@ impl VirtualMachine {
             self.initialize()?;
         }
         
-        let vmcs = self.vmcs.as_ref().unwrap();
+        let vmcs = self.vmcs();
         
         // Configurer l'état du guest
         vmcs.setup_guest_state(entry_point, stack_ptr)?;
@@ -234,14 +239,14 @@ impl VirtualMachine {
             self.initialize()?;
         }
         
-        let vmcs = self.vmcs.as_ref().unwrap();
-        
-        // Configure VMCS with Linux-specific guest state
-        linux_loader::configure_vmcs_for_linux(vmcs, &setup)?;
-        
         // Set RSI = boot_params address (Linux boot protocol requirement)
         self.guest_regs.rsi = setup.boot_params_addr;
         self.save_guest_regs_for_entry();
+        
+        let vmcs = self.vmcs();
+        
+        // Configure VMCS with Linux-specific guest state
+        linux_loader::configure_vmcs_for_linux(vmcs, &setup)?;
         
         // Set up host state for VM exits
         let exit_handler = vm_exit_stub as *const () as u64;
@@ -360,7 +365,7 @@ impl VirtualMachine {
     fn handle_vm_exit(&mut self) -> Result<bool> {
         // Lire les infos de base du VMCS
         let (exit_reason, exit_qual, guest_rip, instr_len) = {
-            let vmcs = self.vmcs.as_ref().unwrap();
+            let vmcs = self.vmcs();
             let reason = vmcs.read(fields::VM_EXIT_REASON)? as u32 & 0xFFFF;
             let qual = vmcs.read(fields::EXIT_QUALIFICATION)?;
             let rip = vmcs.read(fields::GUEST_RIP)?;
@@ -377,7 +382,7 @@ impl VirtualMachine {
                 );
                 self.handle_cpuid()?;
                 // Avancer RIP après CPUID (2 bytes)
-                let vmcs = self.vmcs.as_ref().unwrap();
+                let vmcs = self.vmcs();
                 vmcs.write(fields::GUEST_RIP, guest_rip + 2)?;
                 Ok(true)
             }
@@ -386,7 +391,7 @@ impl VirtualMachine {
                 self.stats.hlt_exits += 1;
                 // For Linux: HLT is used in idle loops, advance RIP past it and continue.
                 // Only stop the VM after too many consecutive HLTs without progress.
-                let vmcs = self.vmcs.as_ref().unwrap();
+                let vmcs = self.vmcs();
                 vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
                 
                 // Safety valve: if we've done thousands of HLTs, the guest is likely stuck
@@ -404,7 +409,7 @@ impl VirtualMachine {
                 let dir = if (exit_qual & 8) == 0 { "OUT" } else { "IN" };
                 crate::lab_mode::trace_bus::emit_vm_io(self.id, dir, port, self.guest_regs.rax);
                 self.handle_io(exit_qual)?;
-                let vmcs = self.vmcs.as_ref().unwrap();
+                let vmcs = self.vmcs();
                 vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
                 Ok(true)
             }
@@ -412,14 +417,14 @@ impl VirtualMachine {
             exit_reason::RDMSR | exit_reason::WRMSR => {
                 self.stats.msr_exits += 1;
                 self.handle_msr(exit_reason == exit_reason::WRMSR)?;
-                let vmcs = self.vmcs.as_ref().unwrap();
+                let vmcs = self.vmcs();
                 vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
                 Ok(true)
             }
             
             exit_reason::EPT_VIOLATION => {
                 self.stats.ept_violations += 1;
-                let vmcs = self.vmcs.as_ref().unwrap();
+                let vmcs = self.vmcs();
                 let guest_phys = vmcs.read(fields::GUEST_PHYSICAL_ADDRESS)?;
                 let guest_linear = vmcs.read(fields::GUEST_LINEAR_ADDRESS).ok();
                 
@@ -453,7 +458,7 @@ impl VirtualMachine {
                 );
                 // Hypercall depuis le guest
                 let result = self.handle_vmcall()?;
-                let vmcs = self.vmcs.as_ref().unwrap();
+                let vmcs = self.vmcs();
                 vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
                 Ok(result)
             }
@@ -487,7 +492,7 @@ impl VirtualMachine {
                     crate::serial_println!("[VM {}] XSETBV ignored XCR{}=0x{:X}", self.id, xcr_index, xcr_value);
                 }
                 
-                let vmcs = self.vmcs.as_ref().unwrap();
+                let vmcs = self.vmcs();
                 vmcs.write(fields::GUEST_RIP, guest_rip + instr_len)?;
                 Ok(true)
             }

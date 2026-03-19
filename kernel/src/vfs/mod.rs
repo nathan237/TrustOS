@@ -336,6 +336,45 @@ pub fn init() {
         }
     }
     
+    // Try to mount ext4 partitions from AHCI (x86_64 only)
+    #[cfg(target_arch = "x86_64")]
+    {
+        crate::log_debug!("[VFS] Looking for ext4 partitions...");
+        if crate::drivers::ahci::is_initialized() {
+            let devices = crate::drivers::ahci::list_devices();
+            'ext4_search: for device in devices {
+                let port = device.port_num;
+                let total_sectors = device.sector_count;
+                let read_fn = |sector: u64, buf: &mut [u8]| -> Result<(), &'static str> {
+                    crate::drivers::ahci::read_sectors(port, sector, 1, buf).map(|_| ())
+                };
+                if let Ok(table) = crate::drivers::partition::parse_partition_table(read_fn, total_sectors) {
+                    for partition in &table.partitions {
+                        match partition.partition_type {
+                            crate::drivers::partition::PartitionType::LinuxFilesystem |
+                            crate::drivers::partition::PartitionType::LinuxFilesystemGpt => {
+                                let reader = Arc::new(fat32::AhciBlockReader::new(port as usize, partition.start_lba));
+                                if ext4::probe(&*reader) {
+                                    match ext4::mount(reader) {
+                                        Ok(fs) => {
+                                            mount("/mnt/ext4", fs).ok();
+                                            crate::log!("[VFS] Mounted ext4 at /mnt/ext4 (AHCI port {} LBA {})", port, partition.start_lba);
+                                            break 'ext4_search;
+                                        }
+                                        Err(e) => {
+                                            crate::log_debug!("[VFS] ext4 mount failed: {}", e);
+                                        }
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
     crate::log!("[OK] VFS initialized");
 }
 

@@ -143,6 +143,9 @@ PROTECTED_IDENTS = RUST_KEYWORDS | RUST_STD_TYPES | RUST_STD_MACROS | frozenset(
     # stdlib alloc functions (must not be renamed)
     'alloc_zeroed', 'alloc_layout', 'dealloc', 'realloc',
     'handle_alloc_error',
+    # Core lang items and extern crate traits/types
+    'GlobalAlloc', 'PanicInfo', 'ToString', 'LockedHeap',
+    'Layout', 'AllocError',
     # Rust attributes and built-in macros
     'cfg_attr', 'cfg_if', 'cfg_accessible', 'derive_const',
     'bench', 'global_allocator', 'test_case',
@@ -160,6 +163,116 @@ PROTECTED_IDENTS = RUST_KEYWORDS | RUST_STD_TYPES | RUST_STD_MACROS | frozenset(
     # Common unsafe/FFI function names
     'write_volatile', 'read_volatile', 'copy_nonoverlapping',
     'swap', 'replace', 'take',
+    # Trait associated types (must match trait definition)
+    'Target', 'Output', 'Item', 'Error', 'Offset',
+    # More trait methods
+    'deref_mut', 'clone_from', 'into_inner', 'as_ptr', 'as_mut_ptr',
+    'with_capacity', 'capacity', 'reserve', 'shrink_to_fit',
+    'extend', 'extend_from_slice', 'truncate', 'retain',
+    'split_at', 'split_first', 'split_last', 'chunks', 'windows',
+    'copy_from_slice', 'swap_with_slice', 'rotate_left', 'rotate_right',
+    'fill', 'sort', 'sort_by', 'sort_unstable', 'binary_search',
+    'iter', 'iter_mut', 'into_iter',
+    # Common function names that must not be renamed
+    'min', 'max', 'clamp', 'abs', 'signum', 'saturating_add', 'saturating_sub',
+    'checked_add', 'checked_sub', 'checked_mul', 'checked_div',
+    'wrapping_add', 'wrapping_sub', 'wrapping_mul',
+    'overflowing_add', 'overflowing_sub',
+    'leading_zeros', 'trailing_zeros', 'count_ones', 'rotate_left', 'rotate_right',
+    'to_le_bytes', 'to_be_bytes', 'to_ne_bytes',
+    'from_le_bytes', 'from_be_bytes', 'from_ne_bytes',
+    # ── str / String methods ──
+    'starts_with', 'ends_with', 'contains_str',
+    'trim', 'trim_start', 'trim_end', 'trim_matches',
+    'trim_start_matches', 'trim_end_matches',
+    'strip_prefix', 'strip_suffix',
+    'split', 'splitn', 'rsplit', 'rsplitn', 'split_whitespace',
+    'split_once', 'rsplit_once', 'split_terminator', 'split_inclusive',
+    'split_ascii_whitespace',
+    'find', 'rfind', 'match_indices', 'matches',
+    'replace', 'replacen',
+    'to_uppercase', 'to_lowercase', 'to_ascii_uppercase', 'to_ascii_lowercase',
+    'make_ascii_uppercase', 'make_ascii_lowercase',
+    'chars', 'bytes', 'lines', 'char_indices', 'encode_utf8', 'encode_utf16',
+    'repeat', 'is_ascii', 'is_char_boundary',
+    'push_str', 'insert_str', 'as_bytes', 'as_str',
+    'is_empty', 'len',
+    'join', 'concat',
+    # ── Iterator methods ──
+    'collect', 'filter', 'filter_map', 'flat_map', 'flatten',
+    'enumerate', 'zip', 'chain', 'cycle',
+    'take_while', 'skip_while', 'map_while',
+    'any', 'all', 'find_map', 'position', 'rposition',
+    'count', 'fold', 'reduce', 'sum', 'product',
+    'for_each', 'inspect', 'scan',
+    'nth', 'last', 'peekable', 'fuse', 'rev',
+    'cloned', 'copied', 'by_ref',
+    'min_by', 'max_by', 'min_by_key', 'max_by_key',
+    'step_by', 'unzip', 'partition',
+    # ── Vec / slice methods ──
+    'push', 'pop', 'insert', 'remove', 'clear', 'drain', 'splice', 'split_off',
+    'swap_remove', 'dedup', 'dedup_by', 'dedup_by_key',
+    'resize', 'resize_with',
+    'to_vec', 'into_boxed_slice', 'into_flattened',
+    'first', 'last', 'get_mut', 'get_unchecked', 'get_unchecked_mut',
+    'starts_with', 'ends_with',
+    'sort_by_key', 'sort_unstable_by', 'sort_unstable_by_key',
+    'contains', 'windows', 'chunks', 'chunks_exact',
+    'rchunks', 'rchunks_exact',
+    # ── HashMap / BTreeMap methods ──
+    'contains_key', 'entry', 'keys', 'values', 'values_mut',
+    'or_insert', 'or_insert_with', 'or_default', 'and_modify',
+    'get_or_insert', 'get_or_insert_with',
+    'remove_entry', 'retain',
+    # ── Option / Result methods ──
+    'unwrap_or_default', 'map_or', 'map_or_else',
+    'ok', 'err', 'transpose', 'flatten',
+    'unwrap_err', 'expect_err',
+    'is_some_and', 'is_ok_and', 'is_err_and',
+    # ── Formatting / Display ──
+    'write_str', 'write_fmt', 'write_char',
+    'pad', 'precision', 'width', 'fill', 'sign_plus', 'sign_minus',
+    'alternate', 'sign_aware_zero_pad', 'debug_struct', 'debug_list',
+    'debug_tuple', 'debug_map', 'debug_set', 'finish',
+    'field', 'entry', 'entries',
+    # ── Conversion / casting ──
+    'as_ref', 'as_mut', 'as_slice', 'as_mut_slice',
+    'to_string', 'to_owned', 'into_owned',
+    'into_bytes', 'into_string', 'from_utf8', 'from_utf8_unchecked',
+    'from_utf8_lossy', 'from_raw_parts', 'from_raw_parts_mut',
+    # ── Numeric methods ──
+    'pow', 'log2', 'log10', 'sqrt', 'cbrt',
+    'is_nan', 'is_infinite', 'is_finite', 'is_normal',
+    'floor', 'ceil', 'round', 'trunc', 'fract',
+    'to_bits', 'from_bits',
+    'from_le', 'from_be', 'to_le', 'to_be',
+    'swap_bytes', 'reverse_bits',
+    'is_power_of_two', 'next_power_of_two',
+    'checked_next_power_of_two',
+    # ── Sync / atomic ──
+    'fetch_or', 'fetch_and', 'fetch_xor', 'fetch_nand',
+    'fetch_max', 'fetch_min', 'fetch_update',
+    'compare_exchange_weak', 'compare_and_swap',
+    'into_inner', 'get_mut',
+    # ── Smart pointer / cell ──
+    'borrow', 'borrow_mut', 'try_borrow', 'try_borrow_mut',
+    'set', 'get', 'replace', 'take', 'swap',
+    'strong_count', 'weak_count', 'downgrade', 'upgrade',
+    # ── Pin / Future ──
+    'as_pin_mut', 'as_pin_ref', 'into_inner', 'get_ref', 'get_mut',
+    # ── Range ──
+    'range', 'range_mut',
+    # ── Commonly used across the kernel ──
+    'offset', 'wrapping_offset', 'add', 'sub', 'wrapping_add', 'wrapping_sub',
+    'is_null', 'is_aligned', 'align_to', 'align_up', 'align_down',
+    'checked_rem', 'checked_neg', 'checked_abs', 'checked_pow',
+    'checked_shl', 'checked_shr',
+    # ── SIMD intrinsic types ──
+    '__m128', '__m128d', '__m128i', '__m256', '__m256d', '__m256i',
+    '__m512', '__m512d', '__m512i',
+    '_mm_loadu_si128', '_mm_storeu_si128', '_mm_set1_epi32',
+    '_mm256_loadu_si256', '_mm256_storeu_si256', '_mm256_set1_epi32',
+    '_mm256_setzero_si256', '_mm256_or_si256',
 })
 
 # ── Abbreviation expansion dictionary (for educational mode) ──
@@ -484,8 +597,9 @@ class RustTokenizer:
             # lifetime 'ident
             return Token(TT.LIFETIME, self._slice(s), l, c)
         elif self._ch() == '\\':
-            self._advance()
-            if self._ch():
+            self._advance()  # skip backslash
+            # consume all chars until closing '
+            while self.pos < len(self.src) and self.src[self.pos] != '\'':
                 self._advance()
             if self._ch() == '\'':
                 self._advance()
@@ -573,9 +687,10 @@ class MinimalNameGen:
     """Generates the shortest possible unique names per naming convention.
     Tracks all generated names globally to avoid cross-style collisions."""
 
-    def __init__(self):
+    def __init__(self, reserved: Set[str] = frozenset()):
         self._counters = {'snake': 0, 'pascal': 0, 'upper': 0}
         self._used: Set[str] = set()
+        self._reserved = reserved  # Original names that survive un-renamed
 
     def next_name(self, style: str) -> str:
         while True:
@@ -589,7 +704,7 @@ class MinimalNameGen:
             else:  # upper / SCREAMING_SNAKE
                 raw = _idx_to_name(idx, 'abcdefghijklmnopqrstuvwxyz')
                 name = raw.upper() + '_'
-            if name not in PROTECTED_IDENTS and name not in self._used:
+            if name not in PROTECTED_IDENTS and name not in self._used and name not in self._reserved:
                 self._used.add(name)
                 return name
 
@@ -632,7 +747,11 @@ _RUST_RESERVED = frozenset({
 
 def expand_identifier(name: str) -> str:
     """Expand abbreviated identifier to a more readable version.
-    Returns the original name if expansion would produce a reserved keyword."""
+    Returns the original name if expansion would produce a reserved keyword
+    or if the original name is in the protected set."""
+    # Never expand identifiers that are in the protected set
+    if name in PROTECTED_IDENTS:
+        return name
     style = _classify_ident(name)
     if style == 'snake':
         parts = _split_snake(name)
@@ -657,6 +776,158 @@ def expand_identifier(name: str) -> str:
 #  CONTEXT ANALYSIS
 # ════════════════════════════════════════════════════════════════
 
+# Known external crate / module roots — identifiers after these :: paths must not be renamed
+# ONLY top-level crate names go here — NOT their sub-modules (sub-modules are
+# protected automatically when the root is followed by ::)
+_EXTERNAL_ROOTS = frozenset({
+    'core', 'alloc', 'std',
+    'spin', 'volatile', 'x86_64', 'limine',
+    'embedded_graphics', 'embedded_graphics_core', 'tiny_skia', 'tiny_skia_path',
+    'uart_16550', 'serde', 'log', 'bitflags', 'lazy_static',
+    'libm', 'micromath', 'miniz_oxide', 'linked_list_allocator',
+    'pc_keyboard',
+})
+
+# Standard library sub-modules commonly re-exported via `use core::xxx`.
+# When used as path prefixes (e.g. `ptr::write_bytes`), identifiers after ::
+# must not be renamed because they're stdlib definitions.
+_STD_MODULE_PATHS = frozenset({
+    'ptr', 'mem', 'fmt', 'ops', 'cmp', 'hash', 'num',
+    'slice', 'iter', 'convert', 'marker', 'any',
+    'cell', 'pin', 'future',
+    'atomic', 'hint', 'intrinsics',
+    # Primitive types used as path prefixes (associated functions/constants)
+    'char', 'bool',
+    'u8', 'u16', 'u32', 'u64', 'u128', 'usize',
+    'i8', 'i16', 'i32', 'i64', 'i128', 'isize',
+    'f32', 'f64',
+    'str',
+})
+
+
+def detect_no_rename_positions(tokens: List[Token]) -> Set[int]:
+    """Detect token positions that must NOT be renamed, based on context:
+    - Identifiers inside #[...] attribute blocks
+    - Identifiers inside asm!() / global_asm!() blocks
+    - Identifiers after :: on external module paths
+    - Trait method names in impl blocks for std/external traits
+    """
+    protected: Set[int] = set()
+    n = len(tokens)
+
+    i = 0
+    while i < n:
+        tok = tokens[i]
+
+        # ── Attribute blocks: #[...] and #![...] ──
+        if tok.type == TT.OPERATOR and tok.value == '#':
+            j = i + 1
+            while j < n and tokens[j].type == TT.WHITESPACE:
+                j += 1
+            if j < n and tokens[j].value in ('[', '!'):
+                # Find matching ] (handle nesting)
+                if tokens[j].value == '!':
+                    j += 1
+                    while j < n and tokens[j].type == TT.WHITESPACE:
+                        j += 1
+                if j < n and tokens[j].value == '[':
+                    depth = 1
+                    j += 1
+                    while j < n and depth > 0:
+                        if tokens[j].value == '[':
+                            depth += 1
+                        elif tokens[j].value == ']':
+                            depth -= 1
+                        if depth > 0 and tokens[j].type == TT.IDENT:
+                            protected.add(j)
+                        j += 1
+                    i = j
+                    continue
+
+        # ── asm!() / global_asm!() / naked_asm!() blocks ──
+        if tok.type == TT.IDENT and tok.value in ('asm', 'global_asm', 'naked_asm'):
+            j = i + 1
+            while j < n and tokens[j].type == TT.WHITESPACE:
+                j += 1
+            if j < n and tokens[j].value == '!':
+                j += 1
+                while j < n and tokens[j].type == TT.WHITESPACE:
+                    j += 1
+                if j < n and tokens[j].value == '(':
+                    depth = 1
+                    j += 1
+                    while j < n and depth > 0:
+                        if tokens[j].value == '(':
+                            depth += 1
+                        elif tokens[j].value == ')':
+                            depth -= 1
+                        if depth > 0 and tokens[j].type == TT.IDENT:
+                            protected.add(j)
+                        j += 1
+                    i = j
+                    continue
+
+        # ── External module paths: core::xxx, alloc::xxx, ptr::xxx, etc. ──
+        if tok.type == TT.IDENT and (tok.value in _EXTERNAL_ROOTS or tok.value in _STD_MODULE_PATHS):
+            j = i + 1
+            while j < n and tokens[j].type == TT.WHITESPACE:
+                j += 1
+            if j < n and tokens[j].value == '::':
+                # Protect all identifiers in the rest of this path
+                j += 1
+                while j < n:
+                    if tokens[j].type == TT.WHITESPACE:
+                        j += 1
+                        continue
+                    if tokens[j].type == TT.IDENT:
+                        protected.add(j)
+                        j += 1
+                        # Check for another ::
+                        while j < n and tokens[j].type == TT.WHITESPACE:
+                            j += 1
+                        if j < n and tokens[j].value == '::':
+                            j += 1
+                            continue
+                    break
+
+        # ── Dot-access: .field or .method() — never rename after '.' ──
+        if tok.type == TT.OPERATOR and tok.value == '.':
+            # Make sure it's not '..' (range operator)
+            if i + 1 < n and tokens[i + 1].value != '.':
+                j = i + 1
+                while j < n and tokens[j].type == TT.WHITESPACE:
+                    j += 1
+                if j < n and tokens[j].type == TT.IDENT:
+                    protected.add(j)
+
+        # ── extern "C" { ... } blocks — linker/assembly symbols ──
+        if tok.type == TT.KEYWORD and tok.value == 'extern':
+            j = i + 1
+            while j < n and tokens[j].type == TT.WHITESPACE:
+                j += 1
+            if j < n and tokens[j].type == TT.STRING and tokens[j].value in ('"C"', '"Rust"'):
+                j += 1
+                while j < n and tokens[j].type == TT.WHITESPACE:
+                    j += 1
+                if j < n and tokens[j].value == '{':
+                    depth = 1
+                    j += 1
+                    while j < n and depth > 0:
+                        if tokens[j].value == '{':
+                            depth += 1
+                        elif tokens[j].value == '}':
+                            depth -= 1
+                        if depth > 0 and tokens[j].type == TT.IDENT:
+                            protected.add(j)
+                        j += 1
+                    i = j
+                    continue
+
+        i += 1
+
+    return protected
+
+
 def collect_module_names(all_tokens: Dict[str, List[Token]]) -> Set[str]:
     """Scan all files for `mod xxx` declarations and path-prefix identifiers."""
     modules: Set[str] = set()
@@ -676,6 +947,70 @@ def collect_module_names(all_tokens: Dict[str, List[Token]]) -> Set[str]:
     return modules
 
 
+def collect_external_imports(all_tokens: Dict[str, List[Token]]) -> Set[str]:
+    """Scan all files for `use external_crate::...` imports and collect all
+    imported type/function/trait names. This protects them from renaming since
+    they are defined in external crates and must match exactly.
+    Also handles grouped imports: `use foo::{A, B, C}`."""
+    imports: Set[str] = set()
+    for tokens in all_tokens.values():
+        n = len(tokens)
+        i = 0
+        while i < n:
+            # Look for `use` keyword
+            if tokens[i].type == TT.KEYWORD and tokens[i].value == 'use':
+                # Collect all tokens until `;`
+                j = i + 1
+                use_tokens = []
+                while j < n and tokens[j].value != ';':
+                    if tokens[j].type != TT.WHITESPACE:
+                        use_tokens.append(tokens[j])
+                    j += 1
+                # Check if this is an external import (starts with external root or crate::)
+                if use_tokens and use_tokens[0].type == TT.IDENT:
+                    root = use_tokens[0].value
+                    is_external = root in _EXTERNAL_ROOTS
+                    is_local = root in ('crate', 'self', 'super')
+                    if is_external:
+                        _extract_import_names(use_tokens, imports)
+                i = j + 1
+            else:
+                i += 1
+    return imports
+
+
+def _extract_import_names(use_tokens: list, imports: Set[str]):
+    """Extract the leaf identifier names from a parsed `use` token list.
+    Handles: `use foo::bar::Baz`, `use foo::{A, B as C, D}`, `use foo::*`."""
+    # Find grouped imports { ... }
+    brace_start = None
+    for k, t in enumerate(use_tokens):
+        if t.value == '{':
+            brace_start = k
+            break
+
+    if brace_start is not None:
+        # Grouped: extract all IDENT tokens inside braces
+        # Handle `as` aliases: `Foo as Bar` — protect both
+        depth = 0
+        for k in range(brace_start, len(use_tokens)):
+            t = use_tokens[k]
+            if t.value == '{':
+                depth += 1
+            elif t.value == '}':
+                depth -= 1
+                if depth <= 0:
+                    break
+            elif t.type == TT.IDENT and depth > 0:
+                imports.add(t.value)
+    elif use_tokens and use_tokens[-1].value != '*':
+        # Simple: `use foo::bar::Baz` — protect last ident
+        for k in range(len(use_tokens) - 1, -1, -1):
+            if use_tokens[k].type == TT.IDENT:
+                imports.add(use_tokens[k].value)
+                break
+
+
 def is_path_prefix(tokens: List[Token], idx: int) -> bool:
     """Check if token at idx is followed by :: (making it a module/crate path prefix)."""
     for j in range(idx + 1, min(idx + 3, len(tokens))):
@@ -683,6 +1018,164 @@ def is_path_prefix(tokens: List[Token], idx: int) -> bool:
             continue
         return tokens[j].type == TT.OPERATOR and tokens[j].value == '::'
     return False
+
+
+def collect_local_definitions(all_tokens: Dict[str, List[Token]]) -> Set[str]:
+    """Scan all files for locally-defined identifiers: fn, struct, enum, trait,
+    const, static, let, type, macro_rules, and field/variant names.
+    Only these identifiers should be subject to renaming — any identifier NOT
+    in this set is either from an external crate or a built-in."""
+    defs: Set[str] = set()
+    # Keywords that introduce a named definition (the IDENT follows the keyword)
+    _DEF_KW = frozenset({'fn', 'struct', 'enum', 'trait', 'const', 'static',
+                          'let', 'type', 'mod', 'macro'})
+
+    for tokens in all_tokens.values():
+        n = len(tokens)
+        for i, tok in enumerate(tokens):
+            # keyword followed by an IDENT → definition
+            if tok.type == TT.KEYWORD and tok.value in _DEF_KW:
+                j = i + 1
+                # skip pub/mut/ref/unsafe between keyword and name
+                while j < n and (tokens[j].type == TT.WHITESPACE or
+                                  (tokens[j].type == TT.KEYWORD and tokens[j].value in ('mut', 'ref', 'unsafe'))):
+                    j += 1
+                if j < n and tokens[j].type == TT.IDENT:
+                    defs.add(tokens[j].value)
+
+            # macro_rules! name
+            if tok.type == TT.IDENT and tok.value == 'macro_rules':
+                j = i + 1
+                while j < n and tokens[j].type == TT.WHITESPACE:
+                    j += 1
+                if j < n and tokens[j].value == '!':
+                    j += 1
+                    while j < n and tokens[j].type == TT.WHITESPACE:
+                        j += 1
+                    if j < n and tokens[j].type == TT.IDENT:
+                        defs.add(tokens[j].value)
+
+    return defs
+
+
+def collect_extern_block_names(all_tokens: Dict[str, List[Token]]) -> Set[str]:
+    """Collect all identifier names declared inside extern \"C\" { ... } blocks.
+    These are linker/assembly symbols that must keep their original names."""
+    extern_names: Set[str] = set()
+    for tokens in all_tokens.values():
+        n = len(tokens)
+        i = 0
+        while i < n:
+            tok = tokens[i]
+            # Look for: extern "C" { or extern "Rust" {
+            if tok.type == TT.KEYWORD and tok.value == 'extern':
+                j = i + 1
+                while j < n and tokens[j].type == TT.WHITESPACE:
+                    j += 1
+                if j < n and tokens[j].type == TT.STRING and tokens[j].value in ('"C"', '"Rust"'):
+                    j += 1
+                    while j < n and tokens[j].type == TT.WHITESPACE:
+                        j += 1
+                    if j < n and tokens[j].value == '{':
+                        depth = 1
+                        j += 1
+                        while j < n and depth > 0:
+                            if tokens[j].value == '{':
+                                depth += 1
+                            elif tokens[j].value == '}':
+                                depth -= 1
+                            if depth > 0 and tokens[j].type == TT.IDENT:
+                                extern_names.add(tokens[j].value)
+                            j += 1
+                        i = j
+                        continue
+            i += 1
+    return extern_names
+
+
+def collect_asm_referenced_names(all_tokens: Dict[str, List[Token]]) -> Set[str]:
+    """Collect all identifier names that appear inside asm!() / global_asm!() blocks.
+    These names must NOT be renamed globally because they refer to local variables
+    that are bound to registers, and the name must match between definition and asm use."""
+    asm_names: Set[str] = set()
+    for tokens in all_tokens.values():
+        n = len(tokens)
+        i = 0
+        while i < n:
+            tok = tokens[i]
+            if tok.type == TT.IDENT and tok.value in ('asm', 'global_asm', 'naked_asm'):
+                j = i + 1
+                while j < n and tokens[j].type == TT.WHITESPACE:
+                    j += 1
+                if j < n and tokens[j].value == '!':
+                    j += 1
+                    while j < n and tokens[j].type == TT.WHITESPACE:
+                        j += 1
+                    if j < n and tokens[j].value == '(':
+                        depth = 1
+                        j += 1
+                        while j < n and depth > 0:
+                            if tokens[j].value == '(':
+                                depth += 1
+                            elif tokens[j].value == ')':
+                                depth -= 1
+                            if depth > 0:
+                                if tokens[j].type == TT.IDENT:
+                                    asm_names.add(tokens[j].value)
+                                # Also scan string literals for {name} placeholders
+                                elif tokens[j].type == TT.STRING:
+                                    for m in re.finditer(r'\{(\w+)\}', tokens[j].value):
+                                        asm_names.add(m.group(1))
+                            j += 1
+                        i = j
+                        continue
+            i += 1
+    return asm_names
+
+
+def collect_dot_access_names(all_tokens: Dict[str, List[Token]]) -> Set[str]:
+    """Collect all identifier names that appear after a '.' (dot-access position).
+    These are field accesses or method calls and must not be renamed globally,
+    because they may refer to fields/methods on external types (str, Vec, etc.)."""
+    dot_names: Set[str] = set()
+    for tokens in all_tokens.values():
+        n = len(tokens)
+        for i in range(n):
+            tok = tokens[i]
+            if tok.type == TT.OPERATOR and tok.value == '.':
+                # Skip '..' range operator
+                if i + 1 < n and tokens[i + 1].value == '.':
+                    continue
+                j = i + 1
+                while j < n and tokens[j].type == TT.WHITESPACE:
+                    j += 1
+                if j < n and tokens[j].type == TT.IDENT:
+                    dot_names.add(tokens[j].value)
+    return dot_names
+
+
+def collect_external_assoc_names(all_tokens: Dict[str, List[Token]],
+                                  external_imports: Set[str]) -> Set[str]:
+    """Collect identifier names that appear after ExternalType:: (associated functions).
+    For example, Transform::identity() where Transform is an external import.
+    These must not be renamed since the function is defined in the external crate."""
+    assoc_names: Set[str] = set()
+    for tokens in all_tokens.values():
+        n = len(tokens)
+        for i in range(n):
+            tok = tokens[i]
+            if tok.type == TT.IDENT and tok.value in external_imports:
+                # Check if followed by ::
+                j = i + 1
+                while j < n and tokens[j].type == TT.WHITESPACE:
+                    j += 1
+                if j < n and tokens[j].value == '::':
+                    j += 1
+                    while j < n and tokens[j].type == TT.WHITESPACE:
+                        j += 1
+                    if j < n and tokens[j].type == TT.IDENT:
+                        assoc_names.add(tokens[j].value)
+    return assoc_names
 
 
 def is_after_dot(tokens: List[Token], idx: int) -> bool:
@@ -837,6 +1330,7 @@ class MinimalTransformer:
 
     def transform(self, tokens: List[Token], mapping: Dict[str, str],
                   module_names: Set[str] = frozenset(), **kw) -> str:
+        no_rename = detect_no_rename_positions(tokens)
         out: List[str] = []
         prev_was_newline = False
         for i, tok in enumerate(tokens):
@@ -857,7 +1351,7 @@ class MinimalTransformer:
             # Rename identifiers
             if tok.type == TT.IDENT:
                 v = tok.value
-                if v in PROTECTED_IDENTS or v in module_names:
+                if i in no_rename or v in PROTECTED_IDENTS or v in module_names:
                     out.append(v)
                 elif v in mapping:
                     out.append(mapping[v])
@@ -878,6 +1372,7 @@ class EducationalTransformer:
 
     def transform(self, tokens: List[Token], mapping: Dict[str, str],
                   module_names: Set[str] = frozenset(), **kw) -> str:
+        no_rename = detect_no_rename_positions(tokens)
         # Detect annotation insertion points
         ann_points = detect_annotation_points(tokens)
         ann_map: Dict[int, str] = {}
@@ -896,7 +1391,7 @@ class EducationalTransformer:
             # Rename identifiers (expand)
             if tok.type == TT.IDENT:
                 v = tok.value
-                if v in PROTECTED_IDENTS or v in module_names:
+                if i in no_rename or v in PROTECTED_IDENTS or v in module_names:
                     out.append(v)
                 elif v in mapping:
                     out.append(mapping[v])
@@ -996,18 +1491,70 @@ class SourceTranslator:
 
         # Detect module names (protected from renaming)
         module_names = collect_module_names(all_tokens)
+        # Detect external imports (types/fns from external crates)
+        external_imports = collect_external_imports(all_tokens)
+        # Detect locally-defined names (only these should be renamed)
+        local_defs = collect_local_definitions(all_tokens)
+        # Detect names used inside asm!() blocks (must keep original names)
+        asm_names = collect_asm_referenced_names(all_tokens)
+        # Detect names used in dot-access position (field/method calls on potentially external types)
+        dot_names = collect_dot_access_names(all_tokens)
+        # Detect associated function names on external types (e.g. Transform::identity)
+        ext_assoc = collect_external_assoc_names(all_tokens, external_imports)
+        # Detect names declared in extern "C" { } blocks (linker/assembly symbols)
+        extern_names = collect_extern_block_names(all_tokens)
+        # Merge protections
+        module_names = module_names | external_imports
+        if self.verbose:
+            print(f"  Protected: {len(module_names)} module/import names")
+            print(f"  Local definitions: {len(local_defs)} names")
+            print(f"  Asm-referenced names: {len(asm_names)} names")
+            print(f"  Dot-access names: {len(dot_names)} names")
         # Remove module names from renameable set
         for mn in module_names:
             if mn in ident_counts:
                 del ident_counts[mn]
+        # Remove asm-referenced names (they must stay unchanged for asm consistency)
+        for an in asm_names:
+            if an in ident_counts:
+                del ident_counts[an]
+        # Remove dot-access names (field/method names that may be external)
+        for dn in dot_names:
+            if dn in ident_counts:
+                del ident_counts[dn]
+        # Remove external associated function names (e.g. Transform::identity)
+        for ea in ext_assoc:
+            if ea in ident_counts:
+                del ident_counts[ea]
+        # Remove extern "C" block names (linker/assembly symbols)
+        for en in extern_names:
+            if en in ident_counts:
+                del ident_counts[en]
+        # Add asm names, dot names, external associated names, and extern block names to module_names so transformers also skip them
+        module_names = module_names | asm_names | dot_names | ext_assoc | extern_names
+        # Remove non-local identifiers (not defined in our codebase) from renameable set
+        # This prevents renaming stdlib method names like push_str, starts_with, etc.
+        non_local = [name for name in ident_counts if name not in local_defs]
+        for name in non_local:
+            del ident_counts[name]
 
         # ── Build or load mapping ──
+        # Collect all identifier names present in the codebase (both renamed and not)
+        # so that generated short names don't collide with un-renamed originals
+        all_ident_names: Set[str] = set()
+        for tokens in all_tokens.values():
+            for tok in tokens:
+                if tok.type == TT.IDENT:
+                    all_ident_names.add(tok.value)
+        # Names that won't be renamed = all names minus those in ident_counts
+        reserved_originals = all_ident_names - set(ident_counts.keys())
+
         if self.load_mapping_path:
             with open(self.load_mapping_path, 'r', encoding='utf-8') as f:
                 mapping = json.load(f)
             print(f"[source_translator] Loaded mapping with {len(mapping)} entries")
         else:
-            mapping = self._build_mapping(ident_counts)
+            mapping = self._build_mapping(ident_counts, reserved_originals)
             print(f"[source_translator] Built mapping: {len(mapping)} identifiers")
 
         # ── Save mapping if requested ──
@@ -1057,7 +1604,7 @@ class SourceTranslator:
 
     # ── mapping builder ─────────────────────────────────────
 
-    def _build_mapping(self, ident_counts: Counter) -> Dict[str, str]:
+    def _build_mapping(self, ident_counts: Counter, reserved: Set[str] = frozenset()) -> Dict[str, str]:
         if self.preset == 'original':
             return {}
 
@@ -1065,7 +1612,7 @@ class SourceTranslator:
         sorted_idents = sorted(ident_counts.items(), key=lambda x: (-x[1], x[0]))
 
         if self.preset == 'minimal':
-            gen = MinimalNameGen()
+            gen = MinimalNameGen(reserved)
             mapping: Dict[str, str] = {}
             for name, _ in sorted_idents:
                 style = _classify_ident(name)
@@ -1074,11 +1621,15 @@ class SourceTranslator:
 
         elif self.preset == 'educational':
             mapping: Dict[str, str] = {}
+            # Collect ALL existing names to detect collisions
+            # (both reserved names and names in ident_counts that haven't been expanded yet)
+            used_names: Set[str] = set(reserved) | set(ident_counts.keys())
             for name, _ in sorted_idents:
                 expanded = expand_identifier(name)
-                # Only map if actually different
-                if expanded != name:
+                # Only map if actually different and no collision
+                if expanded != name and expanded not in used_names:
                     mapping[name] = expanded
+                    used_names.add(expanded)
             return mapping
 
         return {}

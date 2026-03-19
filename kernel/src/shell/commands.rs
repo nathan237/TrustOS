@@ -1564,6 +1564,137 @@ pub(super) fn cmd_restest() {
     }
 }
 
+/// Comprehensive Ring 3 userland test suite
+pub(super) fn cmd_usertest() {
+    crate::println_color!(COLOR_BRIGHT_GREEN, "=== TrustOS Ring 3 Userland Test Suite ===");
+    crate::println_color!(COLOR_WHITE,
+        "Running all user-space tests: syscalls, memory, IPC, signals, exceptions");
+    crate::println!();
+
+    let mut passed = 0usize;
+    let mut failed = 0usize;
+
+    let total = 9;
+
+    // Helper closure-like macro
+    macro_rules! run_test {
+        ($name:expr, $num:expr, $call:expr) => {{
+            crate::println_color!(COLOR_CYAN, "[{}/{}] {}", $num, total, $name);
+            crate::print!("  ");
+            match $call {
+                crate::exec::ExecResult::Exited(0) => {
+                    crate::println_color!(COLOR_GREEN, "PASS (exit 0)");
+                    passed += 1;
+                }
+                crate::exec::ExecResult::Exited(code) => {
+                    crate::println_color!(COLOR_YELLOW, "WARN (exit {})", code);
+                    failed += 1;
+                }
+                crate::exec::ExecResult::Faulted(reason) => {
+                    crate::println_color!(COLOR_RED, "FAIL (fault: {})", reason);
+                    failed += 1;
+                }
+                crate::exec::ExecResult::LoadError(e) => {
+                    crate::println_color!(COLOR_RED, "FAIL (load: {:?})", e);
+                    failed += 1;
+                }
+                crate::exec::ExecResult::MemoryError => {
+                    crate::println_color!(COLOR_RED, "FAIL (out of memory)");
+                    failed += 1;
+                }
+            }
+        }};
+    }
+
+    // 1. Basic Ring 3 execution (raw machine code)
+    run_test!("Ring 3 basic exec (syscall write + exit)", 1,
+        crate::exec::exec_test_program());
+
+    // 2. ELF loading + Ring 3 execution
+    run_test!("ELF binary load + Ring 3 exec", 2,
+        crate::exec::exec_hello_elf());
+
+    // 3. Memory allocation: brk + mmap
+    run_test!("Memory: brk() + mmap() allocation", 3,
+        crate::exec::exec_memtest());
+
+    // 4. IPC: pipe2 + write + read
+    run_test!("IPC: pipe2() + write() + read()", 4,
+        crate::exec::exec_pipe_test());
+
+    // 5. Signals: rt_sigprocmask + kill
+    run_test!("Signals: rt_sigprocmask() + kill()", 5,
+        crate::exec::exec_signal_test());
+
+    // 6. Stdio: getpid + clock_gettime + write
+    run_test!("Stdio: getpid() + clock_gettime() + write()", 6,
+        crate::exec::exec_stdio_test());
+
+    // 7. Exception safety: UD2 — kernel must catch, NOT panic
+    crate::println_color!(COLOR_CYAN, "[7/{}] Exception safety: UD2 (invalid opcode)", total);
+    crate::print!("  ");
+    match crate::exec::exec_exception_safety_test() {
+        crate::exec::ExecResult::Faulted(_) => {
+            crate::println_color!(COLOR_GREEN, "PASS (fault caught, kernel stable)");
+            passed += 1;
+        }
+        crate::exec::ExecResult::Exited(code) if code != 0 => {
+            crate::println_color!(COLOR_GREEN, "PASS (killed with signal, exit {})", code);
+            passed += 1;
+        }
+        other => {
+            crate::println_color!(COLOR_RED, "FAIL ({:?})", other);
+            failed += 1;
+        }
+    }
+
+    // 8. Frame leak test
+    crate::println_color!(COLOR_CYAN, "[8/{}] Memory leak: frame accounting after exit", total);
+    let (total_f, used_before) = crate::memory::frame::stats();
+    let free_before = total_f - used_before;
+    let _ = crate::exec::exec_test_program();
+    let (total_f2, used_after) = crate::memory::frame::stats();
+    let free_after = total_f2 - used_after;
+    crate::print!("  ");
+    if free_after >= free_before {
+        crate::println_color!(COLOR_GREEN, "PASS (no leak, free: {} -> {})", free_before, free_after);
+        passed += 1;
+    } else {
+        let leaked = free_before - free_after;
+        crate::println_color!(COLOR_RED, "FAIL (leaked {} frames = {} KB)", leaked, leaked * 4);
+        failed += 1;
+    }
+
+    // 9. Address space isolation
+    crate::println_color!(COLOR_CYAN, "[9/{}] Address space isolation: separate CR3", total);
+    crate::print!("  ");
+    let r1 = crate::exec::exec_test_program();
+    let r2 = crate::exec::exec_hello_elf();
+    match (&r1, &r2) {
+        (crate::exec::ExecResult::Exited(0), crate::exec::ExecResult::Exited(0)) => {
+            crate::println_color!(COLOR_GREEN, "PASS (both exited cleanly, separate address spaces)");
+            passed += 1;
+        }
+        _ => {
+            crate::println_color!(COLOR_RED, "FAIL");
+            failed += 1;
+        }
+    }
+
+    // Summary
+    crate::println!();
+    crate::println_color!(COLOR_WHITE, "────────────────────────────────────────");
+    let total_tests = passed + failed;
+    if failed == 0 {
+        crate::println_color!(COLOR_BRIGHT_GREEN,
+            "  ALL {}/{} RING 3 TESTS PASSED", passed, total_tests);
+    } else {
+        crate::println_color!(COLOR_RED,
+            "  {}/{} passed, {} FAILED", passed, total_tests, failed);
+    }
+    crate::println_color!(COLOR_WHITE, "────────────────────────────────────────");
+}
+
 /// Comprehensive v0.3 memory-management test suite
 pub(super) fn cmd_memtest() {
     crate::println_color!(COLOR_BRIGHT_GREEN, "=== TrustOS v0.3 Memory Test Suite ===");

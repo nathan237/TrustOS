@@ -739,16 +739,28 @@ pub fn create_etc_files() {
         
         crate::ramfs::with_fs(|fs| {
             // Create passwd
-            let _ = fs.touch("/etc/passwd");
-            let _ = fs.write_file("/etc/passwd", passwd_content.as_bytes());
+            if let Err(e) = fs.touch("/etc/passwd") {
+                crate::serial_println!("[AUTH] Failed to create /etc/passwd: {}", e.as_str());
+            }
+            if let Err(e) = fs.write_file("/etc/passwd", passwd_content.as_bytes()) {
+                crate::serial_println!("[AUTH] Failed to write /etc/passwd: {}", e.as_str());
+            }
             
             // Create group  
-            let _ = fs.touch("/etc/group");
-            let _ = fs.write_file("/etc/group", group_content.as_bytes());
+            if let Err(e) = fs.touch("/etc/group") {
+                crate::serial_println!("[AUTH] Failed to create /etc/group: {}", e.as_str());
+            }
+            if let Err(e) = fs.write_file("/etc/group", group_content.as_bytes()) {
+                crate::serial_println!("[AUTH] Failed to write /etc/group: {}", e.as_str());
+            }
             
             // Create shadow (permissions should be root only in real OS)
-            let _ = fs.touch("/etc/shadow");
-            let _ = fs.write_file("/etc/shadow", b"# Shadow file - passwords hidden\n");
+            if let Err(e) = fs.touch("/etc/shadow") {
+                crate::serial_println!("[AUTH] Failed to create /etc/shadow: {}", e.as_str());
+            }
+            if let Err(e) = fs.write_file("/etc/shadow", b"# Shadow file - passwords hidden\n") {
+                crate::serial_println!("[AUTH] Failed to write /etc/shadow: {}", e.as_str());
+            }
         });
     }
 }

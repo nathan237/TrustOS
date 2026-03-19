@@ -58,13 +58,13 @@ pub fn init() {
     crate::serial_println!("[PERSIST] Initializing persistence system...");
     
     // Find AHCI disk
-    let port = find_ahci_disk();
-    if port.is_none() {
-        crate::serial_println!("[PERSIST] No AHCI disk found, persistence disabled");
-        return;
-    }
-    
-    let port = port.unwrap();
+    let port = match find_ahci_disk() {
+        Some(p) => p,
+        None => {
+            crate::serial_println!("[PERSIST] No AHCI disk found, persistence disabled");
+            return;
+        }
+    };
     *PERSIST_PORT.lock() = Some(port);
     
     // Check if persistence data exists
@@ -419,11 +419,10 @@ pub fn is_available() -> bool {
 pub fn status() -> (&'static str, u32, u64) {
     let port = *PERSIST_PORT.lock();
     
-    if port.is_none() {
-        return ("No disk", 0, 0);
-    }
-    
-    let port = port.unwrap();
+    let port = match port {
+        Some(p) => p,
+        None => return ("No disk", 0, 0),
+    };
     let mut header_buf = [0u8; 512];
     
     if crate::drivers::ahci::read_sectors(port, PERSIST_START_SECTOR, 1, &mut header_buf).is_err() {

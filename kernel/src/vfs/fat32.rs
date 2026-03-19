@@ -573,8 +573,8 @@ impl Fat32Fs {
         let mut remaining = data;
         let mut write_offset = offset as usize;
         
-        for &cluster in &chain {
-            let cluster_start = (chain.iter().position(|&c| c == cluster).unwrap()) * cluster_size;
+        for (chain_idx, &cluster) in chain.iter().enumerate() {
+            let cluster_start = chain_idx * cluster_size;
             let cluster_end = cluster_start + cluster_size;
             
             if write_offset >= cluster_end || remaining.is_empty() {

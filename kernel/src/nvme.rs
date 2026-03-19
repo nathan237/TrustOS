@@ -332,7 +332,7 @@ impl NvmeController {
         
         // Poll for completion
         for _ in 0..10_000_000u32 {
-            let io = self.io.as_mut().unwrap();
+            let io = match self.io.as_mut() { Some(io) => io, None => return Err("NVMe I/O queue not initialized") };
             if let Some(cqe) = io.poll_completion() {
                 let cq_head = io.cq_head;
                 self.ring_cq_doorbell(1, cq_head);

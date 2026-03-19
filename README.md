@@ -6,15 +6,15 @@
 
 ### The OS you can actually read — in your language.
 
-**A bare-metal operating system written entirely in Rust — 276,000+ lines, zero C, zero binary blobs, zero secrets.**
+**A bare-metal operating system written entirely in Rust — 278,000+ lines, zero C, zero binary blobs, zero secrets.**
 
 *Built by one developer. Auditable by anyone. Learnable in English & French.*
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-276%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-278%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.10.4-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.10.5-orange?style=for-the-badge)]()
 [![Tests](https://img.shields.io/badge/tests-96%2F96%20(100%25)-brightgreen?style=for-the-badge)]()
 [![Translated](https://img.shields.io/badge/source-4%20versions-9cf?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
@@ -34,7 +34,7 @@
 
 > **New in v0.10.4** — TrustOS ships its entire source code in **4 developer-friendly versions**, auto-generated from one canonical codebase.
 
-Every `.rs` file in `kernel/src/` (480+ files, 276K+ lines) is automatically translated into 4 presets — each one compiles, each one is a valid representation of TrustOS:
+Every `.rs` file in `kernel/src/` (484 files, 278K+ lines) is automatically translated into 4 presets — each one compiles, each one is a valid representation of TrustOS:
 
 | Version | What it does | Who it's for |
 |---------|-------------|-------------|
@@ -60,24 +60,22 @@ python tools/source_translator.py --preset educational --lang fr -i kernel/src/ 
 
 Every `translated/*/` folder includes a `mapping.json` with thousands of identifier mappings — fully deterministic, reloadable, and diffable.
 
-> **Why this matters:** TrustOS is 276K+ lines of bare-metal Rust. The educational versions turn it into the largest annotated Rust OS learning resource that exists — in two languages.
+> **Why this matters:** TrustOS is 278K+ lines of bare-metal Rust. The educational versions turn it into the largest annotated Rust OS learning resource that exists — in two languages.
 
-## 🆕 What's New in v0.10.4
+## 🆕 What's New in v0.10.5
 
-> **March 18, 2026** — Universal Hardware Debugger Expansion (+4,650 lines, 6 new modules)
+> **March 19, 2026** — Full Userland Integration & Conformance Audit
 
-TrustOS is now a **full hardware diagnostic OS**. PXE-boot or USB-boot on any machine, run `hwdbg auto`, get a complete hardware identity & health report.
+TrustOS now has a **production-grade Ring 3 userland** with 104 Linux-compatible syscalls, a tri-architecture syscall library, and an 85-check conformance audit proving completeness.
 
-- 🔬 **SMBIOS/DMI parser** (`hwdbg smbios`) — Scans memory for SMBIOS 2.x/3.0 entry points. Identifies board, BIOS, chassis, CPU, and every DIMM slot (size, type DDR3/4/5, speed, manufacturer, serial).
-- 💽 **ATA SMART reader** (`hwdbg smart`) — Reads SMART health from IDE (PIO) and AHCI (DMA) drives. 50+ known attributes, threshold comparison, pre-failure detection. Temperature, power-on hours, reallocated sectors, pending/uncorrectable.
-- 📄 **HTML report generator** (`hwdbg report`) — Self-contained HTML with CSS dark theme. Sections: SMBIOS identity, CPU, DIMM table, PCI devices, SMART health, thermals, EFI, network. Export to USB FAT32 or serial.
-- ⚙️ **EFI/UEFI probe** (`hwdbg efi`) — Detects boot mode, Secure Boot, firmware vendor, UEFI version. Works post-ExitBootServices via memory scan.
-- 🖵 **EDID display parser** (`hwdbg edid`) — Reads EDID via Intel GMBUS I2C. Identifies monitor manufacturer, model, native resolution, physical size, refresh rate, supported modes.
-- 🔋 **ACPI battery & thermal zones** (`hwdbg battery`) — Battery status via EC (ThinkPad + generic), AC adapter detection, 8 EC thermal sensors, MSR CPU/package temps, sleep state detection (S0/S3/S4/S5). Verbose: full 256-byte EC register hex dump.
-- 🌐 **MARIONET probe integration** — All new data (SMBIOS, SMART, EFI, battery, thermal zones) available in the MARIONET dashboard auto-collection.
-- 🔒 **Hypervisor safety audit** — AMD SVM: all `unwrap()` removed, safe VMCB accessors. VT-x: error handling improvements.
-- 🔢 **HwDbg now has 23 subcommands** — up from 17. Run `hwdbg help` for the full list.
-- 📈 **276,000+ lines** across 480+ source files, 3 architectures.
+- 🔧 **104 Linux-compatible syscalls** — Full `handle_full()` dispatcher: file I/O (24), process/thread (30), memory (4), networking (14), signals (4), epoll (5), scheduling (3), time (3), sync (3), resources (3), random, plus 4 TrustOS-specific syscalls. Linux ABI-compatible numbering.
+- 📦 **`trustos-syscall` crate** — New userland syscall library with tri-architecture support: `syscall` (x86_64), `svc #0` (aarch64), `ecall` (riscv64). 30+ high-level wrappers (write, read, fork, exec, mmap, brk, socket, pipe, signals, time...).
+- 🏗 **CpuContext portability** — Proper per-architecture register structs: x86_64 (RAX-R15, RIP, RFLAGS, CS, SS), aarch64 (x0-x30, SP, PC, SPSR), riscv64 (x0-x31, PC, SSTATUS). No more generic fallback.
+- 🧪 **`userland-audit` command** — 85-check static conformance audit across 22 categories + 9 live Ring 3 execution tests. Verifies every POSIX/Linux userland capability: Ring 3 execution, syscall interface, memory management, process lifecycle, file I/O, signals, IPC, networking, time, scheduling, ELF loading, address space isolation, exception handling, GDT/TSS, security, filesystem, threading, epoll, resource limits, random, multi-architecture.
+- 🔬 **`usertest` command** — 9-test Ring 3 execution suite: basic exec, ELF load, brk/mmap, pipe IPC, signals, stdio, exception safety (UD2), frame leak detection, address space isolation.
+- 🦀 **Userland programs** — `init` process rewritten with real Linux syscalls (getpid, brk, clock_gettime, sched_yield). New `hello-rust` Ring 3 program.
+- 🏛 **Ring 3 architecture** — SYSCALL/SYSRET via MSR (STAR/LSTAR/SFMASK/EFER), GDT user segments (CS=0x20, DS=0x18), TSS RSP0 per-CPU, per-process PML4 page tables, ELF PIE relocations, System V ABI stack (argc/argv/auxv), COW fork.
+- 📈 **278,000+ lines** across 484 source files, 3 architectures.
 
 ---
 
@@ -157,11 +155,11 @@ TrustOS does things that **no other operating system on Earth** does. Here's why
 ### ⚡ A native x86_64 compiler running *inside* the OS
 TrustLang compiles your programs to **raw Intel machine code** and executes them — all from within the kernel. No LLVM. No GCC. No external toolchain. Write code → native binary → execute. The entire compiler is 3,600 lines of Rust.
 
-### 🔍 276,000 lines — and you can read every single one
+### 🔍 278,000 lines — and you can read every single one
 No binary blobs. No proprietary drivers. No hidden telemetry. **Every driver, every protocol, every pixel, every encryption algorithm** is open Rust. One developer built it. Anyone can audit it.
 
 ### 🌍 Source code that teaches itself — in your language
-Every file ships in **4 auto-generated versions**: original, minimal (stripped), educational-en (annotated English), educational-fr (annotated French). A custom tokenizer-based translator expands abbreviations, adds inline explanations of every `unsafe`, `trait`, `impl`, and Rust pattern — turning 276K lines of kernel code into the **largest annotated Rust OS learning resource in existence**.
+Every file ships in **4 auto-generated versions**: original, minimal (stripped), educational-en (annotated English), educational-fr (annotated French). A custom tokenizer-based translator expands abbreviations, adds inline explanations of every `unsafe`, `trait`, `impl`, and Rust pattern — turning 278K lines of kernel code into the **largest annotated Rust OS learning resource in existence**.
 
 ### 🖥 A real desktop OS, not a toy
 144 FPS SIMD-accelerated desktop with 14+ apps, a browser with HTML/CSS/JS, Game Boy and NES emulators, 3D chess, a code editor, network security toolkit, and the most complete kernel introspection lab ever built into a bare-metal OS.
@@ -210,7 +208,11 @@ TLS 1.3, TCP/IP, DNS, DHCP, HTTP, HTML/CSS parser, JavaScript engine, FAT32, EXT
 
 ### 5. Source Code Translation for Developers
 
-Every `.rs` file auto-translated into 4 versions (original, minimal, educational-en, educational-fr) by a custom tokenizer-based translator. 480+ files × 4 presets = 1,920+ compilable Rust files. Abbreviations expanded, inline annotations in English or French on every Rust pattern. The entire codebase becomes a learning tool. [**→ Learn more**](#-source-code-translation-for-developers)
+Every `.rs` file auto-translated into 4 versions (original, minimal, educational-en, educational-fr) by a custom tokenizer-based translator. 484 files × 4 presets = 1,936 compilable Rust files. Abbreviations expanded, inline annotations in English or French on every Rust pattern. The entire codebase becomes a learning tool. [**→ Learn more**](#-source-code-translation-for-developers)
+
+### 6. Userland Conformance Audit
+
+The `userland-audit` command runs an **85-check static audit** across 22 categories (Ring 3 execution, syscalls, memory, processes, file I/O, signals, IPC, networking, time, scheduling, ELF loading, address space isolation, exception handling, GDT/TSS, security, filesystem, threading, epoll, resource limits, random, system info, multi-architecture) plus **9 live Ring 3 execution tests** (write+exit, ELF load, brk+mmap, pipe IPC, signals, getpid+clock_gettime, exception safety, frame leak detection, address space isolation). Result: **81 PASS, 4 PARTIAL, 0 MISSING**.
 
 ---
 
@@ -247,7 +249,14 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 
 ### Hypervisor & Linux Compatibility
 - **Intel VT-x** and **AMD-V** dual-backend with EPT/NPT
-- **70+ Linux syscalls**, ELF64 loader, Ring 3 userland, PTY/TTY, job control
+- **104 Linux-compatible syscalls**, ELF64 loader, Ring 3 userland, PTY/TTY, job control
+
+### Ring 3 Userland
+- Full SYSCALL/SYSRET Ring 3 execution with per-process page tables
+- ELF64 loader with PIE relocations, System V ABI stack (argc/argv/auxv)
+- `trustos-syscall` crate: tri-architecture syscall library (x86_64/aarch64/riscv64)
+- `userland-audit`: 85-check conformance audit + 9 live Ring 3 tests
+- COW fork, signals, pipes, BSD sockets, epoll, futex from userspace
 
 ### Security & Crypto
 - Ed25519 signatures (RFC 8032) — full public-key cryptography
@@ -277,12 +286,13 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 
 | | |
 |---|---|
-| **276,000+ lines** of pure Rust | **96/96** self-tests passing (100%) |
-| **480+** source files | **144 FPS** SIMD desktop |
+| **278,000+ lines** of pure Rust | **96/96** self-tests passing (100%) |
+| **484** source files | **144 FPS** SIMD desktop |
 | **3** architectures (x86_64, ARM64, RISC-V) | **< 1 sec** boot time |
-| **3,612** lines of TrustLang (dual backend) | **0** lines of C |
-| **215+** shell commands (23 hwdbg subcommands) | **0** binary blobs |
+| **104** Linux-compatible syscalls | **0** lines of C |
+| **207+** shell commands | **0** binary blobs |
 | **4** translated source versions (EN/FR) | **1,920+** auto-generated compilable files |
+| **85** userland conformance checks | **9** live Ring 3 tests |
 | **14+** desktop applications | **0** external dependencies |
 
 ---
@@ -314,7 +324,7 @@ cd TrustOS
 .\trustos.ps1 translate
 
 # Full release (build + translate + tag + push)
-.\.trustos.ps1 release -Tag v0.10.4
+.\.trustos.ps1 release -Tag v0.10.5
 ```
 
 ### First commands
@@ -330,7 +340,9 @@ cd TrustOS
 | `chess3d` | 3D chess vs AI |
 | `gameboy` | Game Boy Color emulator |
 | `selftest` | Run 96 automated self-tests |
-| `help` | All 215+ commands |
+| `userland-audit` | Full userland conformance audit (85 checks + 9 live tests) |
+| `usertest` | Ring 3 execution test suite |
+| `help` | All 207+ commands |
 
 ### Explore the translated source
 
@@ -350,8 +362,8 @@ Each folder contains the full 480+-file kernel — compilable, diffable, and ann
 
 ```
 TrustOS/
-  kernel/                     # Core bare-metal kernel (276K+ lines)
-    src/                      # 480+ .rs files
+  kernel/                     # Core bare-metal kernel (278K+ lines)
+    src/                      # 484 .rs files
       trustlang/              # TrustLang compiler + native x86_64 (3,612 lines)
       shell/                  # 215+ commands
       desktop.rs              # COSMIC2 desktop manager
@@ -392,6 +404,17 @@ TrustOS/
 
 ## 📋 Changelog
 
+### v0.10.5 — Full Userland Integration & Conformance Audit (March 19, 2026)
+
+- **104 Linux-compatible syscalls** — handle_full() dispatcher covers file I/O (24), process/thread (30), memory (4), networking (14), signals (4), epoll (5), scheduling (3), time (3), sync (3), resources (3), random, plus 4 TrustOS-specific syscalls.
+- **`trustos-syscall` crate** — Tri-architecture syscall library: `syscall` (x86_64), `svc #0` (aarch64), `ecall` (riscv64). 30+ wrappers: write, read, fork, exec, mmap, brk, socket, pipe, signals, time.
+- **CpuContext portability** — Per-architecture register structs for x86_64, aarch64, riscv64. No generic fallback.
+- **`userland-audit` command** — 85-check conformance audit (22 categories) + 9 live Ring 3 tests. Result: 81 PASS, 4 PARTIAL, 0 MISSING.
+- **`usertest` command** — 9-test Ring 3 suite: basic exec, ELF load, brk/mmap, pipe IPC, signals, stdio, exception safety, frame leak detection, address space isolation.
+- **Init process rewrite** — PID 1 now uses real Linux syscalls via trustos-syscall.
+- **hello-rust program** — New Ring 3 hello world in Rust.
+- **278,000+ lines** across 484 source files.
+
 ### v0.10.4 — Universal Hardware Debugger Expansion (March 18, 2026)
 
 - **SMBIOS/DMI parser** — Scans memory for SMBIOS 2.x/3.0 entry points. Identifies board, BIOS, chassis, CPU, DIMM slots (532 lines).
@@ -403,7 +426,7 @@ TrustOS/
 - **MARIONET probe integration** — SystemData enriched with SMBIOS, SMART, EFI, battery, thermal zones.
 - **Hypervisor safety** — AMD SVM: all `unwrap()` removed. VT-x: error handling improvements.
 - **HwDbg: 23 subcommands** — up from 17. New: `smbios`, `smart`, `efi`, `edid`, `battery`, `report`.
-- **+4,650 lines** of new hardware diagnostic code. Kernel total: 276K+ lines.
+- **+4,650 lines** of new hardware diagnostic code.
 
 ### v0.10.3 — Source Code Translation & ThinkPad Hardware (March 15, 2026)
 
@@ -591,7 +614,7 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 
 Created by [Nated0ge](https://github.com/nathan237) — March 2026
 
-276,000+ lines | Native x86_64 compiler | 3 architectures | 4 translated source versions | Everything from scratch | Zero C
+278,000+ lines | 104 syscalls | 3 architectures | 85-check userland audit | Everything from scratch | Zero C
 
 [Report Bug](https://github.com/nathan237/TrustOS/issues) | [Request Feature](https://github.com/nathan237/TrustOS/issues) | [Watch Demo](https://youtu.be/RBJJi8jW1_g)
 

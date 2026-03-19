@@ -115,6 +115,11 @@ pub fn handle_cow_fault(fault_addr: u64) -> bool {
 /// All writable user-space pages in the parent become read-only + COW.
 /// The child gets a fresh address space sharing the same physical pages.
 /// On first write, the page fault handler allocates a private copy.
+///
+/// # Architecture support
+/// Currently x86_64 only — walks the 4-level page table hierarchy directly.
+/// Returns `None` on other architectures (aarch64, riscv64) until
+/// arch-specific page table walkers are implemented.
 pub fn clone_cow(parent_cr3: u64) -> Option<AddressSpace> {
     #[cfg(not(target_arch = "x86_64"))]
     { let _ = parent_cr3; return None; } // COW requires x86_64 page tables

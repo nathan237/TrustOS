@@ -130,7 +130,7 @@ pub fn read(fd: i32, buf: &mut [u8]) -> i64 {
             if !pipe.data.is_empty() {
                 let n = buf.len().min(pipe.data.len());
                 for i in 0..n {
-                    buf[i] = pipe.data.pop_front().unwrap();
+                    buf[i] = match pipe.data.pop_front() { Some(b) => b, None => break };
                 }
                 return n as i64;
             }
