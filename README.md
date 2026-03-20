@@ -162,7 +162,7 @@ No binary blobs. No proprietary drivers. No hidden telemetry. **Every driver, ev
 Every file ships in **4 auto-generated versions**: original, minimal (stripped), educational-en (annotated English), educational-fr (annotated French). A custom tokenizer-based translator expands abbreviations, adds inline explanations of every `unsafe`, `trait`, `impl`, and Rust pattern — turning 278K lines of kernel code into the **largest annotated Rust OS learning resource in existence**.
 
 ### 🖥 A real desktop OS, not a toy
-144 FPS SIMD-accelerated desktop with 14+ apps, a browser with HTML/CSS/JS, Game Boy and NES emulators, 3D chess, a code editor, network security toolkit, and the most complete kernel introspection lab ever built into a bare-metal OS.
+144 FPS SIMD-accelerated desktop with 14+ apps, a browser with HTML/CSS/JS, Game Boy and NES emulators, 3D chess, a code editor, network security toolkit, **World of Ants** (WOA — roguelike/platformer game engine running at native 1280×800), and the most complete kernel introspection lab ever built into a bare-metal OS.
 
 ### 🏗 Everything from scratch — zero dependencies
 TLS 1.3, TCP/IP, DNS, DHCP, HTTP/HTTPS, FAT32, EXT4, NVMe, AHCI, VirtIO, VT-x/AMD-V hypervisor, Ed25519 signatures, audio synthesizer — all written in pure Rust. Not a single line of C. Not a single external crate.
