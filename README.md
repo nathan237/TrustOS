@@ -6,16 +6,15 @@
 
 ### The OS you can actually read — in your language.
 
-**A bare-metal operating system written entirely in Rust — 278,000+ lines, zero C, zero binary blobs, zero secrets.**
+**A bare-metal operating system written entirely in Rust — 283,000+ lines, zero C, zero binary blobs, zero secrets.**
 
 *Built by one developer. Auditable by anyone. Learnable in English & French.*
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-278%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-283%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.10.5-orange?style=for-the-badge)]()
-[![Tests](https://img.shields.io/badge/tests-96%2F96%20(100%25)-brightgreen?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.10.6-orange?style=for-the-badge)]()
 [![Translated](https://img.shields.io/badge/source-4%20versions-9cf?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -24,7 +23,7 @@
 
 <img src="media/screenshots/screenshot_desktop.png" alt="TrustOS Desktop" width="720"/>
 
-[**Source Code for Developers**](#-source-code-translation-for-developers) | [What's New](#-whats-new-in-v0104) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [Features](#-features) | [Quick Start](#-quick-start) | [Changelog](#-changelog)
+[**Source Code for Developers**](#-source-code-translation-for-developers) | [What's New](#-whats-new-in-v0106) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [Features](#-features) | [Quick Start](#-quick-start) | [Roadmap](#-roadmap) | [Changelog](#-changelog)
 
 ---
 
@@ -34,7 +33,7 @@
 
 > **New in v0.10.4** — TrustOS ships its entire source code in **4 developer-friendly versions**, auto-generated from one canonical codebase.
 
-Every `.rs` file in `kernel/src/` (484 files, 278K+ lines) is automatically translated into 4 presets — each one compiles, each one is a valid representation of TrustOS:
+Every `.rs` file in `kernel/src/` (498 files, 283K+ lines) is automatically translated into 4 presets — each one compiles, each one is a valid representation of TrustOS:
 
 | Version | What it does | Who it's for |
 |---------|-------------|-------------|
@@ -48,34 +47,35 @@ Every `.rs` file in `kernel/src/` (484 files, 278K+ lines) is automatically tran
 A custom **tokenizer-based Rust source translator** ([`tools/source_translator.py`](tools/source_translator.py), 1,500+ lines) parses every token, detects renameable identifiers vs. protected positions (keywords, `.field` access, `asm!()` blocks, FFI, external crate paths…), and applies preset-specific transformations while guaranteeing the output compiles.
 
 ```powershell
-# Generate all 4 versions in one command:
-.\trustos.ps1 translate
+# Generate all 4 versions:
+python tools/source_translator.py --all
 
-# Or generate a single version:
-.\trustos.ps1 translate -Only educational-en
+# Generate a single version:
+python tools/source_translator.py --preset educational --lang en -i kernel/src/ -o translated/educational-en/
 
-# Direct Python usage:
+# Or French:
 python tools/source_translator.py --preset educational --lang fr -i kernel/src/ -o translated/educational-fr/
 ```
 
 Every `translated/*/` folder includes a `mapping.json` with thousands of identifier mappings — fully deterministic, reloadable, and diffable.
 
-> **Why this matters:** TrustOS is 278K+ lines of bare-metal Rust. The educational versions turn it into the largest annotated Rust OS learning resource that exists — in two languages.
+> **Why this matters:** TrustOS is 283K+ lines of bare-metal Rust. The educational versions turn it into the largest annotated Rust OS learning resource that exists — in two languages.
 
-## 🆕 What's New in v0.10.5
+## 🆕 What's New in v0.10.6
 
-> **March 19, 2026** — Full Userland Integration & Conformance Audit
+> **March 24, 2026** — Hardware Drivers, Remote Desktop & WOA Game Engine
 
-TrustOS now has a **production-grade Ring 3 userland** with 104 Linux-compatible syscalls, a tri-architecture syscall library, and an 85-check conformance audit proving completeness.
+Major hardware compatibility push targeting the ASUS B75 board, plus a new game engine and full remote desktop capabilities.
 
-- 🔧 **104 Linux-compatible syscalls** — Full `handle_full()` dispatcher: file I/O (24), process/thread (30), memory (4), networking (14), signals (4), epoll (5), scheduling (3), time (3), sync (3), resources (3), random, plus 4 TrustOS-specific syscalls. Linux ABI-compatible numbering.
-- 📦 **`trustos-syscall` crate** — New userland syscall library with tri-architecture support: `syscall` (x86_64), `svc #0` (aarch64), `ecall` (riscv64). 30+ high-level wrappers (write, read, fork, exec, mmap, brk, socket, pipe, signals, time...).
-- 🏗 **CpuContext portability** — Proper per-architecture register structs: x86_64 (RAX-R15, RIP, RFLAGS, CS, SS), aarch64 (x0-x30, SP, PC, SPSR), riscv64 (x0-x31, PC, SSTATUS). No more generic fallback.
-- 🧪 **`userland-audit` command** — 85-check static conformance audit across 22 categories + 9 live Ring 3 execution tests. Verifies every POSIX/Linux userland capability: Ring 3 execution, syscall interface, memory management, process lifecycle, file I/O, signals, IPC, networking, time, scheduling, ELF loading, address space isolation, exception handling, GDT/TSS, security, filesystem, threading, epoll, resource limits, random, multi-architecture.
-- 🔬 **`usertest` command** — 9-test Ring 3 execution suite: basic exec, ELF load, brk/mmap, pipe IPC, signals, stdio, exception safety (UD2), frame leak detection, address space isolation.
-- 🦀 **Userland programs** — `init` process rewritten with real Linux syscalls (getpid, brk, clock_gettime, sched_yield). New `hello-rust` Ring 3 program.
-- 🏛 **Ring 3 architecture** — SYSCALL/SYSRET via MSR (STAR/LSTAR/SFMASK/EFER), GDT user segments (CS=0x20, DS=0x18), TSS RSP0 per-CPU, per-process PML4 page tables, ELF PIE relocations, System V ABI stack (argc/argv/auxv), COW fork.
-- 📈 **278,000+ lines** across 484 source files, 3 architectures.
+- 🎮 **World of Ants (WOA)** — New roguelike platformer game engine built into the kernel. 60 FPS fixed-timestep loop, TSC-based timing, zone-based procedural world generation, physics (gravity/velocity/acceleration), 1280×800 backbuffer renderer, pixel-art sprite system. Launch with `woa`.
+- 🖥️ **Remote Desktop** — Full remote input injection via UDP: `key:<code>`, `keys:<string>`, `mouse:<dx>,<dy>,<btn>,<scroll>`, `mouseto:<x>,<y>,...`, `mousepos`. Screencap on dedicated port 7779. Remote `reboot` command via ACPI. Python client: `scripts/remote_console.py`.
+- 🛠️ **AMD GPU driver hardened** — PCI device ID fallback when firmware isn't loaded (Navi10/14 detection without GC_VERSION). VRAM register reads fixed (24-bit mask, not 16-bit). Known GPU VRAM size fallback table (RX 5700 XT = 8 GB, etc.). GPU init deferred after network to avoid MMIO conflict with RTL8168.
+- 🛠️ **NVIDIA NV50+ driver expanded** — +214 lines of register probing and diagnostic output.
+- 🌐 **RTL8139/RTL8169 drivers rewritten** — RTL8139 +341 lines, RTL8169 +173 lines. Proper PCI device ID discrimination. Hardware-tested on B75 board (RTL8168 GbE).
+- 📟 **Visual POST codes** — Real-time boot progress displayed on framebuffer (0x11–0xFF), visible on real hardware for debugging without serial.
+- 🧠 **Boot sequence reordered** — AMD GPU init moved after network (MMIO mapping was breaking RTL8168). DHCP timeout reduced from 10s to 800ms. Security subsystem deferred (SMEP was crashing RTL8169).
+- ⌨️ **Input injection API** — `keyboard::push_key()` and `mouse::inject_usb_mouse()` / `mouse::get_position()` for programmatic input.
+- 📈 **283,000+ lines** across 498 source files, 3 architectures.
 
 ---
 
@@ -155,11 +155,11 @@ TrustOS does things that **no other operating system on Earth** does. Here's why
 ### ⚡ A native x86_64 compiler running *inside* the OS
 TrustLang compiles your programs to **raw Intel machine code** and executes them — all from within the kernel. No LLVM. No GCC. No external toolchain. Write code → native binary → execute. The entire compiler is 3,600 lines of Rust.
 
-### 🔍 278,000 lines — and you can read every single one
+### 🔍 283,000 lines — and you can read every single one
 No binary blobs. No proprietary drivers. No hidden telemetry. **Every driver, every protocol, every pixel, every encryption algorithm** is open Rust. One developer built it. Anyone can audit it.
 
 ### 🌍 Source code that teaches itself — in your language
-Every file ships in **4 auto-generated versions**: original, minimal (stripped), educational-en (annotated English), educational-fr (annotated French). A custom tokenizer-based translator expands abbreviations, adds inline explanations of every `unsafe`, `trait`, `impl`, and Rust pattern — turning 278K lines of kernel code into the **largest annotated Rust OS learning resource in existence**.
+Every file ships in **4 auto-generated versions**: original, minimal (stripped), educational-en (annotated English), educational-fr (annotated French). A custom tokenizer-based translator expands abbreviations, adds inline explanations of every `unsafe`, `trait`, `impl`, and Rust pattern — turning 283K lines of kernel code into the **largest annotated Rust OS learning resource in existence**.
 
 ### 🖥 A real desktop OS, not a toy
 144 FPS SIMD-accelerated desktop with 14+ apps, a browser with HTML/CSS/JS, Game Boy and NES emulators, 3D chess, a code editor, network security toolkit, and the most complete kernel introspection lab ever built into a bare-metal OS.
@@ -208,7 +208,7 @@ TLS 1.3, TCP/IP, DNS, DHCP, HTTP, HTML/CSS parser, JavaScript engine, FAT32, EXT
 
 ### 5. Source Code Translation for Developers
 
-Every `.rs` file auto-translated into 4 versions (original, minimal, educational-en, educational-fr) by a custom tokenizer-based translator. 484 files × 4 presets = 1,936 compilable Rust files. Abbreviations expanded, inline annotations in English or French on every Rust pattern. The entire codebase becomes a learning tool. [**→ Learn more**](#-source-code-translation-for-developers)
+Every `.rs` file auto-translated into 4 versions (original, minimal, educational-en, educational-fr) by a custom tokenizer-based translator. 498 files × 4 presets = 1,992 compilable Rust files. Abbreviations expanded, inline annotations in English or French on every Rust pattern. The entire codebase becomes a learning tool. [**→ Learn more**](#-source-code-translation-for-developers)
 
 ### 6. Userland Conformance Audit
 
@@ -221,7 +221,7 @@ The `userland-audit` command runs an **85-check static audit** across 22 categor
 ### COSMIC2 Desktop Environment
 - Multi-layer GPU compositor: 8 rendering layers, SSE2 SIMD blitting, 144 FPS
 - Taskbar, dock, start menu, window manager with 4px chrome borders
-- 14+ desktop apps: Terminal, Files, TrustCode, Calculator, Network, Snake, Chess 3D, TrustBrowser, TrustEdit 3D…
+- 28 desktop app types: Terminal, Files, TrustCode, Calculator, Network, Snake, Chess 3D, TrustBrowser, Settings, Image Viewer, Hex Viewer, Music Player, Binary Viewer, Lab Mode, WiFi, 3D Demo…
 - Touch & gesture input for mobile/tablet deployment
 
 ### TrustLang — Built-in Programming Language
@@ -263,6 +263,24 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 - TLS 1.3 — handshake, AEAD, X.509, all from scratch
 - Capability-based security model
 
+### GPU Drivers
+- **AMD RDNA1** (Navi10/14) — PCI detection, MMIO mapping, VRAM probe, SDMA engine, compute dispatch, neural GEMM. PCI device ID fallback when firmware isn't loaded.
+- **NVIDIA NV50+** — PMC/PBUS register probing, GPU dump, diagnostic output
+- **VirtIO-GPU** — QEMU/KVM standard, 2D scanout
+
+### World of Ants (WOA)
+- Roguelike platformer game engine built into the kernel
+- 60 FPS fixed-timestep game loop with TSC timing
+- Zone-based procedural world generation, physics engine (gravity/velocity/acceleration)
+- 1280×800 backbuffer renderer with pixel-art sprite system
+- Launch: `woa`
+
+### Remote Desktop
+- UDP-based remote shell (port 7777) with screencap (port 7779)
+- Full input injection: keyboard, mouse (relative & absolute), string input
+- Remote ACPI reboot command
+- Python client: `scripts/remote_console.py`
+
 ### Storage
 - **TrustFS** — native bare-metal filesystem with WAL journal, indirect blocks
 - **FAT32** — read/write for USB/disk interoperability
@@ -274,11 +292,12 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 
 | Target | Arch | Method | Status |
 |--------|------|--------|--------|
-| PC (USB/ISO) | x86_64 | Limine UEFI + Legacy BIOS (hybrid) | Production |
-| Android | ARM64 | `fastboot flash boot` | Ready |
-| Raspberry Pi | ARM64 | SD card (kernel8.img) | Ready |
-| RISC-V boards | RISC-V | OpenSBI + U-Boot | Ready |
-| QEMU (all 3 archs) | x86_64 / ARM64 / RISC-V | Virtual machine | Ready |
+| PC (USB/ISO) | x86_64 | Limine UEFI + Legacy BIOS (hybrid) | **Production** — tested on ThinkPad T61, ASUS B75 |
+| VirtualBox / QEMU | x86_64 | Virtual machine | **Production** — daily development |
+| PXE network boot | x86_64 | TFTP push to bare metal | **Working** — ASUS B75 via 10.0.0.x |
+| Android | ARM64 | `fastboot flash boot` | Experimental |
+| Raspberry Pi | ARM64 | SD card (kernel8.img) | Experimental |
+| RISC-V boards | RISC-V | OpenSBI + U-Boot | WIP stubs |
 
 ---
 
@@ -286,14 +305,14 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 
 | | |
 |---|---|
-| **278,000+ lines** of pure Rust | **96/96** self-tests passing (100%) |
-| **484** source files | **144 FPS** SIMD desktop |
+| **283,000+ lines** of pure Rust | **498** source files |
 | **3** architectures (x86_64, ARM64, RISC-V) | **< 1 sec** boot time |
 | **104** Linux-compatible syscalls | **0** lines of C |
-| **207+** shell commands | **0** binary blobs |
-| **4** translated source versions (EN/FR) | **1,920+** auto-generated compilable files |
+| **276+** shell commands | **0** binary blobs |
+| **4** translated source versions (EN/FR) | **1,992** auto-generated compilable files |
 | **85** userland conformance checks | **9** live Ring 3 tests |
-| **14+** desktop applications | **0** external dependencies |
+| **28** desktop applications | **144 FPS** SIMD desktop |
+| **4.4M** parameter AI (JARVIS) | **0** external runtime dependencies |
 
 ---
 
@@ -317,14 +336,11 @@ qemu-system-x86_64 -cdrom trustos.iso -m 512M -cpu max -smp 4 -display gtk -vga 
 git clone https://github.com/nathan237/TrustOS.git
 cd TrustOS
 
-# Build the OS
-.\trustos.ps1 build
+# Build the kernel
+cargo build --release -p trustos_kernel
 
 # Generate all 4 translated source versions
-.\trustos.ps1 translate
-
-# Full release (build + translate + tag + push)
-.\.trustos.ps1 release -Tag v0.10.5
+python tools/source_translator.py --all
 ```
 
 ### First commands
@@ -332,6 +348,7 @@ cd TrustOS
 | Command | What it does |
 |---------|-------------|
 | `desktop` | Launch COSMIC2 desktop environment |
+| `woa` | Launch World of Ants game |
 | `trustlang demo` | Run TrustLang demo program |
 | `trustlang test` | Run 55+ native backend tests |
 | `trustlab` | Open kernel introspection lab |
@@ -339,10 +356,10 @@ cd TrustOS
 | `neofetch` | System info |
 | `chess3d` | 3D chess vs AI |
 | `gameboy` | Game Boy Color emulator |
-| `selftest` | Run 96 automated self-tests |
 | `userland-audit` | Full userland conformance audit (85 checks + 9 live tests) |
 | `usertest` | Ring 3 execution test suite |
-| `help` | All 207+ commands |
+| `gpu info` | GPU driver status |
+| `help` | All 276+ commands |
 
 ### Explore the translated source
 
@@ -354,7 +371,7 @@ translated/
   educational-fr/    → Expanded names + French annotations
 ```
 
-Each folder contains the full 480+-file kernel — compilable, diffable, and annotated for learning.
+Each folder contains the full 498-file kernel — compilable, diffable, and annotated for learning.
 
 ---
 
@@ -362,13 +379,15 @@ Each folder contains the full 480+-file kernel — compilable, diffable, and ann
 
 ```
 TrustOS/
-  kernel/                     # Core bare-metal kernel (278K+ lines)
-    src/                      # 484 .rs files
+  kernel/                     # Core bare-metal kernel (283K+ lines)
+    src/                      # 498 .rs files
       trustlang/              # TrustLang compiler + native x86_64 (3,612 lines)
-      shell/                  # 215+ commands
+      shell/                  # 276+ commands
       desktop.rs              # COSMIC2 desktop manager
+      woa/                    # World of Ants game engine
+      jarvis/                 # JARVIS AI — 4.4M param transformer
       hwdiag/                 # Hardware diagnostics (23 subcommands)
-      network/                # TCP/IP, TLS 1.3, DHCP, DNS
+      netstack/               # TCP/IP, DHCP, DNS, UDP, ARP, IPv6
       browser/                # HTML/CSS/JS browser engine
       gameboy/                # Game Boy Color emulator
       nes/                    # NES emulator
@@ -376,7 +395,8 @@ TrustOS/
       vfs/                    # TrustFS, FAT32, EXT4, procfs
       tls13/                  # TLS 1.3, crypto, X.509
       netscan/                # Network security toolkit
-      drivers/                # AHCI, USB, VirtIO, NVMe, Apple
+      drivers/                # AHCI, USB, VirtIO, NVMe, AMD GPU, NVIDIA, RTL8169
+      debug/                  # Remote shell (UDP 7777), serial, POST codes
   translated/                 # Auto-generated source versions
     original/                 # Exact copy (reference)
     minimal/                  # Stripped identifiers, no comments
@@ -384,13 +404,14 @@ TrustOS/
     educational-fr/           # Expanded + French annotations
   tools/
     source_translator.py      # Tokenizer-based Rust translator (1,500+ lines)
-    translate-all.ps1         # Translation orchestrator
-  trustos.ps1                 # Unified build shell (build/release/translate/clean/status)
+    woa_prototype.html        # WOA game design prototype
   userland/                   # Userspace programs
   scripts/
+    remote_console.py         # Remote shell client (UDP)
+    remote_screen.py          # Remote screencap client
+    pxe_server.py             # PXE/TFTP deployment
     build/                    # Build scripts (limine, multiarch)
     launch/                   # VM launch scripts (QEMU, VBox)
-    test/                     # Test automation
   docs/                       # Documentation, roadmaps, guides
   builds/
     trustos/                  # ISO output
@@ -404,6 +425,18 @@ TrustOS/
 
 ## 📋 Changelog
 
+### v0.10.6 — Hardware Drivers, Remote Desktop & WOA (March 24, 2026)
+
+- **World of Ants (WOA)** — New roguelike platformer game engine. 60 FPS fixed-timestep loop, TSC timing, zone-based world generation, physics, 1280×800 renderer, pixel-art sprites. Feature-gated (`woa`), enabled by default.
+- **Remote Desktop** — Full remote input injection via UDP 7777: `key:`, `keys:`, `mouse:`, `mouseto:`, `mousepos`. Screencap on port 7779. Remote ACPI reboot. Python client `scripts/remote_console.py`.
+- **AMD GPU driver hardened** — PCI device ID fallback (Navi10/14 detection without firmware). VRAM register fix (24-bit mask). Known VRAM size table. GPU init deferred after network (MMIO conflict with RTL8168).
+- **NVIDIA NV50+ driver expanded** — +214 lines of register probing and diagnostics.
+- **RTL8139/RTL8169 drivers rewritten** — +514 lines. Proper PCI device ID discrimination. Hardware-tested on B75 board.
+- **Visual POST codes** — Real-time boot progress on framebuffer (0x11–0xFF) for hardware debugging.
+- **Boot sequence reordered** — GPU after network, DHCP 800ms timeout, security subsystem deferred.
+- **Input injection API** — `push_key()`, `inject_usb_mouse()`, `get_position()`.
+- **283,000+ lines** across 498 source files.
+
 ### v0.10.5 — Full Userland Integration & Conformance Audit (March 19, 2026)
 
 - **104 Linux-compatible syscalls** — handle_full() dispatcher covers file I/O (24), process/thread (30), memory (4), networking (14), signals (4), epoll (5), scheduling (3), time (3), sync (3), resources (3), random, plus 4 TrustOS-specific syscalls.
@@ -413,7 +446,6 @@ TrustOS/
 - **`usertest` command** — 9-test Ring 3 suite: basic exec, ELF load, brk/mmap, pipe IPC, signals, stdio, exception safety, frame leak detection, address space isolation.
 - **Init process rewrite** — PID 1 now uses real Linux syscalls via trustos-syscall.
 - **hello-rust program** — New Ring 3 hello world in Rust.
-- **278,000+ lines** across 484 source files.
 
 ### v0.10.4 — Universal Hardware Debugger Expansion (March 18, 2026)
 
@@ -557,15 +589,78 @@ TrustOS/
 
 ---
 
-## 📖 Documentation
+## � Roadmap
+
+> **Current status: v0.10.6** — March 24, 2026
+
+TrustOS development follows a milestone-based approach. Here's where we are and where we're going:
+
+### ✅ Completed (v0.1 → v0.10.6)
+
+| Milestone | Status | Version |
+|-----------|--------|---------|
+| Kernel bootstrap (Limine, GDT, IDT, memory) | ✅ Done | v0.1 |
+| Framebuffer, keyboard, shell | ✅ Done | v0.1 |
+| COSMIC2 desktop (28 app types, 144 FPS compositor) | ✅ Done | v0.1–v0.10 |
+| TrustLang compiler (bytecode VM + native x86_64) | ✅ Done | v0.8 |
+| Network stack (TCP/IP, DHCP, DNS, ARP, IPv6) | ✅ Done | v0.3–v0.5 |
+| TLS 1.3 + HTTP/HTTPS (all crypto from scratch) | ✅ Done | v0.4 |
+| Emulators (Game Boy Color, NES) | ✅ Done | v0.4 |
+| TrustLab kernel introspection (7 panels) | ✅ Done | v0.1 |
+| Multi-architecture (x86_64 production, ARM64/RISC-V experimental) | ✅ Done | v0.6 |
+| VT-x/AMD-V hypervisor (EPT/NPT) | ✅ Done | v0.4 |
+| Ring 3 userland (104 syscalls, ELF64, SYSCALL/SYSRET) | ✅ Done | v0.2–v0.10.5 |
+| Source code translation (4 versions, EN/FR) | ✅ Done | v0.10.3 |
+| Hardware diagnostics (SMBIOS, SMART, EDID, thermal) | ✅ Done | v0.10.4 |
+| GPU drivers (AMD RDNA1, NVIDIA NV50+, VirtIO) | ✅ Done | v0.7–v0.10.6 |
+| Remote desktop (UDP input injection + screencap) | ✅ Done | v0.10.6 |
+| WOA game engine (roguelike platformer) | ✅ Done | v0.10.6 |
+| Real hardware boot (ThinkPad T61, ASUS B75 via PXE) | ✅ Done | v0.10–v0.10.6 |
+| PXE network self-deployment | ✅ Done | v0.7 |
+
+### 🔧 In Progress
+
+| Milestone | Status | Details |
+|-----------|--------|---------|
+| **GPU compute for JARVIS** | 🔧 Active | AMD SDMA + compute dispatch implemented, working on hardware validation on B75 board (fans spin, GPU detected, MMIO mapped). Goal: train JARVIS on GPU instead of CPU. |
+| **JARVIS training on hardware** | 🔧 Active | 4.4M-param transformer, gradient descent functional on CPU. Next: GPU-accelerated training via SDMA/neural GEMM. |
+| **RTL8168 GbE stability** | 🔧 Active | Driver rewritten, hardware-tested on B75. Boot ordering fixed. Still tuning DMA ring buffers under load. |
+| **WiFi (iwl4965)** | 🔧 Active | PCI detection + firmware load attempted. APM/BSM init WIP on ThinkPad T61. |
+
+### 🎯 Next Up
+
+| Milestone | Priority | Description |
+|-----------|----------|-------------|
+| **JARVIS GPU training** | 🔴 High | Complete AMD compute pipeline → train JARVIS on real GPU hardware |
+| **Persistent filesystem** | 🔴 High | TrustFS WAL journal + block cache → files survive reboot reliably |
+| **Audio on hardware** | 🟡 Medium | HDA audio path working on T61, needs mixer/volume + more codec support |
+| **WiFi connectivity** | 🟡 Medium | iwl4965 firmware upload + scan/associate/DHCP |
+| **WOA content** | 🟡 Medium | Procedural levels, enemies, items, collision system |
+| **USB mass storage** | 🟡 Medium | BOT protocol over xHCI → read/write USB drives |
+| **Security hardening** | 🟢 Low | Re-enable SMEP/CR0.WP after driver init, add remote shell auth |
+| **Multi-user / login** | 🟢 Low | User accounts, permissions, login screen |
+| **SMP scheduling** | 🟢 Low | Multi-core task scheduling (SMP init done, scheduler needs per-CPU queues) |
+
+### 🌟 Long-Term Vision
+
+- **Self-hosting** — Compile TrustOS from within TrustOS (TrustLang → native Rust subset)
+- **JARVIS autonomy** — On-device AI that learns from hardware probing, user interaction, and federated mesh
+- **Mesh networking** — Multiple TrustOS instances discover each other, share JARVIS weights
+- **Mobile-first desktop** — Touch-optimized COSMIC2 on ARM64 phones/tablets
+- **Full Linux binary compat** — Run unmodified Linux ELF binaries via syscall translation
+
+---
+
+## �📖 Documentation
 
 | Document | Location |
 |----------|----------|
 | Developer Guide | [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md) |
 | Contributing | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
-| Roadmap | [`docs/ROADMAP_V2.md`](docs/ROADMAP_V2.md) |
+| Roadmap V2 | [`docs/ROADMAP_V2.md`](docs/ROADMAP_V2.md) |
 | Release Notes | [`docs/RELEASE_NOTES.md`](docs/RELEASE_NOTES.md) |
 | Command Reference | [`docs/TRUSTOS_COMPLETE_COMMAND_REFERENCE.md`](docs/TRUSTOS_COMPLETE_COMMAND_REFERENCE.md) |
+| Usage Guide | [`docs/TRUSTOS_USAGE_GUIDE.md`](docs/TRUSTOS_USAGE_GUIDE.md) |
 | Source Translator | [`tools/source_translator.py`](tools/source_translator.py) |
 | Translated Source (EN) | [`translated/educational-en/`](translated/educational-en/) |
 | Translated Source (FR) | [`translated/educational-fr/`](translated/educational-fr/) |
@@ -614,7 +709,7 @@ Apache License 2.0 — see [LICENSE](LICENSE).
 
 Created by [Nated0ge](https://github.com/nathan237) — March 2026
 
-278,000+ lines | 104 syscalls | 3 architectures | 85-check userland audit | Everything from scratch | Zero C
+283,000+ lines | 104 syscalls | 3 architectures | 276+ commands | Everything from scratch | Zero C
 
 [Report Bug](https://github.com/nathan237/TrustOS/issues) | [Request Feature](https://github.com/nathan237/TrustOS/issues) | [Watch Demo](https://youtu.be/RBJJi8jW1_g)
 
