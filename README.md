@@ -6,15 +6,15 @@
 
 ### The OS you can actually read — in your language.
 
-**A bare-metal operating system written entirely in Rust — 283,000+ lines, zero C, zero binary blobs, zero secrets.**
+**A bare-metal operating system written entirely in Rust — 286,000+ lines, zero C, zero binary blobs, zero secrets.**
 
 *Built by one developer. Auditable by anyone. Learnable in English & French.*
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
-[![Lines](https://img.shields.io/badge/code-283%2C000%2B%20lines-blue?style=for-the-badge)]()
+[![Lines](https://img.shields.io/badge/code-286%2C000%2B%20lines-blue?style=for-the-badge)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.10.6-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.10.7-orange?style=for-the-badge)]()
 [![Translated](https://img.shields.io/badge/source-4%20versions-9cf?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
@@ -23,7 +23,7 @@
 
 <img src="media/screenshots/screenshot_desktop.png" alt="TrustOS Desktop" width="720"/>
 
-[**Source Code for Developers**](#-source-code-translation-for-developers) | [What's New](#-whats-new-in-v0106) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [Features](#-features) | [Quick Start](#-quick-start) | [Roadmap](#-roadmap) | [Changelog](#-changelog)
+[**Source Code for Developers**](#-source-code-translation-for-developers) | [What's New](#-whats-new-in-v0107) | [Download](#-download) | [Why TrustOS](#-why-trustos) | [Features](#-features) | [Quick Start](#-quick-start) | [Roadmap](#-roadmap) | [Changelog](#-changelog)
 
 ---
 
@@ -33,7 +33,7 @@
 
 > **New in v0.10.4** — TrustOS ships its entire source code in **4 developer-friendly versions**, auto-generated from one canonical codebase.
 
-Every `.rs` file in `kernel/src/` (498 files, 283K+ lines) is automatically translated into 4 presets — each one compiles, each one is a valid representation of TrustOS:
+Every `.rs` file in `kernel/src/` (500 files, 286K+ lines) is automatically translated into 4 presets — each one compiles, each one is a valid representation of TrustOS:
 
 | Version | What it does | Who it's for |
 |---------|-------------|-------------|
@@ -59,23 +59,24 @@ python tools/source_translator.py --preset educational --lang fr -i kernel/src/ 
 
 Every `translated/*/` folder includes a `mapping.json` with thousands of identifier mappings — fully deterministic, reloadable, and diffable.
 
-> **Why this matters:** TrustOS is 283K+ lines of bare-metal Rust. The educational versions turn it into the largest annotated Rust OS learning resource that exists — in two languages.
+> **Why this matters:** TrustOS is 286K+ lines of bare-metal Rust. The educational versions turn it into the largest annotated Rust OS learning resource that exists — in two languages.
 
-## 🆕 What's New in v0.10.6
+## 🆕 What's New in v0.10.7
 
-> **March 24, 2026** — Hardware Drivers, Remote Desktop & WOA Game Engine
+> **March 25, 2026** — AMD PSP Driver, Boot Timing & GPU Debug Toolkit
 
-Major hardware compatibility push targeting the ASUS B75 board, plus a new game engine and full remote desktop capabilities.
+Massive AMD GPU firmware push: PSP (Platform Security Processor) driver, Polaris staging, SDMA expansion, and a full GPU debug command suite.
 
-- 🎮 **World of Ants (WOA)** — New roguelike platformer game engine built into the kernel. 60 FPS fixed-timestep loop, TSC-based timing, zone-based procedural world generation, physics (gravity/velocity/acceleration), 1280×800 backbuffer renderer, pixel-art sprite system. Launch with `woa`.
-- 🖥️ **Remote Desktop** — Full remote input injection via UDP: `key:<code>`, `keys:<string>`, `mouse:<dx>,<dy>,<btn>,<scroll>`, `mouseto:<x>,<y>,...`, `mousepos`. Screencap on dedicated port 7779. Remote `reboot` command via ACPI. Python client: `scripts/remote_console.py`.
-- 🛠️ **AMD GPU driver hardened** — PCI device ID fallback when firmware isn't loaded (Navi10/14 detection without GC_VERSION). VRAM register reads fixed (24-bit mask, not 16-bit). Known GPU VRAM size fallback table (RX 5700 XT = 8 GB, etc.). GPU init deferred after network to avoid MMIO conflict with RTL8168.
-- 🛠️ **NVIDIA NV50+ driver expanded** — +214 lines of register probing and diagnostic output.
-- 🌐 **RTL8139/RTL8169 drivers rewritten** — RTL8139 +341 lines, RTL8169 +173 lines. Proper PCI device ID discrimination. Hardware-tested on B75 board (RTL8168 GbE).
-- 📟 **Visual POST codes** — Real-time boot progress displayed on framebuffer (0x11–0xFF), visible on real hardware for debugging without serial.
-- 🧠 **Boot sequence reordered** — AMD GPU init moved after network (MMIO mapping was breaking RTL8168). DHCP timeout reduced from 10s to 800ms. Security subsystem deferred (SMEP was crashing RTL8169).
-- ⌨️ **Input injection API** — `keyboard::push_key()` and `mouse::inject_usb_mouse()` / `mouse::get_position()` for programmatic input.
-- 📈 **283,000+ lines** across 498 source files, 3 architectures.
+- 🔒 **AMD PSP driver** — New 791-line Platform Security Processor driver (`psp.rs`). PSP status, init, SOS boot, firmware staging pipeline. Shell commands: `gpufw psp`, `gpufw psp init`, `gpufw psp boot`, `gpufw psp sos`.
+- 🛠️ **AMD GPU firmware overhaul** — `firmware.rs` rewritten (+1,515 lines): PSP boot sequences, VRAM physical address tracking, Polaris full init pipeline, firmware staging from blob to GPU memory.
+- 🎮 **Polaris GPU staging** — New `_polaris_staged.rs` (207 lines): GFX/SDMA/SMU/IH microcode staging for Polaris GPUs.
+- ⚡ **SDMA engine expansion** — `sdma.rs` +464 lines: full diagnostic suite, staged init, ring buffer management, firmware load, alloc/reset/test subcommands.
+- 🕐 **Boot timing infrastructure** — TSC-based profiling with `boot_timing!` macro. Per-subsystem boot time measurement displayed at startup. TSC frequency auto-calibration (~2000 MHz Celeron G1610).
+- 🔧 **GPU debug toolkit** — 10+ new `gpu` subcommands: `dump`, `pci`, `probe`, `vramregs`, `mmio read/write`, `mc diag/setup`, `vram`, `sdma` (status/alloc/reset/fw/ring/test/init), `heap`.
+- 🧠 **AMD GPU mod.rs expanded** — +579 lines: extended GPU detection, info export API, PCI device ID fallback hardened, VRAM size improvements.
+- 📊 **Register definitions reorg** — `regs.rs` +324 lines: PSP, SDMA, MC register blocks added.
+- 🌐 **NVIDIA NV50+ driver expanded** — +214 lines of register probing and diagnostics.
+- 📈 **286,000+ lines** across 500 source files, 3 architectures. +4,400 lines in this release.
 
 ---
 
@@ -155,11 +156,11 @@ TrustOS does things that **no other operating system on Earth** does. Here's why
 ### ⚡ A native x86_64 compiler running *inside* the OS
 TrustLang compiles your programs to **raw Intel machine code** and executes them — all from within the kernel. No LLVM. No GCC. No external toolchain. Write code → native binary → execute. The entire compiler is 3,600 lines of Rust.
 
-### 🔍 283,000 lines — and you can read every single one
+### 🔍 286,000 lines — and you can read every single one
 No binary blobs. No proprietary drivers. No hidden telemetry. **Every driver, every protocol, every pixel, every encryption algorithm** is open Rust. One developer built it. Anyone can audit it.
 
 ### 🌍 Source code that teaches itself — in your language
-Every file ships in **4 auto-generated versions**: original, minimal (stripped), educational-en (annotated English), educational-fr (annotated French). A custom tokenizer-based translator expands abbreviations, adds inline explanations of every `unsafe`, `trait`, `impl`, and Rust pattern — turning 283K lines of kernel code into the **largest annotated Rust OS learning resource in existence**.
+Every file ships in **4 auto-generated versions**: original, minimal (stripped), educational-en (annotated English), educational-fr (annotated French). A custom tokenizer-based translator expands abbreviations, adds inline explanations of every `unsafe`, `trait`, `impl`, and Rust pattern — turning 286K lines of kernel code into the **largest annotated Rust OS learning resource in existence**.
 
 ### 🖥 A real desktop OS, not a toy
 144 FPS SIMD-accelerated desktop with 14+ apps, a browser with HTML/CSS/JS, Game Boy and NES emulators, 3D chess, a code editor, network security toolkit, and the most complete kernel introspection lab ever built into a bare-metal OS.
@@ -208,7 +209,7 @@ TLS 1.3, TCP/IP, DNS, DHCP, HTTP, HTML/CSS parser, JavaScript engine, FAT32, EXT
 
 ### 5. Source Code Translation for Developers
 
-Every `.rs` file auto-translated into 4 versions (original, minimal, educational-en, educational-fr) by a custom tokenizer-based translator. 498 files × 4 presets = 1,992 compilable Rust files. Abbreviations expanded, inline annotations in English or French on every Rust pattern. The entire codebase becomes a learning tool. [**→ Learn more**](#-source-code-translation-for-developers)
+Every `.rs` file auto-translated into 4 versions (original, minimal, educational-en, educational-fr) by a custom tokenizer-based translator. 500 files × 4 presets = 2,000 compilable Rust files. Abbreviations expanded, inline annotations in English or French on every Rust pattern. The entire codebase becomes a learning tool. [**→ Learn more**](#-source-code-translation-for-developers)
 
 ### 6. Userland Conformance Audit
 
@@ -264,7 +265,7 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 - Capability-based security model
 
 ### GPU Drivers
-- **AMD RDNA1** (Navi10/14) — PCI detection, MMIO mapping, VRAM probe, SDMA engine, compute dispatch, neural GEMM. PCI device ID fallback when firmware isn't loaded.
+- **AMD RDNA1** (Navi10/14) — PCI detection, MMIO mapping, VRAM probe, SDMA engine, compute dispatch, neural GEMM, PSP boot, firmware staging. PCI device ID fallback. Polaris support staged.
 - **NVIDIA NV50+** — PMC/PBUS register probing, GPU dump, diagnostic output
 - **VirtIO-GPU** — QEMU/KVM standard, 2D scanout
 
@@ -305,11 +306,11 @@ Port scanner, packet sniffer, banner grabber, host discovery, traceroute, vulner
 
 | | |
 |---|---|
-| **283,000+ lines** of pure Rust | **498** source files |
+| **286,000+ lines** of pure Rust | **500** source files |
 | **3** architectures (x86_64, ARM64, RISC-V) | **< 1 sec** boot time |
 | **104** Linux-compatible syscalls | **0** lines of C |
-| **276+** shell commands | **0** binary blobs |
-| **4** translated source versions (EN/FR) | **1,992** auto-generated compilable files |
+| **277+** shell commands | **0** binary blobs |
+| **4** translated source versions (EN/FR) | **2,000** auto-generated compilable files |
 | **85** userland conformance checks | **9** live Ring 3 tests |
 | **28** desktop applications | **144 FPS** SIMD desktop |
 | **4.4M** parameter AI (JARVIS) | **0** external runtime dependencies |
@@ -359,7 +360,7 @@ python tools/source_translator.py --all
 | `userland-audit` | Full userland conformance audit (85 checks + 9 live tests) |
 | `usertest` | Ring 3 execution test suite |
 | `gpu info` | GPU driver status |
-| `help` | All 276+ commands |
+| `help` | All 277+ commands |
 
 ### Explore the translated source
 
@@ -371,7 +372,7 @@ translated/
   educational-fr/    → Expanded names + French annotations
 ```
 
-Each folder contains the full 498-file kernel — compilable, diffable, and annotated for learning.
+Each folder contains the full 500-file kernel — compilable, diffable, and annotated for learning.
 
 ---
 
@@ -379,10 +380,10 @@ Each folder contains the full 498-file kernel — compilable, diffable, and anno
 
 ```
 TrustOS/
-  kernel/                     # Core bare-metal kernel (283K+ lines)
-    src/                      # 498 .rs files
+  kernel/                     # Core bare-metal kernel (286K+ lines)
+    src/                      # 500 .rs files
       trustlang/              # TrustLang compiler + native x86_64 (3,612 lines)
-      shell/                  # 276+ commands
+      shell/                  # 277+ commands
       desktop.rs              # COSMIC2 desktop manager
       woa/                    # World of Ants game engine
       jarvis/                 # JARVIS AI — 4.4M param transformer
@@ -395,7 +396,7 @@ TrustOS/
       vfs/                    # TrustFS, FAT32, EXT4, procfs
       tls13/                  # TLS 1.3, crypto, X.509
       netscan/                # Network security toolkit
-      drivers/                # AHCI, USB, VirtIO, NVMe, AMD GPU, NVIDIA, RTL8169
+      drivers/                # AHCI, USB, VirtIO, NVMe, AMD GPU (PSP/SDMA/Polaris), NVIDIA, RTL8169
       debug/                  # Remote shell (UDP 7777), serial, POST codes
   translated/                 # Auto-generated source versions
     original/                 # Exact copy (reference)
@@ -425,6 +426,18 @@ TrustOS/
 
 ## 📋 Changelog
 
+### v0.10.7 — AMD PSP Driver, Boot Timing & GPU Debug Toolkit (March 25, 2026)
+
+- **AMD PSP driver** — New 791-line Platform Security Processor driver. PSP status reporting, init sequence, SOS boot, firmware staging pipeline. Commands: `gpufw psp`, `gpufw psp init/boot/sos`.
+- **AMD GPU firmware overhaul** — `firmware.rs` rewritten (+1,515 lines): PSP boot sequences, VRAM physical address tracking, Polaris full init, firmware staging from blob to GPU memory.
+- **Polaris GPU staging** — New `_polaris_staged.rs` (207 lines): GFX/SDMA/SMU/IH microcode staging for Polaris GPUs.
+- **SDMA engine expansion** — +464 lines: full diagnostic suite, staged init, ring buffer management, firmware load, 6 subcommands (status, alloc, reset, fw, ring, test).
+- **Boot timing infrastructure** — TSC-based `boot_timing!` macro for per-subsystem profiling. TSC frequency auto-calibration.
+- **GPU debug toolkit** — 10+ new `gpu` subcommands: dump, pci, probe, vramregs, mmio, mc, vram, sdma, heap.
+- **Register definitions reorg** — +324 lines: PSP, SDMA, MC register blocks.
+- **NVIDIA NV50+ expanded** — +214 lines of register probing.
+- **+4,400 lines** across 30 files. 286,000+ lines total, 500 source files.
+
 ### v0.10.6 — Hardware Drivers, Remote Desktop & WOA (March 24, 2026)
 
 - **World of Ants (WOA)** — New roguelike platformer game engine. 60 FPS fixed-timestep loop, TSC timing, zone-based world generation, physics, 1280×800 renderer, pixel-art sprites. Feature-gated (`woa`), enabled by default.
@@ -435,7 +448,7 @@ TrustOS/
 - **Visual POST codes** — Real-time boot progress on framebuffer (0x11–0xFF) for hardware debugging.
 - **Boot sequence reordered** — GPU after network, DHCP 800ms timeout, security subsystem deferred.
 - **Input injection API** — `push_key()`, `inject_usb_mouse()`, `get_position()`.
-- **283,000+ lines** across 498 source files.
+- **283,000+ lines** across 498 source files. *(Superseded by v0.10.7)*
 
 ### v0.10.5 — Full Userland Integration & Conformance Audit (March 19, 2026)
 
@@ -591,7 +604,7 @@ TrustOS/
 
 ## � Roadmap
 
-> **Current status: v0.10.6** — March 24, 2026
+> **Current status: v0.10.7** — March 25, 2026
 
 TrustOS development follows a milestone-based approach. Here's where we are and where we're going:
 
@@ -601,7 +614,7 @@ TrustOS development follows a milestone-based approach. Here's where we are and 
 |-----------|--------|---------|
 | Kernel bootstrap (Limine, GDT, IDT, memory) | ✅ Done | v0.1 |
 | Framebuffer, keyboard, shell | ✅ Done | v0.1 |
-| COSMIC2 desktop (28 app types, 144 FPS compositor) | ✅ Done | v0.1–v0.10 |
+| COSMIC2 desktop (28 app types, 144 FPS compositor) | ✅ Done | v0.1–v0.10.7 |
 | TrustLang compiler (bytecode VM + native x86_64) | ✅ Done | v0.8 |
 | Network stack (TCP/IP, DHCP, DNS, ARP, IPv6) | ✅ Done | v0.3–v0.5 |
 | TLS 1.3 + HTTP/HTTPS (all crypto from scratch) | ✅ Done | v0.4 |
@@ -612,7 +625,7 @@ TrustOS development follows a milestone-based approach. Here's where we are and 
 | Ring 3 userland (104 syscalls, ELF64, SYSCALL/SYSRET) | ✅ Done | v0.2–v0.10.5 |
 | Source code translation (4 versions, EN/FR) | ✅ Done | v0.10.3 |
 | Hardware diagnostics (SMBIOS, SMART, EDID, thermal) | ✅ Done | v0.10.4 |
-| GPU drivers (AMD RDNA1, NVIDIA NV50+, VirtIO) | ✅ Done | v0.7–v0.10.6 |
+| GPU drivers (AMD RDNA1 + PSP + Polaris, NVIDIA NV50+, VirtIO) | ✅ Done | v0.7–v0.10.7 |
 | Remote desktop (UDP input injection + screencap) | ✅ Done | v0.10.6 |
 | WOA game engine (roguelike platformer) | ✅ Done | v0.10.6 |
 | Real hardware boot (ThinkPad T61, ASUS B75 via PXE) | ✅ Done | v0.10–v0.10.6 |
@@ -622,7 +635,7 @@ TrustOS development follows a milestone-based approach. Here's where we are and 
 
 | Milestone | Status | Details |
 |-----------|--------|---------|
-| **GPU compute for JARVIS** | 🔧 Active | AMD SDMA + compute dispatch implemented, working on hardware validation on B75 board (fans spin, GPU detected, MMIO mapped). Goal: train JARVIS on GPU instead of CPU. |
+| **GPU compute for JARVIS** | 🔧 Active | AMD SDMA + compute dispatch + PSP boot + firmware staging implemented. Working on hardware validation on B75 board (fans spin, GPU detected, MMIO mapped, PSP init sequence in progress). Goal: train JARVIS on GPU instead of CPU. |
 | **JARVIS training on hardware** | 🔧 Active | 4.4M-param transformer, gradient descent functional on CPU. Next: GPU-accelerated training via SDMA/neural GEMM. |
 | **RTL8168 GbE stability** | 🔧 Active | Driver rewritten, hardware-tested on B75. Boot ordering fixed. Still tuning DMA ring buffers under load. |
 | **WiFi (iwl4965)** | 🔧 Active | PCI detection + firmware load attempted. APM/BSM init WIP on ThinkPad T61. |
