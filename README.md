@@ -54,6 +54,10 @@ TrustOS probes hardware at the register level. No abstraction layers, no kernel 
 
 *CPUID full decode, CPU registers dump — output on physical screen via framebuffer.*
 
+<img src="media/screenshots/hwdbg_pci_boot.jpg" alt="TrustOS PCI enumeration and boot checkpoints on real hardware" width="720"/>
+
+*PCI bus enumeration (AMD GPU `[1002:731f]` + RTL8168 `[10ec:8168]` detected), heap status, and TSC-stamped boot checkpoints (POST 0x10 → 0xAA) — all on bare metal.*
+
 ---
 
 ## Remote Monitor
