@@ -1,266 +1,58 @@
-# Build outputs
-/target/
-/boot/target/
+# Build artifacts
+target/
 *.o
 *.a
 *.so
-*.img
+
+# ISO / disk images
 *.iso
-
-# Generated data disks
-trustos_data.img
-trustos_audio.vdi
-
-# Cargo
-Cargo.lock
-
-# IDE
-.idea/
-*.iml
-.vscode/
-
-# OS specific
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# Debug files
-*.pdb
-*.dSYM/
-
-# QEMU files
+*.img
 *.qcow2
-*.raw
-*.vdi
-NvVars
-# All loose logs now live in logs/ (which is gitignored above)
-# These patterns catch any stragglers at root
-qemu_*.txt
-serial_*.txt
-build_output.txt
-vbox_serial.txt
-boot_serial_output.txt
-browser_test_results.txt
-build_err_latest.txt
-serial.log
-qemu_debug.log
 
-# UEFI firmware (large binary files)
-*.fd
-OVMF*.fd
-OVMF_CODE.fd
-OVMF_VARS.fd
-
-# Linux initramfs (binary files)
-linux/initramfs/
-linux/bzImage
-
-# Limine bootloader binaries
-limine/
-iso_root/boot/limine/*.bin
-iso_root/boot/limine/*.sys
-iso_root/EFI/
-
-# Boot binaries
-boot/trustos_kernel
-boot/bestdows_kernel
-iso_root/boot/trustos_kernel
-
-# Alpine QEMU image
-qemu-alpine/
-
-# SDK binaries
-sdk/bin/
-
-# Release binaries
-releases/*.bin
-releases/*.img
-
-# Userland binaries
-userland/hello
-userland/*/target/
-userland/compositor/target/
-userland/fs/target/
-userland/init/target/
-userland/jarvis/target/
-userland/network/target/
-userland/shell/target/
-
-# EFI binaries
-EFI/
-
-# Backup files
-*.zip
-OSrust_backup*.zip
-
-# SDK build artifacts
-sdk/examples/*/target/
-
-# Jarvis bench build artifacts
-jarvis-bench/target/
-
-# Apple firmware/ROM binaries (user must supply their own)
-apple/tools/checkm8-dualboot/cache/*.im4p
-apple/tools/checkm8-dualboot/cache/*.img4
-apple/tools/checkm8-dualboot/cache/*.der
-apple/tools/checkm8-dualboot/results/*.bin
-apple/tools/checkm8-dualboot/rom_*_out.txt
-apple/tools/checkm8-dualboot/securerom/*_out.txt
-apple/tools/ipsw-analyst/extracted/*.im4p
-apple/tools/ipsw-analyst/extracted/*_output.txt
-apple/tools/ipsw-analyst/phase*_out.txt
-**/__pycache__/
-
-# Compiled kernel binaries in build/iso dirs
-build/
-builds/
-iso_root/
-
-# Root-level build script output
-trustos.iso
-iso_root_aarch64/
-pxe_tftp/*.sys
-pxe_tftp/trustos_kernel
-pxe_tftp/boot/trustos_kernel
-pxe_tftp/boot/limine-bios.sys
-
-# Pretrained brain binary (can be regenerated)
-jarvis-bench/jarvis_pretrained.bin
-
-# Server packages (can be re-downloaded)
-server/packages/*.tar.gz
-
-# Screenshots - ignore loose PNGs but keep evolution screenshots
-*.png
-*.ppm
-qemu_screenshot*.png
-
-# Keep showcase screenshots in docs/
-!docs/screenshot_desktop.png
-
-# Track screenshot evolution folders
-!media/screenshots/
-!media/screenshots/**
-!media/trustos_screenshots/
-!media/trustos_screenshots/**
-
-# Linux kernel binaries
-linux/bzImage
-linux/*.cpio.gz
-
-# ML model outputs (large)
-output_v21/
-output_v22/
-cache_v21/
-cache_v22/
-*.pt
-tinygl_decompiled.json
-
-# Build logs
-build_out.txt
-serial_*.log
-
-# YouTube / Thumbnail generation (not part of OS)
-make_*thumbnail*.py
-make_showcase_video.py
-thumbnail_*.png
-youtube_description.txt
-film_release.md
-
-# Misc
-launch-trustos.bat
-launch-trustos.ps1
-
-# All loose debug/build/test log .txt files in repo root
-aarch64_serial.txt
-boot_test_output.txt
-build_aarch64*.txt
-build_mobile_check.txt
-build_x64_log.txt
-el2_*.txt
-jarvis_swarm_results.txt
-propagation_test_output.txt
-slim_*.txt
-task_test_results.txt
-ultimate_test_report.txt
-vbox_launch_log.txt
-desktop_test_report.txt
-inttest_*.txt
-mentor_test*.txt
-jarvis_demo*.txt
-jarvis_pretrain.txt
-jarvis_training_results.txt
-google_scan_report.txt
-
-# Debug & test output logs
-build_check*.txt
-build_err*.txt
-build_out*.txt
-build_output*.txt
-build_full*.txt
-debug_out.txt
-debug3_out.txt
-debug-serial3.ps1
-push_err.txt
-test_results*.txt
-test_run*.txt
-test_report.txt
-vm_err.txt
-vm_out.txt
-serial.log
-
-# Rust ICE dumps
-rustc-ice-*.txt
-
-# Reorganized directories (binary/generated content)
+# Logs (local dev)
 logs/
-firmware/
+*.log
+serial.log
+vbox_serial.log
 
-# Media - ignore generated but keep logo and screenshots
-media/ppm/
-!media/logo.png
-!media/trustos_logo.png
+# Build output / temp files
+build_*.txt
+build_*.log
+audit_diff.txt
+flash_log.txt
+gpu_linux_dump.txt
+sdma_v*.txt
+sdma_v*_log.txt
+vbox_launch_log.txt
+screenshot*.png
 
-# Translated build artifacts (sources are tracked, build outputs are not)
-translated/*/target/
-translated/*/iso_root/
-translated/*/build.log
+# One-off scripts
+fix_encoding.py
+fix_gmc.py
+mkfs_fat32_fixed.rs
 
-# QEMU logs and screenshots
-qemu_*.png
-qemu_*.log
-serial_*.log
-debug_screen_*.png
+# Generated (source_translator.py)
+translated/
 
-# Publisher tools credentials (NEVER commit)
-tools/config/
-tools/tokens/
-tools/trustlangdemo_temp.mp4
+# Firmware variable stores (machine-specific)
+firmware/OVMF_VARS*.fd
+firmware/NvVars
 
-# Local usage guide (moved to docs/)
-# TRUSTOS_USAGE_GUIDE.md is now in docs/ and tracked there
+# PXE deploy (local binaries)
+pxe_tftp/trustos_kernel
+pxe_tftp/boot/
+pxe_tftp/EFI/
+pxe_tftp/limine/
 
-# Local planning docs (not for GitHub)
-docs/showcaseplan.md
-docs/TRAILER_PLAN.md
-docs/TRUSTLAB_VIDEO.md
-docs/AUDIO_SYNTH_ROADMAP.md
-docs/SYSTEM_SOUNDS_ROADMAP.md
-docs/youtube_description.txt
-docs/film_release.md
+# IDE / editor
+.vscode/settings.json
+*.swp
+*~
 
-# Audio/video binary assets (too large for git)
-*.wav
-*.mp3
-*.mp4
-*.avi
+# Python
+__pycache__/
+*.pyc
+.venv/
 
-# Temp tools
-tools/trusttemp/
-
-# ROM files (user must supply their own legally-owned ROMs)
-kernel/roms/*.gb
-kernel/roms/*.gbc
-kernel/roms/*.nes
-kernel/roms/*.sfc
-kernel/roms/*.smc
+# Debug-only kernel (local dev)
+debugonly/target/
