@@ -23,6 +23,7 @@ jobs:
       - name: Install Rust Nightly
         uses: dtolnay/rust-toolchain@nightly
         with:
+          components: rust-src, llvm-tools-preview
           targets: x86_64-unknown-none
 
       - name: Cache Cargo
@@ -37,7 +38,7 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Build (release)
-        run: cargo build --release
+        run: cargo build --release -p trustos_kernel
 
       - name: Upload kernel binary
         uses: actions/upload-artifact@v4
@@ -58,7 +59,7 @@ jobs:
       - name: Install Rust Nightly
         uses: dtolnay/rust-toolchain@nightly
         with:
-          components: clippy, rustfmt
+          components: clippy, rustfmt, rust-src, llvm-tools-preview
           targets: x86_64-unknown-none
 
       - name: Cache Cargo
@@ -71,7 +72,7 @@ jobs:
           key: ${{ runner.os }}-lint-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Clippy
-        run: cargo clippy --release -- -A clippy::all
+        run: cargo clippy --release -p trustos_kernel -- -A clippy::all
         continue-on-error: true
 
   integration-test:
@@ -92,10 +93,11 @@ jobs:
       - name: Install Rust Nightly
         uses: dtolnay/rust-toolchain@nightly
         with:
+          components: rust-src, llvm-tools-preview
           targets: x86_64-unknown-none
 
       - name: Build kernel
-        run: cargo build --release
+        run: cargo build --release -p trustos_kernel
 
       - name: Build ISO
         run: |
