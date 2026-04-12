@@ -18,7 +18,7 @@
 
 ---
 
-<img src="screenshot2.png" alt="GPU AMD SDMA OK" width="900"/>
+<img src="win2.png" alt="GPU AMD SDMA OK" width="900"/>
 
 ### AMD GPU WORKING: SDMA Polaris 10 (RX 580X) validated on TrustOS
 
