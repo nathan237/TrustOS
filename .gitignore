@@ -24,7 +24,6 @@ gpu_linux_dump.txt
 sdma_v*.txt
 sdma_v*_log.txt
 vbox_launch_log.txt
-screenshot*.png
 
 # One-off scripts
 fix_encoding.py
@@ -56,3 +55,7 @@ __pycache__/
 
 # Debug-only kernel (local dev)
 debugonly/target/
+# Jailbreak/iOS research (ignore all except monitor)
+apple/iOS_18_5_JAILBREAK_ANALYSIS.md
+apple/tools/checkm8-dualboot/
+# (autres sous-dossiers ou fichiers liés à jailbreak à ajouter ici si besoin)
