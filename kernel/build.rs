@@ -1,6 +1,12 @@
 use std::path::PathBuf;
+use std::process::Command;
 
 fn main() {
+    // ── CoreMark C compilation (when feature enabled) ──
+    if std::env::var("CARGO_FEATURE_COREMARK").is_ok() {
+        build_coremark();
+    }
+
     // ── Linker script (architecture-aware) ──
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let target = std::env::var("TARGET").unwrap_or_default();
@@ -87,4 +93,110 @@ fn main() {
             }
         }
     }
+}
+
+fn build_coremark() {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let coremark_root = PathBuf::from(&manifest_dir).join("coremark-src");
+    let port_dir = coremark_root.join("trustos");
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+
+    let c_files = [
+        coremark_root.join("core_list_join.c"),
+        coremark_root.join("core_main.c"),
+        coremark_root.join("core_matrix.c"),
+        coremark_root.join("core_state.c"),
+        coremark_root.join("core_util.c"),
+        port_dir.join("core_portme.c"),
+        port_dir.join("ee_printf.c"),
+    ];
+
+    let compiler_flags = "-O2 -ffreestanding -nostdlib -fno-builtin -mcmodel=large -mno-red-zone -mno-sse";
+
+    let common_args = &[
+        "-O2",
+        "-ffreestanding",
+        "-nostdlib",
+        "-fno-builtin",
+        "-mcmodel=large",
+        "-mno-red-zone",
+        "-mno-sse",
+        "-DPERFORMANCE_RUN=1",
+        "-DITERATIONS=0",
+        "-DHAS_PRINTF=0",
+        "-DHAS_STDIO=0",
+    ];
+
+    let clang = if PathBuf::from("C:/Program Files/LLVM/bin/clang.exe").exists() {
+        "C:/Program Files/LLVM/bin/clang.exe"
+    } else {
+        "clang"
+    };
+
+    let mut obj_files = Vec::new();
+
+    for src in &c_files {
+        let stem = src.file_stem().unwrap().to_str().unwrap();
+        let obj = out_dir.join(format!("{}.o", stem));
+
+        let status = Command::new(clang)
+            .arg("--target=x86_64-unknown-none-elf")
+            .args(common_args)
+            .arg(&format!("-DFLAGS_STR=\"{}\"", compiler_flags))
+            .arg("-I").arg(&coremark_root)
+            .arg("-I").arg(&port_dir)
+            .arg("-c")
+            .arg(src)
+            .arg("-o").arg(&obj)
+            .status()
+            .expect("Failed to run clang — install LLVM/clang");
+
+        if !status.success() {
+            panic!("gcc failed to compile {}", src.display());
+        }
+        obj_files.push(obj);
+    }
+
+    // Create static library (ELF archive via llvm-ar from Rust toolchain)
+    let llvm_ar = find_llvm_ar();
+    let lib_path = out_dir.join("libcoremark.a");
+    let mut ar_cmd = Command::new(llvm_ar);
+    ar_cmd.arg("rcs").arg(&lib_path);
+    for obj in &obj_files {
+        ar_cmd.arg(obj);
+    }
+    let status = ar_cmd.status().expect("Failed to run ar");
+    if !status.success() {
+        panic!("ar failed to create libcoremark.a");
+    }
+
+    println!("cargo:rustc-link-search=native={}", out_dir.display());
+    println!("cargo:rustc-link-lib=static=coremark");
+    println!("cargo:rerun-if-changed=coremark-src/");
+}
+
+fn find_llvm_ar() -> String {
+    // Try LLVM install
+    let llvm_path = "C:/Program Files/LLVM/bin/llvm-ar.exe";
+    if PathBuf::from(llvm_path).exists() {
+        return llvm_path.to_string();
+    }
+    // Try Rust toolchain sysroot
+    if let Ok(output) = Command::new("rustc").arg("--print").arg("sysroot").output() {
+        let sysroot = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        // Check gnu toolchain path
+        let gnu_path = PathBuf::from(&sysroot)
+            .join("lib/rustlib/x86_64-pc-windows-gnu/bin/llvm-ar.exe");
+        if gnu_path.exists() {
+            return gnu_path.to_string_lossy().to_string();
+        }
+        // Check msvc toolchain path
+        let msvc_path = PathBuf::from(&sysroot)
+            .join("lib/rustlib/x86_64-pc-windows-msvc/bin/llvm-ar.exe");
+        if msvc_path.exists() {
+            return msvc_path.to_string_lossy().to_string();
+        }
+    }
+    // Fallback
+    "llvm-ar".to_string()
 }

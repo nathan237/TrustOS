@@ -32,9 +32,13 @@ name = "trustos_kernel"
 path = "src/main.rs"
 
 [features]
-default = ["emulators", "hires-logo", "jarvis", "extras"]
+default = ["emulators", "hires-logo", "jarvis", "extras", "woa", "psp_sos"]
+## CoreMark EEMBC benchmark (minimal boot, no drivers/shell/GUI)
+coremark = []
 ## NES + Game Boy emulators and GameLab analysis dashboard
 emulators = []
+## PSP SOS firmware blob for AMD GPU (navi10_sos.bin, ~180 KB)
+psp_sos = []
 ## TrustDAW embedded audio (includes ~29 MB WAV). Disable for slim builds.
 daw = []
 ## High-res 400×400 ARGB logo bitmap (~647 KB). Disable for slim builds.
@@ -44,3 +48,5 @@ hires-logo = []
 jarvis = []
 ## Games, 3D renderers, video codec. Disable for slim builds.
 extras = []
+## WOA — World of Ants game engine (roguelike platformer)
+woa = []
