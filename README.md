@@ -12,29 +12,79 @@
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?style=for-the-badge)]()
 [![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?style=for-the-badge&logo=rust&logoColor=white)]()
 [![Architectures](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet?style=for-the-badge)]()
-[![Version](https://img.shields.io/badge/version-0.10.8-orange?style=for-the-badge)]()
+[![Version](https://img.shields.io/badge/version-0.11.0-orange?style=for-the-badge)]()
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue?style=for-the-badge)](LICENSE)
+[![Lines](https://img.shields.io/badge/163K%2B%20lines-Rust-F74C00?style=for-the-badge)]()
 [![Author](https://img.shields.io/badge/created%20by-Nated0ge-ff69b4?style=for-the-badge&logo=github&logoColor=white)](https://github.com/nathan237)
 
 ---
 
+</div>
+
+## What's New (March–April 2026)
+
+Since v0.10.1, TrustOS has seen **40 commits** and over **1.2 million lines of changes** across 2,000+ files. Here are the highlights.
+
+### AMD GPU — SDMA Engine Validated on Real Hardware
+
+<div align="center">
 <img src="win2.png" alt="GPU AMD SDMA OK" width="900"/>
+</div>
 
-### AMD GPU WORKING: SDMA Polaris 10 (RX 580X) validated on TrustOS
+After weeks of bring-up work on an AMD RX 580X (Polaris 10), the **SDMA pipeline is running on bare metal**. Ring buffer allocated in GART, firmware responsive, read/write pointers advancing. The Graphics Memory Controller (L1/L2 TLB, system aperture, VM flat mode) was the missing piece — 14+ debug iterations on real hardware to track it down.
 
-**Motherboard**: BTC-250PRO (Skylake, LGA1151)  
-**GPU**: AMD RX 580X (Polaris 10, 1002:67DF)  
-**SDMA**: RUNNING, GART ring, RPTR/WPTR OK, VRAM/GART mapping matches Linux  
-**Debug**: MMIO mapping, full audit, SDMA test → success  
-**Capture**: TrustOS Monitor v4, netconsole log, real hardware test
+**Hardware**: BTC-250PRO (Skylake), RX 580X via PCIe riser, entirely headless (UDP shell + PXE reboot).
 
-> After weeks of reverse engineering, auditing, and hardware testing, the AMD SDMA pipeline is validated on TrustOS. RPTR/WPTR OK, GART ring, VRAM/GART mapping, sequence matches Linux.
+**Next**: CP/graphics ring, compute dispatch, GPU-accelerated JARVIS training.
 
-**Next step:** compute acceleration, CP/graphics support, JARVIS GPU-native benchmarks.
+### Intel HDA Audio — From Silence to Sound
+
+We wrote a complete **Intel HD Audio driver** from scratch in `no_std` Rust. Tested on ThinkPad T61 with an AD1984 codec — a notoriously tricky chip.
+
+This was a 12-iteration debugging saga:
+- **Root cause**: amp gain bits were swapped in our register encoding — output amplifiers were never actually being set
+- GPIO polarity fix (T61 needs HIGH for amplifier power, not LOW)
+- Triangle wave i16 overflow causing audio tearing
+- Stream reset logic, full DAC configuration, codec dump tool
+- Gain range validation against hardware-reported amp capabilities
+
+Result: working audio output on real hardware, from a bare-metal OS, in pure Rust.
+
+### Ring 3 Userland (v0.10.5)
+
+TrustOS now has a **protected userland**. Full Ring 3 integration with an 85-check conformance audit:
+- User-mode processes running in isolated address spaces
+- Syscall interface validated against expected behavior
+- Foundation for running untrusted code safely on bare metal
+
+### Hardware Diagnostic Suite — 6 New Modules (v0.10.4)
+
+The `hwdbg` toolkit now has **15+ subcommands** for deep hardware inspection:
+
+| Tool | What it does |
+|------|-------------|
+| `pciraw` | Raw PCI/PCIe config space hex dump (256B legacy / 4KB extended) |
+| `regdiff` | Register snapshot & bit-level diff (PCI, MSR, I/O ports) |
+| `ioscan` | I/O port range scanner (legacy devices, COM/UART, IDE controllers) |
+| `regwatch` | Live register monitor with automatic change detection |
+| `aer` | PCIe Advanced Error Reporting — scan, decode, clear |
+| `timing` | TSC-based boot profiling with per-subsystem checkpoint timeline |
+
+### ThinkPad EC Driver + CPU Frequency Control (v0.10.2)
+
+- Embedded Controller driver for ThinkPad laptops — fan control, thermal readout, battery status
+- CPU frequency scaling via MSR writes
+- Proves TrustOS runs and interacts with real laptop hardware, not just server boards
+
+### CoreMark Benchmark — 25,000 iter/sec
+
+Added the industry-standard **EEMBC CoreMark** benchmark. TrustOS achieves **25,000 iterations/second** on bare metal (Intel G4400). A verifiable, comparable number that shows the kernel isn't just functional — it's performant.
+
+### Security Audit
+
+Preemptive vulnerability fixes from a cross-OS security audit. Hardened before shipping, not after.
 
 ---
-
-</div>
 
 ## What is TrustOS?
 
@@ -46,35 +96,23 @@ It ships with a Python remote monitor (`scripts/remote_screen.py`) that lets you
 
 ---
 
-## 🔥 Work in Progress — AMD GPU Bare-Metal Driver
+## AMD GPU Bring-Up — Milestones
 
-We're building a **from-scratch AMD GPU driver** in pure `no_std` Rust — no Linux, no Mesa, no libdrm. Direct MMIO register control on real silicon.
+From-scratch AMD GPU driver in pure `no_std` Rust — no Linux, no Mesa, no libdrm. Direct MMIO register control on real silicon.
 
-**Hardware**: AMD RX 580X (Polaris 10, `1002:67DF`, 8 GB GDDR5) on a BTC-250PRO mining board via PCIe riser. All debugging done **headless** — UDP shell + netconsole + PXE reboot. No monitor, no keyboard.
+| Milestone | Status |
+|-----------|--------|
+| PCI enumeration & BAR decode (VRAM 256 MB, MMIO 512 KB, Doorbell 2 MB) | Done |
+| MMIO register access — validated against Linux amdgpu source | Done |
+| VRAM detection — 8 GB GDDR5 from CONFIG_MEMSIZE | Done |
+| Graphics Memory Controller — L1/L2 TLB, system aperture, VM flat mode | Done |
+| Firmware loading — SDMA0/1, PFP, ME, MEC via MMIO | Done |
+| SDMA ring buffer — GART ring, RPTR/WPTR advancing | Done |
+| PSP bootstrap (Navi) — bootloader protocol scaffolded | In Progress |
+| Compute dispatch — PM4 packets, HQD init | In Progress |
+| GPU-accelerated AI — INT8 GEMM across 36 CUs for JARVIS | Planned |
 
-### Milestones
-
-| What | Status | Proof |
-|------|--------|-------|
-| PCI enumeration & BAR decode | ✅ | GPU found, 6 BARs mapped (VRAM 256 MB, MMIO 512 KB, Doorbell 2 MB) |
-| MMIO register access | ✅ | Direct BAR5 reads/writes validated against Linux amdgpu source |
-| VRAM detection | ✅ | 8 GB GDDR5 from CONFIG_MEMSIZE, FB_LOCATION physical range parsed |
-| Graphics Memory Controller | ✅ | L1/L2 TLB, system aperture, VM flat mode, TLB invalidation |
-| Firmware loading | ✅ | SDMA0/1, PFP, ME, MEC microcode loaded via MMIO (no PSP on Polaris) |
-| SDMA ring buffer | ✅ | Ring allocated, firmware alive — IP_BUSY toggles confirm |
-| PSP bootstrap (Navi) | 🔧 | Bootloader protocol scaffolded (SOS, GPCOM, TMR) — needs real Navi HW |
-| Compute dispatch | 🔧 | PM4 packets + HQD init ready, pending ring validation |
-| GPU-accelerated AI | 📋 | INT8 GEMM (`V_DOT4_I32_I8`) across 36 CUs for JARVIS training |
-
-### Key Discovery
-
-After **14+ debug iterations**, the SDMA read pointer was stuck at 0. We systematically eliminated: PCIe riser effects, VT-d passthrough, doorbell ordering, HDP flush timing, VMID field widths, SAM bit positions, and more.
-
-**Root cause**: the Graphics Memory Controller was never initialized — L1 TLB had system-access-mode disabled, so firmware couldn't resolve ring buffer addresses. Not a register bug, not a PCIe issue — it was the memory subsystem.
-
-### Goal
-
-Train JARVIS (4.4M-param byte-level transformer embedded in the kernel) directly on GPU compute units. No CPU fallback for matrix ops.
+**Key Discovery**: After 14+ iterations, SDMA's read pointer was stuck at 0. Root cause: the Graphics Memory Controller was never initialized — L1 TLB had system-access-mode disabled, so firmware couldn't resolve ring buffer addresses. Not a PCIe issue, not a register bug — the memory subsystem.
 
 ---
 
@@ -87,15 +125,15 @@ TrustOS probes hardware at the register level. No abstraction layers between you
 | **PCI Bus** | Full enumeration: vendor/device IDs, class, BARs, capability chains (MSI, PCIe, PM), bus mastering |
 | **CPU** | CPUID all leaves, brand string, feature flags (SSE/AVX/AES), family/model/stepping, MSR scan |
 | **SMBIOS/DMI** | Board manufacturer, BIOS version, DIMM slots (size/speed/type), chassis, serials |
-| **ACPI** | RSDP → XSDT walk, all tables (MADT, FADT, HPET, MCFG, SSDT), raw hex dump |
+| **ACPI** | RSDP -> XSDT walk, all tables (MADT, FADT, HPET, MCFG, SSDT), raw hex dump |
 | **AMD GPU** | MMIO registers, GRBM status, SDMA engine state, VRAM size, memory controller config |
 | **NVIDIA GPU** | PMC/PBUS registers, GPU identity, diagnostic dump |
+| **Intel HDA** | Codec enumeration, widget tree, amplifier capabilities, pin configuration |
+| **ThinkPad EC** | Fan speed, thermal sensors, battery, embedded controller registers |
 | **Memory Map** | Full UEFI memory map: type, physical range, page count |
-| **Boot Timing** | TSC-based per-subsystem boot profiling (µs precision) |
+| **Boot Timing** | TSC-based per-subsystem boot profiling (us precision) |
 | **Network** | NIC detection, MAC address, PCI config |
 | **Storage** | NVMe/AHCI controller detection, BAR decode |
-
-**Running on real hardware (Intel G4400 + AMD RX 580X, BTC-250PRO LR):**
 
 <img src="media/screenshots/hwdbg_real_hardware.jpg" alt="TrustOS hardware diagnostic on real hardware" width="720"/>
 
@@ -104,34 +142,6 @@ TrustOS probes hardware at the register level. No abstraction layers between you
 <img src="media/screenshots/hwdbg_pci_boot.jpg" alt="TrustOS PCI enumeration on real hardware" width="720"/>
 
 *PCI bus enumeration with AMD GPU + RTL8168 detected, heap status, and TSC boot checkpoints.*
-
----
-
-## Build Your Own Tools
-
-TrustOS gives you **direct register access** and a **shell framework**. From there — you build whatever diagnostics you need.
-
-The project ships the primitives, not a fixed toolkit:
-
-- **MMIO helpers** — Read/write any GPU register by offset. BAR mapping is done for you.
-- **PCI config space** — Full access to any device: config registers, capability chains, BAR decode.
-- **Shell commands** — Add a command in `kernel/src/shell/`, it's live at next boot.
-- **Netconsole** — Every `serial_println!()` streams to UDP 6666. Pipe debug output to any host.
-- **Remote shell** — Commands via UDP 7777. Automate with Python scripts.
-- **PXE boot** — Edit → rebuild → copy to TFTP → remote reboot. Full cycle under 60 seconds.
-
-**Example** — probe a GPU register:
-
-```rust
-// In your shell command handler:
-let mmio = gpu_state.mmio_base; // Already mapped
-let val = unsafe { core::ptr::read_volatile((mmio + 0x2004) as *const u32) };
-serial_println!("GRBM_STATUS2: {:#010x}", val);
-```
-
-No ioctl, no syscall, no permission model — you're in ring 0, talking to silicon.
-
-We built our own GPU diagnostic toolkit this way during the RX 580X bring-up. You can build yours for any hardware TrustOS sees.
 
 ---
 
@@ -151,7 +161,7 @@ python scripts/remote_screen.py --ip 10.0.0.110 --interval 2
 
 <img src="media/screenshots/monitor_gpu_init.png" alt="TrustOS Monitor showing live GPU init" width="720"/>
 
-*Monitor v3.0 — AMD GPU init streamed over UDP netconsole in real time.*
+*Monitor v3.0 — GPU init streamed over UDP netconsole in real time.*
 
 ---
 
@@ -170,7 +180,7 @@ Type `help` for all commands. `hwdbg auto` dumps CPU + memory + PCI + SMBIOS in 
 ### Bare Metal (USB)
 
 1. Download ISO from [**Releases**](https://github.com/nathan237/TrustOS/releases)
-2. Flash with [**Rufus**](https://rufus.ie/) → **DD Image mode**
+2. Flash with [**Rufus**](https://rufus.ie/) — **DD Image mode**
 3. Boot (F12 / DEL). Works on **UEFI** and **Legacy BIOS**.
 
 ### PXE Network Boot
@@ -201,15 +211,17 @@ Tested on: ThinkPad T61, BTC-250PRO LR (mining board), QEMU/VirtualBox.
 TrustOS/
   kernel/src/
     main.rs           — Entry point (Limine boot protocol)
-    drivers/           — AMD GPU (Polaris/Navi), NVIDIA, RTL8139/8169, AHCI, XHCI
+    drivers/           — AMD GPU (Polaris/Navi), NVIDIA, Intel HDA, ThinkPad EC
     netstack/          — TCP/IP, UDP, ARP, DHCP, DNS, IPv6
     memory/            — Physical frame allocator, paging, heap
     interrupts/        — IDT, APIC, exception handlers
     shell/             — 200+ commands (hwdbg, pci, gpu, sensors, etc.)
+    hwdiag/            — Hardware diagnostic modules (pciraw, regdiff, ioscan, aer, timing...)
     jarvis/            — JARVIS AI (4.4M-param transformer, guardian system)
     framebuffer/       — Rendering, POST codes
-    scheduler/         — Process scheduler
+    scheduler/         — Process scheduler, Ring 3 userland
     vfs/               — Virtual filesystem
+  userland/            — Ring 3 processes, syscall interface
   scripts/
     remote_screen.py   — Remote monitor (screencap + input injection)
     pxe_server.py      — DHCP + TFTP for PXE boot
@@ -231,32 +243,21 @@ Requires: Rust nightly, `x86_64-unknown-none` target, `llvm-tools-preview`.
 
 ## Changelog
 
-### v0.10.8 — AMD GPU Memory Controller & SDMA Bring-up (April 5, 2026)
+### v0.11.0 — Audio, Userland, GPU, Benchmarks (April 2026)
 
-- **GMC init** — Full Polaris Graphics Memory Controller: L1/L2 TLB, system aperture, VM flat mode. Root cause of SDMA hang identified and fixed.
-- **SDMA engine alive** — Ring buffer operational on real hardware (RX 580X). Firmware responsive.
-- **14+ debug iterations** — Systematic elimination on real hardware: PCIe, TLB, doorbell, HDP, VMID.
-- **Compute pipeline** — PM4 packet builders, hardware queue descriptors, shader agent framework.
-- **Remote GPU bring-up** — Entire driver development done headless via UDP + PXE.
+- **AMD SDMA validated** — Ring buffer running on RX 580X, GMC fully initialized, firmware responsive
+- **Intel HDA audio** — Complete driver for AD1984 codec, 12-iteration debug to working audio on ThinkPad T61
+- **Ring 3 userland** — Protected user-mode processes, 85-check conformance audit
+- **Hardware diagnostics** — 6 new modules (pciraw, regdiff, ioscan, regwatch, aer, timing), 15+ hwdbg subcommands
+- **ThinkPad EC** — Embedded Controller driver, fan/thermal/battery readout, CPU frequency control
+- **CoreMark** — 25,000 iter/sec on bare metal (EEMBC standard benchmark)
+- **Security** — Preemptive fixes from cross-OS vulnerability audit
+- **CI** — Fixed `build-std` compatibility with rust-src component
 
-### v0.10.7 — AMD PSP Driver & Boot Timing (March 25, 2026)
+### v0.10.1 — Settings GUI & Network (March 13, 2026)
 
-- **PSP driver** — Platform Security Processor bootloader interface for Navi10 GPUs.
-- **Firmware pipeline** — Polaris direct MMIO path, Navi10 PSP path, staged init.
-- **Boot timing** — TSC-based `boot_timing!` macro, µs precision per subsystem.
-
-### v0.10.6 — Remote Desktop & Hardware Drivers (March 24, 2026)
-
-- **Remote desktop** — Input injection, screencap streaming, remote ACPI reboot.
-- **NIC drivers** — RTL8139/RTL8169 rewritten, hardware-tested.
-- **Visual POST codes** — Boot progress on framebuffer.
-- **GPU init hardening** — Deferred init prevents network driver conflicts.
-
-### v0.10.5 — Hypervisor & Userland (March 20, 2026)
-
-- **AMD SVM** — VMCB, NPT, unified backend with Intel VT-x.
-- **Ring 3 userland** — 104 Linux-compatible syscalls, ELF64 loader, COW fork, signals, pipes.
-- **VirtIO** — Stable virtio-blk and virtio-console.
+- Settings GUI, NetScan GUI, shell scrollback fix, ACPI shutdown hardening
+- T61 hardware optimization, matrix rain, GitHub Pages site
 
 ---
 
@@ -268,4 +269,4 @@ Apache 2.0 — see [LICENSE](LICENSE).
 
 ## AI Disclosure
 
-This project was built with AI assistance (GitHub Copilot). All code is reviewed and understood by the author. No generated code is shipped without verification.
+This project was built with AI assistance (GitHub Copilot, Claude). All code is reviewed and understood by the author. No generated code is shipped without verification.
