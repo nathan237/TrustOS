@@ -53,8 +53,8 @@ jobs:
             make -C limine 2>/dev/null || true
           fi
 
-      - name: Build kernel (release)
-        run: cargo build --release -p trustos_kernel
+      - name: Build kernel (release, public edition — no jarvis)
+        run: cargo build --release -p trustos_kernel --no-default-features --features "emulators,hires-logo,extras,woa,psp_sos"
 
       - name: Create bootable ISO
         run: |

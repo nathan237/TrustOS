@@ -26,6 +26,33 @@
 
 ---
 
+## What's new — v0.11.0 (April 2026)
+
+The biggest cycle since v0.10 — bare-metal AMD GPU bring-up, working audio on real laptops, protected userland, and a full hardware diagnostics suite.
+
+### AMD GPU SDMA validated on real silicon
+
+<div align="center">
+<img src="docs/images/gpu_amd_sdma_validated.png" alt="AMD SDMA running on bare metal" width="900"/>
+</div>
+
+From-scratch AMD driver in pure `no_std` Rust on an RX 580X (Polaris 10). Ring buffer in GART, firmware responsive, RPTR/WPTR advancing. Root cause of the 14-iteration debug saga: the **Graphics Memory Controller** (L1/L2 TLB, system aperture, VM flat mode) was uninitialized — the SDMA firmware couldn't resolve ring addresses. Not the registers, not the PCIe link — the memory subsystem.
+
+→ Devlog: [`docs/devlog/gpu_amd_sdma_milestone.md`](docs/devlog/gpu_amd_sdma_milestone.md)
+
+### Other wins this cycle
+
+- **Intel HDA audio** — complete `no_std` driver, working sound on ThinkPad T61 / AD1984 codec
+- **Ring 3 userland** — protected user-mode processes, 85-check conformance audit
+- **Hardware diagnostics** — 6 new modules: `pciraw`, `regdiff`, `ioscan`, `regwatch`, `aer`, `timing` (15+ `hwdbg` subcommands total)
+- **ThinkPad EC** — fan/thermal/battery readout + CPU frequency scaling via MSR
+- **CoreMark** — 25,000 iter/sec on bare metal Intel G4400 ([`docs/BENCHMARK.md`](docs/BENCHMARK.md))
+- **Security audit** — preemptive cross-OS vulnerability sweep
+
+→ Full history: [`CHANGELOG.md`](CHANGELOG.md)
+
+---
+
 ## Architecture at a glance
 
 ```mermaid
@@ -41,31 +68,6 @@ flowchart LR
     F --> J[Screencap<br/>UDP 7779]
     G --> L[Ring 3 Userland]
 ```
-
----
-
-## Highlight reel — v0.11.0 (April 2026)
-
-### AMD GPU SDMA validated on real silicon
-
-<div align="center">
-<img src="docs/images/gpu_amd_sdma_validated.png" alt="AMD SDMA running on bare metal" width="900"/>
-</div>
-
-From-scratch AMD driver in pure `no_std` Rust on an RX 580X (Polaris 10). Ring buffer in GART, firmware responsive, RPTR/WPTR advancing. Root cause of the 14-iteration debug saga: the **Graphics Memory Controller** (L1/L2 TLB, system aperture, VM flat mode) was uninitialized — the SDMA firmware couldn't resolve ring addresses. Not the registers, not the PCIe link — the memory subsystem.
-
-→ Full devlog: [`docs/devlog/gpu_amd_sdma_milestone.md`](docs/devlog/gpu_amd_sdma_milestone.md)
-
-### Other wins this cycle
-
-- **Intel HDA audio** — complete `no_std` driver, working sound on ThinkPad T61 / AD1984 codec
-- **Ring 3 userland** — protected user-mode processes, 85-check conformance audit
-- **Hardware diagnostics** — 6 new modules: `pciraw`, `regdiff`, `ioscan`, `regwatch`, `aer`, `timing`
-- **ThinkPad EC** — fan/thermal/battery readout + CPU frequency scaling via MSR
-- **CoreMark** — 25,000 iter/sec on bare metal Intel G4400 ([`docs/BENCHMARK.md`](docs/BENCHMARK.md))
-- **Security audit** — preemptive cross-OS vulnerability sweep
-
-→ Full history: [`CHANGELOG.md`](CHANGELOG.md)
 
 ---
 
