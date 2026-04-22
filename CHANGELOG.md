@@ -12,7 +12,6 @@ All notable changes to TrustOS. Format loosely follows [Keep a Changelog](https:
 - **ThinkPad EC driver** — fan control, thermal readout, battery status. CPU frequency scaling via MSR.
 - **CoreMark benchmark** — 25,000 iter/sec on bare metal Intel G4400 (EEMBC standard).
 - **AMD PSP driver scaffolding** for Navi 10+.
-- **JARVIS extensions** — training loop, checkpoints, developmental phases (7 stages), genome (JDNA), heartbeat, conversation log, training dashboard, dedicated `jarvis_arena` heap (256 MB – 1 GB).
 
 ### Fixed
 - `build-std` CI compatibility (`rust-src` component, `-p trustos_kernel`).

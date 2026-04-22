@@ -44,10 +44,6 @@ Most of TrustOS is validated by booting on real boards (ThinkPad T61, BTC-250PRO
 - [ ] Public APIs documented.
 - [ ] Commit messages follow `type(scope): subject` (e.g. `feat(amdgpu): wire SDMA doorbell`).
 
-## JARVIS — The Pact
-
-Modifying anything under `kernel/src/jarvis/` requires guardian authorization (see `kernel/src/jarvis/guardian.rs`). Open an issue first to discuss.
-
 ## Code of conduct
 
 Be civil. Disagreement is fine, hostility is not.
