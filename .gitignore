@@ -55,7 +55,13 @@ __pycache__/
 
 # Debug-only kernel (local dev)
 debugonly/target/
-# Jailbreak/iOS research (ignore all except monitor)
-apple/iOS_18_5_JAILBREAK_ANALYSIS.md
-apple/tools/checkm8-dualboot/
-# (autres sous-dossiers ou fichiers liés à jailbreak à ajouter ici si besoin)
+
+# iOS / jailbreak research — separate concern, not part of TrustOS
+apple/
+
+# Local screenshots / scratch
+README.md.bak
+screenshot*.png
+win*.png
+chromedriver.exe
+rustc-ice-*.txt

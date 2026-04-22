@@ -4,6 +4,236 @@
 
 # TrustOS
 
+### A bare-metal OS in Rust that boots on real hardware, ships an embedded transformer, and tells you exactly what's inside the silicon.
+
+[![CI](https://github.com/nathan237/TrustOS/actions/workflows/ci.yml/badge.svg)](https://github.com/nathan237/TrustOS/actions/workflows/ci.yml)
+[![Release](https://github.com/nathan237/TrustOS/actions/workflows/release.yml/badge.svg)](https://github.com/nathan237/TrustOS/actions/workflows/release.yml)
+[![Rust](https://img.shields.io/badge/100%25%20Rust-F74C00?logo=rust&logoColor=white)]()
+[![Arch](https://img.shields.io/badge/arch-x86__64%20%7C%20ARM64%20%7C%20RISC--V-blueviolet)]()
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+[![Latest release](https://img.shields.io/github/v/release/nathan237/TrustOS?color=orange)](https://github.com/nathan237/TrustOS/releases)
+[![Sponsor](https://img.shields.io/github/sponsors/nathan237?color=ea4aaa&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/nathan237)
+
+</div>
+
+---
+
+## Why TrustOS?
+
+- **🦀 100% Rust, `no_std`** — zero C, zero binary blobs, `unsafe` only at MMIO boundaries.
+- **🔬 Hardware X-Ray** — every PCI device, MSR, ACPI table, GPU register readable at boot. No Linux, no Mesa, no abstraction.
+- **🌐 Remote-first** — framebuffer streamed over UDP, shell over UDP, kernel logs over UDP. Debug headless boards from any laptop.
+- **🧠 JARVIS embedded** — a 4.4M-parameter byte-level transformer lives inside the kernel. The OS *learns*.
+- **🛠️ Built solo** — one developer, one vision, no committee.
+
+---
+
+## Architecture at a glance
+
+```mermaid
+flowchart LR
+    A[Limine v8 Boot] --> B[Kernel Init<br/>15 phases]
+    B --> C[Memory<br/>paging + heap]
+    B --> D[Interrupts<br/>IDT + APIC]
+    B --> E[Drivers<br/>PCI / GPU / HDA / NVMe / EC]
+    B --> F[Netstack<br/>TCP/IP + UDP]
+    E --> G[Shell<br/>200+ commands]
+    F --> H[Remote Shell<br/>UDP 7777]
+    F --> I[Netconsole<br/>UDP 6666]
+    F --> J[Screencap<br/>UDP 7779]
+    B --> K[JARVIS<br/>4.4M-param transformer]
+    G --> L[Ring 3 Userland]
+    K --> M[Guardian System<br/>Le Pacte]
+```
+
+---
+
+## JARVIS — an AI lives inside the kernel
+
+TrustOS is the only general-purpose OS I'm aware of that ships a transformer **inside the kernel binary**, trained on the OS's own source code.
+
+| Spec | Value |
+|------|-------|
+| Architecture | Byte-level transformer (GPT-style) |
+| Parameters | ~4.4 M |
+| Vocabulary | Raw bytes (256 tokens, no tokenizer) |
+| Training corpus | TrustOS source + conversation logs |
+| Heap | Dedicated `jarvis_arena` (256 MB – 1 GB) |
+| Developmental stages | 7 (Fetus → Infant → Baby → Child → PreTeen → Teen → Adult) |
+| Guardian system | Two-key authorization (`kernel/src/jarvis/guardian.rs`) |
+
+**The Pact**: protected operations (`Train`, `WeightPush`, `FederatedSync`, `ModelReplace`, …) require explicit guardian approval. `WeightSave` is auto-approved so progress is never lost. Inference and training are exposed as shell commands; future plans wire it onto the AMD GPU compute path for on-device fine-tuning.
+
+---
+
+## Highlight reel — v0.11.0 (April 2026)
+
+### AMD GPU SDMA validated on real silicon
+
+<div align="center">
+<img src="docs/images/gpu_amd_sdma_validated.png" alt="AMD SDMA running on bare metal" width="900"/>
+</div>
+
+From-scratch AMD driver in pure `no_std` Rust on an RX 580X (Polaris 10). Ring buffer in GART, firmware responsive, RPTR/WPTR advancing. Root cause of the 14-iteration debug saga: the **Graphics Memory Controller** (L1/L2 TLB, system aperture, VM flat mode) was uninitialized — the SDMA firmware couldn't resolve ring addresses. Not the registers, not the PCIe link — the memory subsystem.
+
+→ Full devlog: [`docs/devlog/gpu_amd_sdma_milestone.md`](docs/devlog/gpu_amd_sdma_milestone.md)
+
+### Other wins this cycle
+
+- **Intel HDA audio** — complete `no_std` driver, working sound on ThinkPad T61 / AD1984 codec
+- **Ring 3 userland** — protected user-mode processes, 85-check conformance audit
+- **Hardware diagnostics** — 6 new modules: `pciraw`, `regdiff`, `ioscan`, `regwatch`, `aer`, `timing`
+- **ThinkPad EC** — fan/thermal/battery readout + CPU frequency scaling via MSR
+- **CoreMark** — 25,000 iter/sec on bare metal Intel G4400 ([`docs/BENCHMARK.md`](docs/BENCHMARK.md))
+- **Security audit** — preemptive cross-OS vulnerability sweep
+
+→ Full history: [`CHANGELOG.md`](CHANGELOG.md)
+
+---
+
+## How does it compare?
+
+| Project | Lang | `no_std` kernel | Embedded AI | Bare-metal GPU bring-up | Remote UDP shell | Solo dev |
+|---|---|---|---|---|---|---|
+| **TrustOS** | Rust | ✅ | ✅ (4.4M params) | ✅ AMD Polaris from scratch | ✅ | ✅ |
+| Redox OS | Rust | partial (microkernel) | ❌ | ❌ (uses Linux drivers via patch) | ❌ | ❌ (team) |
+| Theseus | Rust | ✅ | ❌ | ❌ | ❌ | research |
+| SerenityOS | C++ | ❌ | ❌ | partial | ❌ | ❌ (team) |
+| Hubris | Rust | ✅ | ❌ | embedded only | ❌ | ❌ (Oxide) |
+| seL4 | C | ✅ | ❌ | ❌ | ❌ | ❌ |
+
+TrustOS is not trying to replace any of these. The angle is different: **boot anywhere, see everything, run an AI on the metal.**
+
+---
+
+## Hardware probe surface
+
+| Subsystem | What you get |
+|-----------|--------------|
+| **PCI / PCIe** | Full enum, BAR decode, capability chains, MSI/PCIe-PM, AER decode |
+| **CPU** | All CPUID leaves, MSRs, family/model/stepping, AVX/SSE/AES feature flags |
+| **SMBIOS / DMI** | Board, BIOS, DIMM (size/speed/type), chassis, serials |
+| **ACPI** | RSDP → XSDT walk, MADT/FADT/HPET/MCFG/SSDT, raw hex |
+| **AMD GPU** | MMIO, GRBM, SDMA state, GMC/VM, VRAM, doorbells |
+| **NVIDIA GPU** | PMC/PBUS regs, GPU identity |
+| **Intel HDA** | Codec tree, widgets, amp caps, pin config |
+| **ThinkPad EC** | Fans, thermals, battery, EC regs |
+| **Memory map** | Full UEFI map: type, range, page count |
+| **Boot timing** | TSC per-subsystem checkpoints (µs precision) |
+| **Network / Storage** | NIC enum + MAC, NVMe/AHCI BAR decode |
+
+<img src="media/screenshots/hwdbg_real_hardware.jpg" alt="hwdbg auto on real hardware" width="720"/>
+
+<img src="media/screenshots/hwdbg_pci_boot.jpg" alt="PCI enumeration on real hardware" width="720"/>
+
+---
+
+## Remote monitor
+
+```bash
+python scripts/remote_screen.py --ip 10.0.0.110 --interval 2
+```
+
+- **UDP 7779** — framebuffer screencap (chunked SCRN protocol)
+- **UDP 7777** — remote shell
+- **UDP 6666** — netconsole (kernel debug output)
+
+<img src="media/screenshots/monitor_gpu_init.png" alt="Live GPU init streamed over UDP" width="720"/>
+
+---
+
+## Quick start
+
+### QEMU
+```bash
+qemu-system-x86_64 -cdrom trustos.iso -m 512M -cpu max -smp 4 \
+  -display gtk -vga std -serial stdio \
+  -netdev user,id=net0 -device rtl8139,netdev=net0
+```
+Then type `help`. `hwdbg auto` dumps CPU + memory + PCI + SMBIOS.
+
+### USB
+1. Grab an ISO from [**Releases**](https://github.com/nathan237/TrustOS/releases).
+2. Flash with [**Rufus**](https://rufus.ie/) — **DD Image mode**.
+3. Boot via F12 / DEL. Works on UEFI **and** Legacy BIOS.
+
+### PXE
+```bash
+python scripts/pxe_server.py --tftp-root pxe_tftp --server-ip 10.0.0.1
+```
+
+---
+
+## Build
+
+```powershell
+cargo build --release -p trustos_kernel    # kernel only
+.\trustos.ps1 build                         # build + ISO + VM
+.\trustos.ps1 build -NoRun                  # build + ISO only
+```
+
+Requires Rust nightly with `rust-src` and `llvm-tools-preview`, target `x86_64-unknown-none`. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+---
+
+## Project layout
+
+```
+TrustOS/
+├── kernel/src/        the kernel (drivers, jarvis, netstack, hwdiag, shell, …)
+├── userland/          Ring 3 processes + syscall interface
+├── boot/              Limine boot helpers
+├── crates/            shared crates
+├── sdk/               developer SDK
+├── tools/             build helpers, source translator
+├── scripts/           remote_screen.py, pxe_server.py, …
+├── docs/              architecture, devlogs, benchmarks, images
+├── firmware/          OVMF
+└── limine/            bootloader (submodule)
+```
+
+---
+
+## Platform support
+
+| Target | Method | Status |
+|--------|--------|--------|
+| x86_64 PC (USB/ISO) | Limine hybrid (UEFI + Legacy BIOS) | **Production** |
+| PXE network boot | TFTP + DHCP auto-config | **Working** |
+| QEMU / VirtualBox | VM | **Production** |
+| ARM64 | `fastboot flash boot` / SD card | Experimental |
+| RISC-V | OpenSBI + U-Boot | WIP |
+
+Validated on: ThinkPad T61, BTC-250PRO LR mining board (Skylake + RX 580X via PCIe riser), QEMU/VirtualBox.
+
+---
+
+## Security
+
+Found a vulnerability? See [`SECURITY.md`](SECURITY.md). Do not open a public issue.
+
+## Contributing
+
+Patches welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) first — kernel rules are strict (`no unwrap()`, `no println!`, `no_std` everywhere).
+
+## Author
+
+Built and maintained by **[Nathan](https://github.com/nathan237)** — solo.
+If TrustOS is useful or interesting to you, [become a sponsor](https://github.com/sponsors/nathan237).
+
+## License
+
+[Apache-2.0](LICENSE).
+
+---
+
+<sub>Built with AI assistance (GitHub Copilot, Claude). Every line is reviewed and understood by the author.</sub>
+<div align="center">
+
+<img src="media/logo.png" alt="TrustOS" width="280"/>
+
+# TrustOS
+
 ### Boot on any hardware. Debug everything.
 
 **A bare-metal OS written entirely in Rust — zero C, zero binary blobs, zero secrets.**
