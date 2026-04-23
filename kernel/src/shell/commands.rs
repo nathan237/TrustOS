@@ -1893,6 +1893,7 @@ pub(super) fn cmd_httpd(args: &[&str]) {
 }
 
 // ==================== MESH NETWORKING COMMAND ====================
+#[cfg(feature = "jarvis")]
 pub(super) fn cmd_mesh(args: &[&str]) {
     match args.first() {
         Some(&"start") => {
@@ -2043,6 +2044,7 @@ pub(super) fn cmd_mesh(args: &[&str]) {
 }
 
 /// Parse an IPv4 address string like "10.0.2.15" into [u8; 4]
+#[cfg(feature = "jarvis")]
 fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
     let parts: alloc::vec::Vec<&str> = s.split('.').collect();
     if parts.len() != 4 {
@@ -2056,6 +2058,7 @@ fn parse_ipv4(s: &str) -> Option<[u8; 4]> {
 }
 
 // ==================== PXE SELF-REPLICATION COMMAND ====================
+#[cfg(feature = "jarvis")]
 pub(super) fn cmd_pxe(args: &[&str]) {
     match args.first() {
         Some(&"start") | Some(&"replicate") => {
@@ -2148,6 +2151,7 @@ pub(super) fn cmd_pxe(args: &[&str]) {
 }
 
 // ==================== GUARDIAN COMMAND ====================
+#[cfg(feature = "jarvis")]
 pub(super) fn cmd_guardian(args: &[&str]) {
     use crate::jarvis::guardian;
 
