@@ -32,21 +32,165 @@ name = "trustos_kernel"
 path = "src/main.rs"
 
 [features]
-default = ["emulators", "hires-logo", "jarvis", "extras", "woa", "psp_sos"]
+# ════════════════════════════════════════════════════════════════════════════
+# DEFAULT — full kitchen-sink (existing behavior, unchanged)
+# ════════════════════════════════════════════════════════════════════════════
+default = [
+    "emulators", "hires-logo", "jarvis", "extras", "woa",
+    "psp_sos", "amdgpu", "daw",
+    # New leaf features (currently no-op stubs, to be wired by gating modules)
+    "netstack", "gui-stack", "wifi", "dashboards", "lab",
+    "compat-linux", "trustlang-vm", "tools", "virtualization",
+    "storage-ext", "security-tools", "browser",
+    "jarvis-train", "jarvis-federated",
+]
+
+# ════════════════════════════════════════════════════════════════════════════
+# LEAF FEATURES — building blocks (gating work happens incrementally per leaf)
+# ════════════════════════════════════════════════════════════════════════════
+
 ## CoreMark EEMBC benchmark (minimal boot, no drivers/shell/GUI)
 coremark = []
 ## NES + Game Boy emulators and GameLab analysis dashboard
 emulators = []
 ## PSP SOS firmware blob for AMD GPU (navi10_sos.bin, ~180 KB)
 psp_sos = []
-## TrustDAW embedded audio (includes ~29 MB WAV). Disable for slim builds.
+## AMD GPU driver (Polaris/RDNA, SDMA, DCN, compute, firmware, neural)
+amdgpu = []
+## TrustDAW — bare-metal Digital Audio Workstation (engine only, no samples)
 daw = []
+## DAW bundled WAV demo samples (~29 MB, embedded via include_bytes!).
+## Opt-in: keeps the slim ISO under 25 MB. Enable for full demo experience.
+daw-samples = ["daw"]
 ## High-res 400×400 ARGB logo bitmap (~647 KB). Disable for slim builds.
 hires-logo = []
-## JARVIS AI — 4.4M-parameter byte-level transformer for on-device inference,
-## federated learning, mesh networking, and autonomous agent capabilities.
+## JARVIS AI — 4.4M-parameter byte-level transformer for on-device inference.
+## Base inference only. Add jarvis-train/jarvis-federated for full capability.
 jarvis = []
-## Games, 3D renderers, video codec. Disable for slim builds.
+## JARVIS on-device training (gradient descent, weight updates).
+jarvis-train = ["jarvis"]
+## JARVIS federated learning + mesh sync (RPC, peers, weight push/pull).
+jarvis-federated = ["jarvis"]
+## Games, 3D renderers, video codec (chess, formula3d, holovolume, video, etc.)
 extras = []
 ## WOA — World of Ants game engine (roguelike platformer)
 woa = []
+
+## TCP/IP stack + virtio-net + network shell commands
+## Modules gated: netstack/, network.rs, virtio_net.rs, httpd.rs, netscan/
+netstack = []
+## GUI stack: compositor, cosmic, wayland, desktop, mobile, ui, theme
+## Modules gated (TODO): compositor.rs, cosmic/, wayland/, desktop.rs,
+##                       mobile.rs, ui/, theme/, accessibility.rs, gui/
+gui-stack = []
+## TrustWave WiFi analyzer + visualizer
+## Modules gated (TODO): wifi_analyzer.rs
+wifi = []
+## Hardware dashboards: Marionet (8-tab probe), Electro (~90 power metrics)
+## Modules gated (TODO): marionet/, electro/
+dashboards = []
+## TrustLab — real-time educational OS introspection laboratory
+## Modules gated (TODO): lab_mode/ (NOTE: trace_bus is called from hypervisor,
+##                       devtools, desktop — needs stub or call-site gating)
+lab = []
+## Linux compat layer: ELF binary execution, syscall translation, distro mgr
+## Modules gated (TODO): linux/, linux_compat/, transpiler/, riscv_translator/,
+##                       compression.rs, persistence.rs
+compat-linux = []
+## TrustLang — integrated Rust-like language + bytecode VM
+## Modules gated (TODO): trustlang/
+trustlang-vm = []
+## TrustPkg, installer, devtools, lab tools
+## Modules gated (TODO): trustpkg.rs, installer.rs, devtools.rs, lab_mode/
+tools = []
+## Hypervisor (KVM-style VM execution: SVM/VMX, virtio backends)
+## Modules gated (TODO): hypervisor/
+virtualization = []
+## Extended storage: NVMe, virtio-blk (beyond ramfs)
+## Modules gated (TODO): nvme.rs, virtio_blk.rs
+storage-ext = []
+## Security/research tools: TrustView (binary analysis), TrustScan (netscan),
+## TrustProbe (hwscan), HWDiag
+## Modules gated (TODO): binary_analysis/, netscan/, hwscan/, hwdiag/
+security-tools = []
+## Embedded web browser
+## Modules gated (TODO): browser/
+browser = []
+
+# ════════════════════════════════════════════════════════════════════════════
+# EDITION PROFILES — composable presets for trustos.ps1 -Edition X
+# ════════════════════════════════════════════════════════════════════════════
+
+## TrustStrudel — Bare-metal live coding (Tidal/Strudel clone)
+## Minimal boot: HDA audio + synth + network + shell. No JARVIS/GPU/extras.
+strudel = ["netstack"]
+
+## TrustOS Audio Edition — DAW + audio + GUI, no JARVIS/GPU/extras.
+## Slim by default: no embedded samples (loads WAVs from VFS instead).
+## Add `daw-samples` for the full ~29 MB built-in demo track.
+trustos-audio = ["hires-logo", "daw", "gui-stack"]
+trustos-audio-full = ["trustos-audio", "daw-samples"]
+
+## TrustOS Server Edition — headless: net + storage + security tools
+trustos-server = [
+    "netstack", "storage-ext", "security-tools", "tools",
+]
+
+## TrustOS JARVIS Edition — full AI: inference + training + federated + net
+trustos-jarvis = [
+    "jarvis", "jarvis-train", "jarvis-federated",
+    "netstack", "amdgpu", "tools",
+]
+
+## TrustOS Gaming Edition — emulators + 3D + WOA + GUI
+trustos-gaming = [
+    "emulators", "extras", "woa", "gui-stack", "amdgpu",
+    "hires-logo",
+]
+
+## TrustOS Mining Edition — AMD GPU + net + hardware diagnostics
+## (BTC-250PRO LR target)
+trustos-mining = [
+    "amdgpu", "netstack", "dashboards", "security-tools",
+    "storage-ext", "tools",
+]
+
+## TrustOS Dev Edition — full development environment
+trustos-dev = [
+    "trustlang-vm", "compat-linux", "tools", "gui-stack",
+    "security-tools", "lab", "virtualization", "netstack",
+    "hires-logo",
+]
+
+## TrustOS IoT Edition — minimal: just net + storage, no GUI/AI/extras
+trustos-iot = ["netstack", "storage-ext"]
+
+## TrustOS Research Edition — security + lab + hypervisor + dashboards
+trustos-research = [
+    "security-tools", "lab", "virtualization", "dashboards",
+    "compat-linux", "netstack", "tools", "gui-stack",
+]
+
+## TrustOS Embedded Edition — bare minimum, no JARVIS, no GUI
+## Goal: smallest footprint kernel that still boots + has shell
+trustos-embedded = []
+
+## TrustOS GPU Debug Edition — slimmest profile that still has GPU stack +
+## remote shell/netconsole. No JARVIS, no GUI, no extras, no emulators, no DAW.
+## Goal: fast rebuilds, minimal kernel surface, isolate GPU stack bugs from
+## the rest of the system. Used by `gpu sdma cp-diag` debug cycles.
+trustos-gpudebug = ["amdgpu", "netstack", "tools"]
+
+# ════════════════════════════════════════════════════════════════════════════
+# DEBUG TRACE FEATURES — feature-gated verbose logging (zero cost when off)
+# ════════════════════════════════════════════════════════════════════════════
+## Verbose GPU stack tracing (init phases, ring submits, fence waits)
+gpu-trace-verbose = []
+## Trace every MMIO read/write in amdgpu (register + value + caller)
+mmio-trace = []
+## Trace heap alloc/free + fragmentation hints
+mem-trace = []
+## Trace netstack packets (ARP/ICMP/UDP/TCP)
+net-trace = []
+## Boot phase markers [BOOT-N] on serial/netconsole
+boot-phase-marker = []

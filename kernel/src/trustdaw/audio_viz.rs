@@ -1047,10 +1047,12 @@ pub fn play_file(path: &str) -> Result<(), &'static str> {
 // Built-in Songs — Embedded audio files
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// The real "Untitled (2)" WAV embedded at compile time (16-bit PCM, 48 kHz stereo)
-#[cfg(feature = "daw")]
+/// The real "Untitled (2)" WAV embedded at compile time (16-bit PCM, 48 kHz stereo).
+/// Gated behind `daw-samples` to keep the slim Audio ISO under 25 MB; without
+/// it, `play_untitled2()` falls back to VFS lookups (see UNTITLED2_VFS_PATHS).
+#[cfg(feature = "daw-samples")]
 pub static UNTITLED2_WAV: &[u8] = include_bytes!("untitled2.wav");
-#[cfg(not(feature = "daw"))]
+#[cfg(not(feature = "daw-samples"))]
 pub static UNTITLED2_WAV: &[u8] = &[];
 
 /// Standard VFS paths where the built-in track may live.
