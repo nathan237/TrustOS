@@ -2,6 +2,28 @@
 
 All notable changes to TrustOS. Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project does not yet follow strict SemVer.
 
+## [v0.12.0] — 2026-04-28 — Audio Edition
+
+First dedicated **music edition** of TrustOS: a `no_std` bare-metal audio stack with synth, DAW, sequencer, live coding, and effects.
+
+### Added
+- **TrustOS Audio Edition** — new build profile `trustos-audio` (`hires-logo + daw + gui-stack`).
+  - Standalone ISO published as a release asset: `trustos-audio.iso`.
+  - Build: `.\scripts\build\build-trustos-edition.ps1 -Edition audio`.
+- **TrustSynth** polyphonic synthesizer
+  - 5 waveforms: sine, square, saw, triangle, noise.
+  - Q16.16 phase accumulator (integer DSP, no FP).
+  - 8-voice polyphony, full ADSR envelope + presets (organ, pluck, pad).
+  - 128-note MIDI mapping, analog-style pitch micro-drift LFO.
+- **Effects rack** — Chamberlin SVF (LP / HP / BP with resonance), delay, distortion, tremolo, vibrato, volume/gain/fade.
+- **Pattern Sequencer** — 16 patterns × 64 steps, BPM 60–300.
+- **TrustDAW** (feature `daw`) — multi-track, solo / mute / pan / volume, Piano Roll, PS/2 keyboard → MIDI, real-time recording, transport controls, Beat Studio grid, WAV export, audio visualizer / VU / spectrum, 480 PPQN.
+- **Strudel / TidalCycles live coding** — mini-notation parser with sequences, sub-groups, repeats, rests, ~60 drum aliases.
+- New shell commands: `beep`, `audio`, `synth`, `live`, `daw`, `vizfx`.
+
+### Changed
+- README "What's new" promoted to v0.12.0 Audio Edition with full feature list and download link.
+
 ## [v0.11.0] — 2026-04-22 — Audio, Userland, GPU, Benchmarks
 
 ### Added

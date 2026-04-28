@@ -26,9 +26,71 @@
 
 ---
 
-## What's new — v0.11.0 (April 2026)
+## What's new — v0.12.0 "Audio Edition" (April 2026)
 
-The biggest cycle since v0.10 — bare-metal AMD GPU bring-up, working audio on real laptops, protected userland, and a full hardware diagnostics suite.
+TrustOS ships its first **music-focused edition**: a bare-metal `no_std` audio stack with synthesizer, DAW, sequencer, live coding, and a stack of effects — all running directly on hardware, no Linux, no PulseAudio, no JACK.
+
+→ Download: [**`trustos-audio.iso`**](https://github.com/nathan237/TrustOS/releases/latest) (Releases page) — boots on real hardware via USB (Rufus / DD mode) or QEMU.
+
+### What's inside the Audio Edition
+
+- **Intel HDA driver** — `no_std`, CORB/RIRB, codec discovery, BDL DMA, 48 kHz / 16-bit stereo. Tested on ThinkPad T61 (AD1984).
+- **TrustSynth** — polyphonic synthesizer engine
+  - 5 waveforms: **sine, square, saw, triangle, noise**
+  - Q16.16 phase accumulator (no FP — pure integer DSP)
+  - Up to **8 simultaneous voices**
+  - Full **ADSR envelope** + presets (organ, pluck, pad)
+  - 128-note MIDI mapping, analog-style pitch micro-drift LFO
+- **Effects rack** (all `no_std`, integer DSP)
+  - **Chamberlin SVF filter** — LP / HP / BP with resonance
+  - **Delay** (echo)
+  - **Distortion** (saturation / clipping)
+  - **Tremolo** (volume LFO)
+  - **Vibrato** (pitch LFO)
+  - **Volume / gain / fade in-out**
+- **Pattern Sequencer** — 16 patterns × 64 steps, BPM 60–300, loop playback with visual feedback.
+- **TrustDAW** — full Digital Audio Workstation in the kernel
+  - Multi-track with **solo / mute / volume / pan**
+  - **Piano Roll** GUI with on-screen keyboard
+  - **PS/2 keyboard → MIDI** input mapping
+  - **Real-time recording**, transport controls (play / stop / rec / loop)
+  - **Beat Studio** grid sequencer
+  - **WAV export** to VFS
+  - Live **audio visualizer** + spectrum / VU meter
+  - 480 PPQN MIDI timing
+- **Strudel / TidalCycles live coding** — mini-notation parser
+  - `c4 e4 g4` sequences, `[e4 g4]` sub-groups, `*3` repeats, `.` rests
+  - ~60 drum aliases (`bd`, `sd`, `hh`, `cp`, `kick`, `snare`, `hihat`, …)
+
+### Shell commands
+
+| Command | What it does |
+|---|---|
+| `beep [freq] [ms]` | One-shot tone (default 440 Hz / 500 ms) |
+| `audio [init\|status\|stop\|test]` | HDA driver control |
+| `synth note <C4> [ms]` | Play a note through TrustSynth |
+| `synth wave <sine\|square\|saw\|tri\|noise>` | Switch waveform |
+| `synth adsr <a> <d> <s> <r>` | Set envelope |
+| `synth preset <organ\|pluck\|pad>` | Load preset |
+| `synth demo` | Scale + showcase demo |
+| `live <pattern>` | Strudel-style live coding |
+| `daw demo \| play \| record \| mixer \| export <file>` | TrustDAW control |
+| `vizfx` | Live audio visualizer |
+
+### Build it yourself
+
+```powershell
+.\scripts\build\build-trustos-edition.ps1 -Edition audio -NoRun
+# → builds\trustos-audio\trustos-audio.iso
+```
+
+→ Devlog: [`docs/AUDIO_SYNTH_ROADMAP.md`](docs/AUDIO_SYNTH_ROADMAP.md)
+
+---
+
+## Previously — v0.11.0 (April 2026)
+
+Bare-metal AMD GPU bring-up, working audio on real laptops, protected userland, and a full hardware diagnostics suite.
 
 ### AMD GPU SDMA validated on real silicon
 
@@ -111,7 +173,7 @@ TrustOS is not trying to replace any of these. The angle is different: **boot an
 ## Remote monitor
 
 ```bash
-python scripts/remote_screen.py --ip 10.0.0.110 --interval 2
+python scripts/remote_screen.py --ip 10.0.0.111 --interval 2
 ```
 
 - **UDP 7779** — framebuffer screencap (chunked SCRN protocol)
