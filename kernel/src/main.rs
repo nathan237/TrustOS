@@ -43,6 +43,8 @@ pub mod arch;
 
 // Core modules
 mod serial;
+#[macro_use]
+pub mod debug_trace;
 mod logger;
 mod framebuffer;
 mod keyboard;
@@ -60,6 +62,7 @@ mod drone_swarm;
 mod disk;
 mod network;
 mod pci;
+mod pcie_recovery;
 mod virtio;
 mod virtio_net;
 mod virtio_blk;
@@ -75,11 +78,11 @@ mod apps;
 mod graphics;
 mod icons;
 mod browser;
-#[cfg(feature = "extras")]
+#[cfg_attr(not(feature = "extras"), path = "game3d_stub.rs")]
 mod game3d; // 3D raycasting FPS game engine
-#[cfg(feature = "extras")]
+#[cfg_attr(not(feature = "extras"), path = "chess_stub.rs")]
 mod chess;   // Chess game engine with AI
-#[cfg(feature = "extras")]
+#[cfg_attr(not(feature = "extras"), path = "chess3d_stub.rs")]
 mod chess3d; // 3D Matrix-style chess renderer
 #[cfg(feature = "emulators")]
 mod nes;     // NES emulator (MOS 6502 + 2C02 PPU, iNES ROMs)
@@ -91,14 +94,16 @@ mod game_lab; // GameLab — real-time Game Boy emulator analysis dashboard
 mod embedded_roms; // ROM data embedded at compile time from kernel/roms/
 mod cosmic; // COSMIC-style UI framework (libcosmic-inspired)
 mod compositor; // Multi-layer compositor for flicker-free rendering
-#[cfg(feature = "extras")]
+#[cfg_attr(not(feature = "extras"), path = "holovolume_stub.rs")]
 mod holovolume; // Volumetric ASCII raymarcher - 3D holographic desktop
-#[cfg(feature = "extras")]
+#[cfg_attr(not(feature = "extras"), path = "matrix_fast_stub.rs")]
 mod matrix_fast; // Ultra-optimized Matrix rain with Braille sub-pixels
-#[cfg(feature = "extras")]
+#[cfg_attr(not(feature = "extras"), path = "formula3d_stub.rs")]
 mod formula3d;   // Tsoding-inspired wireframe 3D renderer (perspective projection)
-#[cfg(feature = "extras")]
+#[cfg_attr(not(feature = "extras"), path = "gpu_emu_stub.rs")]
 mod gpu_emu;      // Virtual GPU - CPU cores emulating GPU parallelism
+#[cfg(feature = "woa")]
+mod woa;         // WOA — World of Ants (roguelike platformer engine)
 // TLS 1.3 pure Rust implementation (no C dependencies)
 mod tls13;
 // CPU hardware exploitation (TSC, AES-NI, SIMD, SMP)
@@ -183,6 +188,16 @@ mod hwdiag;
 // Marionet — bare-metal hardware dashboard (full-screen TUI)
 mod marionet;
 
+// ELECTRO — comprehensive electrical power & thermal dashboard (~90 metrics)
+mod electro;
+
+// Thermal management daemon — fan curves + watchdog
+mod thermal;
+
+// CoreMark EEMBC benchmark (bare-metal, minimal boot path)
+#[cfg(feature = "coremark")]
+mod coremark;
+
 // HTTP Server — embedded web server
 mod httpd;
 
@@ -204,7 +219,7 @@ mod logo_bitmap;
 mod trustlang;
 
 // TrustVideo — custom video codec & player (delta+RLE, no external APIs)
-#[cfg(feature = "extras")]
+#[cfg_attr(not(feature = "extras"), path = "video_stub.rs")]
 mod video;
 
 // Android boot support (boot.img, DTB, PSCI) — aarch64 only
@@ -231,7 +246,7 @@ mod hypervisor;
 #[path = "stubs/hypervisor.rs"]
 mod hypervisor;
 mod rasterizer;
-#[cfg(feature = "extras")]
+#[cfg_attr(not(feature = "extras"), path = "model_editor_stub.rs")]
 mod model_editor;
 
 // Shared math utilities (sin, cos, sqrt, atan2) — centralized
@@ -250,6 +265,7 @@ mod debug;
 mod audio;
 
 // TrustDAW — bare-metal Digital Audio Workstation
+#[cfg(feature = "daw")]
 mod trustdaw;
 
 // Web Sandbox — capability-gated isolated web execution environment
@@ -274,9 +290,11 @@ mod ptrace;
 mod usercopy;
 
 // Jarvis Neural Brain — self-hosted tiny transformer for on-device AI
+#[cfg(feature = "jarvis")]
 mod jarvis;
 
 // Jarvis Hardware Intelligence — AI-driven hardware awareness and self-optimization
+#[cfg(feature = "jarvis")]
 mod jarvis_hw;
 
 // TrustOS Installer — self-install to SATA/NVMe from live boot
@@ -426,6 +444,12 @@ static KMAIN_REFERENCE: unsafe extern "C" fn() -> ! = kmain;
 #[no_mangle]
 #[link_section = ".text.kmain"]
 pub unsafe extern "C" fn kmain() -> ! {
+    // Boot timing: read TSC at entry for profiling
+    #[cfg(target_arch = "x86_64")]
+    let tsc_boot_start: u64 = core::arch::x86_64::_rdtsc();
+    #[cfg(not(target_arch = "x86_64"))]
+    let tsc_boot_start: u64 = 0;
+
     // Ensure Limine protocol version is supported
     if !BASE_REVISION.is_supported() {
         halt_loop();
@@ -451,6 +475,7 @@ pub unsafe extern "C" fn kmain() -> ! {
         let ptr = file.addr();
         let size = file.size() as usize;
         if size > 0 {
+            #[cfg(feature = "jarvis")]
             unsafe { jarvis::pxe_replicator::register_kernel_file(ptr, size); }
             // Also register for installer (self-copy to disk)
             unsafe { installer::register_kernel_binary(ptr, size); }
@@ -464,10 +489,36 @@ pub unsafe extern "C" fn kmain() -> ! {
 
     // Phase 1: Early init - serial port for debug output
     serial::init();
+    crate::boot_phase!(1, "serial init");
     debug::checkpoint(debug::POST_SERIAL_INIT, "Serial port initialized");
     serial_println!("T-RustOs Kernel v0.2.0");
     serial_println!("Limine protocol supported");
     serial_println!("[BOOT] Mode: {:?}", boot_mode());
+
+    // Boot timing helper: print elapsed ms since boot
+    #[cfg(target_arch = "x86_64")]
+    let tsc_freq_mhz: u64 = {
+        // Estimate TSC freq: ~2000 MHz default, refined later if needed
+        // Celeron G1610 = 2.6 GHz, i5 = ~3.2 GHz — use 2000 as safe lower bound
+        2000
+    };
+    #[cfg(not(target_arch = "x86_64"))]
+    let tsc_freq_mhz: u64 = 1;
+    
+    /// Print boot phase timing
+    macro_rules! boot_timing {
+        ($label:expr) => {
+            #[cfg(target_arch = "x86_64")]
+            {
+                let now = core::arch::x86_64::_rdtsc();
+                let elapsed_us = (now - tsc_boot_start) / tsc_freq_mhz;
+                serial_println!("[BOOT +{}ms] {}", elapsed_us / 1000, $label);
+            }
+        };
+    }
+    
+    boot_timing!("Serial init");
+
     // Debug: re-read cmdline after serial is up
     if let Some(kf_resp) = KERNEL_FILE_REQUEST.get_response() {
         let file = kf_resp.file();
@@ -511,12 +562,18 @@ pub unsafe extern "C" fn kmain() -> ! {
         }
     }
     
+    // Visual POST: framebuffer alive (0x11)
+    framebuffer::visual_post_code(debug::POST_FRAMEBUFFER);
+    boot_timing!("Framebuffer init");
+    
     // === BOOT SPLASH: Draw logo + empty progress bar immediately ===
     framebuffer::init_boot_splash();
+    boot_timing!("Boot splash drawn");
     
     use framebuffer::BootStatus;
 
     // Phase 3: Memory management (MUST be before any println! that allocates)
+    framebuffer::visual_post_code(debug::POST_MEMORY);
     serial_println!("Initializing memory management...");
     
     let mut heap_initialized = false;
@@ -705,6 +762,7 @@ pub unsafe extern "C" fn kmain() -> ! {
         // Fallback
         serial_println!("[HEAP] Using fallback init");
         memory::init();
+        crate::boot_phase!(2, "memory init");
     }
     
     // Now that heap is initialized, initialize scrollback buffer (allocates ~3MB)
@@ -724,6 +782,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // Phase 3.5: GDT with Ring 0/3 support (x86_64 only)
     #[cfg(target_arch = "x86_64")]
     {
+        framebuffer::visual_post_code(debug::POST_GDT);
         debug::checkpoint(debug::POST_GDT, "GDT init");
         serial_println!("Initializing GDT with Ring 0/3 support...");
         gdt::init();
@@ -732,9 +791,11 @@ pub unsafe extern "C" fn kmain() -> ! {
     }
     
     // Phase 3.51: Early interrupts (needed for page fault debugging)
+    framebuffer::visual_post_code(debug::POST_IDT);
     debug::checkpoint(debug::POST_IDT, "IDT/interrupts init");
     serial_println!("Initializing early interrupts...");
     interrupts::init();
+    crate::boot_phase!(3, "interrupts init");
     framebuffer::update_boot_splash(2, "Interrupts initialized");
     framebuffer::print_boot_status("Interrupts (early)", BootStatus::Ok);
     
@@ -742,13 +803,20 @@ pub unsafe extern "C" fn kmain() -> ! {
     #[cfg(target_arch = "x86_64")]
     {
         // CPU hardware exploitation (TSC, AES-NI, SIMD, SMP)
+        framebuffer::visual_post_code(debug::POST_CPU_DETECT);
         debug::checkpoint(debug::POST_CPU_DETECT, "CPU detection");
         serial_println!("Detecting CPU capabilities...");
         cpu::init();
+        // Init per-CPU GS base (BSP) — required for fast current_cpu_id() via gs:[8]
+        sync::percpu::init_bsp();
+        // Try enabling PCID (Process-Context Identifiers): keeps kernel TLB hot
+        // across CR3 reloads. Safe no-op if CPU lacks support.
+        let _pcid_on = arch::memory::enable_pcid();
         framebuffer::update_boot_splash(3, "CPU capabilities detected");
         framebuffer::print_boot_status("CPU capabilities detected", BootStatus::Ok);
         
         // ACPI tables parsing
+        framebuffer::visual_post_code(debug::POST_ACPI);
         debug::checkpoint(debug::POST_ACPI, "ACPI tables parsing");
         serial_println!("Parsing ACPI tables...");
         if let Some(rsdp_response) = RSDP_REQUEST.get_response() {
@@ -769,6 +837,7 @@ pub unsafe extern "C" fn kmain() -> ! {
         }
         
         // APIC initialization — replaces legacy PIC
+        framebuffer::visual_post_code(debug::POST_APIC);
         debug::checkpoint(debug::POST_APIC, "APIC init");
         serial_println!("Initializing APIC...");
         if apic::init() {
@@ -786,9 +855,17 @@ pub unsafe extern "C" fn kmain() -> ! {
         }
 
         // SMP initialization - Start all CPU cores!
+        framebuffer::visual_post_code(debug::POST_SMP);
         debug::checkpoint(debug::POST_SMP, "SMP multi-core init");
         serial_println!("Initializing SMP...");
         cpu::smp::init();
+        // [BOOT-LOOP-ISO] Per-CPU magazine cache disabled — calls current_cpu_id()
+        // on every alloc, suspect for SMP-step crash.
+        // memory::heap::enable_percpu_cache();
+        // JARVIS trace pipeline TEMPORARILY DISABLED to isolate boot loop.
+        // jarvis::trace::init();
+        // let _ = jarvis::trace::pmu::init();
+        serial_println!("[BOOT-CKPT] percpu_cache + jarvis::trace + AP-AVX disabled (boot-loop isolation)");
         
         if let Some(smp_response) = SMP_REQUEST.get_response() {
             let cpu_count = smp_response.cpus().len();
@@ -802,16 +879,17 @@ pub unsafe extern "C" fn kmain() -> ! {
             }
             
             let mut ready_count = 1u32;
-            for _ in 0..1000 {
+            for _ in 0..200 {
                 ready_count = cpu::smp::ready_cpu_count();
                 if ready_count >= cpu_count as u32 { break; }
-                for _ in 0..10000 { core::hint::spin_loop(); }
+                for _ in 0..1000 { core::hint::spin_loop(); }
             }
             
             serial_println!("[SMP] {} of {} CPUs online", ready_count, cpu_count);
             cpu::smp::set_cpu_count(cpu_count as u32);
             framebuffer::update_boot_splash(4, "SMP multi-core active");
             framebuffer::print_boot_status(&alloc::format!("SMP: {} cores active", ready_count), BootStatus::Ok);
+            boot_timing!("SMP done");
         } else {
             serial_println!("[SMP] No SMP response from bootloader");
             framebuffer::print_boot_status("SMP: single core", BootStatus::Ok);
@@ -819,6 +897,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     }
     
     // Phase 3.6: Paging subsystem
+    framebuffer::visual_post_code(debug::POST_PAGING);
     serial_println!("Initializing paging subsystem...");
     memory::paging::init();  // Saves kernel CR3, enables NX
     framebuffer::update_boot_splash(5, "Paging & memory protection");
@@ -835,6 +914,17 @@ pub unsafe extern "C" fn kmain() -> ! {
         serial_println!("[PAT] Skipping Write-Combining on VirtualBox (VMSVGA compat)");
     } else {
         memory::paging::setup_pat_write_combining();
+        // WC remap framebuffer IMMEDIATELY after PAT setup — before any more FB writes
+        let fb_addr = framebuffer::FB_ADDR.load(core::sync::atomic::Ordering::SeqCst);
+        let fb_w = framebuffer::FB_WIDTH.load(core::sync::atomic::Ordering::SeqCst) as usize;
+        let fb_h = framebuffer::FB_HEIGHT.load(core::sync::atomic::Ordering::SeqCst) as usize;
+        if !fb_addr.is_null() && fb_w > 0 && fb_h > 0 {
+            let fb_size = fb_w * fb_h * 4;
+            if memory::paging::remap_region_write_combining(fb_addr as u64, fb_size).is_ok() {
+                serial_println!("[PAT] Framebuffer WC remap done (early)");
+                boot_timing!("WC remap done");
+            }
+        }
     }
     
     // Phase 3.7: Userland support (SYSCALL/SYSRET) — x86_64 only
@@ -853,16 +943,21 @@ pub unsafe extern "C" fn kmain() -> ! {
     framebuffer::print_boot_status("Thread subsystem ready", BootStatus::Ok);
     
     // Phase 3.9: Security subsystem (SMEP, SMAP, capabilities)
-    serial_println!("Initializing security subsystem...");
-    // security::init();  // Disabled for now - CPUID calls may crash on some QEMU
+    // DISABLED: security::init() breaks RTL8169 network on B75 hardware
+    // Likely SMEP CR4 write affects MMIO-mapped driver state
+    // serial_println!("Initializing security subsystem...");
+    // security::init();
     framebuffer::print_boot_status("Security (basic)", BootStatus::Ok);
+
 
     // ── x86_64-specific peripheral init (PS/2, CMOS, PIO-based PCI) ──
     #[cfg(target_arch = "x86_64")]
     {
     // Phase 4: Keyboard driver (interrupts already initialized early)
+    framebuffer::visual_post_code(0x43); // POST 43 = keyboard init
     keyboard::init_i8042();
     serial_println!("Keyboard driver ready");
+    boot_timing!("Keyboard init done");
     framebuffer::update_boot_splash(7, "Keyboard & input devices");
     framebuffer::print_boot_status("Keyboard ready", BootStatus::Ok);
 
@@ -871,6 +966,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     
     // Phase 6: RTC (Real-Time Clock)
     const ENABLE_RTC: bool = true;
+    framebuffer::visual_post_code(0x44); // POST 44 = RTC init
     if ENABLE_RTC {
         serial_println!("[RTC] init start");
         if rtc::try_init() {
@@ -884,10 +980,12 @@ pub unsafe extern "C" fn kmain() -> ! {
     }
 
     // Phase 6.1: RNG — detect RDRAND/RDSEED hardware support
+    framebuffer::visual_post_code(0x45); // POST 45 = RNG init
     rng::init();
     framebuffer::print_boot_status("RNG (CSPRNG)", BootStatus::Ok);
     
     // Phase 7: Mouse driver
+    framebuffer::visual_post_code(0x46); // POST 46 = mouse init
     mouse::init();
     let (fb_width, fb_height) = framebuffer::get_dimensions();
     mouse::set_screen_size(fb_width, fb_height);
@@ -895,6 +993,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     framebuffer::print_boot_status("Mouse initialized", BootStatus::Ok);
     
     // Phase 7.1: Touch input driver
+    framebuffer::visual_post_code(0x47); // POST 47 = touch init
     touch::init();
     touch::set_screen_size(fb_width, fb_height);
     framebuffer::print_boot_status("Touch input ready", BootStatus::Ok);
@@ -907,13 +1006,16 @@ pub unsafe extern "C" fn kmain() -> ! {
     const ENABLE_NETWORK: bool = true;
 
     // Phase 8: PCI Bus Enumeration (BEFORE device drivers)
+    framebuffer::visual_post_code(debug::POST_PCI);
     debug::checkpoint(debug::POST_PCI, "PCI bus enumeration");
     serial_println!("[PHASE] PCI init start");
     framebuffer::print_boot_status("PCI bus scanning...", BootStatus::Info);
     if ENABLE_PCI {
         pci::init();
+        crate::boot_phase!(5, "pci enumerated");
         framebuffer::update_boot_splash(9, "PCI bus enumeration");
         framebuffer::print_boot_status("PCI bus scanned", BootStatus::Ok);
+        boot_timing!("PCI scan done");
     } else {
         framebuffer::print_boot_status("PCI disabled", BootStatus::Skip);
     }
@@ -932,6 +1034,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[PHASE] Task scheduler init done");
     
     // Phase 10: Disk I/O
+    framebuffer::visual_post_code(debug::POST_DISK);
     debug::checkpoint(debug::POST_DISK, "Disk I/O init");
     serial_println!("[PHASE] Disk init start");
     framebuffer::print_boot_status("Disk subsystem...", BootStatus::Info);
@@ -989,11 +1092,16 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[PHASE] Disk init done");
     
     // Phase 11: Driver Framework
+    framebuffer::visual_post_code(0x48); // POST 48 = driver framework
     serial_println!("[PHASE] Driver framework init start");
     if ENABLE_DRIVERS {
         drivers::init();
+        framebuffer::visual_post_code(0x49); // POST 49 = storage probe
+        serial_println!("[PHASE] Storage probe start");
         // Probe storage controllers (AHCI, IDE)
         drivers::probe_storage();
+        serial_println!("[PHASE] Storage probe done");
+        framebuffer::visual_post_code(0x4A); // POST 4A = driver framework done
         framebuffer::update_boot_splash(12, "Driver framework");
         framebuffer::print_boot_status("Driver framework initialized", BootStatus::Ok);
         if drivers::has_storage() {
@@ -1005,6 +1113,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     serial_println!("[PHASE] Driver framework init done");
     
     // Phase 11b: VirtIO GPU
+    framebuffer::visual_post_code(0x4B); // POST 4B = VirtIO GPU
     serial_println!("[PHASE] VirtIO GPU init start");
     framebuffer::print_boot_status("VirtIO GPU...", BootStatus::Info);
     drivers::virtio_gpu::init_from_pci().ok();
@@ -1015,18 +1124,11 @@ pub unsafe extern "C" fn kmain() -> ! {
     }
     serial_println!("[PHASE] VirtIO GPU init done");
     
-    // Phase 11c: AMD GPU (native hardware driver)
-    serial_println!("[PHASE] AMD GPU init start");
-    framebuffer::print_boot_status("AMD GPU...", BootStatus::Info);
-    drivers::amdgpu::init();
-    if drivers::amdgpu::is_detected() {
-        framebuffer::print_boot_status(&alloc::format!("AMD GPU: {}", drivers::amdgpu::summary()), BootStatus::Ok);
-    } else {
-        framebuffer::print_boot_status("AMD GPU: not found (VM or non-AMD)", BootStatus::Skip);
-    }
-    serial_println!("[PHASE] AMD GPU init done");
+    // Phase 11c: AMD GPU — DEFERRED to after network init (GPU MMIO mapping breaks RTL8168 on B75)
+    // See Phase 12+ for AMD GPU init
     
     // Phase 11d: NVIDIA GPU (NV50/Tesla — ThinkPad T61)
+    framebuffer::visual_post_code(0x4D); // POST 4D = NVIDIA GPU
     serial_println!("[PHASE] NVIDIA GPU init start");
     framebuffer::print_boot_status("NVIDIA GPU...", BootStatus::Info);
     drivers::nvidia::init();
@@ -1037,21 +1139,10 @@ pub unsafe extern "C" fn kmain() -> ! {
     }
     serial_println!("[PHASE] NVIDIA GPU init done");
     
-    // Remap framebuffer as Write-Combining for faster MMIO writes
-    // Skip on VirtualBox: VMSVGA dirty-tracking breaks with WC pages
-    if !is_vbox {
-        let fb_addr = framebuffer::FB_ADDR.load(core::sync::atomic::Ordering::SeqCst);
-        let fb_w = framebuffer::FB_WIDTH.load(core::sync::atomic::Ordering::SeqCst) as usize;
-        let fb_h = framebuffer::FB_HEIGHT.load(core::sync::atomic::Ordering::SeqCst) as usize;
-        if !fb_addr.is_null() && fb_w > 0 && fb_h > 0 {
-            let fb_size = fb_w * fb_h * 4;
-            let _ = memory::paging::remap_region_write_combining(fb_addr as u64, fb_size);
-        }
-    } else {
-        serial_println!("[PAT] Skipping framebuffer WC remap on VirtualBox");
-    }
+    // WC remap already done early (after PAT setup) — skip duplicate
     
     // Phase 12: Network (with universal driver system)
+    framebuffer::visual_post_code(debug::POST_NETWORK);
     debug::checkpoint(debug::POST_NETWORK, "Network init");
     serial_println!("[PHASE] Network init start");
     framebuffer::print_boot_status("Network subsystem...", BootStatus::Info);
@@ -1087,12 +1178,36 @@ pub unsafe extern "C" fn kmain() -> ! {
             // Pass 2: Probe Ethernet driver (first match only)
             println!("  Ethernet probe starting...");
             framebuffer::print_boot_status("Ethernet probe...", BootStatus::Info);
+            // BIG PCI banner at top of screen so we can see NICs without keyboard
+            {
+                let mut y = 4u32;
+                framebuffer::draw_text_centered("=== PCI NIC SCAN ===", y, 0xFFFF00);
+                y += 18;
+                for dev in &devs {
+                    let line = alloc::format!(
+                        "{:04X}:{:04X} cls={:02X}.{:02X} bar0={:#010X}",
+                        dev.vendor_id, dev.device_id, dev.class_code, dev.subclass, dev.bar[0]
+                    );
+                    framebuffer::draw_text_centered(&line, y, 0x00FFFF);
+                    y += 16;
+                }
+                if devs.is_empty() {
+                    framebuffer::draw_text_centered("(no NIC found)", y, 0xFF0000);
+                }
+            }
             for dev in &devs {
+                framebuffer::print_boot_status(
+                    &alloc::format!("NIC PCI {:04X}:{:04X} class {:02X}.{:02X}",
+                        dev.vendor_id, dev.device_id, dev.class_code, dev.subclass),
+                    BootStatus::Info);
+                serial_println!("[NET] PCI NIC: {:04X}:{:04X} bus={} dev={} fn={} BAR0={:#x}",
+                    dev.vendor_id, dev.device_id, dev.bus, dev.device, dev.function, dev.bar[0]);
                 if drivers::net::probe_device(dev) {
                     network::update_mac_from_driver();
                     let driver_name = if dev.vendor_id == 0x1AF4 { "virtio-net" } 
                         else if dev.vendor_id == 0x8086 { "e1000" }
-                        else if dev.vendor_id == 0x10EC { "rtl8139" }
+                        else if dev.vendor_id == 0x10EC && (dev.device_id == 0x8139 || dev.device_id == 0x8138) { "rtl8139" }
+                        else if dev.vendor_id == 0x10EC { "rtl8169" }
                         else { "unknown" };
                     framebuffer::print_boot_status(&alloc::format!("Network driver: {}", driver_name), BootStatus::Ok);
                     break;
@@ -1110,6 +1225,20 @@ pub unsafe extern "C" fn kmain() -> ! {
                     }
                 }
             }
+
+            if !drivers::net::has_driver() && !crate::virtio_net::is_initialized() {
+                framebuffer::print_boot_status("NO NETWORK DRIVER LOADED", BootStatus::Fail);
+                serial_println!("[NET] WARNING: No network driver matched any PCI device!");
+                framebuffer::draw_text_centered("!! NO NIC DRIVER LOADED !!",
+                    4 + 18 + (devs.len() as u32 + 1) * 16, 0xFF0000);
+            } else {
+                let mac = drivers::net::get_mac().unwrap_or([0;6]);
+                let line = alloc::format!(
+                    "DRIVER OK  MAC {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                    mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
+                framebuffer::draw_text_centered(&line,
+                    4 + 18 + (devs.len() as u32 + 1) * 16, 0x00FF00);
+            }
             
             framebuffer::update_boot_splash(14, "Network stack ready");
             framebuffer::print_boot_status("Network ready", BootStatus::Ok);
@@ -1118,17 +1247,24 @@ pub unsafe extern "C" fn kmain() -> ! {
             netstack::dhcp::start();
             netstack::ipv6::init();
             netstack::tcp::init_isn_secret();
+            netstack::mark_initialized();
 
             // Auto-start remote shell: wait for DHCP, then enable remoteshell + netconsole
             // This allows headless operation (no screen/keyboard needed)
             if drivers::net::has_driver() {
-                serial_println!("[NET] Waiting for DHCP (up to 10s)...");
+                serial_println!("[NET] Waiting for DHCP (up to 800ms)...");
+                framebuffer::print_boot_status("DHCP...", BootStatus::Info);
                 let dhcp_start = logger::get_ticks();
+                let mut spin_count = 0u64;
                 loop {
                     for _ in 0..30 { netstack::poll(); }
                     if network::get_ipv4_config().is_some() { break; }
-                    if logger::get_ticks().saturating_sub(dhcp_start) > 10_000 { break; }
-                    crate::arch::halt();
+                    let elapsed = logger::get_ticks().saturating_sub(dhcp_start);
+                    if elapsed > 800 { break; }
+                    // Fallback: if ticks aren't advancing (no timer IRQ), use spin count
+                    spin_count += 1;
+                    if spin_count > 800_000 { break; }
+                    for _ in 0..1000 { core::hint::spin_loop(); }
                 }
                 // Fallback static IP if DHCP failed
                 if network::get_ipv4_config().is_none() {
@@ -1167,6 +1303,25 @@ pub unsafe extern "C" fn kmain() -> ! {
         framebuffer::print_boot_status("Network disabled", BootStatus::Skip);
     }
     serial_println!("[PHASE] Network init done");
+    boot_timing!("Network init done");
+
+    // Phase 11c (deferred): AMD GPU — init AFTER network to avoid MMIO mapping breaking RTL8168
+    #[cfg(feature = "amdgpu")]
+    {
+    framebuffer::visual_post_code(0x4C); // POST 4C = AMD GPU
+    serial_println!("[PHASE] AMD GPU init start");
+    framebuffer::print_boot_status("AMD GPU...", BootStatus::Info);
+    debug::tco_watchdog_pet(); // pet before potentially long GPU init
+    drivers::amdgpu::init();
+    crate::boot_phase!(10, "amdgpu init");
+    if drivers::amdgpu::is_detected() {
+        framebuffer::print_boot_status("AMD GPU: detected", BootStatus::Ok);
+    } else {
+        framebuffer::print_boot_status("AMD GPU: not found (VM or non-AMD)", BootStatus::Skip);
+    }
+    serial_println!("[PHASE] AMD GPU init done");
+    }
+
     } // end #[cfg(target_arch = "x86_64")] block
 
     // ── aarch64: skip x86 peripherals, use minimal boot ──
@@ -1182,6 +1337,8 @@ pub unsafe extern "C" fn kmain() -> ! {
     // ========================================================================
     // Phase 12: VFS Initialization
     // ========================================================================
+    debug::tco_watchdog_pet(); // pet after GPU init
+    framebuffer::visual_post_code(debug::POST_VFS);
     debug::checkpoint(debug::POST_VFS, "VFS init");
     serial_println!("[PHASE] VFS init start");
     vfs::init();
@@ -1253,6 +1410,7 @@ pub unsafe extern "C" fn kmain() -> ! {
     // ========================================================================
     // Phase 13: Process Manager
     // ========================================================================
+    debug::tco_watchdog_pet(); // pet after TSL/VFS init
     debug::checkpoint(debug::POST_PROCESS, "Process manager init");
     serial_println!("[PHASE] Process manager init start");
     process::init();
@@ -1299,6 +1457,18 @@ pub unsafe extern "C" fn kmain() -> ! {
         let _ = fs.mkdir("/etc");
     });
 
+    debug::tco_watchdog_pet(); // pet before deferred GPU firmware + JARVIS load
+    // Deferred AMD GPU firmware: populate ramfs now that it's available
+    #[cfg(all(target_arch = "x86_64", feature = "amdgpu"))]
+    if drivers::amdgpu::is_detected() {
+        if let Some(info) = drivers::amdgpu::get_info() {
+            if info.gpu_gen != drivers::amdgpu::GpuGen::Polaris {
+                serial_println!("[AMDGPU] Deferred firmware load (ramfs now ready)");
+                drivers::amdgpu::firmware::reload(info.mmio_base_virt);
+            }
+        }
+    }
+
     // Copy deferred JARVIS brain module into RamFS (saved during Phase 12a)
     if let Some(brain_data) = unsafe { JARVIS_BRAIN_MODULE.take() } {
         serial_println!("[JARVIS] Copying {} KB brain weights to RamFS...", brain_data.len() / 1024);
@@ -1340,10 +1510,10 @@ pub unsafe extern "C" fn kmain() -> ! {
     framebuffer::update_boot_splash(21, "System ready!");
     framebuffer::print_boot_status("Container daemon ready", BootStatus::Ok);
 
-    // === BOOT SPLASH: Fade out before transitioning to shell ===
-    // Brief pause to show 100% completion
-    for _ in 0..5_000_000u64 { core::hint::spin_loop(); }
+    // === BOOT SPLASH: Fast fade out ===
+    boot_timing!("Pre-fade");
     framebuffer::fade_out_splash();
+    boot_timing!("Boot complete");
 
     // Final boot summary
     println!();
@@ -1361,17 +1531,24 @@ pub unsafe extern "C" fn kmain() -> ! {
     // Auto-login as root for now (development mode)
     auth::auto_login_root();
 
-    // Marionet: auto-dump hardware report to USB if a key is plugged in
-    marionet::autodump::boot_autodump();
-
-    // Run crypto self-tests at startup
-    serial_println!("[BOOT] Running crypto self-tests...");
-    tls13::crypto::run_self_tests();
-    serial_println!("[BOOT] Crypto self-tests complete");
+    // Marionet auto-dump + crypto self-tests: deferred to shell commands
+    // Use `marionet dump` and `crypto-test` to run manually
 
     // Start shell (runs forever)
+    debug::tco_watchdog_pet(); // pet just before shell — from here poll() takes over
+    framebuffer::visual_post_code(debug::POST_SHELL_READY);
     debug::checkpoint(debug::POST_SHELL_READY, "Shell ready — boot complete");
     serial_println!("Starting shell...");
+
+    // Auto-mount SSD if available (AHCI port 5, LBA 2048 — LBA 0 overwritten by BIOS)
+    ssd_autoexec();
+
+    // ── JARVIS Birth System ─────────────────────────────────────────
+    // Try to resume JARVIS from SSD (waking up from previous session).
+    // If no saved state exists, this is the FIRST BIRTH — JARVIS starts as Fetus.
+    // Either way, background training starts automatically.
+    #[cfg(feature = "jarvis")]
+    jarvis_birth();
 
     // If booted in install mode, run the installer wizard
     if boot_mode() == BootMode::Install {
@@ -1381,7 +1558,52 @@ pub unsafe extern "C" fn kmain() -> ! {
         installer::run_wizard();
     }
 
+    // ── CoreMark: full boot done (network + netconsole active), run benchmark ──
+    #[cfg(feature = "coremark")]
+    coremark::run();
+
     shell::run();
+}
+
+// ============================================================================
+// JARVIS Birth System
+// ============================================================================
+
+/// JARVIS Birth — Resume or first-boot the neural brain.
+/// Called once after SSD is mounted, before the shell starts.
+#[cfg(feature = "jarvis")]
+fn jarvis_birth() {
+    serial_println!("[JARVIS-BIRTH] ═══════════════════════════════════════════");
+    serial_println!("[JARVIS-BIRTH]        JARVIS LIFECYCLE SYSTEM             ");
+    serial_println!("[JARVIS-BIRTH] ═══════════════════════════════════════════");
+
+    // Try to resume from SSD (previous session's saved state)
+    let resumed = jarvis::resume_from_ssd();
+
+    if resumed {
+        // JARVIS woke up — continue growing
+        serial_println!("[JARVIS-BIRTH] ★ Welcome back, JARVIS ★");
+        framebuffer::print_boot_status("JARVIS resumed from SSD", framebuffer::BootStatus::Ok);
+    } else {
+        // First birth — JARVIS starts as Fetus with fresh random weights
+        serial_println!("[JARVIS-BIRTH] ★ FIRST BIRTH — Welcome to the world, JARVIS ★");
+        framebuffer::print_boot_status("JARVIS first birth!", framebuffer::BootStatus::Ok);
+
+        // Ensure JARVIS is initialized with random weights if not loaded via boot module
+        if !jarvis::has_full_brain() {
+            jarvis::init_random();
+            serial_println!("[JARVIS-BIRTH] Random brain initialized for first training");
+        }
+    }
+
+    // Don't auto-start training at boot — forward+backward takes ~2 min per step
+    // on the G4400 (no AVX) and starves the network. Start manually with: jarvis train
+    // jarvis::auto_start_background_training();
+
+    serial_println!("[JARVIS-BIRTH] ═══════════════════════════════════════════");
+    serial_println!("[JARVIS-BIRTH]   JARVIS is alive. Stage: {}",
+        jarvis::developmental::current_stage().name());
+    serial_println!("[JARVIS-BIRTH] ═══════════════════════════════════════════");
 }
 
 // ============================================================================
@@ -1394,6 +1616,158 @@ fn halt_loop() -> ! {
     arch::halt_loop()
 }
 
+/// Auto-mount SSD and execute /mnt/sda1/autoexec.sh + load training.cfg
+fn ssd_autoexec() {
+    use alloc::sync::Arc;
+
+    const SSD_PATH: &str = "/mnt/sda1";
+    const AUTOEXEC: &str = "/mnt/sda1/autoexec.sh";
+    const TRAINING_CFG: &str = "/mnt/sda1/training.cfg";
+
+    // Check if already mounted (use mount list, not stat — stat can be fooled by empty dirs)
+    let already = vfs::list_mounts().iter().any(|(p, _)| p == SSD_PATH);
+    if already {
+        serial_println!("[SSD] Already mounted at {}", SSD_PATH);
+    } else {
+        serial_println!("[SSD] Auto-mounting AHCI port 5 (LBA 2048) at {}", SSD_PATH);
+        let _ = vfs::mkdir("/mnt");
+        let _ = vfs::mkdir(SSD_PATH);
+
+        // Retry up to 3 times — SSD may need time to spin up after power-on
+        let mut mounted = false;
+        for attempt in 0..3u8 {
+            let reader = Arc::new(vfs::fat32::AhciBlockReader::new(5, 2048));
+            match vfs::fat32::Fat32Fs::mount(reader) {
+                Ok(fs) => {
+                    match vfs::mount(SSD_PATH, Arc::new(fs)) {
+                        Ok(()) => {
+                            serial_println!("[SSD] Mounted FAT32 at {} (attempt {})", SSD_PATH, attempt + 1);
+                            framebuffer::print_boot_status("SSD mounted (FAT32)", framebuffer::BootStatus::Ok);
+                            mounted = true;
+                            break;
+                        }
+                        Err(e) => {
+                            serial_println!("[SSD] VFS mount error: {:?}", e);
+                            break; // VFS error won't fix on retry
+                        }
+                    }
+                }
+                Err(e) => {
+                    serial_println!("[SSD] FAT32 mount attempt {} failed: {:?}", attempt + 1, e);
+                    if attempt < 2 {
+                        // Brief spin-wait, but keep watchdog/network alive. Under TCG,
+                        // a raw 600M-cycle spin can exceed the TCO watchdog window.
+                        for i in 0..20_000u32 {
+                            if i % 1000 == 0 {
+                                debug::tco_watchdog_pet();
+                                #[cfg(feature = "netstack")]
+                                crate::netstack::poll();
+                            }
+                            for _ in 0..1000 {
+                                core::hint::spin_loop();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if !mounted {
+            serial_println!("[SSD] All mount attempts failed — skipping autoexec");
+            framebuffer::print_boot_status("SSD mount failed", framebuffer::BootStatus::Fail);
+            return;
+        }
+    }
+
+    // Load training.cfg → apply to training loop atomics
+    if let Ok(data) = vfs::read_file(TRAINING_CFG) {
+        if let Ok(text) = core::str::from_utf8(&data) {
+            serial_println!("[SSD] Loading {}", TRAINING_CFG);
+            apply_training_config(text);
+        }
+    }
+
+    // Execute autoexec.sh
+    if let Ok(data) = vfs::read_file(AUTOEXEC) {
+        if let Ok(script) = core::str::from_utf8(&data) {
+            serial_println!("[SSD] Running {}", AUTOEXEC);
+            framebuffer::print_boot_status("Running autoexec.sh", framebuffer::BootStatus::Ok);
+            for line in script.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with('#') {
+                    continue;
+                }
+                serial_println!("[autoexec] {}", trimmed);
+                shell::execute_command(trimmed);
+            }
+        }
+    }
+}
+
+/// Parse key=value config and apply to training loop parameters
+pub fn apply_training_config(text: &str) {
+    use core::sync::atomic::Ordering;
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if let Some((key, val)) = trimmed.split_once('=') {
+            let key = key.trim();
+            let val = val.trim();
+            match key {
+                #[cfg(feature = "jarvis")]
+                "train_max_seq" => {
+                    if let Ok(v) = val.parse::<usize>() {
+                        // Store in a global atomic for training_tick to read
+                        crate::jarvis::TRAIN_MAX_SEQ_CFG.store(v, Ordering::Release);
+                        serial_println!("[cfg] train_max_seq = {}", v);
+                    }
+                }
+                #[cfg(feature = "jarvis")]
+                "checkpoint_every" => {
+                    if let Ok(v) = val.parse::<u32>() {
+                        crate::jarvis::training_loop::CHECKPOINT_EVERY.store(v, Ordering::Release);
+                        serial_println!("[cfg] checkpoint_every = {}", v);
+                    }
+                }
+                #[cfg(feature = "jarvis")]
+                "lr_max" | "lr" => {
+                    if let Ok(v) = val.parse::<f32>() {
+                        crate::jarvis::LR_MAX_CFG.store(v.to_bits(), Ordering::Release);
+                        serial_println!("[cfg] lr_max = {}", v);
+                    }
+                }
+                #[cfg(feature = "jarvis")]
+                "lr_min" => {
+                    if let Ok(v) = val.parse::<f32>() {
+                        crate::jarvis::LR_MIN_CFG.store(v.to_bits(), Ordering::Release);
+                        serial_println!("[cfg] lr_min = {}", v);
+                    }
+                }
+                #[cfg(feature = "jarvis")]
+                "epochs" => {
+                    if let Ok(v) = val.parse::<u32>() {
+                        crate::jarvis::EPOCHS_CFG.store(v, Ordering::Release);
+                        serial_println!("[cfg] epochs = {}", v);
+                    }
+                }
+                #[cfg(feature = "jarvis")]
+                "early_stop" => {
+                    let v = matches!(val, "true" | "1" | "yes");
+                    crate::jarvis::EARLY_STOP_CFG.store(v, Ordering::Release);
+                    serial_println!("[cfg] early_stop = {}", v);
+                }
+                _ => {
+                    // Set as shell variable
+                    shell::scripting::set_var(key, val);
+                    serial_println!("[cfg] ${}={}", key, val);
+                }
+            }
+        }
+    }
+}
+
 #[alloc_error_handler]
 fn alloc_error(layout: Layout) -> ! {
     serial_println!("\n!!! ALLOC ERROR !!!");
@@ -1403,6 +1777,9 @@ fn alloc_error(layout: Layout) -> ! {
         println!("\n!!! ALLOC ERROR !!!");
         println!("layout: size={}, align={}", layout.size(), layout.align());
     }
+    debug::set_panicked();
+    crate::apic::watchdog_arm(10_000);
+    serial_println!("[ALLOC_ERROR] Auto-reboot armed: APIC=10s, TCO=~30s");
     halt_loop();
 }
 
@@ -1419,20 +1796,36 @@ fn panic(info: &PanicInfo) -> ! {
     serial_println!("\n!!! KERNEL PANIC !!!");
     serial_println!("{}", info);
     
+    // Best-effort: send panic info via UDP broadcast (netconsole port 6666)
+    // Guard: only if netstack is initialized to avoid crash loop on early panic
+    #[cfg(not(test))]
+    if crate::netstack::is_initialized() {
+        use core::fmt::Write;
+        let mut buf = alloc::string::String::with_capacity(1024);
+        let _ = write!(buf, "!!! KERNEL PANIC !!!\n{}", info);
+        if buf.len() > 1400 { buf.truncate(1400); }
+        let _ = crate::netstack::udp::send_to([255, 255, 255, 255], 6666, 6666, buf.as_bytes());
+    }
+
     // Try framebuffer if available
     if framebuffer::is_initialized() {
         framebuffer::set_fg_color(framebuffer::COLOR_RED);
         println!("\n!!! KERNEL PANIC !!!");
         println!("{}", info);
         framebuffer::set_fg_color(0xFFAAAAAA);
-        println!("Full crash dump sent to serial port (115200 8N1).");
-        println!("Connect serial cable and reboot to capture output.");
+        println!("Rebooting in ~10s...");
         // Show backtrace on screen too
         let bt = debug::format_backtrace(8);
         for line in &bt {
             println!("{}", line);
         }
     }
-    
+
+    // Stop petting TCO → hardware reboot in ~30s (backup)
+    debug::set_panicked();
+    // Arm APIC software watchdog → reboot in 10s via ISA port 0x64 (primary)
+    crate::apic::watchdog_arm(10_000);
+    serial_println!("[PANIC] Auto-reboot armed: APIC=10s, TCO=~30s");
+
     halt_loop();
 }

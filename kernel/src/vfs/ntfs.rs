@@ -12,11 +12,14 @@
 //! - Directories use B-tree indexes (INDEX_ROOT + INDEX_ALLOCATION)
 //!
 //! Limitations:
-//! - Read-only (no write support)
-//! - No compressed file support ($DATA with compression)
+//! - Read-only (no write support — planned, see memory/repo/ntfs_write_plan.md)
+//! - No compressed file support ($DATA with compression / LZNT1)
 //! - No encrypted file support (EFS)
-//! - No sparse file support
-//! - No reparse points / symlinks
+//! - Reparse points are *detected* (tag + substitute name parsed for
+//!   symlinks and junctions) but not transparently resolved by the VFS yet.
+//!   Symlinks/junctions surface as `FileType::Symlink`.
+//! - $Volume dirty flag IS detected at mount; future write paths must check
+//!   `NtfsFs::is_dirty()` and refuse if set.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -40,16 +43,31 @@ const NTFS_OEM_ID: &[u8; 8] = b"NTFS    ";
 
 /// Well-known MFT record numbers
 const MFT_RECORD_MFT: u64 = 0;          // $MFT itself
+const MFT_RECORD_VOLUME: u64 = 3;       // $Volume (holds dirty flag)
 const MFT_RECORD_ROOT: u64 = 5;         // Root directory
 
 /// Attribute type codes
 const ATTR_STANDARD_INFORMATION: u32 = 0x10;
 const ATTR_FILE_NAME: u32 = 0x30;
+const ATTR_VOLUME_INFORMATION: u32 = 0x70;
 const ATTR_DATA: u32 = 0x80;
 const ATTR_INDEX_ROOT: u32 = 0x90;
 const ATTR_INDEX_ALLOCATION: u32 = 0xA0;
 const ATTR_BITMAP: u32 = 0xB0;
+const ATTR_REPARSE_POINT: u32 = 0xC0;
 const ATTR_END: u32 = 0xFFFFFFFF;
+
+/// Common NTFS reparse tags. Microsoft tags have the high bit set and carry
+/// no extra GUID. Third-party tags include a 16-byte GUID after the header.
+const IO_REPARSE_TAG_MOUNT_POINT: u32 = 0xA000_0003; // Junctions / volume mount points
+const IO_REPARSE_TAG_SYMLINK: u32     = 0xA000_000C; // NT symbolic links
+
+/// $VOLUME_INFORMATION flags (bitfield in the 12th byte of the attribute value)
+/// Bit 0x0001 = volume is dirty (set by Windows on unclean shutdown,
+/// cleared after `chkdsk` or successful clean dismount).
+/// Writing to a dirty NTFS volume risks data corruption because the journal
+/// ($LogFile) has pending transactions that must be replayed by Windows first.
+const VOLUME_FLAG_DIRTY: u16 = 0x0001;
 
 /// File name namespace types
 const FILE_NAME_POSIX: u8 = 0;
@@ -372,6 +390,11 @@ struct MftRecord {
     index_root_data: Vec<u8>,
     /// $INDEX_ALLOCATION data runs (for directories with many entries)
     index_alloc_runs: Vec<DataRun>,
+    /// Reparse tag (0 if not a reparse point). See `IO_REPARSE_TAG_*`.
+    reparse_tag: u32,
+    /// Resolved substitute name (UTF-8) for symlinks/junctions.
+    /// Empty if not a recognized reparse point or the tag carries no path.
+    reparse_target: String,
 }
 
 // ============================================================================
@@ -381,6 +404,19 @@ struct MftRecord {
 /// NTFS filesystem instance (read-only)
 pub struct NtfsFs {
     inner: Mutex<NtfsFsInner>,
+    /// `$Volume` dirty flag captured at mount time.
+    /// `true` means Windows did not cleanly dismount this volume
+    /// (Fast Startup, hibernation, crash, or pending journal transactions).
+    /// Future write paths MUST refuse if this is `true`.
+    volume_dirty: bool,
+}
+
+impl NtfsFs {
+    /// True if the volume's `$Volume` dirty flag was set at mount time.
+    /// Write operations must refuse when this returns `true`.
+    pub fn is_dirty(&self) -> bool {
+        self.volume_dirty
+    }
 }
 
 struct NtfsFsInner {
@@ -396,6 +432,66 @@ struct NtfsFsInner {
 }
 
 impl NtfsFsInner {
+    /// Read the `$Volume` (MFT record 3) dirty flag.
+    ///
+    /// Returns `Ok(true)` if Windows last marked the volume dirty (unclean
+    /// dismount, Fast Startup still active, hibernation, or pending
+    /// `$LogFile` transactions). Returns `Ok(false)` if clean.
+    /// Returns `Err(())` if the record cannot be read or the
+    /// `$VOLUME_INFORMATION` attribute is missing/malformed.
+    fn read_volume_dirty_flag(&self) -> Result<bool, ()> {
+        let raw = self.read_mft_record_raw(MFT_RECORD_VOLUME)?;
+        if raw.len() < 24 {
+            return Err(());
+        }
+
+        // Validate FILE magic
+        let magic = u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]);
+        if magic != MFT_RECORD_MAGIC {
+            return Err(());
+        }
+
+        // Walk attributes looking for $VOLUME_INFORMATION (always resident).
+        let first_attr = u16::from_le_bytes([raw[20], raw[21]]) as usize;
+        let used_size =
+            u32::from_le_bytes([raw[24], raw[25], raw[26], raw[27]]) as usize;
+        let limit = used_size.min(raw.len());
+
+        let mut off = first_attr;
+        while off + 8 <= limit {
+            let atype = u32::from_le_bytes([
+                raw[off], raw[off + 1], raw[off + 2], raw[off + 3],
+            ]);
+            let alen = u32::from_le_bytes([
+                raw[off + 4], raw[off + 5], raw[off + 6], raw[off + 7],
+            ]) as usize;
+            if atype == ATTR_END || atype == 0 || alen < 16 || alen > limit - off {
+                break;
+            }
+            if atype == ATTR_VOLUME_INFORMATION && off + 24 <= limit {
+                // Resident attribute: value_offset at off+20, value at off+value_offset
+                let value_offset =
+                    u16::from_le_bytes([raw[off + 20], raw[off + 21]]) as usize;
+                let value_start = off + value_offset;
+                // $VOLUME_INFORMATION layout:
+                //   0x00 u64 reserved
+                //   0x08 u8  major_version
+                //   0x09 u8  minor_version
+                //   0x0A u16 flags  <-- here
+                if value_start + 12 <= raw.len() {
+                    let flags = u16::from_le_bytes([
+                        raw[value_start + 10],
+                        raw[value_start + 11],
+                    ]);
+                    return Ok((flags & VOLUME_FLAG_DIRTY) != 0);
+                }
+                return Err(());
+            }
+            off += alen;
+        }
+        Err(())
+    }
+
     /// Read raw bytes from device at byte offset
     fn read_bytes(&self, byte_offset: u64, buf: &mut [u8]) -> Result<(), ()> {
         let sector_size = self.device.sector_size() as u64;
@@ -557,6 +653,8 @@ impl NtfsFsInner {
         let mut resident_data = Vec::new();
         let mut index_root_data = Vec::new();
         let mut index_alloc_runs = Vec::new();
+        let mut reparse_tag: u32 = 0;
+        let mut reparse_target = String::new();
 
         let mut offset = first_attr;
         let limit = used_size.min(buf.len());
@@ -734,6 +832,62 @@ impl NtfsFsInner {
                     }
                 }
 
+                ATTR_REPARSE_POINT if non_resident == 0 => {
+                    // Resident reparse point. Layout (Microsoft tags):
+                    //   u32 ReparseTag
+                    //   u16 ReparseDataLength
+                    //   u16 Reserved
+                    //   <data> (symlink / mount-point buffer)
+                    if offset + 24 <= limit {
+                        let val_len = u32::from_le_bytes([
+                            buf[offset + 16], buf[offset + 17],
+                            buf[offset + 18], buf[offset + 19],
+                        ]) as usize;
+                        let val_off = u16::from_le_bytes([
+                            buf[offset + 20], buf[offset + 21],
+                        ]) as usize;
+                        let data_start = offset + val_off;
+                        if val_len >= 8 && data_start + 8 <= buf.len() {
+                            let tag = u32::from_le_bytes([
+                                buf[data_start], buf[data_start + 1],
+                                buf[data_start + 2], buf[data_start + 3],
+                            ]);
+                            reparse_tag = tag;
+                            // Header is 8 bytes (tag + len + reserved); buffer starts at +8.
+                            // For symlink/mount-point we read SubstituteName.
+                            let buf_off = match tag {
+                                IO_REPARSE_TAG_MOUNT_POINT => 8,
+                                IO_REPARSE_TAG_SYMLINK => 8,
+                                _ => 0,
+                            };
+                            if buf_off != 0 {
+                                let path_buf_hdr = data_start + buf_off;
+                                // 4 u16 fields: SubstOff, SubstLen, PrintOff, PrintLen.
+                                // Symlink adds a u32 Flags after them.
+                                if path_buf_hdr + 8 <= buf.len()
+                                    && path_buf_hdr + 8 <= data_start + val_len
+                                {
+                                    let subst_off = u16::from_le_bytes([
+                                        buf[path_buf_hdr], buf[path_buf_hdr + 1],
+                                    ]) as usize;
+                                    let subst_len = u16::from_le_bytes([
+                                        buf[path_buf_hdr + 2], buf[path_buf_hdr + 3],
+                                    ]) as usize;
+                                    let extra = if tag == IO_REPARSE_TAG_SYMLINK { 12 } else { 8 };
+                                    let path_start = path_buf_hdr + extra + subst_off;
+                                    let path_end = path_start + subst_len;
+                                    if path_end <= buf.len()
+                                        && path_end <= data_start + val_len
+                                    {
+                                        reparse_target =
+                                            decode_utf16le(&buf[path_start..path_end]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 ATTR_INDEX_ALLOCATION if non_resident != 0 => {
                     // Non-resident $INDEX_ALLOCATION
                     if offset + 64 <= limit {
@@ -778,6 +932,8 @@ impl NtfsFsInner {
             resident_data,
             index_root_data,
             index_alloc_runs,
+            reparse_tag,
+            reparse_target,
         })
     }
 
@@ -1051,8 +1207,15 @@ impl NtfsFsInner {
         Err(())
     }
 
-    /// Determine FileType from MftRecord
+    /// Determine FileType from MftRecord. Reparse points (NT symlinks and
+    /// junctions) surface as `FileType::Symlink` even when the MFT record
+    /// also has the directory flag set (junctions are dir-typed reparse
+    /// points underneath).
     fn record_file_type(&self, record: &MftRecord) -> FileType {
+        match record.reparse_tag {
+            IO_REPARSE_TAG_SYMLINK | IO_REPARSE_TAG_MOUNT_POINT => return FileType::Symlink,
+            _ => {}
+        }
         if record.is_directory {
             FileType::Directory
         } else {
@@ -1455,17 +1618,44 @@ pub fn mount(device: Arc<dyn BlockDevice>) -> Result<Arc<NtfsFs>, &'static str> 
     crate::serial_println!("[NTFS] $MFT: {} data runs, {} clusters total",
         mft_data_runs.len(), total_mft_clusters);
 
+    let inner = NtfsFsInner {
+        device,
+        cluster_size,
+        mft_record_size,
+        index_block_size,
+        mft_start_byte,
+        sectors_per_cluster,
+        bytes_per_sector,
+        mft_data_runs,
+    };
+
+    // Read $Volume dirty flag (MFT record 3, $VOLUME_INFORMATION attr).
+    // If we can't read it, treat as dirty (safe default — refuse future RW).
+    let volume_dirty = match inner.read_volume_dirty_flag() {
+        Ok(d) => {
+            if d {
+                crate::serial_println!(
+                    "[NTFS] ⚠ Volume is DIRTY (Fast Startup, hibernation, or unclean dismount)"
+                );
+                crate::serial_println!(
+                    "[NTFS]   → Read-only access OK; write operations will be refused."
+                );
+            } else {
+                crate::serial_println!("[NTFS] ✓ Volume is clean");
+            }
+            d
+        }
+        Err(_) => {
+            crate::serial_println!(
+                "[NTFS] ⚠ Could not read $Volume dirty flag — assuming dirty (safe default)"
+            );
+            true
+        }
+    };
+
     let fs = Arc::new(NtfsFs {
-        inner: Mutex::new(NtfsFsInner {
-            device,
-            cluster_size,
-            mft_record_size,
-            index_block_size,
-            mft_start_byte,
-            sectors_per_cluster,
-            bytes_per_sector,
-            mft_data_runs,
-        }),
+        inner: Mutex::new(inner),
+        volume_dirty,
     });
 
     // Verify we can read the root directory
@@ -1490,7 +1680,10 @@ pub fn mount(device: Arc<dyn BlockDevice>) -> Result<Arc<NtfsFs>, &'static str> 
         }
     }
 
-    crate::serial_println!("[NTFS] Filesystem mounted successfully (read-only)");
+    crate::serial_println!(
+        "[NTFS] Filesystem mounted successfully (read-only, dirty={})",
+        fs.volume_dirty
+    );
     Ok(fs)
 }
 

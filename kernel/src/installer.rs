@@ -192,6 +192,40 @@ fn install_interactive() -> Result<(), InstallError> {
     let size_mb = (target.sector_count * 512) / (1024 * 1024);
     let model = if target.model.is_empty() { "Unknown" } else { &target.model };
 
+    // Phase 3.5: Windows-disk safety gate.
+    // Refuse to install on a disk that hosts a Windows installation unless
+    // the user explicitly types the override phrase. We scan the partition
+    // table; any NTFS / MS Basic Data / MS Reserved / Windows Recovery hit
+    // counts as Windows-owned.
+    if let Ok(table) = crate::drivers::partition::read_from_ahci(target.port_num) {
+        if table.has_windows() {
+            crate::println!("");
+            crate::println_color!(0x00FF0000,
+                "  ╔══════════════════════════════════════════════════════════╗");
+            crate::println_color!(0x00FF0000,
+                "  ║  WINDOWS PARTITIONS DETECTED ON THIS DISK                ║");
+            crate::println_color!(0x00FF0000,
+                "  ╚══════════════════════════════════════════════════════════╝");
+            crate::println!("  TrustOS will not erase a Windows disk by default.");
+            crate::println!("  Detected partitions:");
+            for p in &table.partitions {
+                if p.partition_type.is_windows_owned() {
+                    crate::println!("    - #{} {} ({})",
+                        p.number, p.partition_type.name(), p.size_human());
+                }
+            }
+            crate::println!("");
+            crate::println!("  To proceed anyway, type exactly:  WIPE WINDOWS");
+            crate::print!("  > ");
+            let override_line = read_line_trimmed();
+            if override_line != "WIPE WINDOWS" {
+                crate::println!("  Aborted (Windows disk protected).");
+                return Err(InstallError::UserAborted);
+            }
+            crate::println_color!(0x00FF8800, "  Override accepted. Continuing.");
+        }
+    }
+
     // Phase 4: Confirmation
     crate::println!("");
     crate::println_color!(0x00FF0000, "  ╔══════════════════════════════════════════════╗");

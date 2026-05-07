@@ -103,6 +103,8 @@ pub enum PartitionType {
     MicrosoftReserved,
     /// Microsoft Basic Data (NTFS, FAT32)
     MicrosoftBasicData,
+    /// Windows Recovery Environment
+    WindowsRecovery,
     /// Linux Filesystem (GPT)
     LinuxFilesystemGpt,
     /// Linux Root (x86-64)
@@ -184,16 +186,38 @@ impl PartitionType {
             0xE1, 0xC7, 0x3A, 0x93, 0xB4, 0x2E, 0x13, 0x4F,
             0xB8, 0x44, 0x0E, 0x14, 0xE2, 0xAE, 0xF9, 0x15
         ];
-        
+
+        // Windows Recovery: DE94BBA4-06D1-4D40-A16A-BFD50179D6AC
+        const WIN_RECOVERY: [u8; 16] = [
+            0xA4, 0xBB, 0x94, 0xDE, 0xD1, 0x06, 0x40, 0x4D,
+            0xA1, 0x6A, 0xBF, 0xD5, 0x01, 0x79, 0xD6, 0xAC
+        ];
+
         if guid == &EFI_SYSTEM { Self::EfiSystem }
         else if guid == &MS_BASIC_DATA { Self::MicrosoftBasicData }
         else if guid == &MS_RESERVED { Self::MicrosoftReserved }
+        else if guid == &WIN_RECOVERY { Self::WindowsRecovery }
         else if guid == &LINUX_FS { Self::LinuxFilesystemGpt }
         else if guid == &LINUX_SWAP { Self::LinuxSwap }
         else if guid == &LINUX_ROOT { Self::LinuxRoot }
         else if guid == &LINUX_HOME { Self::LinuxHome }
         else if guid == &[0u8; 16] { Self::Empty }
         else { Self::UnknownGpt(*guid) }
+    }
+
+    /// True if this partition belongs to a Windows installation
+    /// (NTFS / exFAT / MS Basic Data / MS Reserved / Windows Recovery).
+    ///
+    /// Used by the installer and disk tools to refuse destructive operations
+    /// on a disk that hosts Windows, unless the user explicitly overrides.
+    pub fn is_windows_owned(&self) -> bool {
+        matches!(
+            self,
+            Self::Ntfs
+                | Self::MicrosoftBasicData
+                | Self::MicrosoftReserved
+                | Self::WindowsRecovery
+        )
     }
     
     /// Get human-readable name
@@ -213,6 +237,7 @@ impl PartitionType {
             Self::EfiSystem => "EFI System",
             Self::MicrosoftReserved => "MS Reserved",
             Self::MicrosoftBasicData => "MS Basic Data",
+            Self::WindowsRecovery => "Windows Recovery",
             Self::LinuxFilesystemGpt => "Linux",
             Self::LinuxRoot => "Linux root",
             Self::LinuxHome => "Linux home",
@@ -349,6 +374,12 @@ impl PartitionTable {
             disk_guid: None,
             total_sectors: 0,
         }
+    }
+
+    /// True if any partition on this disk is owned by Windows.
+    /// Used as a safety gate before destructive operations (install / wipe).
+    pub fn has_windows(&self) -> bool {
+        self.partitions.iter().any(|p| p.partition_type.is_windows_owned())
     }
 }
 
@@ -553,14 +584,16 @@ pub fn print_partition_table(table: &PartitionTable) {
     
     for p in &table.partitions {
         let boot_flag = if p.bootable { "*" } else { " " };
+        let win_tag = if p.partition_type.is_windows_owned() { "  [WINDOWS]" } else { "" };
         crate::println!(
-            "  {}  {}     {:>12}  {:>12}  {:>10}   {}",
+            "  {}  {}     {:>12}  {:>12}  {:>10}   {}{}",
             p.number,
             boot_flag,
             p.start_lba,
             p.end_lba(),
             p.size_human(),
-            p.partition_type.name()
+            p.partition_type.name(),
+            win_tag,
         );
         
         if !p.name.is_empty() {

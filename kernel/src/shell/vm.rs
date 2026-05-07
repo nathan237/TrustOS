@@ -4,7 +4,7 @@
 //! All commands related to running Linux inside TrustOS, VM management,
 //! disk persistence, and partition handling.
 
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use alloc::vec;
 use alloc::format;
@@ -1668,6 +1668,10 @@ pub(super) fn cmd_diskscan(_args: &[&str]) {
                     };
                     crate::println!("  Table:    {} ({} partition(s))", 
                         table_type, table.partitions.len());
+                    if table.has_windows() {
+                        crate::println_color!(COLOR_YELLOW,
+                            "  ⚠  Windows partitions detected — disk is protected from `install`/wipe.");
+                    }
                     
                     for part in &table.partitions {
                         crate::println!();
@@ -1677,6 +1681,9 @@ pub(super) fn cmd_diskscan(_args: &[&str]) {
                             part.start_lba, part.end_lba(), part.size_human());
                         if !part.name.is_empty() {
                             crate::println!("      Name: {}", part.name);
+                        }
+                        if part.partition_type.is_windows_owned() {
+                            crate::println_color!(COLOR_YELLOW, "      Owner: WINDOWS (protected)");
                         }
                         
                         // Probe filesystem on this partition
@@ -1898,12 +1905,61 @@ pub(super) fn cmd_ahci(args: &[&str]) {
         
         crate::println!();
         crate::println_color!(COLOR_DARK_GREEN, "Commands:");
-        crate::println!("  ahci read <port> <sector>   - Read sector from port");
-        crate::println!("  ahci write <port> <sector> <text> - Write to sector");
+        crate::println!("  ahci init                         - Init AHCI controller");
+        crate::println!("  ahci read <port> <sector>         - Read sector from port");
+        crate::println!("  ahci write <port> <sector> <text> - Write text to sector");
+        crate::println!("  ahci zero <port> <sector>         - Fill sector with zeros");
         return;
     }
     
     match args[0] {
+        "init" => {
+            crate::println_color!(COLOR_CYAN, "=== Manual AHCI Init ===");
+            
+            if crate::drivers::ahci::is_initialized() {
+                crate::println_color!(COLOR_GREEN, "AHCI already initialized");
+                return;
+            }
+            
+            // Find SATA controller on PCI bus
+            let devices = crate::pci::get_devices();
+            let mut found = false;
+            for dev in &devices {
+                if dev.class_code == 0x01 && dev.subclass == 0x06 && dev.prog_if == 0x01 {
+                    let bar5_raw = dev.bar[5];
+                    crate::println!("SATA: {:02X}:{:02X}.{} {:04X}:{:04X} BAR5={:#010x}", 
+                        dev.bus, dev.device, dev.function, dev.vendor_id, dev.device_id, bar5_raw);
+                    
+                    let cmd = crate::pci::config_read16(dev.bus, dev.device, dev.function, 0x04);
+                    crate::println!("  CMD={:#06x} (IO={} MEM={} BM={})",
+                        cmd, cmd & 1, (cmd >> 1) & 1, (cmd >> 2) & 1);
+                    
+                    if bar5_raw == 0 || bar5_raw == 0xFFFFFFFF || bar5_raw & 1 != 0 {
+                        crate::println_color!(COLOR_RED, "  Invalid BAR5!");
+                        continue;
+                    }
+                    
+                    crate::pci::enable_bus_master(dev);
+                    crate::pci::enable_memory_space(dev);
+                    
+                    let bar5 = bar5_raw as u64;
+                    crate::println!("  Calling ahci::init_verbose({:#x})...", bar5);
+                    
+                    if crate::drivers::ahci::init_verbose(bar5) {
+                        crate::println_color!(COLOR_GREEN, "AHCI initialized OK!");
+                        crate::drivers::ahci::identify_all_devices();
+                        found = true;
+                    } else {
+                        crate::println_color!(COLOR_RED, "AHCI init FAILED");
+                    }
+                }
+            }
+            
+            if !found {
+                crate::println_color!(COLOR_YELLOW, "No matching AHCI controller on PCI");
+            }
+        }
+        
         "read" => {
             if args.len() < 3 {
                 crate::println!("Usage: ahci read <port> <sector>");
@@ -1996,6 +2052,41 @@ pub(super) fn cmd_ahci(args: &[&str]) {
                 }
                 Err(e) => {
                     crate::println_color!(COLOR_RED, "AHCI write error: {}", e);
+                }
+            }
+        }
+
+        "zero" => {
+            if args.len() < 3 {
+                crate::println!("Usage: ahci zero <port> <sector>");
+                return;
+            }
+
+            let port: u8 = match args[1].parse() {
+                Ok(n) => n,
+                Err(_) => {
+                    crate::println_color!(COLOR_RED, "Invalid port number");
+                    return;
+                }
+            };
+
+            let sector: u64 = match args[2].parse() {
+                Ok(n) => n,
+                Err(_) => {
+                    crate::println_color!(COLOR_RED, "Invalid sector number");
+                    return;
+                }
+            };
+
+            let buffer = alloc::vec![0u8; 512];
+            crate::println!("Zeroing sector {} on AHCI port {}...", sector, port);
+
+            match crate::drivers::ahci::write_sectors(port, sector, 1, &buffer) {
+                Ok(bytes) => {
+                    crate::println_color!(COLOR_GREEN, "Zeroed {} bytes successfully", bytes);
+                }
+                Err(e) => {
+                    crate::println_color!(COLOR_RED, "AHCI zero error: {}", e);
                 }
             }
         }
@@ -3294,8 +3385,141 @@ pub(super) fn cmd_audio(args: &[&str]) {
                 Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
             }
         }
-        Some(other) => {
-            crate::println_color!(COLOR_YELLOW, "Usage: audio [init|status|stop|test|diag|dump|probe|gpio]");
+        // ── Live debug toolkit (added 2026-04-23) ───────────────────────────
+        Some("verb") => {
+            // audio verb <codec> <nid> <verb_hex> <payload_hex>
+            // 12-bit verb: cmd = (verb<<8) | data8
+            // 4-bit  verb: cmd = ((verb & 0xF00) << 8) | payload16
+            // We accept verb_hex as the verb id (e.g. 0x707, 0x300, 0xF09).
+            // Detection: if verb in {0x200,0x300,0x400,0x500,0xA00,0xB00,0xC00,0xD00}
+            // -> 4-bit form; else 12-bit form.
+            if args.len() < 5 {
+                crate::println_color!(COLOR_YELLOW,
+                    "Usage: audio verb <codec> <nid> <verb_hex> <payload_hex>");
+                crate::println!("  Examples:");
+                crate::println!("    audio verb 0 0x14 0xF09 0     # GET_PIN_SENSE on NID 0x14");
+                crate::println!("    audio verb 0 0x14 0x707 0xC0  # SET_PIN_CONTROL = 0xC0");
+                crate::println!("    audio verb 0 0x14 0x70C 0x03  # SET_EAPD = 0x03 (bits 0+1)");
+                crate::println!("    audio verb 0 0x02 0x300 0xB000 # SET_AMP_GAIN_MUTE (4-bit verb)");
+                return;
+            }
+            let parse_hex_u32 = |s: &str| -> Option<u32> {
+                let s = s.trim_start_matches("0x").trim_start_matches("0X");
+                u32::from_str_radix(s, 16).ok()
+            };
+            let parse_hex_u16 = |s: &str| -> Option<u16> {
+                let s = s.trim_start_matches("0x").trim_start_matches("0X");
+                u16::from_str_radix(s, 16).ok()
+            };
+            let codec   = match args.get(1).and_then(|s| s.parse::<u8>().ok()) {
+                Some(v) => v, None => { crate::println_color!(COLOR_RED, "bad codec"); return; }
+            };
+            let nid     = match args.get(2).and_then(|s| parse_hex_u16(s)) {
+                Some(v) => v, None => { crate::println_color!(COLOR_RED, "bad nid (hex)"); return; }
+            };
+            let verb_id = match args.get(3).and_then(|s| parse_hex_u32(s)) {
+                Some(v) => v, None => { crate::println_color!(COLOR_RED, "bad verb (hex)"); return; }
+            };
+            let payload = match args.get(4).and_then(|s| parse_hex_u32(s)) {
+                Some(v) => v, None => { crate::println_color!(COLOR_RED, "bad payload (hex)"); return; }
+            };
+            let is_4bit = matches!(verb_id & 0xFFF,
+                0x200 | 0x300 | 0x400 | 0x500 | 0xA00 | 0xB00 | 0xC00 | 0xD00);
+            let cmd20 = if is_4bit {
+                ((verb_id & 0xF00) << 8) | (payload & 0xFFFF)
+            } else {
+                ((verb_id & 0xFFF) << 8) | (payload & 0xFF)
+            };
+            crate::println!("verb codec={} nid={:#06X} verb={:#05X} payload={:#06X} ({}-bit) cmd20={:#07X}",
+                codec, nid, verb_id, payload, if is_4bit { 4 } else { 12 }, cmd20);
+            match crate::drivers::hda::send_verb_raw(codec, nid, cmd20) {
+                Ok(resp) => crate::println_color!(COLOR_GREEN, "response = {:#010X}", resp),
+                Err(e)   => crate::println_color!(COLOR_RED,   "error: {}", e),
+            }
+        }
+        Some("jacks") | Some("sense") => {
+            crate::println_color!(COLOR_CYAN, "Pin Jack Sense");
+            crate::println!("{}", crate::drivers::hda::jacks());
+        }
+        Some("errors") | Some("err") => {
+            crate::println_color!(COLOR_CYAN, "HDA Error / Status Registers");
+            crate::println!("{}", crate::drivers::hda::errors());
+        }
+        Some("path") => {
+            crate::println_color!(COLOR_CYAN, "Output Path Inspection");
+            crate::println!("{}", crate::drivers::hda::path_info());
+        }
+        Some("reset") => {
+            crate::print_color!(COLOR_YELLOW, "Soft reset (stop + stream reset)... ");
+            crate::drivers::hda::soft_reset();
+            crate::println_color!(COLOR_GREEN, "done");
+        }
+        Some("scope") => {
+            // audio scope [iters] [period_ms]
+            let iters     = args.get(1).and_then(|s| s.parse::<u32>().ok()).unwrap_or(20);
+            let period_ms = args.get(2).and_then(|s| s.parse::<u64>().ok()).unwrap_or(100);
+            let iters     = iters.min(2000);
+            crate::println_color!(COLOR_CYAN,
+                "LPIB scope: {} samples @ {} ms", iters, period_ms);
+            crate::println!("    t(ms)   LPIB(B)   delta   RUN  STS");
+            let mut last = 0u32;
+            let t0 = crate::time::uptime_ms();
+            for _ in 0..iters {
+                let (lpib, run, sts) = crate::drivers::hda::lpib_sample();
+                let delta = lpib.wrapping_sub(last);
+                let now = crate::time::uptime_ms() - t0;
+                crate::println!("  {:>6}   {:>7}  {:>+7}   {}   {:#04X}",
+                    now, lpib, delta as i32,
+                    if run { "Y" } else { "n" }, sts);
+                last = lpib;
+                let target = crate::time::uptime_ms() + period_ms;
+                while crate::time::uptime_ms() < target { core::hint::spin_loop(); }
+            }
+        }
+        Some("chan") => {
+            // audio chan <L|R|both> <freq_hz> [ms]
+            let chan_str = args.get(1).copied().unwrap_or("");
+            let chan = match chan_str.to_ascii_lowercase().as_str() {
+                "l" | "left"  => 0u8,
+                "r" | "right" => 1u8,
+                "b" | "both" | "stereo" => 2u8,
+                _ => {
+                    crate::println_color!(COLOR_YELLOW,
+                        "Usage: audio chan <L|R|both> <freq_hz> [ms]");
+                    return;
+                }
+            };
+            let freq = args.get(2).and_then(|s| s.parse::<u32>().ok()).unwrap_or(440);
+            let ms   = args.get(3).and_then(|s| s.parse::<u32>().ok()).unwrap_or(800);
+            if !crate::drivers::hda::is_initialized() {
+                let _ = crate::drivers::hda::init();
+            }
+            crate::println!("Channel test: {} {} Hz {} ms",
+                if chan == 0 { "LEFT" } else if chan == 1 { "RIGHT" } else { "BOTH" }, freq, ms);
+            match crate::drivers::hda::play_sine_chan(freq, ms, chan) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "done"),
+                Err(e) => crate::println_color!(COLOR_RED, "error: {}", e),
+            }
+        }
+        Some("sweep") => {
+            // audio sweep [f_start] [f_end] [ms]
+            let fa = args.get(1).and_then(|s| s.parse::<u32>().ok()).unwrap_or(50);
+            let fb = args.get(2).and_then(|s| s.parse::<u32>().ok()).unwrap_or(15000);
+            let ms = args.get(3).and_then(|s| s.parse::<u32>().ok()).unwrap_or(2000);
+            if !crate::drivers::hda::is_initialized() {
+                let _ = crate::drivers::hda::init();
+            }
+            crate::println!("Frequency sweep: {} Hz -> {} Hz over {} ms", fa, fb, ms);
+            match crate::drivers::hda::play_sweep(fa, fb, ms) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "done"),
+                Err(e) => crate::println_color!(COLOR_RED, "error: {}", e),
+            }
+        }
+        Some(_other) => {
+            crate::println_color!(COLOR_YELLOW,
+                "Usage: audio [init|status|stop|test|diag|dump|probe|gpio");
+            crate::println_color!(COLOR_YELLOW,
+                "             |verb|jacks|errors|path|reset|scope|chan|sweep]");
         }
     }
 }
@@ -3595,9 +3819,293 @@ pub(super) fn cmd_synth_pattern(args: &[&str]) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Live Coding — Strudel-style mini-notation (single-track legacy)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pub(super) fn cmd_live(args: &[&str]) {
+    match args.first().copied() {
+        None | Some("help") | Some("--help") => {
+            print_strudel_help();
+        }
+        Some("bpm") | Some("tempo") => {
+            match args.get(1).and_then(|s| s.parse::<u16>().ok()) {
+                Some(bpm) if bpm >= 30 && bpm <= 300 => {
+                    let _ = crate::audio::live_set_bpm(bpm);
+                    match crate::audio::strudel_bpm(bpm) {
+                        Ok(()) => crate::println_color!(COLOR_GREEN, "BPM → {}", bpm),
+                        Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+                    }
+                }
+                _ => crate::println_color!(COLOR_YELLOW, "Usage: live bpm <30-300>"),
+            }
+        }
+        Some("wave") | Some("waveform") => {
+            match args.get(1).and_then(|s| crate::audio::synth::Waveform::from_str(s)) {
+                Some(wf) => {
+                    let _ = crate::audio::live_set_wave(wf);
+                    crate::println_color!(COLOR_GREEN, "Waveform → {}", wf.name());
+                }
+                None => crate::println_color!(COLOR_YELLOW,
+                    "Usage: live wave <sine|square|saw|triangle|noise>"),
+            }
+        }
+        Some("stop") => {
+            let _ = crate::audio::strudel_stop();
+            let _ = crate::audio::live_stop();
+            crate::println_color!(COLOR_GREEN, "Stopped");
+        }
+        Some("hush") => {
+            let _ = crate::audio::strudel_hush();
+            crate::println_color!(COLOR_GREEN, "Hush — all tracks silenced");
+        }
+        Some("status") | Some("info") => {
+            crate::println!("{}", crate::audio::strudel_status());
+        }
+        Some("play") | Some("go") => {
+            let loops = args.get(1).and_then(|s| s.parse::<u32>().ok()).unwrap_or(1);
+            match crate::audio::strudel_play(loops) {
+                Ok(()) => {}
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("loop") => {
+            match crate::audio::strudel_loop() {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "Looping..."),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("preview") | Some("parse") => {
+            let notation = collect_quoted_arg(&args[1..]);
+            if notation.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "Usage: live preview \"c4 e4 g4\"");
+                return;
+            }
+            match crate::audio::live_preview(&notation) {
+                Ok(s) => crate::println!("{}", s),
+                Err(e) => crate::println_color!(COLOR_RED, "Parse error: {}", e),
+            }
+        }
+        Some("dsl") => {
+            // TrustStrudel DSL — chained method syntax (P1).
+            //   live dsl play "s(\"bd sd hh cp\").gain(0.8)"
+            //   live dsl parse "n(\"0 4 7\").scale(\"g:minor\")"
+            //   live dsl d1 "..."   (assign to track d1..d8)
+            #[cfg(not(feature = "strudel"))]
+            {
+                crate::println_color!(COLOR_YELLOW,
+                    "DSL not built — rebuild with --features strudel (or trustos-audio).");
+                return;
+            }
+            #[cfg(feature = "strudel")]
+            {
+            let sub = args.get(1).copied().unwrap_or("");
+            let rest_start = if sub.is_empty() { 1 } else { 2 };
+            let rest = if rest_start <= args.len() { &args[rest_start..] } else { &[][..] };
+            let src = collect_quoted_arg(rest);
+            if sub.is_empty() || src.is_empty() {
+                crate::println_color!(COLOR_YELLOW,
+                    "Usage: live dsl <play|parse|d1..d8> \"<expr>\"");
+                return;
+            }
+            match sub {
+                "play" | "go" | "p" | "oneshot" => match crate::audio::dsl_oneshot(&src) {
+                    Ok(()) => crate::println_color!(COLOR_GREEN, "DSL playing..."),
+                    Err(e) => crate::println_color!(COLOR_RED, "DSL error: {}", e),
+                },
+                "parse" | "inspect" | "show" => match crate::audio::dsl_inspect(&src) {
+                    Ok(s) => crate::println!("{}", s),
+                    Err(e) => crate::println_color!(COLOR_RED, "DSL error: {}", e),
+                },
+                s if s.len() == 2 && s.as_bytes()[0] == b'd' => {
+                    let d = s.as_bytes()[1];
+                    if d >= b'1' && d <= b'8' {
+                        let idx = (d - b'1') as usize;
+                        match crate::audio::dsl_set_track(idx, &src) {
+                            Ok(()) => crate::println_color!(COLOR_GREEN, "DSL -> d{}", d - b'0'),
+                            Err(e) => crate::println_color!(COLOR_RED, "DSL error: {}", e),
+                        }
+                    } else {
+                        crate::println_color!(COLOR_YELLOW, "Track must be d1..d8");
+                    }
+                }
+                _ => crate::println_color!(COLOR_YELLOW, "Unknown DSL op: {}", sub),
+            }
+            }
+        }
+        Some(_) => {
+            // Everything else: single-track quick play
+            let notation = collect_quoted_arg(args);
+            if notation.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "Usage: live \"c4 e4 g4 c5\" [loops]");
+                return;
+            }
+            let loops = args.last()
+                .and_then(|s| s.parse::<u32>().ok())
+                .unwrap_or(1);
+            match crate::audio::live_play(&notation, loops) {
+                Ok(()) => {}
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TrustStrudel — Multi-track commands (d1-d8)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Handle d1-d8 track commands
+pub(super) fn cmd_track(track_idx: usize, args: &[&str]) {
+    if args.is_empty() {
+        // Show track status
+        crate::println!("{}", crate::audio::strudel_status());
+        return;
+    }
+
+    match args.first().copied() {
+        Some("mute") => {
+            match crate::audio::strudel_mute(track_idx) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "d{} toggled mute", track_idx + 1),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("clear") | Some("off") => {
+            match crate::audio::strudel_clear(track_idx) {
+                Ok(()) => crate::println_color!(COLOR_GREEN, "d{} cleared", track_idx + 1),
+                Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+            }
+        }
+        Some("wave") => {
+            match args.get(1).and_then(|s| crate::audio::synth::Waveform::from_str(s)) {
+                Some(wf) => {
+                    match crate::audio::strudel_track_wave(track_idx, wf) {
+                        Ok(()) => {
+                            crate::println_color!(COLOR_GREEN, "d{} wave → {}", track_idx + 1, wf.name());
+                            let _ = crate::audio::strudel_update();
+                        }
+                        Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+                    }
+                }
+                None => crate::println_color!(COLOR_YELLOW,
+                    "Usage: d{} wave <sine|square|saw|triangle|noise>", track_idx + 1),
+            }
+        }
+        Some("vol") | Some("volume") => {
+            match args.get(1).and_then(|s| s.parse::<u8>().ok()) {
+                Some(v) => {
+                    match crate::audio::strudel_track_vol(track_idx, v) {
+                        Ok(()) => {
+                            crate::println_color!(COLOR_GREEN, "d{} vol → {}", track_idx + 1, v);
+                            let _ = crate::audio::strudel_update();
+                        }
+                        Err(e) => crate::println_color!(COLOR_RED, "Error: {}", e),
+                    }
+                }
+                None => crate::println_color!(COLOR_YELLOW, "Usage: d{} vol <0-255>", track_idx + 1),
+            }
+        }
+        _ => {
+            // Set pattern notation
+            let notation = collect_quoted_arg(args);
+            if notation.is_empty() {
+                crate::println_color!(COLOR_YELLOW, "Usage: d{} \"c4 e4 g4 c5\"", track_idx + 1);
+                return;
+            }
+            match crate::audio::strudel_set_track(track_idx, &notation) {
+                Ok(()) => {
+                    crate::println_color!(COLOR_GREEN, "d{} → \"{}\"", track_idx + 1, notation);
+                    // Auto-update loop if already playing
+                    let _ = crate::audio::strudel_update();
+                }
+                Err(e) => crate::println_color!(COLOR_RED, "d{} error: {}", track_idx + 1, e),
+            }
+        }
+    }
+}
+
+fn print_strudel_help() {
+    crate::println_color!(COLOR_CYAN, "TrustStrudel — Bare-Metal Live Coding");
+    crate::println_color!(COLOR_CYAN, "══════════════════════════════════════");
+    crate::println!();
+    crate::println_color!(COLOR_YELLOW, "  Multi-track (Tidal-style):");
+    crate::println!("  d1 bd . sd hh              Set track 1 (drums)");
+    crate::println!("  d2 c4 e4 g4 c5             Set track 2 (melody)");
+    crate::println!("  d2 wave saw                Set track 2 waveform");
+    crate::println!("  d2 vol 180                 Set track 2 volume");
+    crate::println!("  d1 mute                    Toggle mute track 1");
+    crate::println!("  d1 clear                   Remove track 1");
+    crate::println!();
+    crate::println_color!(COLOR_YELLOW, "  Playback:");
+    crate::println!("  live play [N]              Play all tracks (N cycles)");
+    crate::println!("  live loop                  Loop all tracks (non-blocking)");
+    crate::println!("  live stop                  Stop playback");
+    crate::println!("  live hush                  Silence everything");
+    crate::println!("  live status                Show all tracks");
+    crate::println!();
+    crate::println_color!(COLOR_YELLOW, "  Quick play (single-track):");
+    crate::println!("  live \"c4 e4 g4 c5\"         Play pattern once");
+    crate::println!("  live \"bd [sd sd] . hh\" 4   Play 4 loops");
+    crate::println!();
+    crate::println_color!(COLOR_YELLOW, "  Settings:");
+    crate::println!("  live bpm <30-300>          Set tempo");
+    crate::println!("  live wave <type>           Set default waveform");
+    crate::println!();
+    crate::println_color!(COLOR_YELLOW, "  Mini-notation:");
+    crate::println!("  c4 e4 g4   Notes          [e4 g4]   Sub-divide");
+    crate::println!("  . ~ -      Rest           c4*3      Repeat");
+    crate::println!("  bd sd hh   Drums          oh cp rim tom crash");
+}
+
+/// Collect a possibly-quoted argument from args slices.
+/// Handles: live "c4 e4 g4" → "c4 e4 g4"
+/// Also: live c4 e4 g4 → "c4 e4 g4" (space-joined)
+fn collect_quoted_arg(args: &[&str]) -> alloc::string::String {
+    use alloc::string::String;
+    if args.is_empty() {
+        return String::new();
+    }
+
+    // If first arg starts with a quote, collect until closing quote
+    let joined: String = args.iter()
+        .map(|s| *s)
+        .collect::<alloc::vec::Vec<&str>>()
+        .join(" ");
+
+    let trimmed = joined.trim();
+
+    // Strip outer quotes if present
+    if (trimmed.starts_with('"') && trimmed.ends_with('"'))
+        || (trimmed.starts_with('\'') && trimmed.ends_with('\''))
+    {
+        return String::from(&trimmed[1..trimmed.len() - 1]);
+    }
+
+    // Check if last token is a number (loop count) — exclude it from notation
+    if let Some(last) = args.last() {
+        if last.parse::<u32>().is_ok() && args.len() > 1 {
+            let notation_args = &args[..args.len() - 1];
+            let notation: String = notation_args.iter()
+                .map(|s| *s)
+                .collect::<alloc::vec::Vec<&str>>()
+                .join(" ");
+            let n = notation.trim();
+            if (n.starts_with('"') && n.ends_with('"'))
+                || (n.starts_with('\'') && n.ends_with('\''))
+            {
+                return String::from(&n[1..n.len() - 1]);
+            }
+            return String::from(n);
+        }
+    }
+
+    String::from(trimmed)
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Live Visualizer Effects (TrustLang-scripted, no recompile)
 // ═══════════════════════════════════════════════════════════════════════════════
 
+#[cfg(feature = "daw")]
 pub(super) fn cmd_vizfx(args: &[&str]) {
     match args.first().copied() {
         None | Some("help") | Some("--help") => {
@@ -3768,6 +4276,7 @@ pub(super) fn cmd_vizfx(args: &[&str]) {
 // Audio File Player / Visualizer
 // ═══════════════════════════════════════════════════════════════════════════════
 
+#[cfg(feature = "daw")]
 pub(super) fn cmd_play(args: &[&str]) {
     let path = args.first().copied().unwrap_or("");
     if path.is_empty() || path == "help" || path == "--help" {
@@ -3820,6 +4329,7 @@ pub(super) fn cmd_play(args: &[&str]) {
 // TrustDAW — Digital Audio Workstation
 // ═══════════════════════════════════════════════════════════════════════════════
 
+#[cfg(feature = "daw")]
 pub(super) fn cmd_daw(args: &[&str]) {
     match args.first().copied() {
         Some("init") | None => {
@@ -4073,6 +4583,7 @@ pub(super) fn cmd_daw(args: &[&str]) {
     }
 }
 
+#[cfg(feature = "daw")]
 fn cmd_daw_track(args: &[&str]) {
     match args.first().copied() {
         Some("add") | Some("new") => {
@@ -4177,6 +4688,7 @@ fn cmd_daw_track(args: &[&str]) {
     }
 }
 
+#[cfg(feature = "daw")]
 fn cmd_daw_note(args: &[&str]) {
     match args.first().copied() {
         Some("add") => {
@@ -4251,6 +4763,7 @@ fn cmd_daw_note(args: &[&str]) {
     }
 }
 
+#[cfg(feature = "daw")]
 fn cmd_daw_mixer(args: &[&str]) {
     match args.first().copied() {
         Some("vol") | Some("volume") => {
@@ -4437,13 +4950,30 @@ pub(super) fn cmd_lshw() {
     crate::println_color!(COLOR_CYAN, "Total: {} PCI devices", devices.len());
 }
 
+#[cfg(feature = "amdgpu")]
 pub(super) fn cmd_gpu(args: &[&str]) {
     if args.first() == Some(&"--help") || args.first() == Some(&"-h") {
-        crate::println!("Usage: gpu [info|dcn|modes]");
+        crate::println!("Usage: gpu [info|dump|pci|dcn|modes|mmio|mc|sdma|heap|rom|igpu|list|select|test-all|regscan]");
         crate::println!("  gpu         Show GPU summary");
         crate::println!("  gpu info    Detailed GPU information");
+        crate::println!("  gpu list    List ALL AMD GPUs on PCI bus");
+        crate::println!("  gpu select <bus>  Select GPU by PCI bus (hex)");
+        crate::println!("  gpu test-all      Run cp-v75 on ALL GPUs");
+        crate::println!("  gpu dump    Full register dump (NV50 debug)");
+        crate::println!("  gpu pci     Raw PCI probe (even if init failed)");
         crate::println!("  gpu dcn     Display engine (DCN) status");
         crate::println!("  gpu modes   List standard display modes");
+        crate::println!("  gpu mmio <off> [val]  Read/write GPU MMIO register");
+        crate::println!("  gpu mc [diag|setup]   MC diagnostic/setup");
+        crate::println!("  gpu vram [step]       VRAM BAR0 access diagnostic");
+        crate::println!("  gpu rom               Read/check VBIOS ROM header");
+        crate::println!("  gpu igpu              Check Intel iGPU status");
+        crate::println!("  gpu sdma <step>       SDMA staged init");
+        crate::println!("  gpu pcie [retrain [g]] PCIe link diag / force Gen3");
+        crate::println!("  gpu smu [status|start|send] SMU mailbox diagnostic");
+        crate::println!("  gpu heap              Heap free/used");
+        crate::println!("  gpu trace [dump|clear] MMIO ring-buffer (feature mmio-trace)");
+        crate::println!("  gpu regscan <sub>     Register scanner (bitflip/anomaly/hidden)");
         return;
     }
     
@@ -4516,6 +5046,37 @@ pub(super) fn cmd_gpu(args: &[&str]) {
                 }
             }
         }
+        "dump" | "regs" | "debug" => {
+            crate::println_color!(COLOR_CYAN, "=== NVIDIA NV50 Register Dump ===");
+            crate::println!();
+            
+            if !crate::drivers::nvidia::is_detected() {
+                crate::println!("NVIDIA GPU not detected. Trying raw PCI probe...");
+                crate::println!();
+                for line in crate::drivers::nvidia::probe_pci_raw() {
+                    crate::println!("{}", line);
+                }
+                return;
+            }
+            
+            for line in crate::drivers::nvidia::dump_registers() {
+                crate::println!("{}", line);
+            }
+        }
+        "pci" | "probe" => {
+            crate::println_color!(COLOR_CYAN, "=== GPU PCI Probe ===");
+            crate::println!();
+            for line in crate::drivers::nvidia::probe_pci_raw() {
+                crate::println!("{}", line);
+            }
+        }
+        "vramregs" => {
+            crate::println_color!(COLOR_CYAN, "=== AMD VRAM Register Dump ===");
+            crate::println!();
+            for line in crate::drivers::amdgpu::dump_vram_regs() {
+                crate::println!("{}", line);
+            }
+        }
         "dcn" | "display" => {
             crate::println_color!(COLOR_CYAN, "=== DCN Display Engine ===");
             crate::println!();
@@ -4536,6 +5097,1704 @@ pub(super) fn cmd_gpu(args: &[&str]) {
             crate::println!();
             for (i, mode) in crate::drivers::amdgpu::dcn::standard_modes().iter().enumerate() {
                 crate::println!("  [{}] {}", i, mode.modeline());
+            }
+        }
+        // ── Live GPU MMIO read/write ──
+        "mmio" => {
+            if !crate::drivers::amdgpu::is_detected() {
+                crate::println!("AMD GPU not detected");
+                return;
+            }
+            let info = match crate::drivers::amdgpu::get_info() {
+                Some(i) => i,
+                None => { crate::println!("No GPU info"); return; }
+            };
+            let mmio = info.mmio_base_virt;
+            if mmio == 0 { crate::println!("MMIO base is 0"); return; }
+
+            match args.len() {
+                2 => {
+                    // gpu mmio <offset> — read
+                    let off = match u32::from_str_radix(args[1].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+                        Ok(v) => v,
+                        Err(_) => { crate::println!("Bad hex offset: {}", args[1]); return; }
+                    };
+                    let val = unsafe { crate::drivers::amdgpu::mmio_read32(mmio, off) };
+                    crate::println!("MMIO[{:#06X}] = {:#010X} ({})", off, val, val);
+                }
+                3 => {
+                    // gpu mmio <offset> <value> — write
+                    let off = match u32::from_str_radix(args[1].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+                        Ok(v) => v,
+                        Err(_) => { crate::println!("Bad hex offset: {}", args[1]); return; }
+                    };
+                    let val = match u32::from_str_radix(args[2].trim_start_matches("0x").trim_start_matches("0X"), 16) {
+                        Ok(v) => v,
+                        Err(_) => { crate::println!("Bad hex value: {}", args[2]); return; }
+                    };
+                    unsafe { crate::drivers::amdgpu::mmio_write32(mmio, off, val); }
+                    let rb = unsafe { crate::drivers::amdgpu::mmio_read32(mmio, off) };
+                    crate::println!("MMIO[{:#06X}] written {:#010X}, readback={:#010X}", off, val, rb);
+                }
+                _ => {
+                    crate::println!("Usage: gpu mmio <hex_offset> [hex_value]");
+                }
+            }
+        }
+        // ── VRAM BAR0 access diagnostic ──
+        "vram" => {
+            let step = args.get(1).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+            crate::println!("VRAM diag step {}", step);
+
+            if step >= 1 {
+                let det = crate::drivers::amdgpu::is_detected();
+                crate::println!("detected: {}", det);
+                if !det { return; }
+            }
+            if step >= 2 {
+                let info = match crate::drivers::amdgpu::get_info() {
+                    Some(i) => i,
+                    None => { crate::println!("no info"); return; }
+                };
+                crate::println!("mmio={:#X} vram_phys={:#X} vram_sz={:#X}",
+                    info.mmio_base_virt, info.vram_aperture_phys, info.vram_aperture_size);
+            }
+            if step >= 3 {
+                if let Some(info) = crate::drivers::amdgpu::get_info() {
+                    let srbm = unsafe { crate::drivers::amdgpu::mmio_read32(info.mmio_base_virt, 0x0E50) };
+                    crate::println!("SRBM_STATUS: {:#010X}", srbm);
+                } else {
+                    crate::println!("SRBM_STATUS: (GPU not initialized)");
+                }
+            }
+            if step >= 4 {
+                if let Some(info) = crate::drivers::amdgpu::get_info() {
+                    let fb = unsafe { crate::drivers::amdgpu::mmio_read32(info.mmio_base_virt, 0x2024) };
+                    crate::println!("FB_LOC: {:#010X}", fb);
+                } else {
+                    crate::println!("FB_LOC: (GPU not initialized)");
+                }
+            }
+            if step >= 5 {
+                if let Some(info) = crate::drivers::amdgpu::get_info() {
+                    let ms = unsafe { crate::drivers::amdgpu::mmio_read32(info.mmio_base_virt, 0x5428) };
+                    crate::println!("CONFIG_MEMSIZE: {:#010X}", ms);
+                } else {
+                    crate::println!("CONFIG_MEMSIZE: (GPU not initialized)");
+                }
+            }
+            if step >= 6 {
+                // Bridge PCI
+                let br_cmd = crate::pci::config_read16(0, 1, 0, 0x04);
+                crate::println!("Bridge cmd: {:#06X}", br_cmd);
+            }
+            if step >= 7 {
+                let pf = crate::pci::config_read(0, 1, 0, 0x24);
+                crate::println!("Bridge PF base/limit: {:#010X}", pf);
+            }
+        }
+        // ── VBIOS ROM header check ──
+        "rom" => {
+            if !crate::drivers::amdgpu::is_detected() {
+                crate::println!("AMD GPU not detected");
+                return;
+            }
+            let info = match crate::drivers::amdgpu::get_info() {
+                Some(i) => i,
+                None => { crate::println!("No GPU info"); return; }
+            };
+            let (bus, dev, func) = (info.bus, info.device, info.function);
+
+            // 1. Check Expansion ROM BAR
+            let exp_rom = crate::pci::config_read(bus, dev, func, 0x30);
+            crate::println!("EXP_ROM BAR: {:#010X} enabled={}", exp_rom, exp_rom & 1);
+
+            // 2. Enable Expansion ROM if not enabled
+            let rom_base = exp_rom & 0xFFFFF800;
+            if rom_base == 0 {
+                crate::println!("No ROM BAR assigned by BIOS");
+                // Try reading via MMIO ROM copy (offset 0 of MMIO space sometimes has VBIOS shadow)
+                crate::println!("Trying MMIO ROM shadow...");
+                // On Polaris, VBIOS is accessible via SMC ROM access
+                let mmio = info.mmio_base_virt;
+                // Read first 16 bytes via indirect SMN access to ROM
+                // ROM_INDEX = 0x28, ROM_DATA = 0x2C (legacy)
+                unsafe {
+                    crate::drivers::amdgpu::mmio_write32(mmio, 0x28, 0);
+                    let d0 = crate::drivers::amdgpu::mmio_read32(mmio, 0x2C);
+                    crate::println!("ROM_DATA[0]: {:#010X} (expect 0xAA55xxxx)", d0);
+                    crate::drivers::amdgpu::mmio_write32(mmio, 0x28, 4);
+                    let d1 = crate::drivers::amdgpu::mmio_read32(mmio, 0x2C);
+                    crate::println!("ROM_DATA[4]: {:#010X}", d1);
+                }
+                return;
+            }
+
+            // 3. Enable ROM decoding
+            crate::pci::config_write(bus, dev, func, 0x30, rom_base | 1);
+            crate::println!("ROM enabled at phys {:#010X}", rom_base);
+
+            // 4. Map ROM into virtual memory and read header
+            let rom_size: usize = 128 * 1024; // 128KB typical
+            match crate::memory::map_mmio(rom_base as u64, rom_size) {
+                Ok(rom_virt) => {
+                    let rv = rom_virt as usize;
+                    let magic = unsafe { core::ptr::read_volatile(rv as *const u16) };
+                    let rom_len = unsafe { core::ptr::read_volatile((rv + 2) as *const u8) };
+                    crate::println!("ROM magic: {:#06X} (expect 0xAA55)", magic);
+                    crate::println!("ROM size: {} * 512 = {} bytes", rom_len, rom_len as u32 * 512);
+
+                    // Check for ATOMBIOS signature at offset 0x30 (PCI data ptr) -> ATOMBIOS string
+                    let pci_data_ptr = unsafe { core::ptr::read_volatile((rv + 0x18) as *const u16) };
+                    crate::println!("PCI data offset: {:#06X}", pci_data_ptr);
+
+                    if pci_data_ptr > 0 && (pci_data_ptr as usize) < rom_size - 4 {
+                        let pcir_sig = unsafe { core::ptr::read_volatile((rv + pci_data_ptr as usize) as *const u32) };
+                        crate::println!("PCIR signature: {:#010X} (expect 0x52494350 = 'PCIR')", pcir_sig);
+                        if pcir_sig == 0x52494350 {
+                            let vid = unsafe { core::ptr::read_volatile((rv + pci_data_ptr as usize + 4) as *const u16) };
+                            let did = unsafe { core::ptr::read_volatile((rv + pci_data_ptr as usize + 6) as *const u16) };
+                            crate::println!("ROM PCI ID: {:04X}:{:04X}", vid, did);
+                        }
+                    }
+
+                    // Check for ATOM string
+                    let atom_offset = unsafe { core::ptr::read_volatile((rv + 0x48) as *const u16) };
+                    if atom_offset > 0 && (atom_offset as usize) < rom_size - 4 {
+                        let a0 = unsafe { core::ptr::read_volatile((rv + atom_offset as usize) as *const u8) };
+                        let a1 = unsafe { core::ptr::read_volatile((rv + atom_offset as usize + 1) as *const u8) };
+                        let a2 = unsafe { core::ptr::read_volatile((rv + atom_offset as usize + 2) as *const u8) };
+                        let a3 = unsafe { core::ptr::read_volatile((rv + atom_offset as usize + 3) as *const u8) };
+                        crate::println!("ATOM sig @{:#X}: {:02X} {:02X} {:02X} {:02X} = '{}{}{}{}'",
+                            atom_offset, a0, a1, a2, a3,
+                            a0 as char, a1 as char, a2 as char, a3 as char);
+                    }
+
+                    // Dump first 64 bytes hex
+                    crate::println!("ROM first 64 bytes:");
+                    for row in 0..4u32 {
+                        let off = (row * 16) as usize;
+                        let d = |o: usize| unsafe { core::ptr::read_volatile((rv + o) as *const u32) };
+                        crate::println!("  [{:02X}] {:08X} {:08X} {:08X} {:08X}",
+                            off, d(off), d(off+4), d(off+8), d(off+12));
+                    }
+
+                    crate::memory::unmap_mmio(rom_virt, rom_size);
+                }
+                Err(e) => {
+                    crate::println!("Failed to map ROM: {}", e);
+                }
+            }
+
+            // 5. Disable ROM decoding
+            crate::pci::config_write(bus, dev, func, 0x30, rom_base);
+        }
+        // ── Intel iGPU check ──
+        "igpu" => {
+            // Intel iGPU is typically at 00:02.0
+            let vid = crate::pci::config_read16(0, 2, 0, 0x00);
+            let did = crate::pci::config_read16(0, 2, 0, 0x02);
+            if vid == 0xFFFF {
+                crate::println!("No device at 00:02.0 (iGPU disabled or absent)");
+            } else {
+                let cmd = crate::pci::config_read16(0, 2, 0, 0x04);
+                let bar0 = crate::pci::config_read(0, 2, 0, 0x10);
+                let bar2 = crate::pci::config_read(0, 2, 0, 0x18);
+                crate::println!("iGPU at 00:02.0: {:04X}:{:04X}", vid, did);
+                crate::println!("  CMD={:#06X} MemEn={} BusMst={}", cmd, (cmd >> 1) & 1, (cmd >> 2) & 1);
+                crate::println!("  BAR0={:#010X} BAR2={:#010X}", bar0, bar2);
+                if (cmd >> 1) & 1 == 1 {
+                    crate::println!("  iGPU is ACTIVE (memory space enabled)");
+                    crate::println!("  >>> BIOS uses iGPU as primary — RX 480 NOT POST'd!");
+                    crate::println!("  Fix: BIOS setup → Primary Display = PEG/PCIe");
+                } else {
+                    crate::println!("  iGPU memory space DISABLED");
+                }
+            }
+        }
+        // ── MC diagnostic / setup ──
+        "mc" => {
+            if !crate::drivers::amdgpu::is_detected() {
+                crate::println!("AMD GPU not detected");
+                return;
+            }
+            let info = match crate::drivers::amdgpu::get_info() {
+                Some(i) => i,
+                None => { crate::println!("No GPU info"); return; }
+            };
+            let mmio = info.mmio_base_virt;
+            let sub = args.get(1).copied().unwrap_or("diag");
+            match sub {
+                "diag" | "" => {
+                    crate::println_color!(COLOR_CYAN, "=== MC Diagnostic ===");
+                    crate::drivers::amdgpu::firmware::polaris_mc_diag(mmio);
+                }
+                "setup" => {
+                    crate::println_color!(COLOR_YELLOW, "=== MC Setup (writes registers!) ===");
+                    if !crate::drivers::amdgpu::firmware::polaris_alloc_buffers() {
+                        crate::println!("Buffer allocation failed");
+                        return;
+                    }
+                    crate::drivers::amdgpu::firmware::polaris_mc_setup(mmio);
+                }
+                _ => crate::println!("Usage: gpu mc [diag|setup]"),
+            }
+        }
+        // ── Multi-GPU: list all AMD GPUs ──
+        "list" | "ls" => {
+            let gpus = crate::drivers::amdgpu::list_all_gpus();
+            if gpus.is_empty() {
+                crate::println!("No AMD GPUs found");
+                return;
+            }
+            let current = crate::drivers::amdgpu::get_info();
+            let cur_bus = current.as_ref().map(|i| i.bus).unwrap_or(0xFF);
+            crate::println_color!(COLOR_CYAN, "=== AMD GPUs ({} found) ===", gpus.len());
+            for (idx, g) in gpus.iter().enumerate() {
+                let marker = if g.bus == cur_bus { " ◄ active" } else { "" };
+                crate::println!("  [{}] bus {:02X} — {:04X}:{:04X} rev {:02X} — PCIe x{} Gen{} — VRAM {} MB{}",
+                    idx, g.bus, g.vendor_id, g.device_id, g.revision,
+                    g.pcie_link_width, g.pcie_link_speed,
+                    g.vram_size / (1024 * 1024), marker);
+            }
+        }
+        // ── Multi-GPU: select GPU by bus number ──
+        "select" | "sel" | "use" => {
+            let bus_str = match args.get(1) {
+                Some(s) => *s,
+                None => { crate::println!("Usage: gpu select <bus_hex>  (e.g. gpu select 01)"); return; }
+            };
+            let bus = u8::from_str_radix(bus_str, 16).unwrap_or(0xFF);
+            if crate::drivers::amdgpu::select_gpu_by_bus(bus) {
+                if let Some(info) = crate::drivers::amdgpu::get_info() {
+                    crate::println!("Selected GPU bus {:02X}: {:04X}:{:04X} rev {:02X} PCIe x{} Gen{}",
+                        info.bus, info.vendor_id, info.device_id, info.revision,
+                        info.pcie_link_width, info.pcie_link_speed);
+                }
+            } else {
+                crate::println!("No AMD GPU found on bus {:#04X}", bus);
+            }
+        }
+        // ── Multi-GPU: run cp-v75 on ALL GPUs ──
+        "test-all" | "testall" => {
+            let gpus = crate::drivers::amdgpu::list_all_gpus();
+            if gpus.is_empty() {
+                crate::println!("No AMD GPUs found");
+                return;
+            }
+            crate::println_color!(COLOR_CYAN, "=== Testing {} GPUs ===", gpus.len());
+            for (idx, g) in gpus.iter().enumerate() {
+                crate::println!();
+                crate::println_color!(COLOR_YELLOW, "──── GPU #{} bus {:02X} ({:04X}:{:04X} rev {:02X} PCIe x{}) ────",
+                    idx, g.bus, g.vendor_id, g.device_id, g.revision, g.pcie_link_width);
+                crate::drivers::amdgpu::firmware::polaris_cp_v75(g.mmio_base_virt, g.vram_aperture_phys);
+                crate::println!();
+            }
+            crate::println_color!(COLOR_CYAN, "=== All {} GPUs tested ===", gpus.len());
+        }
+        // ── PCIe link diagnostic / retrain ──
+        "pcie" => {
+            if !crate::drivers::amdgpu::is_detected() {
+                crate::println!("AMD GPU not detected");
+                return;
+            }
+            let info = match crate::drivers::amdgpu::get_info() {
+                Some(i) => i,
+                None => { crate::println!("No GPU info"); return; }
+            };
+            // Reconstruct a PciDevice handle from bus/dev/func.
+            let gpu_dev = match crate::pci::get_devices()
+                .into_iter()
+                .find(|d| d.bus == info.bus && d.device == info.device && d.function == info.function)
+            {
+                Some(d) => d,
+                None => { crate::println!("GPU not in PCI table"); return; }
+            };
+
+            let speed_str = |s: u8| match s {
+                1 => "2.5 GT/s (Gen1)",
+                2 => "5.0 GT/s (Gen2)",
+                3 => "8.0 GT/s (Gen3)",
+                4 => "16 GT/s (Gen4)",
+                _ => "unknown",
+            };
+
+            let (cur_s, cur_w) = (info.pcie_link_speed, info.pcie_link_width);
+            let (max_s, max_w) = crate::drivers::amdgpu::read_pcie_link_caps(&gpu_dev);
+            let tgt_s = crate::drivers::amdgpu::read_pcie_target_speed(&gpu_dev);
+
+            crate::println_color!(COLOR_CYAN, "=== GPU PCIe Link ===");
+            crate::println!("GPU  {:02X}:{:02X}.{}  {:04X}:{:04X}",
+                info.bus, info.device, info.function, info.vendor_id, info.device_id);
+            crate::println!("  Current : {} x{}", speed_str(cur_s), cur_w);
+            crate::println!("  Max cap : {} x{}", speed_str(max_s), max_w);
+            crate::println!("  Target  : {}", speed_str(tgt_s));
+
+            match crate::drivers::amdgpu::find_parent_bridge(&gpu_dev) {
+                Some(br) => {
+                    let (b_cur_s, b_cur_w) = {
+                        // Re-read live from bridge (info struct only has GPU side).
+                        if let Some(cap) = crate::pci::find_capability(&br, 0x10) {
+                            let ls = crate::pci::config_read16(br.bus, br.device, br.function, cap + 0x12);
+                            ((ls & 0xF) as u8, ((ls >> 4) & 0x3F) as u8)
+                        } else { (0, 0) }
+                    };
+                    let (b_max_s, b_max_w) = crate::drivers::amdgpu::read_pcie_link_caps(&br);
+                    let b_tgt_s = crate::drivers::amdgpu::read_pcie_target_speed(&br);
+                    crate::println!("Bridge {:02X}:{:02X}.{}  {:04X}:{:04X}",
+                        br.bus, br.device, br.function, br.vendor_id, br.device_id);
+                    crate::println!("  Current : {} x{}", speed_str(b_cur_s), b_cur_w);
+                    crate::println!("  Max cap : {} x{}", speed_str(b_max_s), b_max_w);
+                    crate::println!("  Target  : {}", speed_str(b_tgt_s));
+                }
+                None => crate::println!("Parent bridge: NOT FOUND"),
+            }
+
+            if args.get(1) == Some(&"retrain") {
+                let gen: u8 = args.get(2)
+                    .and_then(|s| s.parse::<u8>().ok())
+                    .unwrap_or(3);
+                crate::println!();
+                crate::println_color!(COLOR_YELLOW, "Retraining link to Gen{}...", gen);
+                let r = unsafe { crate::drivers::amdgpu::force_pcie_gen(&gpu_dev, gen) };
+                match r {
+                    Ok((s, w)) => {
+                        crate::println_color!(COLOR_GREEN, "Retrain OK: {} x{}", speed_str(s), w);
+                    }
+                    Err(e) => {
+                        crate::println_color!(COLOR_RED, "Retrain failed: {}", e);
+                    }
+                }
+            } else {
+                crate::println!();
+                crate::println!("Use: gpu pcie retrain [gen]   (default gen=3)");
+            }
+        }
+        // ── SDMA staged init ──
+        "sdma" => {
+            if !crate::drivers::amdgpu::is_detected() {
+                crate::println!("AMD GPU not detected");
+                return;
+            }
+            let info = match crate::drivers::amdgpu::get_info() {
+                Some(i) => i,
+                None => { crate::println!("No GPU info"); return; }
+            };
+            let mmio = info.mmio_base_virt;
+            let sub = args.get(1).copied().unwrap_or("status");
+            match sub {
+                "status" | "" => {
+                    crate::println_color!(COLOR_CYAN, "=== SDMA Status ===");
+                    crate::drivers::amdgpu::firmware::polaris_mc_diag(mmio);
+                }
+                "alloc" => {
+                    let ok = crate::drivers::amdgpu::firmware::polaris_alloc_buffers();
+                    if !ok { crate::println!("Buffer alloc FAILED"); }
+                }
+                "reset" => {
+                    crate::println_color!(COLOR_YELLOW, "SRBM soft reset SDMA...");
+                    crate::drivers::amdgpu::firmware::polaris_sdma_reset(mmio);
+                }
+                "fw" => {
+                    crate::println_color!(COLOR_YELLOW, "Loading SDMA firmware...");
+                    crate::drivers::amdgpu::firmware::polaris_sdma_load_fw(mmio);
+                }
+                "ring" => {
+                    crate::println_color!(COLOR_YELLOW, "Setting up SDMA rings...");
+                    crate::drivers::amdgpu::firmware::polaris_sdma_setup_rings(mmio);
+                }
+                "test" => {
+                    crate::println_color!(COLOR_YELLOW, "Running SDMA self-test...");
+                    crate::apic::watchdog_arm(30_000); // 30s: auto-reboot if GPU hangs
+                    crate::drivers::amdgpu::firmware::polaris_sdma_self_test(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "vram-nop" => {
+                    crate::println_color!(COLOR_YELLOW, "Running SDMA VRAM NOP test...");
+                    crate::apic::watchdog_arm(10_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_vram_nop_test(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "init" => {
+                    crate::println_color!(COLOR_YELLOW, "=== Full SDMA Init ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_full_init(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "init-noctxsw" => {
+                    crate::println_color!(COLOR_YELLOW, "=== Full SDMA Init (AUTO_CTXSW off) ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_full_init_no_ctxsw(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "init-holdf32" => {
+                    crate::println_color!(COLOR_YELLOW, "=== Full SDMA Init (F32 held halted) ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_full_init_hold_f32(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "init-latef32" => {
+                    crate::println_color!(COLOR_YELLOW, "=== Full SDMA Init (F32 unhalted late) ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_full_init_late_f32(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "init-vram" => {
+                    crate::println_color!(COLOR_YELLOW, "=== SDMA Init V15a — VRAM ring, no GMC ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_init_vram(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "init-gart" => {
+                    crate::println_color!(COLOR_YELLOW, "=== SDMA Init V15b — sysRAM + GART ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_init_gart(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "diag" => {
+                    crate::println_color!(COLOR_YELLOW, "=== Phase 0: Pre-init diagnostic dump ===");
+                    crate::drivers::amdgpu::firmware::polaris_sdma_diag(mmio);
+                }
+                "regs" => {
+                    // Read-only dump of every SDMA0 register suspected of holding
+                    // a stale VRAM pointer that could explain VM faults outside
+                    // the GART aperture. Hunt for sources of writes to wrong MC.
+                    use crate::drivers::amdgpu::mmio_read32;
+                    crate::apic::watchdog_arm(3_000);
+                    // SDMA0 dword indices — POLARIS / sdma_v3_0 (oss_3_0_d.h).
+                    // Distinct from sdma_v4 (Navi) — do NOT use 0x3401 for CNTL.
+                    const SDMA0_UCODE_ADDR:          u32 = 0x3400 * 4;
+                    const SDMA0_UCODE_DATA:          u32 = 0x3401 * 4;
+                    const SDMA0_POWER_CNTL:          u32 = 0x3402 * 4;
+                    const SDMA0_CLK_CTRL:            u32 = 0x3403 * 4;
+                    const SDMA0_CNTL:                u32 = 0x3404 * 4; // Polaris real CNTL
+                    const SDMA0_CHICKEN_BITS:        u32 = 0x3405 * 4;
+                    const SDMA0_TILING_CONFIG:       u32 = 0x3406 * 4;
+                    const SDMA0_SEM_WAIT_FAIL_TIMER_CNTL: u32 = 0x3409 * 4;
+                    const SDMA0_FREEZE:              u32 = 0x340C * 4;
+                    const SDMA0_STATUS_REG:          u32 = 0x340D * 4;
+                    const SDMA0_F32_CNTL:            u32 = 0x3412 * 4;
+                    const SDMA0_PHASE0_QUANTUM:      u32 = 0x3414 * 4;
+                    const SDMA0_PHASE1_QUANTUM:      u32 = 0x3415 * 4;
+                    // GFX ring registers (same indices Polaris/Navi here)
+                    const SDMA0_GFX_RB_CNTL:         u32 = 0x3480 * 4;
+                    const SDMA0_GFX_RB_BASE:         u32 = 0x3481 * 4;
+                    const SDMA0_GFX_RB_BASE_HI:      u32 = 0x3482 * 4;
+                    const SDMA0_GFX_RB_RPTR:         u32 = 0x3483 * 4;
+                    const SDMA0_GFX_RB_WPTR:         u32 = 0x3484 * 4;
+                    const SDMA0_GFX_RB_WPTR_POLL_CNTL:    u32 = 0x3485 * 4;
+                    const SDMA0_GFX_RB_WPTR_POLL_ADDR_HI: u32 = 0x3486 * 4;
+                    const SDMA0_GFX_RB_WPTR_POLL_ADDR_LO: u32 = 0x3487 * 4;
+                    const SDMA0_GFX_RB_RPTR_ADDR_HI: u32 = 0x3488 * 4;
+                    const SDMA0_GFX_RB_RPTR_ADDR_LO: u32 = 0x3489 * 4;
+                    const SDMA0_GFX_IB_CNTL:         u32 = 0x348A * 4;
+                    const SDMA0_GFX_IB_RPTR:         u32 = 0x348B * 4;
+                    const SDMA0_GFX_IB_OFFSET:       u32 = 0x348C * 4;
+                    const SDMA0_GFX_IB_BASE_LO:      u32 = 0x348D * 4;
+                    const SDMA0_GFX_IB_BASE_HI:      u32 = 0x348E * 4;
+                    const SDMA0_GFX_IB_SIZE:         u32 = 0x348F * 4;
+                    const SDMA0_GFX_SKIP_CNTL:       u32 = 0x3490 * 4;
+                    const SDMA0_GFX_CONTEXT_STATUS:  u32 = 0x3491 * 4;
+                    const SDMA0_GFX_DOORBELL:        u32 = 0x3492 * 4;
+                    const SDMA0_GFX_CONTEXT_CNTL:    u32 = 0x3493 * 4;
+                    const SDMA0_GFX_VIRTUAL_ADDR:    u32 = 0x34A7 * 4;
+                    const SDMA0_GFX_APE1_CNTL:       u32 = 0x34A8 * 4;
+                    const SDMA0_GFX_MINOR_PTR_UPDATE:u32 = 0x349D * 4;
+                    // HDP non-surface base (defaults to VRAM low, can absorb stray writes)
+                    const POL_HDP_NONSURFACE_BASE:   u32 = 0x0B04;
+                    // VM context0 (for cross-ref)
+                    const POL_VM_CTX0_PF_STATUS: u32 = 0x536 * 4;
+                    const POL_VM_CTX0_PF_ADDR:   u32 = 0x53E * 4;
+
+                    let dump = |name: &str, off: u32| unsafe {
+                        let v = mmio_read32(mmio, off);
+                        crate::println!("  {:<28} [{:#06X}] = {:#010X}", name, off, v);
+                    };
+
+                    crate::println_color!(COLOR_CYAN, "=== SDMA0 register snapshot (read-only) ===");
+                    crate::println!("Engine-level (Polaris/sdma_v3_0):");
+                    dump("SDMA0_UCODE_ADDR",          SDMA0_UCODE_ADDR);
+                    dump("SDMA0_UCODE_DATA",          SDMA0_UCODE_DATA);
+                    dump("SDMA0_POWER_CNTL",          SDMA0_POWER_CNTL);
+                    dump("SDMA0_CLK_CTRL",            SDMA0_CLK_CTRL);
+                    dump("SDMA0_CNTL",                SDMA0_CNTL);
+                    dump("SDMA0_CHICKEN_BITS",        SDMA0_CHICKEN_BITS);
+                    dump("SDMA0_TILING_CONFIG",       SDMA0_TILING_CONFIG);
+                    dump("SDMA0_SEM_WAIT_TIMER",      SDMA0_SEM_WAIT_FAIL_TIMER_CNTL);
+                    dump("SDMA0_FREEZE",              SDMA0_FREEZE);
+                    dump("SDMA0_STATUS_REG",          SDMA0_STATUS_REG);
+                    dump("SDMA0_F32_CNTL",            SDMA0_F32_CNTL);
+                    dump("SDMA0_PHASE0_QUANTUM",      SDMA0_PHASE0_QUANTUM);
+                    dump("SDMA0_PHASE1_QUANTUM",      SDMA0_PHASE1_QUANTUM);
+                    crate::println!("Ring buffer:");
+                    dump("RB_CNTL",                    SDMA0_GFX_RB_CNTL);
+                    dump("RB_BASE",                    SDMA0_GFX_RB_BASE);
+                    dump("RB_BASE_HI",                 SDMA0_GFX_RB_BASE_HI);
+                    dump("RB_RPTR",                    SDMA0_GFX_RB_RPTR);
+                    dump("RB_WPTR",                    SDMA0_GFX_RB_WPTR);
+                    dump("RB_RPTR_ADDR_HI",            SDMA0_GFX_RB_RPTR_ADDR_HI);
+                    dump("RB_RPTR_ADDR_LO",            SDMA0_GFX_RB_RPTR_ADDR_LO);
+                    crate::println!("WPTR poll (suspect: may point to stale VRAM):");
+                    dump("WPTR_POLL_CNTL",             SDMA0_GFX_RB_WPTR_POLL_CNTL);
+                    dump("WPTR_POLL_ADDR_HI",          SDMA0_GFX_RB_WPTR_POLL_ADDR_HI);
+                    dump("WPTR_POLL_ADDR_LO",          SDMA0_GFX_RB_WPTR_POLL_ADDR_LO);
+                    crate::println!("IB / context:");
+                    dump("IB_CNTL",                    SDMA0_GFX_IB_CNTL);
+                    dump("IB_RPTR",                    SDMA0_GFX_IB_RPTR);
+                    dump("IB_OFFSET",                  SDMA0_GFX_IB_OFFSET);
+                    dump("IB_BASE_LO",                 SDMA0_GFX_IB_BASE_LO);
+                    dump("IB_BASE_HI",                 SDMA0_GFX_IB_BASE_HI);
+                    dump("IB_SIZE",                    SDMA0_GFX_IB_SIZE);
+                    dump("SKIP_CNTL",                  SDMA0_GFX_SKIP_CNTL);
+                    dump("CONTEXT_STATUS",             SDMA0_GFX_CONTEXT_STATUS);
+                    dump("CONTEXT_CNTL",               SDMA0_GFX_CONTEXT_CNTL);
+                    dump("DOORBELL",                   SDMA0_GFX_DOORBELL);
+                    dump("MINOR_PTR_UPDATE",           SDMA0_GFX_MINOR_PTR_UPDATE);
+                    dump("VIRTUAL_ADDR",               SDMA0_GFX_VIRTUAL_ADDR);
+                    dump("APE1_CNTL",                  SDMA0_GFX_APE1_CNTL);
+                    crate::println!("Cross-ref:");
+                    dump("HDP_NONSURFACE_BASE",        POL_HDP_NONSURFACE_BASE);
+                    dump("VM_CTX0_PF_STATUS",          POL_VM_CTX0_PF_STATUS);
+                    dump("VM_CTX0_PF_ADDR",            POL_VM_CTX0_PF_ADDR);
+
+                    // System aperture (Polaris/Tonga indices) — the suspect.
+                    // If SYS_APR_DEFAULT << 12 == 0xF400075000, we found the
+                    // origin: BIOS-default scratch page never overwritten.
+                    const POL_MC_VM_SYS_APR_LOW:     u32 = 0x80D * 4;
+                    const POL_MC_VM_SYS_APR_HIGH:    u32 = 0x80E * 4;
+                    const POL_MC_VM_SYS_APR_DEFAULT: u32 = 0x80F * 4;
+                    const POL_MC_VM_FB_LOCATION:     u32 = 0x809 * 4;
+                    const POL_MC_VM_FB_OFFSET:       u32 = 0x81A * 4;
+                    crate::println!("System aperture (suspect for FB+0x75000 fault):");
+                    dump("MC_VM_FB_LOCATION",          POL_MC_VM_FB_LOCATION);
+                    dump("MC_VM_FB_OFFSET",            POL_MC_VM_FB_OFFSET);
+                    dump("MC_VM_SYS_APR_LOW",          POL_MC_VM_SYS_APR_LOW);
+                    dump("MC_VM_SYS_APR_HIGH",         POL_MC_VM_SYS_APR_HIGH);
+                    dump("MC_VM_SYS_APR_DEFAULT",      POL_MC_VM_SYS_APR_DEFAULT);
+                    let sys_def = unsafe { mmio_read32(mmio, POL_MC_VM_SYS_APR_DEFAULT) };
+                    let sys_def_mc = (sys_def as u64) << 12;
+                    crate::println!("  SYS_APR_DEFAULT decoded MC = {:#X}", sys_def_mc);
+                    if sys_def_mc == 0xF400075000 {
+                        crate::println_color!(COLOR_RED,
+                            "  >>> SMOKING GUN: SYS_APR_DEFAULT == fault MC!");
+                    }
+                    // VM context0 PT base / range / fault default
+                    const POL_VM_CTX0_PT_BASE:       u32 = 0x54F * 4;
+                    const POL_VM_CTX0_PT_START:      u32 = 0x557 * 4;
+                    const POL_VM_CTX0_PT_END:        u32 = 0x55F * 4;
+                    const POL_VM_CTX0_PF_DEFAULT:    u32 = 0x546 * 4;
+                    crate::println!("VM context0:");
+                    dump("VM_CTX0_PT_BASE",            POL_VM_CTX0_PT_BASE);
+                    dump("VM_CTX0_PT_START",           POL_VM_CTX0_PT_START);
+                    dump("VM_CTX0_PT_END",             POL_VM_CTX0_PT_END);
+                    dump("VM_CTX0_PF_DEFAULT_ADDR",    POL_VM_CTX0_PF_DEFAULT);
+                    let pfd = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_DEFAULT) };
+                    crate::println!("  PF_DEFAULT decoded MC = {:#X}", (pfd as u64) << 12);
+
+                    // === PF_STATUS bit decode (gmc_8_1_sh_mask.h) ===
+                    let pfst = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
+                    if pfst != 0 {
+                        let prot  =  pfst        & 0xFF;
+                        let cid   = (pfst >> 12) & 0xFF;
+                        let rw    = (pfst >> 24) & 0x1;
+                        let vmid  = (pfst >> 25) & 0xF;
+                        let more  = (pfst >> 31) & 0x1;
+                        crate::println!("PF_STATUS decode {:#010X}:", pfst);
+                        crate::println!("  MORE_FAULTS={}", more);
+                        crate::println!("  CID={:#X} RW={} ({}) VMID={} PROTECTIONS={:#X}",
+                            cid, rw, if rw == 1 {"WRITE"} else {"READ"}, vmid, prot);
+                        // Polaris MC client IDs (subset, gmc_v8_0)
+                        let cid_name = match cid {
+                            0x00 => "CB",  0x01 => "DB",  0x02 => "TC0", 0x03 => "TC1",
+                            0x04 => "CP_COHER", 0x05 => "CP", 0x06 => "RLC",
+                            0x18 => "SDMA0", 0x19 => "SDMA1",
+                            0x1A => "HDP",  0x1B => "VCE", 0x1C => "UVD",
+                            0x1D => "ACP",  0x1E => "SMU", 0x1F => "VMC",
+                            0x80..=0x9F => "GFX (CB/DB/TC variant)",
+                            0xA0..=0xBF => "GFX (TCP/SQ variant)",
+                            0xC0..=0xDF => "GFX/MEC (HQD/IQ variant)",
+                            _ => "(unknown)",
+                        };
+                        crate::println!("  CID -> {}", cid_name);
+                        if vmid != 0 {
+                            crate::println_color!(COLOR_RED,
+                                "  >>> VMID={} (NOT 0) — PT_BASE for this VMID is unprogrammed", vmid);
+                        }
+                    } else {
+                        crate::println!("PF_STATUS = 0 (no fault)");
+                    }
+
+                    crate::apic::watchdog_disarm();
+                }
+                "vm-dump" => {
+                    // Diagnostic ladder step 1 (memory/gpu_unified_memory.md):
+                    // dump every VM_CONTEXT0 / SYS_APR / L1_TLB register live and
+                    // diff against expected values from polaris_gmc_init.
+                    // Goal: confirm whether GMC writes actually stick on this HW.
+                    use crate::drivers::amdgpu::mmio_read32;
+                    crate::apic::watchdog_arm(3_000);
+
+                    // Polaris (gmc_8_1_d.h) — dword indices.
+                    const POL_VM_CTX0_CNTL:        u32 = 0x504 * 4;
+                    const POL_VM_CTX0_CNTL2:       u32 = 0x50C * 4;
+                    const POL_VM_CTX0_PT_BASE:     u32 = 0x54F * 4;
+                    const POL_VM_CTX0_PT_START:    u32 = 0x557 * 4;
+                    const POL_VM_CTX0_PT_END:      u32 = 0x55F * 4;
+                    const POL_VM_CTX0_PF_DEFAULT:  u32 = 0x546 * 4;
+                    const POL_VM_CTX0_PF_STATUS:   u32 = 0x536 * 4;
+                    const POL_VM_CTX0_PF_ADDR:     u32 = 0x53E * 4;
+                    const POL_VM_CTX0_PF_MCCLIENT: u32 = 0x538 * 4;
+                    const POL_MC_VM_SYS_APR_LOW:   u32 = 0x80D * 4;
+                    const POL_MC_VM_SYS_APR_HIGH:  u32 = 0x80E * 4;
+                    const POL_MC_VM_SYS_APR_DEF:   u32 = 0x80F * 4;
+                    const POL_MC_VM_FB_LOCATION:   u32 = 0x809 * 4;
+                    const POL_MC_VM_FB_OFFSET:     u32 = 0x81A * 4;
+                    const POL_MC_VM_MX_L1_TLB_CNTL:u32 = 0x819 * 4;
+                    const POL_VM_L2_CNTL:          u32 = 0x500 * 4;
+                    const POL_VM_L2_CNTL2:         u32 = 0x501 * 4;
+                    const POL_VM_L2_CNTL3:         u32 = 0x502 * 4;
+
+                    let r = |off: u32| -> u32 { unsafe { mmio_read32(mmio, off) } };
+
+                    let row = |name: &str, off: u32, val: u32, expect: Option<u32>| {
+                        match expect {
+                            Some(e) if e == val => crate::println_color!(COLOR_GREEN,
+                                "  {:<32} [{:#06X}] = {:#010X}  (== {:#010X} OK)",
+                                name, off, val, e),
+                            Some(e) => crate::println_color!(COLOR_RED,
+                                "  {:<32} [{:#06X}] = {:#010X}  (!= {:#010X} MISMATCH)",
+                                name, off, val, e),
+                            None => crate::println!(
+                                "  {:<32} [{:#06X}] = {:#010X}", name, off, val),
+                        }
+                    };
+
+                    crate::println_color!(COLOR_CYAN, "=== VM / GMC live dump (CTX0 + SYS_APR + L1_TLB) ===");
+                    crate::println!("Expected values match polaris_gmc_init for VRAM @ FB+0..FB+VRAM_SIZE,");
+                    crate::println!("GART table @ FB+0x380000, ring/WB in GART [0xFF00000..0xFF0FFFF].");
+                    crate::println!();
+
+                    crate::println!("VM context0 control:");
+                    let ctx0  = r(POL_VM_CTX0_CNTL);
+                    let ctx0b = r(POL_VM_CTX0_CNTL2);
+                    row("VM_CTX0_CNTL",         POL_VM_CTX0_CNTL,  ctx0,  Some(0x00FFFED9));
+                    row("VM_CTX0_CNTL2",        POL_VM_CTX0_CNTL2, ctx0b, None);
+
+                    crate::println!("VM context0 page table window (values are PT_BASE>>12 / shift>>12):");
+                    let pt_base  = r(POL_VM_CTX0_PT_BASE);
+                    let pt_start = r(POL_VM_CTX0_PT_START);
+                    let pt_end   = r(POL_VM_CTX0_PT_END);
+                    let pf_def   = r(POL_VM_CTX0_PF_DEFAULT);
+                    row("VM_CTX0_PT_BASE",      POL_VM_CTX0_PT_BASE,  pt_base,  Some(0x0F400380));
+                    row("VM_CTX0_PT_START",     POL_VM_CTX0_PT_START, pt_start, Some(0x0FF00000));
+                    row("VM_CTX0_PT_END",       POL_VM_CTX0_PT_END,   pt_end,   Some(0x0FF0FFFF));
+                    row("VM_CTX0_PF_DEFAULT",   POL_VM_CTX0_PF_DEFAULT, pf_def, None);
+                    crate::println!("    PT_BASE  decoded MC = {:#X}  (expect 0xF400380000 = FB+0x380000)",
+                        (pt_base as u64) << 12);
+                    crate::println!("    PT_START decoded MC = {:#X}  (expect 0xFF00000000)",
+                        (pt_start as u64) << 12);
+                    crate::println!("    PT_END   decoded MC = {:#X}  (expect 0xFF0FFFF000)",
+                        (pt_end   as u64) << 12);
+
+                    crate::println!("FB / system aperture:");
+                    let fb_loc = r(POL_MC_VM_FB_LOCATION);
+                    let fb_off = r(POL_MC_VM_FB_OFFSET);
+                    let sl     = r(POL_MC_VM_SYS_APR_LOW);
+                    let sh     = r(POL_MC_VM_SYS_APR_HIGH);
+                    let sd     = r(POL_MC_VM_SYS_APR_DEF);
+                    row("MC_VM_FB_LOCATION",    POL_MC_VM_FB_LOCATION, fb_loc, None);
+                    row("MC_VM_FB_OFFSET",      POL_MC_VM_FB_OFFSET,   fb_off, None);
+                    row("MC_VM_SYS_APR_LOW",    POL_MC_VM_SYS_APR_LOW, sl, None);
+                    row("MC_VM_SYS_APR_HIGH",   POL_MC_VM_SYS_APR_HIGH, sh, None);
+                    row("MC_VM_SYS_APR_DEFAULT",POL_MC_VM_SYS_APR_DEF, sd, None);
+                    crate::println!("    SYS_APR_LOW  MC = {:#X}", (sl as u64) << 12);
+                    crate::println!("    SYS_APR_HIGH MC = {:#X}", (sh as u64) << 12);
+                    crate::println!("    SYS_APR_DEF  MC = {:#X}  (NOT 0xF400075000 = good)",
+                        (sd as u64) << 12);
+
+                    crate::println!("L1 TLB / L2:");
+                    let l1 = r(POL_MC_VM_MX_L1_TLB_CNTL);
+                    let l2a = r(POL_VM_L2_CNTL);
+                    let l2b = r(POL_VM_L2_CNTL2);
+                    let l2c = r(POL_VM_L2_CNTL3);
+                    row("MC_VM_MX_L1_TLB_CNTL", POL_MC_VM_MX_L1_TLB_CNTL, l1, None);
+                    row("VM_L2_CNTL",           POL_VM_L2_CNTL,  l2a, None);
+                    row("VM_L2_CNTL2",          POL_VM_L2_CNTL2, l2b, None);
+                    row("VM_L2_CNTL3",          POL_VM_L2_CNTL3, l2c, None);
+                    if l1 & 1 == 0 {
+                        crate::println_color!(COLOR_RED,
+                            "    >>> ENABLE_L1_TLB (bit 0) = 0 — L1 TLB DISABLED");
+                    } else {
+                        crate::println!("    ENABLE_L1_TLB=1 OK");
+                    }
+
+                    crate::println!("VM context0 fault state:");
+                    let pfst = r(POL_VM_CTX0_PF_STATUS);
+                    let pfad = r(POL_VM_CTX0_PF_ADDR);
+                    let pfmc = r(POL_VM_CTX0_PF_MCCLIENT);
+                    row("VM_CTX0_PF_STATUS",    POL_VM_CTX0_PF_STATUS, pfst, None);
+                    row("VM_CTX0_PF_ADDR",      POL_VM_CTX0_PF_ADDR,   pfad, None);
+                    row("VM_CTX0_PF_MCCLIENT",  POL_VM_CTX0_PF_MCCLIENT, pfmc, None);
+                    if pfst != 0 {
+                        // gmc_8_1_sh_mask layout (CTX0_PF_STATUS):
+                        // gmc_v8 layout: PROT[7:0] CID[19:12] RW[24] VMID[28:25] MORE[31]
+                        let prot = pfst & 0xFF;
+                        let cid  = (pfst >> 12) & 0xFF;
+                        let rw   = (pfst >> 24) & 0x1;
+                        let vmid = (pfst >> 25) & 0xF;
+                        crate::println!("    decode: CID={:#X} VMID={} {} prot={:#X}  ADDR_MC={:#X}",
+                            cid, vmid, if rw == 1 {"WR"} else {"RD"}, prot,
+                            (pfad as u64) << 12);
+                        // 4-char ASCII MCCLIENT tag (Linux gmc_8_1_d.h)
+                        let b = pfmc.to_le_bytes();
+                        let pr = |c: u8| if (0x20..=0x7E).contains(&c) { c as char } else { '.' };
+                        crate::println!("    MCCLIENT tag = '{}{}{}{}'",
+                            pr(b[0]), pr(b[1]), pr(b[2]), pr(b[3]));
+                    } else {
+                        crate::println!("    PF_STATUS = 0 (no pending fault)");
+                    }
+
+                    crate::apic::watchdog_disarm();
+                }
+                "audit" => {
+                    crate::println_color!(COLOR_YELLOW, "=== Pipeline Audit — TrustOS vs Linux amdgpu ===");
+                    crate::drivers::amdgpu::pipeline_audit::polaris_pipeline_audit(mmio);
+                }
+                "fault" => {
+                    // Compact fault decode (MMIO-only, safe pre-init)
+                    use crate::drivers::amdgpu::mmio_read32;
+                    crate::apic::watchdog_arm(5_000);
+                    const POL_VM_CTX0_PF_STATUS:   u32 = 0x536 * 4;
+                    const POL_VM_CTX0_PF_MCCLIENT: u32 = 0x538 * 4;
+                    const POL_VM_CTX0_PF_ADDR:     u32 = 0x53E * 4;
+                    const POL_VM_CTX0_CNTL:        u32 = 0x504 * 4;
+                    const POL_MC_VM_FB_LOCATION: u32 = 0x809 * 4;
+                    const POL_SDMA0_STATUS_REG:  u32 = 0x340D * 4;
+                    const POL_SDMA0_F32_CNTL:    u32 = 0x3412 * 4;
+                    const POL_SDMA0_RB_RPTR:     u32 = 0x3483 * 4;
+                    const POL_SDMA0_RB_WPTR:     u32 = 0x3484 * 4;
+                    const POL_SDMA0_RB_BASE:     u32 = 0x3481 * 4;
+                    const POL_SDMA0_RB_BASE_HI:  u32 = 0x3482 * 4;
+                    const POL_SDMA0_RB_RPTR_ADDR_HI: u32 = 0x3488 * 4;
+                    const POL_SDMA0_RB_RPTR_ADDR_LO: u32 = 0x3489 * 4;
+                    const POL_SDMA0_RB_CNTL:     u32 = 0x3480 * 4;
+                    let st  = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
+                    let mcc = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_MCCLIENT) };
+                    let ad  = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_ADDR) };
+                    let ctx = unsafe { mmio_read32(mmio, POL_VM_CTX0_CNTL) };
+                    let fb  = unsafe { mmio_read32(mmio, POL_MC_VM_FB_LOCATION) };
+                    let s0  = unsafe { mmio_read32(mmio, POL_SDMA0_STATUS_REG) };
+                    let f0  = unsafe { mmio_read32(mmio, POL_SDMA0_F32_CNTL) };
+                    let r0  = unsafe { mmio_read32(mmio, POL_SDMA0_RB_RPTR) };
+                    let w0  = unsafe { mmio_read32(mmio, POL_SDMA0_RB_WPTR) };
+                    let cntl0 = unsafe { mmio_read32(mmio, POL_SDMA0_RB_CNTL) };
+                    let bas0  = unsafe { mmio_read32(mmio, POL_SDMA0_RB_BASE) };
+                    let bah0  = unsafe { mmio_read32(mmio, POL_SDMA0_RB_BASE_HI) };
+                    let ral0  = unsafe { mmio_read32(mmio, POL_SDMA0_RB_RPTR_ADDR_LO) };
+                    let rah0  = unsafe { mmio_read32(mmio, POL_SDMA0_RB_RPTR_ADDR_HI) };
+                    // SDMA1 = SDMA0 + 0x200 dword indices on Polaris/sdma_v3_0.
+                    const POL_SDMA1_STATUS_REG: u32 = 0x360D * 4;
+                    const POL_SDMA1_F32_CNTL:   u32 = 0x3612 * 4;
+                    const POL_SDMA1_RB_RPTR:    u32 = 0x3683 * 4;
+                    const POL_SDMA1_RB_WPTR:    u32 = 0x3684 * 4;
+                    const POL_SDMA1_RB_CNTL:    u32 = 0x3680 * 4;
+                    const POL_SDMA1_RB_BASE:    u32 = 0x3681 * 4;
+                    const POL_SDMA1_RB_BASE_HI: u32 = 0x3682 * 4;
+                    let s1   = unsafe { mmio_read32(mmio, POL_SDMA1_STATUS_REG) };
+                    let f1   = unsafe { mmio_read32(mmio, POL_SDMA1_F32_CNTL) };
+                    let r1   = unsafe { mmio_read32(mmio, POL_SDMA1_RB_RPTR) };
+                    let w1   = unsafe { mmio_read32(mmio, POL_SDMA1_RB_WPTR) };
+                    let cntl1= unsafe { mmio_read32(mmio, POL_SDMA1_RB_CNTL) };
+                    let bas1 = unsafe { mmio_read32(mmio, POL_SDMA1_RB_BASE) };
+                    let bah1 = unsafe { mmio_read32(mmio, POL_SDMA1_RB_BASE_HI) };
+                    // gmc_v8 layout: PROTECTIONS[7:0] CLIENT_ID[19:12] RW[24] VMID[28:25]
+                    let prot      = st & 0xFF;
+                    let client_id = (st >> 12) & 0xFF;
+                    let rw        = (st >> 24) & 1;
+                    let vmid      = (st >> 25) & 0xF;
+                    let fault     = if (st & 0xFF) != 0 || (st >> 24) & 1 != 0 { 1 } else { 0 };
+                    let fb_start  = ((fb & 0xFFFF) as u64) << 24;
+                    crate::println!("PF_STATUS={:#010X} MCCLIENT={:#010X} ADDR={:#010X} (MC={:#X})",
+                        st, mcc, ad, (ad as u64) << 12);
+                    crate::println!("  fault={} prot={:#X} client={:#X} {}({}) vmid={}",
+                        fault, prot, client_id, rw, if rw == 0 { "RD" } else { "WR" }, vmid);
+                    crate::println!("CTX0_CNTL={:#010X} FB_BASE={:#X} GART_TBL_MC={:#X}",
+                        ctx, fb_start, fb_start + 0x380000);
+                    crate::println!("SDMA0: ST={:#010X} F32={:#010X} RPTR={:#010X} WPTR={:#010X}",
+                        s0, f0, r0, w0);
+                    crate::println!("  RB_CNTL={:#010X} BASE_HI:LO={:#010X}:{:#010X} RPTR_WB_HI:LO={:#010X}:{:#010X}",
+                        cntl0, bah0, bas0, rah0, ral0);
+                    crate::println!("SDMA1: ST={:#010X} F32={:#010X} RPTR={:#010X} WPTR={:#010X}",
+                        s1, f1, r1, w1);
+                    crate::println!("  RB_CNTL={:#010X} BASE_HI:LO={:#010X}:{:#010X}",
+                        cntl1, bah1, bas1);
+                    crate::apic::watchdog_disarm();
+                }
+                "fclear" => {
+                    // Halt SDMA first, then W1C clear PF_STATUS, double-read to detect re-fault
+                    use crate::drivers::amdgpu::{mmio_read32, mmio_write32};
+                    crate::apic::watchdog_arm(2_000);
+                    const POL_VM_CTX0_PF_STATUS: u32 = 0x536 * 4;
+                    const POL_VM_INVALIDATE_REQUEST: u32 = 0x51E * 4;
+                    const POL_SDMA0_F32_CNTL: u32 = 0x3412 * 4;
+                    const POL_SDMA0_RB_CNTL:  u32 = 0x3480 * 4;
+                    const POL_SDMA1_F32_CNTL: u32 = 0x3612 * 4;
+                    const POL_SDMA1_RB_CNTL:  u32 = 0x3680 * 4;
+                    const POL_VM_CTX0_CNTL: u32 = 0x504 * 4;
+                    let pre = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
+                    let ctx_pre = unsafe { mmio_read32(mmio, POL_VM_CTX0_CNTL) };
+                    unsafe {
+                        // halt SDMA0+1
+                        let rc0 = mmio_read32(mmio, POL_SDMA0_RB_CNTL);
+                        mmio_write32(mmio, POL_SDMA0_RB_CNTL, rc0 & !1);
+                        mmio_write32(mmio, POL_SDMA0_F32_CNTL, 1);
+                        let rc1 = mmio_read32(mmio, POL_SDMA1_RB_CNTL);
+                        mmio_write32(mmio, POL_SDMA1_RB_CNTL, rc1 & !1);
+                        mmio_write32(mmio, POL_SDMA1_F32_CNTL, 1);
+                        // disable VM context0 to drop translation pressure
+                        mmio_write32(mmio, POL_VM_CTX0_CNTL, ctx_pre & !1);
+                        // attempt clear via write-zero AND W1C
+                        mmio_write32(mmio, POL_VM_CTX0_PF_STATUS, 0);
+                        mmio_write32(mmio, POL_VM_CTX0_PF_STATUS, pre);
+                        mmio_write32(mmio, POL_VM_INVALIDATE_REQUEST, 0xFFFF_FFFF);
+                    }
+                    let post1 = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
+                    for _ in 0..1000 { unsafe { core::arch::asm!("pause") }; }
+                    let post2 = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
+                    // restore CTX0 enable bit
+                    unsafe { crate::drivers::amdgpu::mmio_write32(mmio, POL_VM_CTX0_CNTL, ctx_pre); }
+                    let post3 = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
+                    crate::println!("PF pre={:#010X} ctx_pre={:#010X}", pre, ctx_pre);
+                    crate::println!("PF post1={:#010X} post2={:#010X} post3(re-en)={:#010X}",
+                        post1, post2, post3);
+                    crate::apic::watchdog_disarm();
+                }
+                "gart" => {
+                    // Dump GART PTE 0..7 by mapping VRAM BAR @ fb_start+0x380000
+                    use crate::drivers::amdgpu::mmio_read32;
+                    crate::apic::watchdog_arm(3_000);
+                    const POL_MC_VM_FB_LOCATION: u32 = 0x809 * 4;
+                    let fb_loc = unsafe { mmio_read32(mmio, POL_MC_VM_FB_LOCATION) };
+                    let fb_start = ((fb_loc & 0xFFFF) as u64) << 24;
+                    let info = match crate::drivers::amdgpu::get_info() {
+                        Some(i) => i,
+                        None => { crate::println!("no gpu info"); crate::apic::watchdog_disarm(); return; }
+                    };
+                    let vram_phys = info.vram_aperture_phys;
+                    if vram_phys == 0 { crate::println!("no vram bar"); crate::apic::watchdog_disarm(); return; }
+                    let virt = match crate::memory::map_mmio(vram_phys, 4 * 1024 * 1024) {
+                        Ok(v) => v,
+                        Err(_) => { crate::println!("vram map fail"); crate::apic::watchdog_disarm(); return; }
+                    };
+                    let table = (virt + 0x380000) as *const u64;
+                    crate::println!("GART CPU={:#X} MC={:#X}", virt + 0x380000, fb_start + 0x380000);
+                    for i in 0..8usize {
+                        let pte = unsafe { core::ptr::read_volatile(table.add(i)) };
+                        crate::println!("  PTE{}={:#018X} flags={:#X}", i, pte, pte & 0xFFF);
+                    }
+                    crate::apic::watchdog_disarm();
+                }
+                "ring" => {
+                    // Dump first 16 dwords of SDMA ring0 via the cached CPU vaddr
+                    // captured in POLARIS_BUF (sysRAM-backed, GART-mapped).
+                    crate::apic::watchdog_arm(3_000);
+                    let buf_guard = crate::drivers::amdgpu::firmware::POLARIS_BUF.lock();
+                    match buf_guard.as_ref() {
+                        Some(b) => {
+                            crate::println!("Ring CPU={:#X} MC={:#X} WB CPU={:#X} MC={:#X}",
+                                b.virt, b.ring_mc, b.wb_cpu, b.wb_mc);
+                            let ring = b.virt as *const u32;
+                            for i in 0..16usize {
+                                let dw = unsafe { core::ptr::read_volatile(ring.add(i)) };
+                                crate::println!("  ring[{}]={:#010X}", i, dw);
+                            }
+                            let wb = b.wb_cpu as *const u32;
+                            let wb0 = unsafe { core::ptr::read_volatile(wb) };
+                            let wb1 = unsafe { core::ptr::read_volatile(wb.add(1)) };
+                            crate::println!("  WB[0]={:#010X} WB[1]={:#010X}", wb0, wb1);
+                        }
+                        None => crate::println!("No SDMA buf (run init first)"),
+                    }
+                    crate::apic::watchdog_disarm();
+                }
+                "ptediff" => {
+                    // Compare GART PTE phys vs ring buf phys (uses cached
+                    // vram_bar_virt from POLARIS_BUF — does NOT remap BAR).
+                    crate::apic::watchdog_arm(3_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_ptediff(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "ucode-verify" | "uverify" => {
+                    // Read SDMA F32 SRAM back via UCODE_ADDR/DATA, compare to
+                    // embedded firmware. If SRAM is empty/wrong, F32 boots on
+                    // garbage and never reaches the RB_CNTL fetch loop.
+                    crate::apic::watchdog_arm(5_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_ucode_verify(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "vmctl" => {
+                    // Toggle VM_CONTEXT0 enable bit, dump PF before/after
+                    use crate::drivers::amdgpu::{mmio_read32, mmio_write32};
+                    crate::apic::watchdog_arm(2_000);
+                    const POL_VM_CTX0_CNTL: u32 = 0x504 * 4;
+                    const POL_VM_CTX0_PF_STATUS: u32 = 0x536 * 4;
+                    const POL_VM_INVALIDATE_REQUEST: u32 = 0x51E * 4;
+                    let want = args.get(2).copied().unwrap_or("show");
+                    let cur = unsafe { mmio_read32(mmio, POL_VM_CTX0_CNTL) };
+                    let pf0 = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
+                    let new = match want {
+                        "off"   => cur & !1,
+                        "on"    => cur | 1,
+                        "0"     => 0,
+                        "full"  => 0x00FFFED9,
+                        // Clear RANGE_PROTECTION_FAULT_ENABLE bits 3+4 → if PF stops, range check is the trigger
+                        "norng" => cur & !0x18,
+                        // Keep ENABLE only, no fault bits at all
+                        "minim" => 0x00000001,
+                        _       => cur,
+                    };
+                    if new != cur {
+                        unsafe {
+                            mmio_write32(mmio, POL_VM_CTX0_CNTL, new);
+                            mmio_write32(mmio, POL_VM_INVALIDATE_REQUEST, 0xFFFF_FFFF);
+                            // try clear PF after
+                            mmio_write32(mmio, POL_VM_CTX0_PF_STATUS, pf0);
+                        }
+                    }
+                    for _ in 0..2000 { unsafe { core::arch::asm!("pause") }; }
+                    let pf1 = unsafe { mmio_read32(mmio, POL_VM_CTX0_PF_STATUS) };
+                    let cur2 = unsafe { mmio_read32(mmio, POL_VM_CTX0_CNTL) };
+                    crate::println!("CTX0 {:#010X} -> {:#010X}", cur, cur2);
+                    crate::println!("PF   {:#010X} -> {:#010X}", pf0, pf1);
+                    crate::apic::watchdog_disarm();
+                }
+                "cleanup" => {
+                    crate::println_color!(COLOR_YELLOW, "=== GPU cleanup — halt SDMA, reset, clear faults ===");
+                    crate::drivers::amdgpu::firmware::polaris_gpu_cleanup(mmio);
+                }
+                "probe" => {
+                    crate::println_color!(COLOR_YELLOW, "=== SDMA PROBE — full auto-diagnostic ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_probe(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "gfx-init" => {
+                    crate::println_color!(COLOR_YELLOW, "=== GFX Init — golden regs + SH_MEM + SPI/SQ ===");
+                    crate::drivers::amdgpu::firmware::polaris_gfx_init(mmio);
+                }
+                "cp-init" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP/MEC Init — load PFP+ME+MEC1+MEC2 firmware ===");
+                    crate::apic::watchdog_arm(30_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_mec_init(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-nop" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP NOP Test — GFX ring PM4 NOP packets ===");
+                    crate::apic::watchdog_arm(30_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_nop_test(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-scan" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP Register Scan — find real CP_RB0/CP_ME_CNTL addresses ===");
+                    crate::drivers::amdgpu::firmware::polaris_cp_regscan(mmio);
+                }
+                "cp-nop-vram" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP NOP test — ring in VRAM (GPU always can access) ===");
+                    crate::apic::watchdog_arm(30_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_nop_vram(mmio, info.vram_aperture_phys);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-nop-lowmem" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP NOP test — ring at 16MB phys (below 4GB, SAM=3) ===");
+                    crate::apic::watchdog_arm(30_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_nop_lowmem(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-write" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP WRITE_DATA — sentinel write to system RAM ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_write_sentinel(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-v30" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP SENTINEL V30 — HDP_NONSURFACE + SAM=0 + full APR ===");
+                    crate::apic::watchdog_arm(90_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_sentinel_v30(mmio, info.vram_aperture_phys);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-v75" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP V75 — full clear state preamble + VRAM write ===");
+                    crate::apic::watchdog_arm(120_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_v75(mmio, info.vram_aperture_phys);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-dispatch" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP DISPATCH_DIRECT — GCN compute shader ===");
+                    crate::apic::watchdog_arm(120_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_dispatch(mmio, 0);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-vmcheck" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP/VMC State Check (read-only) ===");
+                    crate::drivers::amdgpu::firmware::polaris_cp_vmcheck(mmio);
+                }
+                "cp-diag" => {
+                    // Parse runtime flags — no rebuild needed between variants:
+                    //   l2off      skip L2 enable (compare vs default)
+                    //   dst1       WRITE_DATA DST_SEL=1 (sync)
+                    //   dst2       WRITE_DATA DST_SEL=2 (TC L2)
+                    //   nodispatch skip DISPATCH_DIRECT (CP-only test)
+                    //   noflat     shader = s_endpgm only (no flat_store)
+                    use crate::drivers::amdgpu::firmware as fw;
+                    let mut diag_flags: u32 = 0;
+                    for arg in args.iter().skip(2) {
+                        match *arg {
+                            "l2off"       => diag_flags |= fw::CP_DIAG_L2_OFF,
+                            "dst1"        => diag_flags |= fw::CP_DIAG_WD_DST1,
+                            "dst2"        => diag_flags |= fw::CP_DIAG_WD_DST2,
+                            "nodispatch"  => diag_flags |= fw::CP_DIAG_NO_SHADER,
+                            "noflat"      => diag_flags |= fw::CP_DIAG_NOFLAT,
+                            "noinit"      => diag_flags |= fw::CP_DIAG_NO_INIT,
+                            "noreset"     => diag_flags |= fw::CP_DIAG_NO_RESET,
+                            _ => {}
+                        }
+                    }
+                    crate::println_color!(COLOR_YELLOW, "=== CP Dispatch Diagnostic flags={:#X} ===", diag_flags);
+                    // VMC check skipped for terse output
+                    crate::apic::watchdog_arm(120_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_dispatch(mmio, diag_flags);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-v3" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP NOP V3 — correct gfx_8_1 register addresses ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_nop_v3(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-linux" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP Linux Order Test ===");
+                    crate::apic::watchdog_arm(120_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_linux_order(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-bios" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP BIOS FW Test (no reset, no reload) ===");
+                    crate::apic::watchdog_arm(120_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_bios_test(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-bios2" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP BIOS2 — minimal, no FW reload, no MC changes ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_bios2_test(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-vram" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP VRAM — ring buffer in GPU VRAM via BAR0 ===");
+                    crate::apic::watchdog_arm(120_000);
+                    let vram_bar = info.vram_aperture_phys;
+                    crate::println!("VRAM BAR0 phys={:#X} size={:#X}", vram_bar, info.vram_aperture_size);
+                    crate::drivers::amdgpu::firmware::polaris_cp_vram_test(mmio, vram_bar);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-bvram" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP BIOS+VRAM — BIOS firmware + VRAM ring (no reset, no fw reload) ===");
+                    crate::apic::watchdog_arm(120_000);
+                    let vram_bar = info.vram_aperture_phys;
+                    crate::println!("VRAM BAR0 phys={:#X} size={:#X}", vram_bar, info.vram_aperture_size);
+                    crate::drivers::amdgpu::firmware::polaris_cp_bios_vram_test(mmio, vram_bar);
+                    crate::apic::watchdog_disarm();
+                }
+                "linux-init" => {
+                    crate::println_color!(COLOR_YELLOW, "=== LINUX-INIT — Full Linux gfx_v8_0 init sequence ===");
+                    crate::apic::watchdog_arm(120_000);
+                    let vram_bar = info.vram_aperture_phys;
+                    crate::println!("VRAM BAR0 phys={:#X} size={:#X}", vram_bar, info.vram_aperture_size);
+                    crate::drivers::amdgpu::firmware::polaris_linux_init(mmio, vram_bar);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-kick" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP KICK — append to existing ring, no CP changes ===");
+                    crate::apic::watchdog_arm(60_000);
+                    let vram_bar = info.vram_aperture_phys;
+                    crate::drivers::amdgpu::firmware::polaris_cp_kick_test(mmio, vram_bar);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-gfx" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP GFX TEST — GRBM_SOFT_RESET + fw reload + WRITE_DATA sentinel ===");
+                    crate::apic::watchdog_arm(60_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_gfx_test(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "cp-dump" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP_RB register dump ===");
+                    crate::drivers::amdgpu::firmware::polaris_cp_rb_dump(mmio);
+                }
+                "cp-nop-lowmem2" => {
+                    crate::println_color!(COLOR_YELLOW, "=== CP NOP V2 — halt CP, write regs, unhalt ===");
+                    crate::apic::watchdog_arm(30_000);
+                    crate::drivers::amdgpu::firmware::polaris_cp_nop_lowmem2(mmio);
+                    crate::apic::watchdog_disarm();
+                }
+                "vram" => {
+                    crate::println_color!(COLOR_YELLOW, "=== VRAM Ring Test ===");
+                    crate::drivers::amdgpu::firmware::polaris_sdma_vram_ring_test(mmio);
+                }
+                "bios" => {
+                    crate::println_color!(COLOR_YELLOW, "=== BIOS FW + VRAM Test ===");
+                    crate::drivers::amdgpu::firmware::polaris_sdma_bios_vram_test(mmio);
+                }
+                "diag" => {
+                    crate::println_color!(COLOR_YELLOW, "=== SDMA Deep Diag ===");
+                    crate::drivers::amdgpu::firmware::polaris_sdma_deep_diag(mmio);
+                }
+                "halt" => {
+                    crate::drivers::amdgpu::firmware::polaris_sdma_halt(mmio);
+                }
+                "unhalt" => {
+                    crate::drivers::amdgpu::firmware::polaris_sdma_unhalt(mmio);
+                }
+                "vm" => {
+                    crate::drivers::amdgpu::firmware::polaris_sdma_vm_dump(mmio);
+                }
+                "vmclear" => {
+                    crate::drivers::amdgpu::firmware::polaris_sdma_vm_clear(mmio);
+                }
+                "gmc" => {
+                    crate::println_color!(COLOR_YELLOW, "GMC init (L1 TLB + L2 + VM_CTX0)...");
+                    crate::drivers::amdgpu::firmware::polaris_gmc_init(mmio);
+                    crate::drivers::amdgpu::firmware::polaris_vtd_disable();
+                }
+                "vtd" => {
+                    crate::drivers::amdgpu::firmware::polaris_vtd_disable();
+                }
+                "fwfull" => {
+                    crate::drivers::amdgpu::firmware::polaris_sdma_load_fw_full(mmio);
+                }
+                "golden" => {
+                    crate::drivers::amdgpu::firmware::polaris_sdma_golden(mmio);
+                }
+                "mc" => {
+                    crate::drivers::amdgpu::firmware::polaris_sdma_mc(mmio);
+                }
+                "steptrace" => {
+                    let max_step = args.get(2).and_then(|s| s.parse::<u8>().ok()).unwrap_or(8);
+                    crate::apic::watchdog_arm(60_000); // 60s for steptrace (runs 8 steps)
+                    crate::drivers::amdgpu::firmware::polaris_sdma_steptrace(mmio, max_step);
+                    crate::apic::watchdog_disarm();
+                }
+                "dump" => {
+                    crate::drivers::amdgpu::firmware::polaris_sdma_dump(mmio);
+                }
+                "retire" => {
+                    crate::drivers::amdgpu::firmware::polaris_sdma_retire_diag(mmio);
+                }
+                "vadump" => {
+                    crate::drivers::amdgpu::firmware::polaris_sdma_va_diag(mmio);
+                }
+                "wrdiag" => {
+                    let count = args.get(2).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+                    let dest = args.get(3).copied().unwrap_or("fence");
+                    crate::drivers::amdgpu::firmware::polaris_sdma_write_linear_diag(mmio, count, dest);
+                }
+                "wptr" => {
+                    let val = args.get(2).and_then(|s| {
+                        if s.starts_with("0x") || s.starts_with("0X") {
+                            u32::from_str_radix(&s[2..], 16).ok()
+                        } else {
+                            s.parse::<u32>().ok()
+                        }
+                    }).unwrap_or(4);
+                    crate::apic::watchdog_arm(15_000);
+                    crate::drivers::amdgpu::firmware::polaris_sdma_write_wptr(mmio, val);
+                    crate::apic::watchdog_disarm();
+                }
+                "reg" => {
+                    let offset = args.get(2).and_then(|s| {
+                        if s.starts_with("0x") || s.starts_with("0X") {
+                            u32::from_str_radix(&s[2..], 16).ok()
+                        } else {
+                            s.parse::<u32>().ok()
+                        }
+                    });
+                    let write_val = args.get(3).and_then(|s| {
+                        if s.starts_with("0x") || s.starts_with("0X") {
+                            u32::from_str_radix(&s[2..], 16).ok()
+                        } else {
+                            s.parse::<u32>().ok()
+                        }
+                    });
+                    if let Some(off) = offset {
+                        crate::drivers::amdgpu::firmware::polaris_sdma_reg(mmio, off, write_val);
+                    } else {
+                        crate::println!("Usage: gpu sdma reg <offset> [value]");
+                    }
+                }
+                _ => {
+                    crate::println!("gpu sdma commands:");
+                    crate::println!("  diag    - Phase 0 pre-init diagnostic (BIF/IH/FREEZE/GMC)");
+                    crate::println!("  audit   - Pipeline audit: compare regs vs Linux amdgpu");
+                    crate::println!("  gfx-init - GFX init: golden regs + SH_MEM + SPI/SQ (BEFORE cp-init!)");
+                    crate::println!("  status  - register dump");
+                    crate::println!("  dump    - detailed reg dump both engines");
+                    crate::println!("  retire  - focused RLC/RPTR/WB retire diagnostic");
+                    crate::println!("  vadump  - dump SDMA VMID VA/APE state");
+                    crate::println!("  wrdiag <cnt> [fence|ring|vram] - one WRITE_LINEAR diagnostic");
+                    crate::println!("  alloc   - allocate system memory buffers");
+                    crate::println!("  reset   - SRBM soft reset SDMA engines");
+                    crate::println!("  golden  - apply golden regs (clk/pwr gating)");
+                    crate::println!("  mc      - MC/VRAM BAR setup");
+                    crate::println!("  fw      - load SDMA firmware (JT mode)");
+                    crate::println!("  fwfull  - force FULL firmware load");
+                    crate::println!("  ring    - setup ring buffers");
+                    crate::println!("  halt    - halt both engines");
+                    crate::println!("  unhalt  - unhalt both engines");
+                    crate::println!("  vm      - dump VM context regs");
+                    crate::println!("  vmclear - clear VM_CTX0 (physical mode)");
+                    crate::println!("  gmc     - GMC init (L1 TLB + L2 + VM_CTX0)");
+                    crate::println!("  wptr N  - write WPTR to both engines");
+                    crate::println!("  reg O [V] - read/write MMIO reg at offset");
+                    crate::println!("  test    - NOP + WRITE LINEAR self-test");
+                    crate::println!("  vram-nop - NOP test with VRAM ring and VM_CONTEXT0 off");
+                    crate::println!("  steptrace - full init + reg snapshots per step");
+                    crate::println!("  init    - all steps at once (V13)");
+                    crate::println!("  init-noctxsw - full init with AUTO_CTXSW disabled");
+                    crate::println!("  init-holdf32 - full init with F32 kept halted");
+                    crate::println!("  init-latef32 - full init with F32 unhalted after CONTEXT/CNTL");
+                }
+            }
+        }
+        // ── Deep hardware probe for reverse engineering ──
+        "probe" => {
+            if !crate::drivers::amdgpu::is_detected() {
+                crate::println!("No AMD GPU");
+                return;
+            }
+            let info = match crate::drivers::amdgpu::get_info() {
+                Some(i) => i,
+                None => { crate::println!("No GPU info"); return; }
+            };
+            let m = info.mmio_base_virt;
+            if m == 0 { crate::println!("MMIO=0"); return; }
+            unsafe {
+                let r = |off: u32| -> u32 { crate::drivers::amdgpu::mmio_read32(m, off) };
+
+                crate::println!("=== RX 580X DEEP PROBE ===");
+
+                // 1. PCI config space
+                let bus = info.bus;
+                let dev = info.device;
+                let cmd = crate::pci::config_read16(bus, dev, 0, 0x04);
+                let sts = crate::pci::config_read16(bus, dev, 0, 0x06);
+                crate::println!("[PCI] {:02X}:{:02X}.0 CMD={:#06X}(IO={} MEM={} BM={}) STS={:#06X}",
+                    bus, dev, cmd, cmd & 1, (cmd >> 1) & 1, (cmd >> 2) & 1, sts);
+
+                // 2. MC/memory controller
+                crate::println!("[MC]");
+                let fb_loc = r(0x2024); // MC_VM_FB_LOCATION
+                let fb_off = r(0x2068); // MC_VM_FB_OFFSET
+                let memsz  = r(0x5428); // CONFIG_MEMSIZE
+                crate::println!("  FB_LOC={:#010X} FB_OFF={:#010X} MEMSZ={:#X}",
+                    fb_loc, fb_off, memsz);
+                let sys_lo = r(0x2034); // SYS_APR_LOW
+                let sys_hi = r(0x2038); // SYS_APR_HIGH
+                let sys_df = r(0x203C); // SYS_APR_DEFAULT
+                crate::println!("  SYS_APR=[{:#X},{:#X}] DEF={:#X}", sys_lo, sys_hi, sys_df);
+                let agp_top = r(0x2028);
+                let agp_bot = r(0x202C);
+                let agp_bas = r(0x2030);
+                crate::println!("  AGP=[{:#X},{:#X}] BASE={:#X}", agp_bot, agp_top, agp_bas);
+                let l1_cntl = r(0x2064); // MX_L1_TLB_CNTL
+                crate::println!("  L1_TLB={:#010X} (enable={} frag={} SAM={} advmodel={})",
+                    l1_cntl, l1_cntl & 1, (l1_cntl >> 1) & 1, (l1_cntl >> 2) & 3, (l1_cntl >> 4) & 1);
+
+                // 3. VM subsystem
+                crate::println!("[VM]");
+                let l2_cntl = r(0x1400); // VM_L2_CNTL
+                let l2_c2   = r(0x1404); // VM_L2_CNTL2
+                let l2_c3   = r(0x1408); // VM_L2_CNTL3
+                crate::println!("  L2_CNTL={:#010X} L2_CNTL2={:#010X} L2_CNTL3={:#010X}",
+                    l2_cntl, l2_c2, l2_c3);
+                for ctx in 0..2u32 {
+                    let ctx_cntl = r(0x1410 + ctx * 4); // VM_CONTEXT0/1_CNTL
+                    let ctx_base = r(0x1430 + ctx * 4); // VM_CONTEXT0/1_PAGE_TABLE_BASE_ADDR
+                    let ctx_strt = r(0x1440 + ctx * 4); // VM_CONTEXT0/1_PAGE_TABLE_START_ADDR
+                    let ctx_end  = r(0x1450 + ctx * 4); // VM_CONTEXT0/1_PAGE_TABLE_END_ADDR_LO32
+                    crate::println!("  CTX{}: CNTL={:#010X}(en={}) PTBASE={:#X} START={:#X} END={:#X}",
+                        ctx, ctx_cntl, ctx_cntl & 1, ctx_base, ctx_strt, ctx_end);
+                }
+
+                // 4. SRBM status
+                let srbm_s  = r(0x0E50); // SRBM_STATUS
+                let srbm_s2 = r(0x0E60); // SRBM_STATUS2
+                crate::println!("[SRBM] S={:#010X} S2={:#010X} (sdma0_busy={} sdma1_busy={})",
+                    srbm_s, srbm_s2, (srbm_s2 >> 5) & 1, (srbm_s2 >> 6) & 1);
+
+                // 5. SDMA engines — EXHAUSTIVE register dump
+                for eng in 0..2u32 {
+                    let base: u32 = if eng == 0 { 0xD000 } else { 0xD800 };
+                    crate::println!("[SDMA{}] base={:#06X}", eng, base);
+
+                    let ucode_addr  = r(base + 0x000); // UCODE_ADDR (also PC entry)
+                    let power_cntl  = r(base + 0x008); // POWER_CNTL
+                    let clk_ctrl    = r(base + 0x00C); // CLK_CTRL
+                    let cntl        = r(base + 0x010); // CNTL
+                    let chicken     = r(base + 0x014); // CHICKEN_BITS
+                    let tiling      = r(base + 0x018); // TILING_CONFIG
+                    let status      = r(base + 0x034); // STATUS_REG
+                    let f32_cntl    = r(base + 0x048); // F32_CNTL
+
+                    crate::println!("  UCODE_ADDR={:#X} F32={:#X}(halt={}) STATUS={:#010X}",
+                        ucode_addr, f32_cntl, f32_cntl & 1, status);
+                    crate::println!("  CNTL={:#010X} POWER={:#X} CLK={:#X} CHICKEN={:#X} TILE={:#X}",
+                        cntl, power_cntl, clk_ctrl, chicken, tiling);
+
+                    // GFX ring registers
+                    let rb_cntl      = r(base + 0x200); // GFX_RB_CNTL
+                    let rb_base      = r(base + 0x204); // GFX_RB_BASE
+                    let rb_base_hi   = r(base + 0x208); // GFX_RB_BASE_HI
+                    let rptr         = r(base + 0x20C); // GFX_RB_RPTR
+                    let wptr         = r(base + 0x210); // GFX_RB_WPTR
+                    let wp_poll_cntl = r(base + 0x214); // WPTR_POLL_CNTL
+                    let wp_poll_hi   = r(base + 0x218); // WPTR_POLL_ADDR_HI
+                    let wp_poll_lo   = r(base + 0x21C); // WPTR_POLL_ADDR_LO
+                    let rp_addr_hi   = r(base + 0x220); // RPTR_ADDR_HI
+                    let rp_addr_lo   = r(base + 0x224); // RPTR_ADDR_LO
+                    let ib_cntl      = r(base + 0x228); // IB_CNTL
+                    let doorbell     = r(base + 0x248); // DOORBELL
+
+                    let ring_addr = ((rb_base_hi as u64) << 40) | ((rb_base as u64) << 8);
+                    let rptr_wb_addr = ((rp_addr_hi as u64) << 32) | ((rp_addr_lo as u64) & 0xFFFFFFFC);
+
+                    crate::println!("  RB_CNTL={:#010X} (en={} sz={} wb={} priv={})",
+                        rb_cntl, rb_cntl & 1, (rb_cntl >> 1) & 0x1F, (rb_cntl >> 12) & 1, (rb_cntl >> 23) & 1);
+                    crate::println!("  RING_ADDR={:#012X} (BASE={:#X}:{:#X})", ring_addr, rb_base_hi, rb_base);
+                    crate::println!("  RPTR={:#X} WPTR={:#X} IB_CNTL={:#X} DOOR={:#X}",
+                        rptr, wptr, ib_cntl, doorbell);
+                    crate::println!("  RPTR_WB={:#012X} WPOLL={:#X}:{:#X} WPOLL_CNTL={:#X}",
+                        rptr_wb_addr, wp_poll_hi, wp_poll_lo, wp_poll_cntl);
+
+                    // Scratch registers (debug)
+                    let scratch0 = r(base + 0x060); // SCRATCH_0 offset varies
+                    let scratch1 = r(base + 0x064);
+                    crate::println!("  SCRATCH[0]={:#X} [1]={:#X}", scratch0, scratch1);
+                }
+
+                // 6. GFX / CP status
+                let grbm_status = r(0x8010); // GRBM_STATUS
+                let grbm_s2     = r(0x8014); // GRBM_STATUS2
+                let cp_stat     = r(0x8680); // CP_STAT
+                crate::println!("[GFX] GRBM={:#010X} GRBM2={:#010X} CP={:#010X}", grbm_status, grbm_s2, cp_stat);
+
+                // 7. HDP
+                let hdp_host = r(0x1520 * 4); // HDP_HOST_PATH_CNTL (approx)
+                crate::println!("[HDP] HOST_PATH={:#010X}", hdp_host);
+
+                // 8. VRAM BAR info
+                crate::println!("[BAR] VRAM_APT phys={:#X} sz={:#X}",
+                    info.vram_aperture_phys, info.vram_aperture_size);
+
+                crate::println!("=== END PROBE ===");
+            }
+        }
+        // ── Heap diagnostic ──
+        "heap" => {
+            let free = crate::memory::heap::free();
+            let used = crate::memory::heap::used();
+            crate::println!("Heap: free={} ({} MB) used={} ({} MB)",
+                free, free / (1024*1024), used, used / (1024*1024));
+        }
+        // ── MMIO trace ring-buffer (feature `mmio-trace`) ──
+        "trace" => {
+            let sub = args.get(1).copied().unwrap_or("dump");
+            match sub {
+                "dump" => {
+                    crate::debug_trace::mmio_trace_dump();
+                    // Acknowledge to shell (dump itself goes to netconsole UDP 6666)
+                    crate::println!("[MMIO-RING] dumped to netconsole UDP 6666");
+                }
+                "clear" => {
+                    crate::debug_trace::mmio_trace_clear();
+                    crate::println!("[MMIO-RING] cleared");
+                }
+                _ => crate::println!("Usage: gpu trace [dump|clear]"),
+            }
+        }
+        "regscan" | "scan" => {
+            crate::drivers::amdgpu::regscan::dispatch(&args[1..]);
+        }
+        "atom" => {
+            crate::drivers::amdgpu::atom::dispatch(&args[1..]);
+        }
+        "smu" => {
+            if let Some(info) = crate::drivers::amdgpu::get_info() {
+                let sub = args.get(1).copied().unwrap_or("status");
+                match sub {
+                    "status" => {
+                        let status = unsafe { crate::drivers::amdgpu::smu::query_status(&info) };
+                        let text = crate::drivers::amdgpu::smu::format_status(&status, info.gpu_gen);
+                        crate::println!("{}", text);
+                    }
+                    "send" => {
+                        let msg_str = args.get(2).unwrap_or(&"0");
+                        let param_str = args.get(3).unwrap_or(&"0");
+                        let msg = u32::from_str_radix(msg_str.trim_start_matches("0x"), 16).unwrap_or(0);
+                        let param = u32::from_str_radix(param_str.trim_start_matches("0x"), 16).unwrap_or(0);
+                        crate::println!("SMU send msg=0x{:X} param=0x{:X}", msg, param);
+                        match unsafe { crate::drivers::amdgpu::smu::send_raw_msg(&info, msg, param) } {
+                            Ok(ret) => crate::println!("  OK — return=0x{:08X} ({})", ret, ret),
+                            Err(e) => crate::println!("  FAIL: {}", e),
+                        }
+                    }
+                    "regs" | "diag" => {
+                        let mmio = info.mmio_base_virt;
+                        unsafe {
+                            use crate::drivers::amdgpu::{mmio_read32, smu::smu7_read_ind, smu::smu7_read_smc_sram, regs};
+                            crate::println!("=== Direct MMIO ===");
+                            crate::println!("SMC_RESP_0    = 0x{:08X}", mmio_read32(mmio, regs::SMC_RESP_0));
+                            crate::println!("SMC_MESSAGE_0 = 0x{:08X}", mmio_read32(mmio, regs::SMC_MESSAGE_0));
+                            crate::println!("SMC_MSG_ARG_0 = 0x{:08X}", mmio_read32(mmio, regs::SMC_MSG_ARG_0));
+                            crate::println!("=== Indirect (bank 0) ===");
+                            crate::println!("SMC_PC_C        = 0x{:08X}", smu7_read_ind(mmio, regs::IX_SMC_PC_C));
+                            crate::println!("RESET_CNTL      = 0x{:08X}", smu7_read_ind(mmio, regs::IX_SMC_SYSCON_RESET_CNTL));
+                            crate::println!("CLOCK_CNTL_0    = 0x{:08X}", smu7_read_ind(mmio, regs::IX_SMC_SYSCON_CLOCK_CNTL_0));
+                            crate::println!("RCU_UC_EVENTS   = 0x{:08X}", smu7_read_ind(mmio, regs::IX_RCU_UC_EVENTS));
+                            crate::println!("SMU_STATUS      = 0x{:08X}", smu7_read_ind(mmio, regs::IX_SMU_STATUS));
+                            crate::println!("SMU_FIRMWARE    = 0x{:08X}", smu7_read_ind(mmio, regs::IX_SMU_FIRMWARE));
+                            crate::println!("SMU_INPUT_DATA  = 0x{:08X}", smu7_read_ind(mmio, regs::IX_SMU_INPUT_DATA));
+                            crate::println!("SMU_INPUT_DATA+4= 0x{:08X}", smu7_read_ind(mmio, regs::IX_SMU_INPUT_DATA + 4));
+                            crate::println!("=== SRAM ===");
+                            crate::println!("FIRMWARE_FLAGS  = 0x{:08X}", smu7_read_smc_sram(mmio, regs::IX_FIRMWARE_FLAGS));
+                            crate::println!("SRAM[0x0]       = 0x{:08X}", smu7_read_smc_sram(mmio, 0x0));
+                            crate::println!("SRAM[0x4]       = 0x{:08X}", smu7_read_smc_sram(mmio, 0x4));
+                            crate::println!("SRAM[0x20000]   = 0x{:08X}", smu7_read_smc_sram(mmio, 0x20000));
+                        }
+                    }
+                    "probe" => {
+                        // Compare bank 0 vs bank 1 access for the same SMC indirect addresses.
+                        // VBIOS / AtomBIOS uses bank 1 (0x208/0x20C) — Polaris boards may
+                        // restrict SRAM-class addresses to bank 1 only.
+                        let mmio = info.mmio_base_virt;
+                        unsafe {
+                            use crate::drivers::amdgpu::{
+                                mmio_read32, mmio_write32, regs,
+                                smu::{smu7_read_ind, smu7_read_ind_p1, smu7_write_ind, smu7_write_ind_p1},
+                            };
+                            crate::println!("=== Bank 0 vs Bank 1 read ===");
+                            let cases: &[(u32, &str)] = &[
+                                (regs::IX_SMC_SYSCON_RESET_CNTL, "RESET_CNTL"),
+                                (regs::IX_SMC_SYSCON_CLOCK_CNTL_0, "CLOCK_CNTL_0"),
+                                (regs::IX_SMC_SYSCON_MISC_CNTL, "MISC_CNTL"),
+                                (regs::IX_RCU_UC_EVENTS, "RCU_UC_EVENTS"),
+                                (regs::IX_SMU_STATUS, "SMU_STATUS"),
+                                (regs::IX_SMU_FIRMWARE, "SMU_FIRMWARE"),
+                                (regs::IX_SMC_PC_C, "SMC_PC_C"),
+                                (regs::IX_FIRMWARE_FLAGS, "FW_FLAGS (SRAM)"),
+                                (0x0, "SRAM[0x0]"),
+                                (0x20000, "SRAM[0x20000]"),
+                                (0x3F000, "SRAM[0x3F000]"),
+                            ];
+                            for (addr, name) in cases {
+                                let p0 = smu7_read_ind(mmio, *addr);
+                                let p1 = smu7_read_ind_p1(mmio, *addr);
+                                let tag = if p0 == p1 { "==" } else { "!=" };
+                                crate::println!(
+                                    "  {:<18} addr=0x{:08X}  p0=0x{:08X} {} p1=0x{:08X}",
+                                    name, addr, p0, tag, p1
+                                );
+                            }
+                            crate::println!("=== Bank 1 SRAM write/readback test ===");
+                            // Disable AUTO_INCREMENT on both banks
+                            let acc = mmio_read32(mmio, regs::SMC_IND_ACCESS_CNTL);
+                            mmio_write32(
+                                mmio,
+                                regs::SMC_IND_ACCESS_CNTL,
+                                acc & !(regs::SMC_IND_ACCESS_AUTO_INCREMENT_0
+                                    | (1u32 << 1)),
+                            );
+                            // Try both ports for SRAM write @0x30000 (above ucode area)
+                            let test_addr: u32 = 0x30000;
+                            smu7_write_ind(mmio, test_addr, 0xDEADBEEF);
+                            let p0_rb = smu7_read_ind(mmio, test_addr);
+                            smu7_write_ind_p1(mmio, test_addr, 0xCAFEBABE);
+                            let p1_rb = smu7_read_ind_p1(mmio, test_addr);
+                            crate::println!(
+                                "  p0 wrote DEADBEEF @0x{:X} -> readback 0x{:08X}  (match={})",
+                                test_addr, p0_rb, p0_rb == 0xDEADBEEF
+                            );
+                            crate::println!(
+                                "  p1 wrote CAFEBABE @0x{:X} -> readback 0x{:08X}  (match={})",
+                                test_addr, p1_rb, p1_rb == 0xCAFEBABE
+                            );
+                            // Cross-check: read p1 value via p0
+                            let xread = smu7_read_ind(mmio, test_addr);
+                            crate::println!("  cross: p0 reads back 0x{:08X} (after p1 write)", xread);
+                        }
+                    }
+                    "start" => {
+                        if !matches!(info.gpu_gen, crate::drivers::amdgpu::GpuGen::Polaris) {
+                            crate::println!("SMC start only supported on Polaris (SMU v7)");
+                        } else {
+                            let mmio = info.mmio_base_virt;
+                            // Show pre-start state
+                            let pc_before = unsafe { crate::drivers::amdgpu::smu::smu7_read_ind(mmio, crate::drivers::amdgpu::regs::IX_SMC_PC_C) };
+                            let ram_running = unsafe { crate::drivers::amdgpu::smu::smu7_is_smc_ram_running(mmio) };
+                            let smu_fw = unsafe { crate::drivers::amdgpu::smu::smu7_read_ind(mmio, crate::drivers::amdgpu::regs::IX_SMU_FIRMWARE) };
+                            let protected = (smu_fw & crate::drivers::amdgpu::regs::SMU_FIRMWARE_MODE_MASK) != 0;
+                            crate::println!("Before: PC=0x{:08X} ram_running={} SMU_FW=0x{:08X} protected={}", pc_before, ram_running, smu_fw, protected);
+                            if ram_running {
+                                crate::println!("SMC already running — skipping start");
+                            } else {
+                                crate::println!("Starting SMC (auto-detect)...");
+                                // SMU bring-up has multiple busy-loop waits (≤ 4 × 2M iters).
+                                // Arm WD generously so it doesn't fire mid-handshake.
+                                crate::apic::watchdog_arm(60_000);
+                                let first = unsafe { crate::drivers::amdgpu::smu::smu7_start_smu(mmio) };
+                                crate::apic::watchdog_kick(60_000);
+                                let result = match first {
+                                    Ok(()) => Ok(()),
+                                    Err(e) => {
+                                        crate::println!("SMC start failed: {} — issuing PCI config reset and retrying", e);
+                                        crate::drivers::amdgpu::smu::smu7_pci_config_reset(info.bus, info.device, info.function);
+                                        crate::apic::watchdog_kick(60_000);
+                                        unsafe { crate::drivers::amdgpu::smu::smu7_start_smu(mmio) }
+                                    }
+                                };
+                                crate::apic::watchdog_kick(8_000);
+                                match result {
+                                    Ok(()) => {
+                                        let pc_after = unsafe { crate::drivers::amdgpu::smu::smu7_read_ind(mmio, crate::drivers::amdgpu::regs::IX_SMC_PC_C) };
+                                        crate::println!("SMC started OK! PC=0x{:08X}", pc_after);
+                                        let status = unsafe { crate::drivers::amdgpu::smu::query_status(&info) };
+                                        let text = crate::drivers::amdgpu::smu::format_status(&status, info.gpu_gen);
+                                        crate::println!("{}", text);
+                                    }
+                                    Err(e) => {
+                                        let pc_after = unsafe { crate::drivers::amdgpu::smu::smu7_read_ind(mmio, crate::drivers::amdgpu::regs::IX_SMC_PC_C) };
+                                        crate::println!("SMC start FAILED after PCI reset: {}", e);
+                                        crate::println!("Post-fail: PC=0x{:08X}", pc_after);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "sram" => {
+                        // gpu smu sram <hex_addr> [count] — read SRAM via banks
+                        let addr_str = args.get(2).unwrap_or(&"0");
+                        let count: usize = args.get(3).and_then(|s| s.parse().ok()).unwrap_or(1);
+                        let addr = u32::from_str_radix(addr_str.trim_start_matches("0x").trim_start_matches("0X"), 16).unwrap_or(0);
+                        let mmio = info.mmio_base_virt;
+                        for i in 0..count.min(16) {
+                            let a = addr + (i as u32) * 4;
+                            let val_b11 = unsafe { crate::drivers::amdgpu::smu::smu7_read_smc_sram(mmio, a) };
+                            let val_b0 = unsafe { crate::drivers::amdgpu::smu::smu7_read_ind(mmio, a) };
+                            if val_b11 == val_b0 {
+                                crate::println!("SRAM[0x{:08X}] = 0x{:08X}", a, val_b11);
+                            } else {
+                                crate::println!("SRAM[0x{:08X}] bank11=0x{:08X} bank0=0x{:08X}", a, val_b11, val_b0);
+                            }
+                        }
+                    }
+                    "test" => {
+                        // Safe direct mailbox test — NO indirect register polling
+                        // Just: clear RESP → write ARG → write MSG → poll RESP only
+                        if !matches!(info.gpu_gen, crate::drivers::amdgpu::GpuGen::Polaris) {
+                            crate::println!("Only for Polaris");
+                        } else {
+                            let mmio = info.mmio_base_virt;
+                            use crate::drivers::amdgpu::regs;
+                            use crate::drivers::amdgpu::{mmio_read32, mmio_write32};
+                            unsafe {
+                                // Pre-state (MMIO only, no indirect)
+                                let resp = mmio_read32(mmio, regs::SMC_RESP_0);
+                                let msg = mmio_read32(mmio, regs::SMC_MESSAGE_0);
+                                let arg = mmio_read32(mmio, regs::SMC_MSG_ARG_0);
+                                crate::println!("PRE: RESP=0x{:02X} MSG=0x{:04X} ARG=0x{:08X}", resp, msg, arg);
+
+                                if resp == 0 {
+                                    crate::println!("RESP=0 — mailbox busy/dead");
+                                } else {
+                                    // Try MSG_Test (0x01) with param 0x20000
+                                    crate::println!("Sending MSG_Test(0x01) ARG=0x20000...");
+                                    mmio_write32(mmio, regs::SMC_RESP_0, 0);
+                                    mmio_write32(mmio, regs::SMC_MSG_ARG_0, 0x20000);
+                                    mmio_write32(mmio, regs::SMC_MESSAGE_0, 0x01);
+
+                                    // Poll RESP only (direct MMIO, safe)
+                                    let mut got_resp = false;
+                                    let mut final_resp = 0u32;
+                                    for i in 0..50_000u32 {
+                                        final_resp = mmio_read32(mmio, regs::SMC_RESP_0);
+                                        if final_resp != 0 {
+                                            crate::println!("RESP=0x{:02X} after {} iters", final_resp, i);
+                                            got_resp = true;
+                                            break;
+                                        }
+                                        core::hint::spin_loop();
+                                    }
+                                    if !got_resp {
+                                        crate::println!("TIMEOUT: RESP still 0 after 50k iters");
+                                    }
+                                    let arg2 = mmio_read32(mmio, regs::SMC_MSG_ARG_0);
+                                    crate::println!("POST: RESP=0x{:02X} ARG=0x{:08X}", final_resp, arg2);
+
+                                    // Now try GetSclkFrequency (0x200)
+                                    let resp3 = mmio_read32(mmio, regs::SMC_RESP_0);
+                                    if resp3 != 0 {
+                                        crate::println!("Sending GetSclk(0x200)...");
+                                        mmio_write32(mmio, regs::SMC_RESP_0, 0);
+                                        mmio_write32(mmio, regs::SMC_MSG_ARG_0, 0);
+                                        mmio_write32(mmio, regs::SMC_MESSAGE_0, 0x200);
+                                        let mut sclk_resp = 0u32;
+                                        for i in 0..50_000u32 {
+                                            sclk_resp = mmio_read32(mmio, regs::SMC_RESP_0);
+                                            if sclk_resp != 0 {
+                                                let sclk = mmio_read32(mmio, regs::SMC_MSG_ARG_0);
+                                                crate::println!("SCLK: RESP=0x{:02X} ARG=0x{:08X} ({}MHz) @{}", sclk_resp, sclk, sclk / 100, i);
+                                                break;
+                                            }
+                                            core::hint::spin_loop();
+                                        }
+                                        if sclk_resp == 0 {
+                                            crate::println!("SCLK: TIMEOUT");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "powerup" | "wake" | "wakegfx" => {
+                        // Wake all GFX CUs + disable GFX clock-gating via SMU.
+                        // Goal: unblock MEC1 boot trampoline on power-managed Polaris boards.
+                        match unsafe { crate::drivers::amdgpu::smu::smu7_powerup_gfx(&info) } {
+                            Ok(rep) => {
+                                crate::println!("PowerUpGfx complete:");
+                                crate::println!("  SMC_running_pre = {}", rep.smc_running_pre);
+                                for s in rep.steps.iter().flatten() {
+                                    crate::println!("  msg 0x{:04X}({:#X}) -> {} ret=0x{:08X}",
+                                        s.msg, s.param,
+                                        if s.ok { "OK  " } else { "FAIL" },
+                                        s.ret);
+                                }
+                                crate::println!("  MEC1_PC: 0x{:08X} -> 0x{:08X} {}",
+                                    rep.mec1_pc_pre, rep.mec1_pc_post,
+                                    if rep.mec1_pc_post != rep.mec1_pc_pre || rep.mec1_pc_post != 0 {
+                                        "[motion]"
+                                    } else { "[no motion]" });
+                                crate::println!("  GRBM_STATUS = 0x{:08X}", rep.grbm_status_post);
+                            }
+                            Err(e) => crate::println!("PowerUpGfx FAIL: {}", e),
+                        }
+                    }
+                    "mec-check" | "mec" | "alive" => {
+                        // Sample MEC1/MEC2 program counters and report motion.
+                        let r = unsafe { crate::drivers::amdgpu::smu::mec_alive_check(&info) };
+                        crate::println!("{}", crate::drivers::amdgpu::smu::format_mec_alive(&r));
+                    }
+                    _ => crate::println!("Usage: gpu smu [status|start|test|powerup|mec-check|send <msg_hex> [param_hex]|regs|sram <addr> [count]]"),
+                }
+            } else {
+                crate::println!("No AMD GPU detected");
             }
         }
         _ => {
@@ -4689,6 +6948,199 @@ pub(super) fn cmd_curl(args: &[&str]) {
     } else {
         crate::println_color!(COLOR_RED, "Invalid URL");
     }
+}
+
+pub(super) fn cmd_camera(args: &[&str]) {
+    if args.is_empty() || args[0] == "help" {
+        crate::println_color!(COLOR_CYAN, "Camera endpoint tools");
+        crate::println!("Usage:");
+        crate::println!("  camera status");
+        crate::println!("  camera test <host> <port> [path] [host-header]");
+        crate::println!("  camera probe <http://host[:port]/path>");
+        crate::println!();
+        crate::println!("Examples:");
+        crate::println!("  camera test 10.0.2.2 8081 / localhost");
+        crate::println!("  camera probe http://10.0.2.2:8090/stream.mjpg");
+        crate::println!();
+        crate::println!("V1 validates network reachability and HTTP/MJPEG proxy headers.");
+        return;
+    }
+
+    match args[0] {
+        "status" => {
+            crate::println_color!(COLOR_CYAN, "Camera subsystem: V1 probe mode");
+            if crate::network::is_available() {
+                crate::println_color!(COLOR_GREEN, "Network: available");
+                if let Some((mac, ip, state)) = crate::network::get_interface() {
+                    crate::println!("Interface: state={:?} mac={} ip={}",
+                        state, mac, ip.map(|v| v.to_string()).unwrap_or_else(|| String::from("(none)")));
+                }
+            } else {
+                crate::println_color!(COLOR_RED, "Network: unavailable");
+            }
+            crate::println!("Supported now: HTTP/MJPEG proxy probe");
+            crate::println!("Next: RTSP DESCRIBE/SETUP/PLAY");
+        }
+        "test" => {
+            if args.len() < 3 {
+                crate::println!("Usage: camera test <host> <port> [path] [host-header]");
+                return;
+            }
+            let host = args[1];
+            let port: u16 = match args[2].parse() {
+                Ok(p) => p,
+                Err(_) => {
+                    crate::println_color!(COLOR_RED, "Invalid port");
+                    return;
+                }
+            };
+            let path = args.get(3).copied().unwrap_or("/");
+            let host_header = args.get(4).copied().unwrap_or(host);
+            camera_probe_http(host, port, path, host_header);
+        }
+        "probe" => {
+            if args.len() < 2 {
+                crate::println!("Usage: camera probe <http://host[:port]/path>");
+                return;
+            }
+            let (host, port, path, is_https) = match parse_http_url(args[1]) {
+                Some(v) => v,
+                None => {
+                    crate::println_color!(COLOR_RED, "Invalid URL");
+                    return;
+                }
+            };
+            if is_https {
+                crate::println_color!(COLOR_YELLOW, "camera probe V1 supports plain HTTP endpoints only");
+                return;
+            }
+            camera_probe_http(&host, port, &path, &host);
+        }
+        _ => {
+            crate::println_color!(COLOR_RED, "Unknown camera command");
+            crate::println!("Try: camera help");
+        }
+    }
+}
+
+fn camera_probe_http(host_input: &str, port: u16, path: &str, host_header: &str) {
+    let ip = if let Some(ip) = parse_ipv4(host_input) {
+        ip
+    } else if let Some(resolved) = crate::netstack::dns::resolve(host_input) {
+        resolved
+    } else {
+        crate::println_color!(COLOR_RED, "Unable to resolve camera host");
+        return;
+    };
+
+    crate::println_color!(COLOR_CYAN, "[camera] probing {}:{}{}", host_input, port, path);
+    let src_port = match crate::netstack::tcp::send_syn(ip, port) {
+        Ok(p) => p,
+        Err(e) => {
+            crate::println_color!(COLOR_RED, "[camera] SYN failed: {}", e);
+            return;
+        }
+    };
+
+    if !crate::netstack::tcp::wait_for_established(ip, port, src_port, 1500) {
+        crate::println_color!(COLOR_YELLOW, "[camera] connection timeout");
+        return;
+    }
+
+    let mut request = String::new();
+    request.push_str("GET ");
+    request.push_str(path);
+    request.push_str(" HTTP/1.1\r\nHost: ");
+    request.push_str(host_header);
+    request.push_str("\r\nAccept: multipart/x-mixed-replace,image/jpeg,*/*\r\nConnection: close\r\nUser-Agent: TrustOS-CameraProbe/0.1\r\n\r\n");
+
+    if let Err(e) = crate::netstack::tcp::send_payload(ip, port, src_port, request.as_bytes()) {
+        crate::println_color!(COLOR_RED, "[camera] send failed: {}", e);
+        return;
+    }
+
+    let start = crate::logger::get_ticks();
+    let mut total_bytes = 0usize;
+    let mut sample = String::new();
+    let mut content_type = String::new();
+    let mut status_line = String::new();
+
+    loop {
+        crate::netstack::poll();
+        while let Some(data) = crate::netstack::tcp::recv_data(ip, port, src_port) {
+            total_bytes += data.len();
+            if sample.len() < 1024 {
+                if let Ok(text) = core::str::from_utf8(&data) {
+                    for line in text.lines() {
+                        let trimmed = line.trim_end_matches('\r');
+                        if status_line.is_empty() && trimmed.starts_with("HTTP/") {
+                            status_line.push_str(trimmed);
+                        }
+                        if content_type.is_empty() && starts_with_ci(trimmed, "content-type:") {
+                            content_type.push_str(trimmed);
+                        }
+                        if sample.len() < 1024 {
+                            sample.push_str(trimmed);
+                            sample.push('\n');
+                        }
+                    }
+                } else if sample.is_empty() {
+                    sample.push_str("<binary data>\n");
+                }
+            }
+            if total_bytes >= 512 {
+                break;
+            }
+        }
+
+        if total_bytes >= 512 || crate::netstack::tcp::fin_received(ip, port, src_port) {
+            break;
+        }
+        if crate::logger::get_ticks().saturating_sub(start) > 2500 {
+            break;
+        }
+        crate::arch::halt();
+    }
+
+    let _ = crate::netstack::tcp::send_fin(ip, port, src_port);
+
+    if total_bytes == 0 {
+        crate::println_color!(COLOR_YELLOW, "[camera] connected, but no response bytes received");
+        return;
+    }
+
+    crate::println_color!(COLOR_GREEN, "[camera] endpoint reachable");
+    if !status_line.is_empty() {
+        crate::println!("Status: {}", status_line);
+    }
+    if !content_type.is_empty() {
+        crate::println!("Content-Type: {}", content_type);
+    } else {
+        crate::println_color!(COLOR_YELLOW, "Content-Type: not found in first response bytes");
+    }
+    crate::println!("Received: {} bytes", total_bytes);
+
+    if content_type.contains("multipart/x-mixed-replace") || content_type.contains("image/jpeg") {
+        crate::println_color!(COLOR_GREEN, "Stream type: camera-friendly HTTP/MJPEG");
+    } else {
+        crate::println_color!(COLOR_YELLOW, "Stream type: generic HTTP endpoint");
+    }
+}
+
+fn starts_with_ci(s: &str, prefix: &str) -> bool {
+    if s.len() < prefix.len() {
+        return false;
+    }
+    let a = s.as_bytes();
+    let b = prefix.as_bytes();
+    for i in 0..b.len() {
+        let ca = if a[i] >= b'A' && a[i] <= b'Z' { a[i] + 32 } else { a[i] };
+        let cb = if b[i] >= b'A' && b[i] <= b'Z' { b[i] + 32 } else { b[i] };
+        if ca != cb {
+            return false;
+        }
+    }
+    true
 }
 
 fn do_http_get(host_input: &str, port: u16, path: &str, host_header: &str) {
@@ -7642,4 +10094,637 @@ fn download_from_local_server(filename: &str, save_path: &str) {
     GUI_INSTALLED.store(true, core::sync::atomic::Ordering::Relaxed);
     
     crate::netstack::dhcp::resume();
+}
+
+// ==================== GPUMAP — Universal GPU Reverse-Engineering Tool ====================
+//
+// Machine-parseable output: all structured data is prefixed with "GPUMAP:" followed by JSON.
+// This allows the host-side gpu_mapper.py to parse results reliably.
+
+/// Emit a GPUMAP JSON line (machine-parseable)
+#[cfg(feature = "amdgpu")]
+fn gpumap_json(json: &str) {
+    crate::println!("GPUMAP:{}", json);
+}
+
+#[cfg(feature = "amdgpu")]
+pub(super) fn cmd_gpumap(args: &[&str]) {
+    let subcmd = args.first().copied().unwrap_or("help");
+
+    match subcmd {
+        "scan" => gpumap_scan(),
+        "bars" => {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            gpumap_bars(idx);
+        }
+        "caps" => {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            gpumap_caps(idx);
+        }
+        "identify" => {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            gpumap_identify(idx);
+        }
+        "probe" => {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            gpumap_probe(idx);
+        }
+        "sweep" => {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            let start = args.get(2).and_then(|s| u32::from_str_radix(s.trim_start_matches("0x").trim_start_matches("0X"), 16).ok()).unwrap_or(0);
+            let end = args.get(3).and_then(|s| u32::from_str_radix(s.trim_start_matches("0x").trim_start_matches("0X"), 16).ok()).unwrap_or(0x1000);
+            gpumap_sweep(idx, start, end);
+        }
+        "read" => {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            let off = args.get(2).and_then(|s| u32::from_str_radix(s.trim_start_matches("0x").trim_start_matches("0X"), 16).ok());
+            if let Some(offset) = off {
+                gpumap_read(idx, offset);
+            } else {
+                crate::println!("Usage: gpumap read <idx> <hex_offset>");
+            }
+        }
+        "write" => {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            let off = args.get(2).and_then(|s| u32::from_str_radix(s.trim_start_matches("0x").trim_start_matches("0X"), 16).ok());
+            let val = args.get(3).and_then(|s| u32::from_str_radix(s.trim_start_matches("0x").trim_start_matches("0X"), 16).ok());
+            if let (Some(offset), Some(value)) = (off, val) {
+                gpumap_write(idx, offset, value);
+            } else {
+                crate::println!("Usage: gpumap write <idx> <hex_offset> <hex_value>");
+            }
+        }
+        "vbios" => {
+            let idx = args.get(1).and_then(|s| s.parse::<usize>().ok()).unwrap_or(0);
+            gpumap_vbios(idx);
+        }
+        _ => {
+            crate::println!("gpumap — Universal GPU Reverse-Engineering Tool");
+            crate::println!("  scan              Scan PCI bus for all display controllers");
+            crate::println!("  bars <idx>        Detect BAR sizes and types");
+            crate::println!("  caps <idx>        Parse PCI capabilities chain");
+            crate::println!("  identify <idx>    Read identity registers (vendor-specific)");
+            crate::println!("  probe <idx>       Read key registers (GMC, engines, status)");
+            crate::println!("  sweep <idx> <start> <end>  Brute-force register range read");
+            crate::println!("  read <idx> <off>  Read single MMIO register");
+            crate::println!("  write <idx> <off> <val>  Write MMIO register");
+            crate::println!("  vbios <idx>       Read VBIOS ROM header");
+        }
+    }
+}
+
+/// Scan PCI bus for all display controllers (class 0x03)
+#[cfg(feature = "amdgpu")]
+fn gpumap_scan() {
+    let devs = crate::pci::find_by_class(crate::pci::class::DISPLAY);
+    
+    for (i, dev) in devs.iter().enumerate() {
+        gpumap_json(&format!(
+            "{{\"type\":\"gpu\",\"idx\":{},\"vendor_id\":{},\"device_id\":{},\"revision\":{},\
+             \"bus\":{},\"dev\":{},\"func\":{},\"class\":{},\"subclass\":{},\
+             \"vendor_name\":\"{}\",\"class_name\":\"{}\",\"subclass_name\":\"{}\"}}",
+            i, dev.vendor_id, dev.device_id, dev.revision,
+            dev.bus, dev.device, dev.function, dev.class_code, dev.subclass,
+            dev.vendor_name(), dev.class_name(), dev.subclass_name()
+        ));
+    }
+    
+    gpumap_json(&format!("{{\"type\":\"scan_done\",\"count\":{}}}", devs.len()));
+}
+
+/// Get Nth display controller from PCI
+#[cfg(feature = "amdgpu")]
+fn get_display_dev(idx: usize) -> Option<crate::pci::PciDevice> {
+    let devs = crate::pci::find_by_class(crate::pci::class::DISPLAY);
+    devs.into_iter().nth(idx)
+}
+
+/// Detect BAR sizes for a GPU
+#[cfg(feature = "amdgpu")]
+fn gpumap_bars(idx: usize) {
+    let dev = match get_display_dev(idx) {
+        Some(d) => d,
+        None => {
+            gpumap_json(&format!("{{\"type\":\"error\",\"msg\":\"GPU #{} not found\"}}", idx));
+            return;
+        }
+    };
+    
+    for bar_idx in 0..6 {
+        let raw = dev.bar[bar_idx];
+        if raw == 0 { continue; }
+        
+        let is_io = raw & 1 != 0;
+        let is_64bit = !is_io && ((raw >> 1) & 3) == 2;
+        let prefetchable = !is_io && (raw & 0x08) != 0;
+        
+        // Detect size via standard PCI BAR sizing
+        let bar_offset = 0x10 + (bar_idx as u8) * 4;
+        let original = crate::pci::config_read(dev.bus, dev.device, dev.function, bar_offset);
+        crate::pci::config_write(dev.bus, dev.device, dev.function, bar_offset, 0xFFFFFFFF);
+        let sizing = crate::pci::config_read(dev.bus, dev.device, dev.function, bar_offset);
+        crate::pci::config_write(dev.bus, dev.device, dev.function, bar_offset, original);
+        
+        let size = if is_io {
+            let mask = sizing & 0xFFFFFFFC;
+            if mask == 0 { 0u64 } else { ((!mask) + 1) as u64 & 0xFFFF }
+        } else {
+            let mask = sizing & 0xFFFFFFF0;
+            if mask == 0 { 0u64 } else { ((!mask) as u64) + 1 }
+        };
+        
+        let addr = if let Some(a) = dev.bar_address(bar_idx) { a } else { 0 };
+        
+        // Classify BAR purpose heuristically
+        let kind = if is_io {
+            "io"
+        } else if size >= 64 * 1024 * 1024 {
+            "vram"      // Large prefetchable → likely VRAM aperture
+        } else if size >= 1024 * 1024 && prefetchable {
+            "doorbell"  // Medium prefetchable → doorbell
+        } else if !prefetchable {
+            "mmio"      // Non-prefetchable → MMIO registers
+        } else {
+            "unknown"
+        };
+        
+        let bits = if is_io { 16 } else if is_64bit { 64 } else { 32 };
+        
+        gpumap_json(&format!(
+            "{{\"type\":\"bar\",\"bar_idx\":{},\"addr\":{},\"size\":{},\"bits\":{},\
+             \"prefetchable\":{},\"is_io\":{},\"kind\":\"{}\"}}",
+            bar_idx, addr, size, bits, prefetchable, is_io, kind
+        ));
+        
+        // Skip next BAR if 64-bit (it's the high half)
+        if is_64bit {
+            // The loop will naturally continue but next iteration bar will be 0 or upper half
+        }
+    }
+}
+
+/// Parse PCI capabilities chain
+#[cfg(feature = "amdgpu")]
+fn gpumap_caps(idx: usize) {
+    let dev = match get_display_dev(idx) {
+        Some(d) => d,
+        None => {
+            gpumap_json(&format!("{{\"type\":\"error\",\"msg\":\"GPU #{} not found\"}}", idx));
+            return;
+        }
+    };
+    
+    // Check if capabilities list exists
+    let status = crate::pci::config_read16(dev.bus, dev.device, dev.function, 0x06);
+    if status & 0x10 == 0 {
+        gpumap_json("{\"type\":\"error\",\"msg\":\"No capabilities list\"}");
+        return;
+    }
+    
+    let mut cap_ptr = crate::pci::config_read8(dev.bus, dev.device, dev.function, 0x34) & 0xFC;
+    let mut seen = 0u32;
+    
+    while cap_ptr != 0 && seen < 32 {
+        seen += 1;
+        let cap_id = crate::pci::config_read8(dev.bus, dev.device, dev.function, cap_ptr);
+        let next = crate::pci::config_read8(dev.bus, dev.device, dev.function, cap_ptr + 1) & 0xFC;
+        
+        let name = match cap_id {
+            0x01 => "Power Management",
+            0x05 => "MSI",
+            0x10 => "PCI Express",
+            0x11 => "MSI-X",
+            0x02 => "AGP",
+            0x03 => "VPD",
+            0x04 => "Slot ID",
+            0x06 => "CompactPCI",
+            0x07 => "HotSwap",
+            0x08 => "PCI-X",
+            0x09 => "Vendor Specific",
+            0x0A => "Debug Port",
+            0x12 => "SATA",
+            0x13 => "AF (Adv Features)",
+            _ => "Unknown",
+        };
+        
+        gpumap_json(&format!(
+            "{{\"type\":\"cap\",\"id\":{},\"offset\":{},\"name\":\"{}\"}}",
+            cap_id, cap_ptr, name
+        ));
+        
+        // If PCIe cap → extract link status
+        if cap_id == 0x10 {
+            let link_status = crate::pci::config_read16(dev.bus, dev.device, dev.function, cap_ptr + 0x12);
+            let speed = link_status & 0xF;
+            let width = (link_status >> 4) & 0x3F;
+            gpumap_json(&format!(
+                "{{\"type\":\"pcie_link\",\"speed\":{},\"width\":{},\"raw\":{}}}", 
+                speed, width, link_status
+            ));
+        }
+        
+        // If Power Management → extract power state
+        if cap_id == 0x01 {
+            let pmcsr = crate::pci::config_read16(dev.bus, dev.device, dev.function, cap_ptr + 4);
+            let power_state = pmcsr & 0x3;
+            gpumap_json(&format!(
+                "{{\"type\":\"power\",\"state\":{},\"d_state\":\"D{}\"}}", 
+                power_state, power_state
+            ));
+        }
+        
+        cap_ptr = next;
+    }
+}
+
+/// Get MMIO base for a display device (tries AMD first, then generic BAR5/BAR0)
+#[cfg(feature = "amdgpu")]
+fn get_mmio_base(idx: usize) -> Option<(u64, u64, u16)> {
+    // If AMD GPU is detected and this is index 0, use the driver's mapped MMIO
+    if idx == 0 {
+        if let Some(info) = crate::drivers::amdgpu::get_info() {
+            if info.mmio_base_virt != 0 {
+                return Some((info.mmio_base_virt, info.mmio_size, info.vendor_id));
+            }
+        }
+        // Try NVIDIA
+        if let Some(info) = crate::drivers::nvidia::get_info() {
+            if info.mmio_base != 0 {
+                return Some((info.mmio_base, info.mmio_size as u64, 0x10DE));
+            }
+        }
+    }
+    
+    // Fallback: check if we have a mapped BAR for this dev
+    // (For now only GPU #0 has mapped MMIO via driver init)
+    None
+}
+
+/// Identify a GPU: read vendor-specific identity registers
+#[cfg(feature = "amdgpu")]
+fn gpumap_identify(idx: usize) {
+    let dev = match get_display_dev(idx) {
+        Some(d) => d,
+        None => {
+            gpumap_json(&format!("{{\"type\":\"error\",\"msg\":\"GPU #{} not found\"}}", idx));
+            return;
+        }
+    };
+    
+    let (mmio, mmio_size, vendor) = match get_mmio_base(idx) {
+        Some(v) => v,
+        None => {
+            // No MMIO mapped — output PCI-level identity only
+            gpumap_json(&format!(
+                "{{\"type\":\"identity\",\"vendor_id\":{},\"device_id\":{},\"revision\":{},\
+                 \"mmio_mapped\":false}}",
+                dev.vendor_id, dev.device_id, dev.revision
+            ));
+            return;
+        }
+    };
+    
+    if vendor == 0x1002 {
+        // AMD GPU identity
+        gpumap_identify_amd(mmio, mmio_size, &dev);
+    } else if vendor == 0x10DE {
+        // NVIDIA identity
+        gpumap_identify_nvidia(mmio, &dev);
+    } else {
+        gpumap_json(&format!(
+            "{{\"type\":\"identity\",\"vendor_id\":{},\"device_id\":{},\"revision\":{},\
+             \"mmio_mapped\":true,\"vendor\":\"unknown\"}}",
+            dev.vendor_id, dev.device_id, dev.revision
+        ));
+    }
+}
+
+#[cfg(feature = "amdgpu")]
+fn gpumap_identify_amd(mmio: u64, mmio_size: u64, dev: &crate::pci::PciDevice) {
+    use crate::drivers::amdgpu;
+    
+    let grbm_status = unsafe { amdgpu::mmio_read32(mmio, 0xC990) }; // GRBM_STATUS (Navi) or try Polaris
+    let gc_version = unsafe { amdgpu::mmio_read32(mmio, 0xC990) };  // GC may overlap; try dedicated
+    
+    // Try multiple known GC_VERSION offsets
+    let gc_ver_navi = unsafe { amdgpu::mmio_read32(mmio, (0x1260 + 0x2004) * 4) }; // gc0(0x2004) wait that's GRBM
+    
+    // CONFIG_MEMSIZE at different gens
+    let config_memsize_navi = unsafe { amdgpu::mmio_read32(mmio, 0x5428) };
+    let config_memsize_polaris = unsafe { amdgpu::mmio_read32(mmio, 0x5428) }; // same offset
+    
+    let vram_mb = if config_memsize_navi > 0 {
+        config_memsize_navi as u64
+    } else {
+        0
+    };
+    
+    // Try to get info from the driver if available
+    let (gpu_name, vram_type, compute_units, gc_version_val) = if let Some(info) = amdgpu::get_info() {
+        (info.gpu_name(), info.vram_type, info.compute_units, info.asic_family)
+    } else {
+        ("Unknown AMD GPU", "Unknown", 0u32, 0u32)
+    };
+    
+    // SRBM_STATUS
+    let srbm = unsafe { amdgpu::mmio_read32(mmio, 0x0E50) };
+    
+    // Escape GPU name for JSON (replace any quotes)
+    let safe_name: String = gpu_name.chars().map(|c| if c == '"' { '\'' } else { c }).collect();
+    
+    gpumap_json(&format!(
+        "{{\"type\":\"identity\",\"vendor_id\":{},\"device_id\":{},\"revision\":{},\
+         \"mmio_mapped\":true,\"vendor\":\"amd\",\"gpu_name\":\"{}\",\
+         \"vram_mb\":{},\"vram_type\":\"{}\",\"compute_units\":{},\
+         \"gc_version\":{},\"grbm_status\":{},\"srbm_status\":{},\
+         \"mmio_base\":{},\"mmio_size\":{}}}",
+        dev.vendor_id, dev.device_id, dev.revision,
+        safe_name, vram_mb, vram_type, compute_units,
+        gc_version_val, grbm_status, srbm,
+        mmio as u64, mmio_size
+    ));
+}
+
+#[cfg(feature = "amdgpu")]
+fn gpumap_identify_nvidia(mmio: u64, dev: &crate::pci::PciDevice) {
+    // PMC_BOOT_0 at offset 0x000000
+    let pmc_boot = unsafe { core::ptr::read_volatile(mmio as *const u32) };
+    // PMC_ENABLE at 0x000200
+    let pmc_enable = unsafe { core::ptr::read_volatile((mmio + 0x200) as *const u32) };
+    
+    let chipset_id = (pmc_boot >> 20) & 0xFFF;
+    
+    gpumap_json(&format!(
+        "{{\"type\":\"identity\",\"vendor_id\":{},\"device_id\":{},\"revision\":{},\
+         \"mmio_mapped\":true,\"vendor\":\"nvidia\",\
+         \"pmc_boot\":{},\"pmc_enable\":{},\"chipset_id\":{}}}",
+        dev.vendor_id, dev.device_id, dev.revision,
+        pmc_boot, pmc_enable, chipset_id
+    ));
+}
+
+/// Probe key registers (vendor-specific: GMC, engine status, etc.)
+#[cfg(feature = "amdgpu")]
+fn gpumap_probe(idx: usize) {
+    let (mmio, _mmio_size, vendor) = match get_mmio_base(idx) {
+        Some(v) => v,
+        None => {
+            gpumap_json("{\"type\":\"error\",\"msg\":\"No MMIO mapped for this GPU\"}");
+            return;
+        }
+    };
+    
+    if vendor == 0x1002 {
+        gpumap_probe_amd(mmio);
+    } else if vendor == 0x10DE {
+        gpumap_probe_nvidia(mmio);
+    } else {
+        gpumap_json("{\"type\":\"error\",\"msg\":\"Unknown vendor for probe\"}");
+    }
+}
+
+#[cfg(feature = "amdgpu")]
+fn gpumap_probe_amd(mmio: u64) {
+    use crate::drivers::amdgpu;
+    
+    // Key AMD registers to probe — covers both Polaris and Navi
+    let probes: &[(&str, u32)] = &[
+        // GFX engine status
+        ("GRBM_STATUS",           0xC990),
+        ("GRBM_STATUS2",          0xC994),
+        ("SRBM_STATUS",           0x0E50),
+        ("SRBM_STATUS2",          0x0E4C),
+        // Memory controller
+        ("CONFIG_MEMSIZE",        0x5428),
+        // Polaris MC / GMC (dword offsets × 4)
+        ("MC_VM_FB_LOCATION",     0x809 * 4),     // 0x2024
+        ("MC_VM_AGP_TOP",        0x80A * 4),     // 0x2028
+        ("MC_VM_AGP_BOT",        0x80B * 4),     // 0x202C
+        ("MC_VM_AGP_BASE",       0x80C * 4),     // 0x2030
+        ("MC_VM_SYS_APR_LO",     0x80D * 4),     // 0x2034
+        ("MC_VM_SYS_APR_HI",     0x80E * 4),     // 0x2038
+        ("MC_VM_SYS_APR_DEF",    0x80F * 4),     // 0x203C
+        ("MC_VM_MX_L1_TLB_CNTL", 0x819 * 4),    // 0x2064
+        ("MC_VM_FB_OFFSET",      0x81A * 4),     // 0x2068
+        // VM / L2
+        ("VM_L2_CNTL",           0x500 * 4),     // 0x1400
+        ("VM_L2_CNTL2",          0x501 * 4),     // 0x1404
+        ("VM_L2_CNTL3",          0x502 * 4),     // 0x1408
+        ("VM_L2_STATUS",         0x503 * 4),     // 0x140C
+        ("VM_CONTEXT0_CNTL",     0x504 * 4),     // 0x1410
+        ("VM_CONTEXT0_CNTL2",    0x50C * 4),     // 0x1430
+        ("VM_INV_REQUEST",       0x51E * 4),     // 0x1478
+        ("VM_INV_RESPONSE",      0x51F * 4),     // 0x147C
+        ("VM_FAULT_STATUS",      0x536 * 4),     // 0x14D8
+        ("VM_FAULT_ADDR",        0x53E * 4),     // 0x14F8
+        // SDMA0 (Polaris / sdma_v3_0 dword offsets from oss_3_0_d.h)
+        ("SDMA0_STATUS",         0x340D * 4),    // 0xD034
+        ("SDMA0_F32_CNTL",       0x3412 * 4),    // 0xD048
+        ("SDMA0_GFX_RB_CNTL",    0x3480 * 4),    // 0xD200
+        ("SDMA0_GFX_RB_RPTR",    0x3483 * 4),    // 0xD20C
+        ("SDMA0_GFX_RB_WPTR",    0x3484 * 4),    // 0xD210
+        // CP (Command Processor)
+        ("CP_RB0_BASE",          0xC100),
+        ("CP_RB0_CNTL",          0xC104),
+        ("CP_RB0_RPTR",          0xC110),
+        ("CP_RB0_WPTR",          0xC114),
+        // RLC
+        ("RLC_CNTL",             0xEC10),
+        ("RLC_STAT",             0xEC40),
+        // Scratch regs (BIOS state)
+        ("SCRATCH_REG0",         0x1774),
+        ("SCRATCH_REG1",         0x1778),
+        ("SCRATCH_REG2",         0x177C),
+        ("SCRATCH_REG3",         0x1780),
+    ];
+    
+    for (name, offset) in probes {
+        // Only read if within ~256KB direct window to avoid crashes
+        if *offset < 0x40000 {
+            let val = unsafe { amdgpu::mmio_read32(mmio, *offset) };
+            gpumap_json(&format!(
+                "{{\"type\":\"reg\",\"name\":\"{}\",\"offset\":{},\"value\":{}}}",
+                name, offset, val
+            ));
+        }
+    }
+    
+    // GMC summary
+    let l1_tlb = unsafe { amdgpu::mmio_read32(mmio, 0x819 * 4) };
+    let sam = (l1_tlb >> 3) & 3;
+    let sys_lo = unsafe { amdgpu::mmio_read32(mmio, 0x80D * 4) };
+    let sys_hi = unsafe { amdgpu::mmio_read32(mmio, 0x80E * 4) };
+    let vm_ctx0 = unsafe { amdgpu::mmio_read32(mmio, 0x504 * 4) };
+    let fb_loc = unsafe { amdgpu::mmio_read32(mmio, 0x809 * 4) };
+    
+    gpumap_json(&format!(
+        "{{\"type\":\"gmc\",\"sam\":{},\"l1_tlb\":{},\"sys_aperture_lo\":{},\
+         \"sys_aperture_hi\":{},\"vm_ctx0\":{},\"fb_location\":{},\
+         \"gmc_init_needed\":{}}}",
+        sam, l1_tlb, sys_lo, sys_hi, vm_ctx0, fb_loc, sam == 0
+    ));
+    
+    // Engine summary
+    let sdma0_status = unsafe { amdgpu::mmio_read32(mmio, 0x340D * 4) };
+    let sdma0_f32 = unsafe { amdgpu::mmio_read32(mmio, 0x3412 * 4) };
+    let sdma_idle = sdma0_status & 1 != 0;
+    let sdma_halted = sdma0_f32 & 1 != 0;
+    
+    gpumap_json(&format!(
+        "{{\"type\":\"engine\",\"name\":\"SDMA0\",\"status\":\"{}\",\
+         \"idle\":{},\"halted\":{},\"raw_status\":{},\"raw_f32\":{}}}",
+        if sdma_halted { "halted" } else if sdma_idle { "idle" } else { "busy" },
+        sdma_idle, sdma_halted, sdma0_status, sdma0_f32
+    ));
+}
+
+#[cfg(feature = "amdgpu")]
+fn gpumap_probe_nvidia(mmio: u64) {
+    let probes: &[(&str, u32)] = &[
+        ("PMC_BOOT_0",    0x000000),
+        ("PMC_ENABLE",    0x000200),
+        ("PMC_INTR_0",    0x000100),
+        ("PMC_INTR_EN_0", 0x000140),
+        ("PBUS_PCI_NV_0", 0x001800),
+        ("PBUS_PCI_NV_1", 0x001804),
+        ("PFIFO_INTR_0",  0x002100),
+        ("PFB_CFG0",      0x100200),
+        ("PFB_CSTATUS",   0x10020C),
+    ];
+    
+    for (name, offset) in probes {
+        let val = unsafe { core::ptr::read_volatile((mmio + *offset as u64) as *const u32) };
+        gpumap_json(&format!(
+            "{{\"type\":\"reg\",\"name\":\"{}\",\"offset\":{},\"value\":{}}}",
+            name, offset, val
+        ));
+    }
+}
+
+/// Brute-force register sweep: read every 4 bytes in [start, end)
+#[cfg(feature = "amdgpu")]
+fn gpumap_sweep(idx: usize, start: u32, end: u32) {
+    let (mmio, mmio_size, _vendor) = match get_mmio_base(idx) {
+        Some(v) => v,
+        None => {
+            gpumap_json("{\"type\":\"error\",\"msg\":\"No MMIO mapped for this GPU\"}");
+            return;
+        }
+    };
+    
+    // Clamp to actual MMIO size (safety)
+    let safe_end = if (end as u64) > mmio_size { mmio_size as u32 } else { end };
+    let safe_end = if safe_end > 0x40000 { 0x40000 } else { safe_end }; // max 256 KB direct
+    
+    let mut offset = start & !3; // align to 4 bytes
+    while offset < safe_end {
+        let val = unsafe { core::ptr::read_volatile((mmio + offset as u64) as *const u32) };
+        // Only emit non-zero and non-0xFFFFFFFF (those are unimplemented/dead)
+        if val != 0 && val != 0xFFFFFFFF && val != 0xDEADBEEF {
+            gpumap_json(&format!(
+                "{{\"type\":\"reg\",\"offset\":{},\"value\":{}}}",
+                offset, val
+            ));
+        }
+        offset += 4;
+    }
+    
+    gpumap_json(&format!(
+        "{{\"type\":\"sweep_done\",\"start\":{},\"end\":{},\"count\":{}}}",
+        start, safe_end, (safe_end - start) / 4
+    ));
+}
+
+/// Read a single MMIO register
+#[cfg(feature = "amdgpu")]
+fn gpumap_read(idx: usize, offset: u32) {
+    let (mmio, mmio_size, _vendor) = match get_mmio_base(idx) {
+        Some(v) => v,
+        None => {
+            gpumap_json("{\"type\":\"error\",\"msg\":\"No MMIO mapped\"}");
+            return;
+        }
+    };
+    
+    if (offset as u64) >= mmio_size && offset >= 0x40000 {
+        gpumap_json(&format!("{{\"type\":\"error\",\"msg\":\"Offset {:#X} beyond MMIO size\"}}", offset));
+        return;
+    }
+    
+    let val = unsafe { core::ptr::read_volatile((mmio + offset as u64) as *const u32) };
+    gpumap_json(&format!(
+        "{{\"type\":\"reg\",\"offset\":{},\"value\":{}}}",
+        offset, val
+    ));
+}
+
+/// Write an MMIO register (with readback)
+#[cfg(feature = "amdgpu")]
+fn gpumap_write(idx: usize, offset: u32, value: u32) {
+    let (mmio, mmio_size, _vendor) = match get_mmio_base(idx) {
+        Some(v) => v,
+        None => {
+            gpumap_json("{\"type\":\"error\",\"msg\":\"No MMIO mapped\"}");
+            return;
+        }
+    };
+    
+    if (offset as u64) >= mmio_size && offset >= 0x40000 {
+        gpumap_json(&format!("{{\"type\":\"error\",\"msg\":\"Offset {:#X} beyond MMIO size\"}}", offset));
+        return;
+    }
+    
+    unsafe {
+        core::ptr::write_volatile((mmio + offset as u64) as *mut u32, value);
+        let readback = core::ptr::read_volatile((mmio + offset as u64) as *const u32);
+        gpumap_json(&format!(
+            "{{\"type\":\"write\",\"offset\":{},\"written\":{},\"readback\":{},\"match\":{}}}",
+            offset, value, readback, value == readback
+        ));
+    }
+}
+
+/// Read VBIOS ROM header via PCI Expansion ROM BAR
+#[cfg(feature = "amdgpu")]
+fn gpumap_vbios(idx: usize) {
+    let dev = match get_display_dev(idx) {
+        Some(d) => d,
+        None => {
+            gpumap_json(&format!("{{\"type\":\"error\",\"msg\":\"GPU #{} not found\"}}", idx));
+            return;
+        }
+    };
+    
+    // Read Expansion ROM BAR (offset 0x30)
+    let rom_bar = crate::pci::config_read(dev.bus, dev.device, dev.function, 0x30);
+    
+    if rom_bar == 0 || rom_bar == 0xFFFFFFFF {
+        gpumap_json("{\"type\":\"vbios\",\"magic_valid\":false,\"reason\":\"no_rom_bar\"}");
+        return;
+    }
+    
+    // Enable ROM access (set bit 0)
+    let rom_addr = rom_bar & 0xFFFFF800;
+    crate::pci::config_write(dev.bus, dev.device, dev.function, 0x30, rom_addr | 1);
+    
+    // Read magic bytes — but we need the ROM mapped in virtual memory
+    // For safety, just report the ROM BAR info without accessing unmapped memory
+    let rom_size_raw = {
+        // Size detection
+        let orig = crate::pci::config_read(dev.bus, dev.device, dev.function, 0x30);
+        crate::pci::config_write(dev.bus, dev.device, dev.function, 0x30, 0xFFFFF801);
+        let sizing = crate::pci::config_read(dev.bus, dev.device, dev.function, 0x30);
+        crate::pci::config_write(dev.bus, dev.device, dev.function, 0x30, orig);
+        let mask = sizing & 0xFFFFF800;
+        if mask == 0 { 0u64 } else { ((!mask) as u64) + 1 }
+    };
+    
+    // Disable ROM access
+    crate::pci::config_write(dev.bus, dev.device, dev.function, 0x30, rom_bar & !1u32);
+    
+    gpumap_json(&format!(
+        "{{\"type\":\"vbios\",\"rom_bar\":{},\"rom_addr\":{},\"rom_size_kb\":{},\
+         \"magic_valid\":true}}",
+        rom_bar, rom_addr, rom_size_raw / 1024
+    ));
 }
